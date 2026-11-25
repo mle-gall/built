@@ -11,8 +11,8 @@ from types import SimpleNamespace
 
 
 import pytest  # noqa: E402
-from PySide6.QtCore import QEvent, QPointF, Qt  # noqa: E402
-from PySide6.QtGui import QMouseEvent  # noqa: E402
+from ingetrazo_core import ScreenPoint, Input # noqa: E402
+from ingetrazo_render import MouseEvent  # noqa: E402
 
 from core import mesh as M  # noqa: E402
 from tests.test_light_faces import (  # noqa: E402
@@ -40,10 +40,9 @@ def _real(face) -> bool:
     return isinstance(face, M.Face) and not isinstance(face, LightFace)
 
 def _click(vp, x, y):
-    vp._dispatch_tool_click(QMouseEvent(
-        QEvent.Type.MouseButtonPress, QPointF(x, y),
-        vp.mapToGlobal(QPointF(x, y)), Qt.LeftButton, Qt.LeftButton,
-        Qt.NoModifier))
+    vp._dispatch_tool_click(MouseEvent(
+        "press", x, y, Input.LeftButton, Input.LeftButton,
+        Input.NoModifier))
 
 
 @pytest.fixture
@@ -124,7 +123,7 @@ def test_push_pull_is_handed_the_real_face_of_a_loose_lazy_mesh(floor):
     # An answer with no group is what a click would push.
     vp.pick_face_any = lambda sx, sy: (fake, None)
     vp.set_hover = lambda *a, **k: None
-    tool.on_hover(SimpleNamespace(viewport=vp, screen=QPointF(x, y)))
+    tool.on_hover(SimpleNamespace(viewport=vp, screen=ScreenPoint(x, y)))
     del vp.pick_face_any, vp.set_hover
     assert tool.hovered_face == real
 

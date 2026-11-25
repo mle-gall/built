@@ -29,7 +29,7 @@ class Store:
 @pytest.fixture
 def settings(monkeypatch):
     store = Store()
-    monkeypatch.setattr(ud, "QSettings", lambda: store)
+    monkeypatch.setattr(ud, "native_settings", lambda: store)
     monkeypatch.setattr(uc, "should_check_at_start", lambda *a, **kw: True)
     return store
 

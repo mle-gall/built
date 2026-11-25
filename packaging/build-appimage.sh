@@ -37,7 +37,7 @@ echo "==> PyInstaller"
 rm -rf "$APPDIR" "$WORK/pyi"
 "$PYTHON" -m PyInstaller --noconfirm \
     --distpath "$WORK/pyi" --workpath "$WORK/pyi-work" \
-    ingetrazo.spec
+    packaging/native.spec
 
 PYO3_PYTHON="$PYTHON" packaging/install-native-launcher.sh "$WORK/pyi/ingetrazo"
 

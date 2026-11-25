@@ -121,7 +121,7 @@ def test_pushing_an_offset_ring_raises_walls_with_thickness():
 def test_offset_value_label_and_vcb():
     from tools.offset import OffsetTool
     from tools.base import ToolContext
-    from PySide6.QtCore import QPointF, Qt
+    from ingetrazo_core import ScreenPoint, Input
 
     class _MockVP:
         def __init__(self, scene, history):
@@ -141,14 +141,14 @@ def test_offset_value_label_and_vcb():
 
     # Hover and click on face to start offset
     tool.hovered_face = face
-    ctx = ToolContext(viewport=vp, world=V(2, 0), screen=QPointF(2, 0),
-                      modifiers=Qt.NoModifier, snap=None)
+    ctx = ToolContext(viewport=vp, world=V(2, 0), screen=ScreenPoint(2, 0),
+                      modifiers=Input.NoModifier, snap=None)
     tool.on_click(ctx)
     assert tool.dragging is True
 
     # Hover at inward position
-    ctx_drag = ToolContext(viewport=vp, world=V(2, 0.5), screen=QPointF(2, 0.5),
-                           modifiers=Qt.NoModifier, snap=None)
+    ctx_drag = ToolContext(viewport=vp, world=V(2, 0.5), screen=ScreenPoint(2, 0.5),
+                           modifiers=Input.NoModifier, snap=None)
     tool.on_hover(ctx_drag)
     assert abs(tool.distance - 0.5) < 1e-4
 
@@ -200,7 +200,7 @@ def test_offset_drag_snaps_to_endpoint_and_midpoint():
     """The drag distance aligns perpendicular to a snapped endpoint or
     midpoint — the offset stays in the face's plane, it only takes its
     distance from the point."""
-    from PySide6.QtCore import QPointF, Qt
+    from ingetrazo_core import ScreenPoint, Input
     from core.snap import SnapResult
     from tools.base import ToolContext
     from tools.offset import OffsetTool
@@ -220,19 +220,19 @@ def test_offset_drag_snaps_to_endpoint_and_midpoint():
     vp = _MockVP(scene, hist)
     tool = OffsetTool()
     tool.hovered_face = face
-    tool.on_click(ToolContext(viewport=vp, world=V(2, 0), screen=QPointF(2, 0),
-                              modifiers=Qt.NoModifier, snap=None))
+    tool.on_click(ToolContext(viewport=vp, world=V(2, 0), screen=ScreenPoint(2, 0),
+                              modifiers=Input.NoModifier, snap=None))
     assert tool.dragging
     assert tool._ref_inward == V(0, 1, 0)      # bottom edge, inward +Y
 
     snap = SnapResult(V(3, 2, 0), "endpoint")
-    tool.on_hover(ToolContext(viewport=vp, world=V(3, 2, 0), screen=QPointF(3, 2),
-                              modifiers=Qt.NoModifier, snap=snap))
+    tool.on_hover(ToolContext(viewport=vp, world=V(3, 2, 0), screen=ScreenPoint(3, 2),
+                              modifiers=Input.NoModifier, snap=snap))
     assert abs(tool.distance - 2.0) < 1e-6     # perpendicular to the edge
 
     snap = SnapResult(V(1, 0.5, 0), "midpoint")
-    tool.on_hover(ToolContext(viewport=vp, world=V(1, 0.5, 0), screen=QPointF(1, 0.5),
-                              modifiers=Qt.NoModifier, snap=snap))
+    tool.on_hover(ToolContext(viewport=vp, world=V(1, 0.5, 0), screen=ScreenPoint(1, 0.5),
+                              modifiers=Input.NoModifier, snap=snap))
     assert abs(tool.distance - 0.5) < 1e-6
 
     # Cursor-dependent snaps (on edge / on face) are not reliable: they do
@@ -240,15 +240,15 @@ def test_offset_drag_snaps_to_endpoint_and_midpoint():
     for kind in ("on_edge", "on_face"):
         snap = SnapResult(V(3, 5, 0), kind)      # off the ray: must be ignored
         tool.on_hover(ToolContext(viewport=vp, world=V(3, 5, 0),
-                                  screen=QPointF(3, 1.5),
-                                  modifiers=Qt.NoModifier, snap=snap))
+                                  screen=ScreenPoint(3, 1.5),
+                                  modifiers=Input.NoModifier, snap=snap))
         assert abs(tool.distance - 1.5) < 1e-6   # the raycast point, not the snap
 
     # An off-plane endpoint still measures its in-plane projection: the
     # offset never leaves the face's plane.
     snap = SnapResult(V(3, 2, 5), "endpoint")
-    tool.on_hover(ToolContext(viewport=vp, world=V(3, 2, 5), screen=QPointF(3, 2),
-                              modifiers=Qt.NoModifier, snap=snap))
+    tool.on_hover(ToolContext(viewport=vp, world=V(3, 2, 5), screen=ScreenPoint(3, 2),
+                              modifiers=Input.NoModifier, snap=snap))
     assert abs(tool.distance - 2.0) < 1e-6
 
 
@@ -272,14 +272,12 @@ def test_offset_engine_refuses_on_edge_and_on_face():
     assert engine._limit_snap(SnapResult(V(0, 0, 0), "on_face"), None).kind == "on_face"
 
 
-
-
 def test_offset_snaps_only_during_the_drag():
     """Choosing the face stays as it was: no marker on the corners under the
     cursor, and no Alt clause for inferences the tool does not take."""
     import math
 
-    from PySide6.QtCore import QPointF, Qt
+    from ingetrazo_core import ScreenPoint, Input
     from views.status_hints import hint_for
     from tools.offset import OffsetTool
     from views.document_interaction import _HoverEvent
@@ -299,14 +297,14 @@ def test_offset_snaps_only_during_the_drag():
 
     def hover(p):
         x, y = vp._world_to_pixel(p)
-        vp._process_hover(QPointF(x, y), Qt.NoModifier)
+        vp._process_hover(ScreenPoint(x, y), Input.NoModifier)
         return vp.last_snap.kind
 
     assert hover(V(2, 0, 1)) == "none"              # a corner of the face
     assert hover(V(3, -1, 1)) == "none"
     x, y = vp._world_to_pixel(V(1.9, 1, 1))
-    vp._process_hover(QPointF(x, y), Qt.NoModifier)
-    tool.on_click(vp._build_ctx(_HoverEvent(QPointF(x, y), Qt.NoModifier)))
+    vp._process_hover(ScreenPoint(x, y), Input.NoModifier)
+    tool.on_click(vp._build_ctx(_HoverEvent(ScreenPoint(x, y), Input.NoModifier)))
     assert tool.dragging
     assert hover(V(3, -1, 1)) == "endpoint"
     assert "Alt" not in hint_for("offset", tool, linear_mode="all")
@@ -317,7 +315,7 @@ def test_a_refused_hot_retype_keeps_the_offset_already_made():
     the 1 m offset must stay (it vanished: the retype undid it first)."""
     from tools.offset import OffsetTool
     from tools.base import ToolContext
-    from PySide6.QtCore import QPointF, Qt
+    from ingetrazo_core import ScreenPoint, Input
 
     class _MockVP:
         def __init__(self, scene, history):
@@ -334,11 +332,11 @@ def test_a_refused_hot_retype_keeps_the_offset_already_made():
     vp = _MockVP(scene, hist)
     tool = OffsetTool()
     tool.hovered_face = face
-    tool.on_click(ToolContext(viewport=vp, world=V(2, 0), screen=QPointF(2, 0),
-                              modifiers=Qt.NoModifier, snap=None))
+    tool.on_click(ToolContext(viewport=vp, world=V(2, 0), screen=ScreenPoint(2, 0),
+                              modifiers=Input.NoModifier, snap=None))
     tool.on_hover(ToolContext(viewport=vp, world=V(2, 0.5),
-                              screen=QPointF(2, 0.5),
-                              modifiers=Qt.NoModifier, snap=None))
+                              screen=ScreenPoint(2, 0.5),
+                              modifiers=Input.NoModifier, snap=None))
     assert tool.on_value(vp, 1.0) is True
     assert len(scene.mesh.faces) == 2
     steps = len(hist.undo_stack)

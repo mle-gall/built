@@ -20,14 +20,6 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 import numpy as np                                                # noqa: E402
 import pytest                                                     # noqa: E402
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication                        # noqa: E402
-
-_inst = QApplication.instance()
-if _inst is None:
-    _app = QApplication([])
-elif not isinstance(_inst, QApplication):
-    pytest.skip("a non-widget QGuiApplication is already active",
-                allow_module_level=True)
 
 from core.group import Group                                      # noqa: E402
 from core.mesh import Mesh                                        # noqa: E402

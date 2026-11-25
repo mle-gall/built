@@ -56,7 +56,7 @@ fn view_of<'py>(win: &Bound<'py, PyAny>) -> Option<Bound<'py, PyAny>> {
 
 /// Give a view the keys; a view already gone needs none.
 fn focus_view(py: Python<'_>, view: &Bound<'_, PyAny>) {
-    if let Ok(reason) = py.import("core.input_types").and_then(|m| m.getattr("Qt")?.getattr("OtherFocusReason")) {
+    if let Ok(reason) = py.import("ingetrazo_core").and_then(|m| m.getattr("Input")?.getattr("OtherFocusReason")) {
         let _ = view.call_method1("setFocus", (reason,));
     }
 }
@@ -243,10 +243,7 @@ impl Page {
             focus_view(py, &view);
         }
         if !cs.call_method0("in_shell")?.is_truthy()? {
-            let platform: String = py.import("PySide6.QtGui")?.getattr("QGuiApplication")?.call_method0("platformName")?.extract()?;
-            if platform == "offscreen" || platform == "minimal" {
-                return Ok(true);
-            }
+            return Ok(true); // headless: no frames come, nothing to watch for
         }
         if slf.borrow().dog.is_none(py) {
             let dog = timer(py, &win, slf.getattr("_watchdog")?, None)?;
@@ -438,12 +435,6 @@ impl StartSheet {
     #[classattr]
     fn id() -> &'static str {
         "start"
-    }
-
-    /// The page has its own watchdog (cold starts are slow).
-    #[classattr]
-    fn watchdog() -> bool {
-        false
     }
 
     fn signature<'py>(slf: &Bound<'py, Self>, _ctx: &Bound<'py, PyAny>) -> PyResult<(bool, Bound<'py, PyAny>)> {
@@ -843,13 +834,15 @@ fn _thumbnail<'py>(py: Python<'py>, p: &Bound<'py, PyAny>, st: &Bound<'py, PyAny
     Ok(PyTuple::new(py, [s(py, &key), picture.get_item(0)?, picture.get_item(1)?, picture.get_item(2)?])?.into_any())
 }
 
-/// The classic save path supplies a QImage. Rust samples its RGBA pixels.
+/// An image object a caller hands in (`isNull`, `convertToFormat`,
+/// `constBits`); Rust samples its RGBA pixels. The format is read from the
+/// image's own type, so nothing here imports an image toolkit.
 #[pyfunction]
 fn blank_picture(py: Python<'_>, image: &Bound<'_, PyAny>) -> PyResult<bool> {
     if image.is_none() || image.call_method0("isNull")?.is_truthy()? {
         return Ok(true);
     }
-    let fmt = py.import("PySide6.QtGui")?.getattr("QImage")?.getattr("Format_RGBA8888")?;
+    let fmt = image.get_type().getattr("Format_RGBA8888")?;
     let rgba = image.call_method1("convertToFormat", (fmt,))?;
     let bytes = py.import("builtins")?.getattr("bytes")?.call1((rgba.call_method0("constBits")?,))?;
     py.import("ingetrazo_render")?.call_method1("blank_picture", (rgba.call_method0("width")?, rgba.call_method0("height")?, bytes))?.is_truthy()

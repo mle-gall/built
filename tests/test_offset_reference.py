@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import pytest
-from PySide6.QtCore import QPointF, Qt
-from PySide6.QtGui import QImage, QPainter
+from ingetrazo_core import ScreenPoint, Input
+import numpy as np
+from ingetrazo_render import AnnotationCanvas
 from ingetrazo_core import Vec3 as V
 
 from core.history import History
@@ -58,7 +59,7 @@ def offset():
 
 def context(vp, x, y):
     point = V(x, y, 0)
-    return ToolContext(vp, point, QPointF(*vp._world_to_pixel(point)), Qt.NoModifier, None)
+    return ToolContext(vp, point, ScreenPoint(*vp._world_to_pixel(point)), Input.NoModifier, None)
 
 
 def begin(vp, tool):
@@ -68,26 +69,19 @@ def begin(vp, tool):
 
 
 def render(vp, tool):
-    image = QImage(480, 480, QImage.Format_ARGB32)
-    image.fill(Qt.transparent)
-    painter = QPainter(image)
-    try:
-        overlay = getattr(tool, "draw_overlay", None)
-        if overlay is not None:
-            overlay(vp, painter)
-    finally:
-        painter.end()
-    return image
+    canvas = AnnotationCanvas(480, 480, 480)
+    tool.draw_overlay(vp, canvas)
+    return np.frombuffer(canvas.composite(bytes(480 * 480 * 4)), np.uint8).reshape(480, 480, 4)
 
 
 def test_source_square_is_visible_before_the_first_click(offset):
     vp, tool = offset
     tool.on_hover(context(vp, 2, .1))
     image = render(vp, tool)
-    marker = image.pixelColor(240, 440)
-    assert marker.red() > 140 and marker.green() < 80 and marker.blue() < 100
-    edge = image.pixelColor(140, 440)
-    assert edge.blue() > 150 and edge.red() < 80
+    marker = image[440, 240]
+    assert marker[0] > 140 and marker[1] < 80 and marker[2] < 100
+    edge = image[440, 140]
+    assert edge[2] > 150 and edge[0] < 80
 
 
 def test_idle_reference_follows_the_nearest_boundary(offset):
@@ -122,11 +116,11 @@ def test_drag_adds_a_distance_guide_without_moving_the_source_square(offset):
     begin(vp, tool)
     tool.on_hover(context(vp, 3, .5))
     image = render(vp, tool)
-    marker = image.pixelColor(240, 440)
-    assert marker.red() > 140 and marker.green() < 80
-    assert any(image.pixelColor(240, y).alpha() for y in range(395, 425))
+    marker = image[440, 240]
+    assert marker[0] > 140 and marker[1] < 80
+    assert any(image[y, 240][3] for y in range(395, 425))
     # Cursor moved sideways: the guide still measures from the first click.
-    assert all(image.pixelColor(340, y).alpha() == 0 for y in range(395, 425))
+    assert all(image[y, 340][3] == 0 for y in range(395, 425))
 
 
 @pytest.mark.parametrize("action", ["cancel", "deactivate", "empty"])
@@ -142,7 +136,7 @@ def test_transient_reference_clears_without_editing_geometry(offset, action):
         tool.on_hover(context(vp, 10, 10))
     assert tool._offset_reference is None
     assert len(vp.scene.mesh.faces) == 1 and not vp.history.undo_stack
-    assert render(vp, tool).pixelColor(240, 440).alpha() == 0
+    assert render(vp, tool)[440, 240][3] == 0
 
 
 def test_hidden_source_does_not_paint_a_marker(offset):
@@ -150,8 +144,8 @@ def test_hidden_source_does_not_paint_a_marker(offset):
     tool.on_hover(context(vp, 2, .1))
     vp.hidden = True
     image = render(vp, tool)
-    assert image.pixelColor(240, 440).alpha() == 0
-    assert image.pixelColor(140, 440).alpha() == 0
+    assert image[440, 240][3] == 0
+    assert image[440, 140][3] == 0
 
 
 def test_parallel_cursor_ray_clears_the_idle_marker(offset):

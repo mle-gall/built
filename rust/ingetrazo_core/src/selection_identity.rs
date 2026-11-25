@@ -43,11 +43,57 @@ impl Materials {
         self.faces += 1;
     }
 
+    /// A mesh not built yet: its faces' materials counted from the loader's
+    /// arrays (the attribute row of each face), exactly, without building it.
+    fn deferred(&mut self, mesh: &Bound<'_, PyAny>, fallback: Option<String>) -> PyResult<()> {
+        let py = mesh.py();
+        let source = mesh.getattr("__dict__")?.call_method1("get", ("_deferred_source",))?;
+        if source.is_none() {
+            if let Some(name) = fallback {
+                self.counts.entry(name).or_default();
+            }
+            return Ok(());
+        }
+        let rows: Vec<u8> = py
+            .import("numpy")?
+            .call_method1("asarray", (source.get_item("face_attr")?, "<i8"))?
+            .call_method0("tobytes")?
+            .extract()?;
+        let mut per_row = BTreeMap::<i64, usize>::new();
+        for chunk in rows.chunks_exact(8) {
+            *per_row.entry(i64::from_le_bytes(chunk.try_into().unwrap())).or_default() += 1;
+        }
+        if per_row.is_empty() {
+            if let Some(name) = fallback {
+                self.counts.entry(name).or_default();
+            }
+            return Ok(());
+        }
+        let table = source.get_item("meta")?.call_method1("get", ("face_attrs",))?;
+        let decode = py.import("ingetrazo_core")?.getattr("igz_face_attrs_from_json")?;
+        for (row, n) in per_row {
+            let mut name = None;
+            if row >= 0 && !table.is_none() {
+                let attrs = decode.call1((table.get_item(row)?,))?;
+                if !attrs.is_none() {
+                    name = attrs.call_method1("get", ("mat",))?.extract::<Option<String>>()?;
+                }
+            }
+            *self.counts.entry(name.or_else(|| fallback.clone()).unwrap_or_default()).or_default() += n;
+            self.faces += n;
+        }
+        Ok(())
+    }
+
     fn visit(&mut self, obj: &Bound<'_, PyAny>, fallback: Option<String>) -> PyResult<()> {
         if self.sampled {
             return Ok(());
         }
         if let Ok(mesh) = obj.getattr("mesh") {
+            // Selecting an imported part must not build its mesh.
+            if mesh.get_type().is(&mesh.py().import("core.mesh")?.getattr("DeferredMesh")?) {
+                return self.deferred(&mesh, fallback);
+            }
             let faces = mesh.getattr("faces")?;
             if faces.len()? == 0 {
                 if let Some(name) = fallback {

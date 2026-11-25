@@ -46,10 +46,3 @@ def test_stl_parse_reports_worker_progress_on_the_calling_thread(native_host, tm
         path, 1., "none", lambda *_: threads.append(get_ident()))
     assert error is None and len(mesh.faces) == 1
     assert set(threads) == {get_ident()}
-
-
-def test_legacy_choice_does_not_resize_the_native_rail(private_settings):
-    from core.settings import settings
-    from views.icons import DEFAULT_TOOLBAR_ICON_PX
-    settings().setValue("ui/toolbar_icon_px", 40)
-    assert DEFAULT_TOOLBAR_ICON_PX == 24

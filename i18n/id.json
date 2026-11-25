@@ -1,4 +1,13 @@
 {
+ "Discard": "Buang",
+ "Abort": "Batalkan",
+ "Ignore": "Abaikan",
+ "Retry": "Coba lagi",
+ "Restore Defaults": "Pulihkan nilai bawaan",
+ "Open": "Buka",
+ "OK": "Oke",
+ "Yes": "Ya",
+ "No": "Tidak",
  "Map": "Peta",
  "Model origin (0,0)": "Titik asal model (0,0)",
  "Place or address": "Tempat atau alamat",

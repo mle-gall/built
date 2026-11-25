@@ -1,5 +1,5 @@
 """Live input for a tool's own window, including during timer callbacks."""
-from core.input_types import QPoint, Qt
+from ingetrazo_core import Input, PixelPoint
 
 
 def _window_input(owner):
@@ -11,25 +11,15 @@ def _window_input(owner):
 
 def modifiers(owner, *, query=False):
     state = _window_input(owner)
-    if state is None:
-        from PySide6.QtGui import QGuiApplication
-        from PySide6.QtWidgets import QApplication
-        return QApplication.queryKeyboardModifiers() if query else QGuiApplication.keyboardModifiers()
-    return Qt.KeyboardModifier(state.modifiers)
+    return Input.KeyboardModifier(state.modifiers) if state is not None else Input.NoModifier
 
 
 def mouse_buttons(owner):
     state = _window_input(owner)
-    if state is None:
-        from PySide6.QtWidgets import QApplication
-        return QApplication.mouseButtons()
-    return Qt.MouseButton(state.buttons)
+    return Input.MouseButton(state.buttons) if state is not None else Input.NoButton
 
 
 def cursor_position(owner):
     state = _window_input(owner)
-    if state is None:
-        from PySide6.QtGui import QCursor
-        return QCursor.pos()
-    x, y = state.position
-    return QPoint(int(x), int(y))
+    x, y = state.position if state is not None else (0, 0)
+    return PixelPoint(int(x), int(y))

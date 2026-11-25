@@ -9,50 +9,10 @@ never snaps': the first release placed a zero cota and silently disarmed the
 tool."""
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-
 import pytest
-from PySide6.QtCore import QEvent, QPoint, QPointF, Qt
-from PySide6.QtGui import QMouseEvent
-from PySide6.QtWidgets import QApplication, QGraphicsScene
-
-_inst = QApplication.instance()
-if _inst is None:
-    _app = QApplication([])
-elif not isinstance(_inst, QApplication):
-    pytest.skip("a non-widget QGuiApplication is already active",
-                allow_module_level=True)
 
 from core.composition import (Cajetin, Composicion, CotaItem,   # noqa: E402
                               FormaItem, MarcoVista)
-
-
-def _mouse(view, etype, px, py, button=Qt.LeftButton,
-           buttons=Qt.NoButton, mods=Qt.NoModifier):
-    pos = QPointF(px, py)
-    # The global point is where that viewport pixel is on the screen: the
-    # scene finds what is under a press through it, so passing the local
-    # point again only worked while the page sat at the window's left edge.
-    glob = QPointF(view.viewport().mapToGlobal(pos.toPoint()))
-    ev = QMouseEvent(etype, pos, glob, button, buttons, mods)
-    if etype == QEvent.MouseButtonPress:
-        view.mousePressEvent(ev)
-    elif etype == QEvent.MouseMove:
-        view.mouseMoveEvent(ev)
-    else:
-        view.mouseReleaseEvent(ev)
-
-
-def _click(view, px, py):
-    _mouse(view, QEvent.MouseButtonPress, px, py)
-    _mouse(view, QEvent.MouseButtonRelease, px, py)
-
-
-def _scene_xy(view, px, py):
-    p = view.mapToScene(QPoint(px, py))
-    return p.x(), p.y()
 
 
 class _FakeViewport:

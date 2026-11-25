@@ -58,8 +58,6 @@ def _every_kind(comp) -> None:
 
 
 def build(path: Path) -> None:
-    from PySide6.QtWidgets import QApplication
-    QApplication.instance() or QApplication([])
     from core.composition import Composicion, MarcoVista, TextoItem
     from core.saved_views import SavedView
     from core.scene import Scene

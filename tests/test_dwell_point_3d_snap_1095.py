@@ -13,9 +13,8 @@ Two regressions, both on the Line tool:
 """
 from __future__ import annotations
 
-import os
 
-from PySide6.QtCore import QPointF, Qt
+from ingetrazo_core import ScreenPoint as QPointF, Input as Qt
 from ingetrazo_core import Vec3 as QVector3D
 
 from core.scene import Scene
@@ -100,9 +99,6 @@ def test_shift_locks_a_from_point_reference():
 
 
 def test_the_line_tool_dwell_reference_works_in_3d_through_the_viewport():
-    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    from PySide6.QtWidgets import QApplication
-    QApplication.instance() or QApplication([])
     from tests.controller_surface import ControllerSurface as Viewport
     from tools.rust_tools import LineTool
     from tools.base import ToolContext
@@ -181,7 +177,6 @@ def test_the_magnetic_axis_holds_once_engaged():
                             "project_onto_line": project_far},
                          sticky_axis="x")
     assert broke.kind != "axis"
-
 
 
 def test_a_shift_lock_keeps_the_from_point_guide():

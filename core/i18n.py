@@ -106,10 +106,12 @@ def resolve_language(choice: str | None) -> str:
     if choice and str(choice) != SYSTEM:
         return str(choice)
     from app_shell.native import _shell
-    if _shell is not None:
-        return language_for_locales(_shell.preferred_languages())
-    from PySide6.QtCore import QLocale
-    return language_for_locales(QLocale.system().uiLanguages())
+    if _shell is not None:          # the shell: the user's languages, in order
+        from ingetrazo_render import preferred_languages
+        return language_for_locales(preferred_languages())
+    import locale                   # headless: the process's own locale
+    language, _ = locale.getlocale()
+    return language_for_locales([language] if language else [])
 
 
 def set_language(lang: str) -> None:

@@ -12,17 +12,13 @@ lock stayed free. Now it goes through the cursor ray, as the on-edge snap.
 """
 from __future__ import annotations
 
+from ingetrazo_render import MouseEvent
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-import sys
 
 import pytest
-from PySide6.QtCore import QEvent, QPointF, Qt
-from PySide6.QtGui import QMouseEvent
+from ingetrazo_core import Input as Qt
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication
 
-if QApplication.instance() is None:
-    QApplication(sys.argv[:1])
 
 ALTURA = 0.825
 
@@ -43,8 +39,7 @@ def vp(native_host):
 
 def _hover_guide(v, x, mods=Qt.NoModifier):
     px = v._world_to_pixel(QVector3D(x, 3.0, ALTURA))
-    ev = QMouseEvent(QEvent.MouseMove, QPointF(*px), QPointF(*px),
-                     Qt.NoButton, Qt.NoButton, mods)
+    ev = MouseEvent('move', *px, Qt.NoButton, Qt.NoButton, mods)
     return v._build_ctx(ev).snap
 
 

@@ -11,13 +11,9 @@ import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication
-
 from core.camera import OrbitCamera
 from core.scene import Scene
 from views.wgpu_style import SHADOW_CATCHER_Z, style_payload, sun_payload
-
-_app = QApplication.instance() or QApplication([])
 
 
 def _scene():

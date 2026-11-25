@@ -9,21 +9,11 @@ visto"); the eyedropper picks the identity up; and editing a material
 restamps every face that wears it — all of it undoable exactly."""
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
-from PySide6.QtCore import QPointF, Qt
+from ingetrazo_core import ScreenPoint, Input
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication
 
-_inst = QApplication.instance()
-if _inst is None:
-    _app = QApplication([])
-elif not isinstance(_inst, QApplication):
-    pytest.skip("a non-widget QGuiApplication is already active",
-                allow_module_level=True)
 
 from core.group import Group                                      # noqa: E402
 from core.history import History, RestampMaterialCommand          # noqa: E402
@@ -58,11 +48,11 @@ class _FakeViewport:
         pass
 
 
-def _click(vp, face, modifiers=Qt.NoModifier):
+def _click(vp, face, modifiers=Input.NoModifier):
     vp._pick = face
     tool = PaintTool()
     tool.on_click(ToolContext(viewport=vp, world=QVector3D(),
-                              screen=QPointF(0, 0), modifiers=modifiers,
+                              screen=ScreenPoint(0, 0), modifiers=modifiers,
                               snap=None))
 
 
@@ -129,10 +119,10 @@ def test_eyedropper_picks_up_identity():
     anon = _quad(vp.scene.mesh, z=1.0)
     anon.attrs["color"] = (0.1, 0.2, 0.3)
 
-    _click(vp, face, modifiers=Qt.AltModifier)
+    _click(vp, face, modifiers=Input.AltModifier)
     assert PaintTool.current_material is mat          # the registry object
 
-    _click(vp, anon, modifiers=Qt.AltModifier)
+    _click(vp, anon, modifiers=Input.AltModifier)
     assert PaintTool.current_material is None         # anonymous sample
 
 
@@ -251,7 +241,7 @@ def test_eyedropper_carries_a_positioned_texture_only_within_its_plane():
                               "sh": 1.0, "rot": 0.0,
                               "uvw": [1, 0, 0, 0, 0, 1, 0, 0]}
 
-    _click(vp, floor, modifiers=Qt.AltModifier)        # sample
+    _click(vp, floor, modifiers=Input.AltModifier)        # sample
     assert PaintTool.current_texture["uvw"]
 
     _click(vp, wall)                                   # paint another plane

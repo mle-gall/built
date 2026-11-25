@@ -1160,7 +1160,7 @@ def _acquire(engine, view, edges, on_face, point, face_normal,
                              face_normal=face_normal if on_face else None)
     options['acquired_edge'] = engine._acquired_edge
     options['acquired_face_normal'] = engine._acquired_face_normal
-    from core.input_types import Qt
+    from core.input_codes import Input as Qt
     if drawing and engine.direction_locked(
             modifiers if modifiers is not None else Qt.NoModifier):
         if hover is not None:

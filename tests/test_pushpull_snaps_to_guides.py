@@ -12,8 +12,8 @@ from __future__ import annotations
 import math
 
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from PySide6.QtCore import QPointF, Qt
-from PySide6.QtGui import QMouseEvent
+from ingetrazo_core import ScreenPoint, Input
+from ingetrazo_render import MouseEvent
 from ingetrazo_core import Vec3 as QVector3D
 
 from core.guide import Guide
@@ -36,15 +36,14 @@ def _window(native_host):
 
 
 def _hover(vp, px, py):
-    vp._last_mouse_pos = QPointF(px, py)
-    vp._process_hover(QPointF(px, py), Qt.NoModifier)
+    vp._last_mouse_pos = ScreenPoint(px, py)
+    vp._process_hover(ScreenPoint(px, py), Input.NoModifier)
 
 
 def _click(vp, px, py):
-    vp._last_mouse_pos = QPointF(px, py)
-    vp._dispatch_tool_click(QMouseEvent(
-        QMouseEvent.MouseButtonPress, QPointF(px, py),
-        Qt.LeftButton, Qt.LeftButton, Qt.NoModifier))
+    vp._last_mouse_pos = ScreenPoint(px, py)
+    vp._dispatch_tool_click(MouseEvent(
+        "press", px, py, Input.LeftButton, Input.LeftButton, Input.NoModifier))
 
 
 def _start_push(win, vp):

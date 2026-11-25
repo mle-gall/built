@@ -50,6 +50,12 @@ from __future__ import annotations
 from formats import built
 import logging
 
+# Forms, questions and jobs for extensions (docs/plugins.md). The old
+# module names ``views.chrome_forms`` / ``views.chrome_dialogs`` still
+# resolve (views/__init__.py) but are deprecated.
+from ingetrazo_render import chrome_dialogs, chrome_forms  # noqa: F401
+from ingetrazo_render.chrome_dialogs import Job  # noqa: F401
+
 log = logging.getLogger("ingetrazo.plugins")
 
 API_VERSION = 2
@@ -68,7 +74,7 @@ def _make_pick_tool(prompt: str, done, cancelled):
     a ceiling, an endpoint), ``cancelled()`` on Esc. Built here and not at
     module level: a module-level Tool would get its own Extensions-menu
     entry (core/extensions.py), and the panel is the only way in."""
-    from core.input_types import Qt
+    from ingetrazo_core import Input as Qt
     from tools.base import Tool
 
     class _PickPoint(Tool):
@@ -172,8 +178,8 @@ class ExtensionApp:
         if late is not None:
             restored = bool(late())
         else:
-            from core.settings import settings as QSettings
-            state = QSettings().value("ui/window_state")
+            from core.settings import settings as native_settings
+            state = native_settings().value("ui/window_state")
             if state is None:
                 return False
             restored = bool(self._window.restoreState(state))

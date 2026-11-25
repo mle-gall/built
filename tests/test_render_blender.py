@@ -9,8 +9,10 @@ import json
 import os
 import py_compile
 import shutil
+import signal
 import struct
 import subprocess
+import sys
 
 import pytest
 from ingetrazo_core import Vec3 as QVector3D
@@ -146,6 +148,31 @@ def _png_size(path):
     return struct.unpack(">II", head[16:24])
 
 
+def _cycles_metal_kernel_abort(run):
+    # The macOS exception includes Blender's symbolized ObjC stack on stderr.
+    return (sys.platform == "darwin" and run.returncode == -signal.SIGABRT
+            and "Blender 5.2.3 LTS " in run.stdout
+            and "INGETRAZO device METAL" in run.stdout and "INGETRAZO engine CYCLES" in run.stdout
+            and "terminating due to uncaught exception of type NSException" in run.stderr
+            and "fileURLWithPath:" in run.stderr
+            and any("MetalKernelPipeline" in line and "compile" in line
+                    for line in run.stderr.splitlines()))
+
+
+def test_only_the_known_macos_kernel_compiler_abort_is_skippable(monkeypatch):
+    monkeypatch.setattr(sys, "platform", "darwin")
+    stdout = "Blender 5.2.3 LTS (hash e13b728c6880)\nINGETRAZO device METAL\nINGETRAZO engine CYCLES"
+    stderr = ("+[NSURL(NSURL) fileURLWithPath:]\nccl::MetalKernelPipeline::compile()\n"
+              "libc++abi: terminating due to uncaught exception of type NSException")
+    def aborted(output, trace):
+        return subprocess.CompletedProcess(["blender"], -signal.SIGABRT, output, trace)
+    assert _cycles_metal_kernel_abort(aborted(stdout, stderr))
+    assert not _cycles_metal_kernel_abort(aborted(stdout, "renderer failed"))
+    assert not _cycles_metal_kernel_abort(aborted(stdout.replace("5.2.3", "5.2.4"), stderr))
+    assert not _cycles_metal_kernel_abort(aborted(stdout, stderr.replace("compile()", "load()")))
+    assert not _cycles_metal_kernel_abort(subprocess.CompletedProcess(["blender"], 1, stdout, stderr))
+
+
 @pytest.mark.slow
 @pytest.mark.skipif(shutil.which("blender") is None,
                     reason="no Blender on this machine")
@@ -156,7 +183,9 @@ def test_a_real_render_through_the_users_blender(tmp_path):
     found = rb.find_blender()
     run = subprocess.run(rb.command(found, job), capture_output=True,
                          text=True, env=rb.clean_env(), timeout=600)
-    assert run.returncode == 0, run.stdout[-2000:]
+    if _cycles_metal_kernel_abort(run):
+        pytest.skip("Blender 5.2.3 Cycles aborted compiling a Metal kernel (NSURL fileURLWithPath:)")
+    assert run.returncode == 0, (run.stdout + run.stderr)[-4000:]
     assert "INGETRAZO done" in run.stdout
     assert _png_size(tmp_path / "render.png") == (160, 90)
 

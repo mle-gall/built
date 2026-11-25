@@ -3,6 +3,7 @@
 ones stay indented. Either way the document reads back the same."""
 from __future__ import annotations
 
+from tests.raster_samples import solid_raster
 import json
 import zipfile
 
@@ -62,12 +63,10 @@ def test_a_large_document_is_compact_and_reads_back_the_same(
 
 def test_a_large_textured_container_reads_back_the_same(
         tmp_path, monkeypatch):
-    from PySide6.QtGui import QImage
     monkeypatch.setattr(igz, "_LARGE_DOCUMENT", 10)
     monkeypatch.setenv("INGETRAZO_TEXTURE_CACHE", str(tmp_path / "cache"))
     png = tmp_path / "t.png"
-    img = QImage(4, 4, QImage.Format_RGB32)
-    img.fill(0x3689E6)
+    img = solid_raster(4, 4, (54, 137, 230))
     img.save(str(png))
     scene = _doc(tmp_path, 30, texture=png)
     out = tmp_path / "large-tex.igz"

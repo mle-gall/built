@@ -4,7 +4,7 @@
 from collections import defaultdict
 from unittest.mock import Mock, patch
 
-from core.input_types import Qt
+from ingetrazo_core import Input as Qt
 from ingetrazo_render import shortcut_text
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from tests.test_shortcuts_transfer import ventana  # noqa: F401

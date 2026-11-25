@@ -64,6 +64,8 @@ The bridge adds `api`, `plugin` (the extension filename stem), `panel`, `instanc
 
 Built refreshes a descriptor after an event or a scene revision change. Call `invalidate()` on the application thread when asynchronous progress or results change. Use `ingetrazo_render.chrome_dialogs.Job(app.window, label, on_cancel=...)` for long-running work. Snapshot the active scene and camera before starting a worker. Update and end the job on the application thread. Closing the panel leaves the job in the activity capsule.
 
+Set `sections_on_show = True` on panels whose sections are expensive to compute. Built registers the title immediately and requests the sections when the panel is visible. Model Info uses the document revision to share one census between its tables and Copy to Clipboard.
+
 For a snapped point, call `app.pick_point(prompt, done)`. The host routes the next viewport click to `done(point, on_face)` for the original scene revision. Escape cancels and restores the Select tool.
 
 A model may implement `on_open()` to prepare its content when a command opens it. For document overlays, implement `overlay(viewport)` and yield `views.wgpu_overlay.Primitive` values. Coordinates are logical pixels in the supplied viewport. Project world points with `viewport._world_to_pixel(point)` and skip points outside the projection. The native annotation canvas draws these primitives above the model. Supported shapes include `polyline`, `polygon`, `point` and `text`. Set `color` and optional `fill` to hex colours, and `width` to the stroke width. An empty sequence clears the overlay.

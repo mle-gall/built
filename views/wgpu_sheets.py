@@ -25,7 +25,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from core.input_types import NATIVE, QEvent, Qt
+from core.input_codes import Input as Qt, Type as QEvent
 from ingetrazo_render import shortcut_text
 
 SEP = "\x1f"
@@ -71,34 +71,20 @@ _WINDOW_KEYS = ("Ctrl+S", "Ctrl+Shift+S", "Ctrl+O", "Ctrl+N", "Ctrl+W", "Ctrl+Q"
 
 
 # ---- Where the workspace can be ----------------------------------------------
-def _qt_window(win):
-    """The QMainWindow behind ``win`` (a DocumentHost answers for one), or None."""
-    if NATIVE:
-        return None
-    from PySide6.QtWidgets import QWidget
-    real = getattr(win, "_host_window", win) if win is not None else None
-    return real if isinstance(real, QWidget) else None
-
-
 def is_shell(win) -> bool:
-    """The native ``built`` shell's window (app_shell/window.py): no widget."""
-    return win is not None and _qt_window(win) is None
+    """The native ``built`` shell's window (app_shell/window.py): the only
+    host since the Classic window left."""
+    return win is not None
 
 
 def embeds(win) -> bool:
-    """Whether ``win``'s sheets open as the workspace (else the Qt window)."""
+    """Whether ``win``'s sheets open as the workspace: always, in the shell."""
     if FORCE is not None:
         return FORCE
-    if is_shell(win):
-        return True
-    from PySide6.QtGui import QGuiApplication
-    if QGuiApplication.platformName() in ("offscreen", "minimal"):
-        return False
-    doc = getattr(win, "_doc", None)
-    return bool(getattr(doc, "_renderer_wgpu", False))
+    return is_shell(win)
 
 
-#: The rail's tools: their icon (views/icons.py) and their name.
+#: The rail's tools: their icon (ingetrazo_render.icon_art) and their name.
 TOOL_ICONS = {"select": "select", "pan": "pan", "zoom": "zoom", "zoom_ventana": "zoom_window",
               "estilo": "eyedropper", "vista": "comp_vista", "texto": "text", "etiqueta": "comp_etiqueta",
               "nivel": "comp_nivel", "llamada": "comp_llamada", "imagen": "image", "cajetin": "comp_cajetin",
@@ -285,10 +271,6 @@ def to_sheets(win, index=None) -> None:
 def to_model(win) -> None:
     """The workspace ▾ chose Model (or ⌃Tab)."""
     win = getattr(win, "_host_window", win)
-    qt = _qt_window(win)
-    if qt is not None and hasattr(qt, "_show_model"):
-        qt._show_model()
-        return
     comp = getattr(win, "_composer", None)
     if comp is not None and getattr(comp, "EMBEDDED", False):
         comp.hide()
@@ -299,9 +281,9 @@ def _cajetin_template():
     starts from (the composer's ``cajetin_templates_dir`` and
     ``default_cajetin_template_name``): ``(folder, name or None)``."""
     from core.autosave import _app_data_base
-    from core.settings import settings as QSettings
+    from core.settings import settings as native_settings
     base = _app_data_base()
-    name = str(QSettings().value("composer/default_cajetin", "") or "") or None
+    name = str(native_settings().value("composer/default_cajetin", "") or "") or None
     return str(Path(base) / "cajetines"), name
 
 
@@ -323,13 +305,7 @@ def _int(v) -> int:
 
 
 def _alive(obj) -> bool:
-    if NATIVE:
-        return obj is not None and not getattr(obj, "_closed", False)
-    try:
-        from shiboken6 import isValid
-        return obj is not None and isValid(obj) and not getattr(obj, "_closed", False)
-    except Exception:  # noqa: BLE001
-        return False
+    return obj is not None and not getattr(obj, "_closed", False)
 
 
 class _Act:
@@ -794,7 +770,7 @@ class Workspace:
         from core.composition import AddItemCommand
         from core.i18n import tr
         from views.filedialogs import file_dialogs
-        parent = _qt_window(self.composer._window)
+        parent = None                     # the shell's panels have no Qt parent
         path, _ = file_dialogs.getOpenFileName(parent, tr("Choose image…"), "", tr("Images (*.png *.jpg *.jpeg)"))
         self._tool("select")
         if not path:
@@ -1190,7 +1166,7 @@ class Workspace:
         title, ext, filters = self._EXPORTS[kind]
         from views.filedialogs import file_dialogs
         # The native save panel in both apps (the shell's is app_shell.files').
-        parent = _qt_window(self.composer._window)
+        parent = None                     # the shell's panels have no Qt parent
         path, _ = file_dialogs.getSaveFileName(parent, title, self._default_path(kind), filters)
         if path:
             if not Path(path).suffix:
@@ -1200,7 +1176,7 @@ class Workspace:
     def _export_to(self, kind: str, path: str) -> None:
         comp = self.composer
         from ingetrazo_render import chrome_dialogs
-        parent = _qt_window(comp._window) or comp._window
+        parent = comp._window
         labels = {"pdf": "Exporting PDF", "pdf_all": "Exporting the sheets", "png": "Exporting image",
                   "dxf": "Exporting DXF", "svg": "Exporting SVG"}
         name = Path(path).name

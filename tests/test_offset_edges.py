@@ -6,7 +6,7 @@ an edge takes its connected run (open polyline or closed loop), and edges
 selected before picking the tool up are the run — the two usual ways."""
 from __future__ import annotations
 
-from PySide6.QtCore import QPointF, Qt
+from ingetrazo_core import ScreenPoint, Input
 from ingetrazo_core import Vec3 as QVector3D
 
 from core.history import History
@@ -51,8 +51,8 @@ class _Vp:
 
 
 def _ctx(vp, world=V(0, 0)):
-    return ToolContext(viewport=vp, world=world, screen=QPointF(0, 0),
-                       modifiers=Qt.NoModifier, snap=None)
+    return ToolContext(viewport=vp, world=world, screen=ScreenPoint(0, 0),
+                       modifiers=Input.NoModifier, snap=None)
 
 
 def _keys(points):

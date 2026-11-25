@@ -23,10 +23,11 @@ it never creates a guide, so it must keep it.
 """
 from __future__ import annotations
 
+from ingetrazo_render import KeyEvent, ShortcutOverride
 from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
 from types import SimpleNamespace
 
-from PySide6.QtCore import QPointF, Qt
+from ingetrazo_core import ScreenPoint as QPointF, Input as Qt
 from ingetrazo_core import Vec3 as QVector3D
 
 from core.history import History
@@ -283,16 +284,11 @@ def test_ctrl_as_part_of_a_shortcut_leaves_the_mode_alone():
 
 
 def test_the_viewport_knows_a_ctrl_tap_from_ctrl_z():
-    from PySide6.QtCore import QEvent
-    from PySide6.QtGui import QKeyEvent
-    from PySide6.QtWidgets import QApplication
-    if QApplication.instance() is None:
-        QApplication([])
     from tests.controller_surface import ControllerSurface as Viewport
     vp = Viewport(None)
-    vp.keyPressEvent(QKeyEvent(QEvent.KeyPress, Qt.Key_Control, Qt.ControlModifier))
+    vp.keyPressEvent(KeyEvent(True, Qt.Key_Control, Qt.ControlModifier))
     assert vp.ctrl_tapped()
-    vp.event(QKeyEvent(QEvent.ShortcutOverride, Qt.Key_Z, Qt.ControlModifier, "z"))
+    vp.event(ShortcutOverride(Qt.Key_Z, Qt.ControlModifier, 'z'))
     assert not vp.ctrl_tapped()                 # Ctrl+Z: not a tap
-    vp.keyPressEvent(QKeyEvent(QEvent.KeyPress, Qt.Key_Control, Qt.ControlModifier))
+    vp.keyPressEvent(KeyEvent(True, Qt.Key_Control, Qt.ControlModifier))
     assert vp.ctrl_tapped()                     # a fresh press re-arms it

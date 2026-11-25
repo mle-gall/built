@@ -124,7 +124,7 @@ def test_enter_on_select_is_not_a_repeat(win):
     win._on_reverse_faces()
     win._activate_tool("line")
     win._activate_tool("select")
-    from core.input_types import Qt
+    from ingetrazo_core import Input as Qt
     win._host.key(True, Qt.Key_Return, text="\r")
     win._host.key(False, Qt.Key_Return)
     assert win.viewport.active_tool is win._tools["select"]

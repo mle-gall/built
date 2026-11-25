@@ -1,15 +1,6 @@
-# IngeTrazo runtime + dev dependencies.
-#
-# Deliberately minimal: the engine runs on PySide6 alone (Qt's bundled OpenGL
-# for rendering, QtGui's QMatrix4x4/QVector3D for math, the stdlib `array` for
-# vertex packing). NumPy joined in the georef DEM work (Track G, G2) for
-# heightfield decode/sampling. No native mesh/BIM libraries yet — those are
-# added only when the feature that needs them actually lands.
+# Python runtime and development dependencies for native Built.
 
 # --- Runtime ---
-# <6.12: 6.12.0 came out on 08-10-2026 and 0.5.8 was tested on 6.11; a new
-# Qt minor is adopted after it is tried, not on a release day.
-PySide6>=6.7,<6.12
 numpy>=1.26        # DEM heightfield decode + sampling (georef Track G, G2)
 # .skp import: OpenSKP 1.5.0 includes annotation reading and analytic arcs.
 openskp @ git+https://github.com/iamahsanmehmood/openskp@902ca8027efbe9faf1d31fcec4fea485a2f5fd1c#subdirectory=packages/python
@@ -30,6 +21,4 @@ pytest-xdist>=3.8
 # --- Planned (NOT yet required; do not install on Python 3.14 — no wheels) ---
 # ifcopenshell   # IFC import/export (BIM bridge with IngePresupuestos)
 # pyassimp       # COLLADA/glTF import
-# Note: georef tiles + DEM need NO extra pip — QNetworkAccessManager/QImage (Qt)
-# fetch tiles, NumPy decodes the DEM. pyproj/mercantile/rasterio intentionally
-# avoided (UTM ported by hand, slippy math + Terrain-RGB decoded in-project).
+# Survey imagery uses the native image codecs, and NumPy samples DEM data.

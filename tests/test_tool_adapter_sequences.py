@@ -110,19 +110,16 @@ def test_adapter_event_prefix(name, recorded):
 
 
 def test_plugin_can_connect_and_disconnect_a_bound_native_tool_slot():
-    from PySide6.QtCore import QObject, Signal
+    from ingetrazo_render import ChangeCallbacks
     from tools.rust_tools import SelectTool
-
-    class Events(QObject):
-        hover = Signal(object, int, int, int)
 
     class RecordingSelect(SelectTool):
         def _px(self, viewport, kind, x, y, modifiers=0, t=0.0):
             calls.append((viewport, kind, x, y, modifiers))
 
-    tool, events, calls = RecordingSelect(), Events(), []
-    events.hover.connect(tool.hover_at)
-    events.hover.emit(events, 7, 11, 3)
-    events.hover.disconnect(tool.hover_at)
-    events.hover.emit(events, 8, 12, 4)
+    tool, events, calls = RecordingSelect(), ChangeCallbacks(), []
+    events.connect(tool.hover_at)
+    events.emit(events, 7, 11, 3)
+    events.disconnect(tool.hover_at)
+    events.emit(events, 8, 12, 4)
     assert calls == [(events, "hover", 7, 11, 3)]

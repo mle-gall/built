@@ -10,18 +10,14 @@ from __future__ import annotations
 
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import math
-import os
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np  # noqa: E402
 import pytest  # noqa: E402
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
-from PySide6.QtWidgets import QApplication  # noqa: E402
 
 import core._native as _native  # noqa: E402
 
-_app = QApplication.instance() or QApplication([])
 mod = _native.native            # the engine on (INGETRAZO_RUST), not only built
 pytestmark = pytest.mark.skipif(
     mod is None or not hasattr(mod, "InstanceSet")
@@ -82,7 +78,6 @@ def _window(native_host, lazy):
     vp.scene.version += 1
     vp._PICK_LAZY_MIN_FACES = 1 if lazy else 10 ** 9
     return win, vp
-
 
 
 VIEWS = ((30.0, 35.0, True), (200.0, 20.0, True), (115.0, 60.0, False),
@@ -271,7 +266,6 @@ def test_of_two_coplanar_faces_the_smaller_copy_is_picked(native_host):
         out.append((_key(face.centroid()), place.name))
         assert not lazy or not getattr(vp, "_pick_live", None)
     assert out[0] == out[1] and out[0][1] == "small"
-
 
 
 def test_the_points_near_the_cursor_are_numpys():

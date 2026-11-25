@@ -13,7 +13,7 @@ fn on_key<'py>(a: &Args<'py>) -> Reply<'py> {
     let modifiers = a.get_item(3)?;
     let tool = a.get_item(0)?;
     let vp = a.get_item(1)?;
-    let qt = imported(py, "core.input_types")?.getattr("Qt")?;
+    let qt = imported(py, "ingetrazo_core")?.getattr("Input")?;
     let arrow = fields!(py; qt.getattr("Key_Right")? => "ArrowRight", qt.getattr("Key_Left")? => "ArrowLeft", qt.getattr("Key_Up")? => "ArrowUp", qt.getattr("Key_Down")? => "ArrowDown").into_any().call_method1("get", (&key,))?;
     if !arrow.is_truthy()? {
         return false.into_bound_py_any(py);

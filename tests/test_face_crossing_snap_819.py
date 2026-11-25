@@ -8,16 +8,11 @@ A box sunk into the floor, a beam through a wall: .skp offers
 said «On face», so a line could not start exactly on it."""
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from PySide6.QtCore import Qt  # noqa: E402
+from ingetrazo_core import Input as Qt
 from ingetrazo_core import Vec3 as V
-from PySide6.QtWidgets import QApplication  # noqa: E402
 
-_app = QApplication.instance() or QApplication([])
 
 from core.snap import compute_snap  # noqa: E402
 

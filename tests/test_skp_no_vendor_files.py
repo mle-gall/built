@@ -10,14 +10,11 @@ from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from pathlib import Path
 
 import pytest
-from PySide6.QtWidgets import QApplication
 
-_app = QApplication.instance() or QApplication([])
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_an_unreadable_skp_is_reported_and_nothing_else_runs(native_host, monkeypatch, tmp_path):
-    from PySide6.QtWidgets import QMessageBox
 
 
     for name in ("_find_skp_converter", "_install_skp_converter",
@@ -25,7 +22,7 @@ def test_an_unreadable_skp_is_reported_and_nothing_else_runs(native_host, monkey
         assert not hasattr(native_host.window, name), name
     said = []
     monkeypatch.setattr("ingetrazo_render.chrome_dialogs.warning",
-                        staticmethod(lambda *a, **k: said.append(a[2]) or QMessageBox.Ok))
+                        staticmethod(lambda *a, **k: said.append(a[2])))
     monkeypatch.setattr("ingetrazo_render.chrome_dialogs.question",
                         staticmethod(lambda *a, **k: pytest.fail("asked to install something")))
     # The Render tab looks for Blender when the window opens (one
@@ -55,7 +52,7 @@ def test_no_skp_export_in_the_menu(native_host):
 
 
 def test_the_bundle_spec_leaves_the_sdk_template_out():
-    text = (ROOT / "ingetrazo.spec").read_text(encoding="utf-8")
+    text = (ROOT / "packaging/native.spec").read_text(encoding="utf-8")
     assert "'_scaffold' not in src" in text
     flatpak = (ROOT / "packaging/flatpak/com.ingetrazo.IngeTrazo.yml").read_text(encoding="utf-8")
     assert "openskp/_scaffold" in flatpak and "rm -rf" in flatpak

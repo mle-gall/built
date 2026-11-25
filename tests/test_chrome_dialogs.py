@@ -10,11 +10,11 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import pytest
-from core.input_types import Qt
+from ingetrazo_core import Input as Qt
 from ingetrazo_core import Vec3 as QVector3D
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from ingetrazo_render import chrome_dialogs as cd
-from ingetrazo_render.chrome_dialogs import QMessageBox
+from core.input_codes import StandardButton
 
 
 @pytest.fixture
@@ -35,6 +35,18 @@ def win(native_host, monkeypatch):
 
     monkeypatch.setattr(modal, "run_until", turn)
     return w
+
+
+def _png_rgb(w, h, pixel):
+    """An opaque RGB PNG of one colour (standard library only)."""
+    import struct
+    import zlib
+
+    def chunk(kind, data):
+        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
+    rows = b"".join(b"\x00" + pixel * w for _ in range(h))
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0))
+            + chunk(b"IDAT", zlib.compress(rows)) + chunk(b"IEND", b""))
 
 
 def chrome(win, then):
@@ -155,20 +167,20 @@ def test_message_boxes_map_standard_buttons(win):
     got = []
     chrome(win, lambda: (got.append(cd.current_sheet(win)), press(Qt.Key_Return, target=win)))
     assert cd.question(win, "Recovered drawing", "Recover it?",
-                       QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes) == QMessageBox.Yes
+                       StandardButton.Yes | StandardButton.No, StandardButton.Yes) == StandardButton.Yes
     sheet = got[0]
     assert [b[1] for b in sheet.buttons] == ["No", "Yes"]
-    assert sheet.cancel == str(QMessageBox.No.value)
+    assert sheet.cancel == str(StandardButton.No.value)
     chrome(win, lambda: press(Qt.Key_Escape, target=win))
-    assert cd.question(win, "Purge", "Purge unused?") == QMessageBox.No
-    assert cd.critical(win, "Open failed", "No such file") == QMessageBox.Ok
+    assert cd.question(win, "Purge", "Purge unused?") == StandardButton.No
+    assert cd.critical(win, "Open failed", "No such file") == StandardButton.Ok
 
 
 def test_warning_before_the_first_frame_is_kept_in_the_chrome_history(native_host, monkeypatch):
     win = native_host.window
     monkeypatch.setattr(cd, "in_shell", lambda: True)
     assert cd.live(win) is None
-    assert cd.warning(win, "Linked files", "Missing") == QMessageBox.Ok
+    assert cd.warning(win, "Linked files", "Missing") == StandardButton.Ok
     row = cd.history(win)[0]
     assert (row.title, row.detail, row.tone) == ("Linked files", "Missing", "warning")
 
@@ -189,10 +201,7 @@ def test_information_call_sites_post_toasts(win, tmp_path, monkeypatch, method, 
         monkeypatch.setattr(autosave, "discarded_dir", lambda: tmp_path)
     elif method == "_on_insert_faceme_image":
         picture = tmp_path / "opaque.png"
-        from PySide6.QtGui import QImage
-        image = QImage(2, 2, QImage.Format.Format_RGB32)
-        image.fill(0xFFFFFFFF)
-        assert image.save(str(picture))
+        picture.write_bytes(_png_rgb(2, 2, b"\xff\xff\xff"))
         monkeypatch.setattr(file_dialogs, "getOpenFileName", lambda *a: (str(picture), ""))
 
     elif method == "_import_rfa_path":
@@ -431,37 +440,3 @@ def test_failed_job_and_export_folder_are_retained(win, tmp_path, monkeypatch):
     assert row.action_label == "Open folder"
     row.action()
     assert opened == [tmp_path.resolve()]
-
-
-def test_the_guard_holds_a_qt_window_while_a_sheet_is_up():
-    """In the Qt app the guard filters the application's events: a key is
-    the sheet's (Esc answers it), clicks reach only the Metal view, the
-    menu bar greys out; released, all of it comes back."""
-    from PySide6.QtCore import QEvent, QPointF
-    from PySide6.QtGui import QKeyEvent, QMouseEvent
-    from PySide6.QtWidgets import QApplication, QLineEdit, QMainWindow, QWidget
-
-    class Window(QMainWindow):
-        _tool_actions = {}
-        _documents = []
-
-    w = Window()
-    field = QLineEdit(w)
-    view = QWidget(w)
-    w._doc = SimpleNamespace(stand_in=view)
-    menu = w.menuBar().addMenu("File")
-    answers = []
-    cd.ask_later(w, "Q", "Which?", [("cancel", "Cancel"), ("ok", "OK")], answers.append,
-                 default="ok", cancel="cancel")
-    assert cd.modal(w) and not menu.menuAction().isEnabled()
-    QApplication.sendEvent(field, QKeyEvent(QEvent.KeyPress, Qt.Key_A.value, Qt.NoModifier, "a"))
-    assert field.text() == ""
-    click = QMouseEvent(QEvent.MouseButtonPress, QPointF(2, 2), QPointF(2, 2), Qt.LeftButton,
-                        Qt.LeftButton, Qt.NoModifier)
-    guard = w._chrome_guard.filter
-    assert guard.eventFilter(field, click) is True
-    assert guard.eventFilter(view, click) is False
-    QApplication.sendEvent(field, QKeyEvent(QEvent.KeyPress, Qt.Key_Escape.value, Qt.NoModifier))
-    assert answers == ["cancel"] and not cd.modal(w) and menu.menuAction().isEnabled()
-    QApplication.sendEvent(field, QKeyEvent(QEvent.KeyPress, Qt.Key_A.value, Qt.NoModifier, "a"))
-    assert field.text() == "a"

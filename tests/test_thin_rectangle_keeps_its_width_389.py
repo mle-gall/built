@@ -22,12 +22,12 @@ the point snaps and the square.
 from __future__ import annotations
 
 
+from ingetrazo_render import MouseEvent
 from types import SimpleNamespace
 
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import pytest
-from PySide6.QtCore import QPointF, Qt
-from PySide6.QtGui import QMouseEvent
+from ingetrazo_core import ScreenPoint as QPointF, Input as Qt
 from ingetrazo_core import Vec3 as QVector3D
 
 from core.snap import compute_snap
@@ -158,9 +158,7 @@ def _hover(vp, world):
 
 
 def _press(vp, px, py):
-    vp._dispatch_tool_click(QMouseEvent(
-        QMouseEvent.MouseButtonPress, QPointF(px, py),
-        Qt.LeftButton, Qt.LeftButton, Qt.NoModifier))
+    vp._dispatch_tool_click(MouseEvent('press', px, py, Qt.LeftButton, Qt.LeftButton, Qt.NoModifier))
 
 
 def _off_axis_px(vp, cursor):
@@ -178,9 +176,7 @@ def _off_axis_px(vp, cursor):
 def test_a_thin_rectangle_keeps_its_width(native_host, far, rule, monkeypatch):
     # The hover reads the live modifiers: a Shift left over from another
     # test's last key event would lock the axis under this one.
-    from PySide6.QtGui import QGuiApplication
-    monkeypatch.setattr(QGuiApplication, "keyboardModifiers",
-                        staticmethod(lambda: Qt.NoModifier))
+    native_host.input_state.focus_lost()
     win, vp = _scene(native_host)
     assert _off_axis_px(vp, far) < vp.snap_threshold_px
 

@@ -263,6 +263,22 @@ def test_a_closed_project_lets_its_memory_go(win, tmp_path):
     assert vp() is None and scene() is None
 
 
+def test_a_retained_view_releases_its_renderer_on_close(win):
+    from views import wgpu_lines
+
+    class Renderer:
+        def set_lines(self, *args):
+            pass
+
+    view = win.view
+    view.set_scene(win.viewport.scene)
+    view.renderer = Renderer()
+    device = weakref.ref(view.renderer)
+    wgpu_lines.sync(view)
+    view.closeEvent()
+    assert device() is None
+
+
 def test_closing_the_first_tab_lets_it_go_too(win, tmp_path):
     assert win.open_path(_igz(tmp_path, "first.igz"))
     vp = weakref.ref(win.viewport)

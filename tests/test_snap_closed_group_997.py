@@ -8,7 +8,7 @@ from __future__ import annotations
 
 
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from PySide6.QtCore import Qt  # noqa: E402
+from ingetrazo_core import Input  # noqa: E402
 from ingetrazo_core import Vec3 as V
 
 
@@ -40,18 +40,18 @@ def test_corners_edges_and_faces_of_a_closed_group_snap(native_host):
     assert vp.scene.edit_group is None
     corner = V(1, 0, 1)
     px = vp._world_to_pixel(corner)
-    snap = vp._snap_at(px[0] + 2, px[1] + 2, Qt.NoModifier)
+    snap = vp._snap_at(px[0] + 2, px[1] + 2, Input.NoModifier)
     assert snap.kind == "endpoint"
     assert (snap.point - corner).length() < 1e-6
     mid = V(0.5, 0, 1)
     px = vp._world_to_pixel(mid)
-    snap = vp._snap_at(px[0], px[1] + 2, Qt.NoModifier)
+    snap = vp._snap_at(px[0], px[1] + 2, Input.NoModifier)
     assert snap.kind == "midpoint"
     assert (snap.point - mid).length() < 1e-6
     # Clear of the face's middle, which is the «Face center» snap.
     top = V(0.25, 0.5, 1)
     px = vp._world_to_pixel(top)
-    snap = vp._snap_at(*px, Qt.NoModifier)
+    snap = vp._snap_at(*px, Input.NoModifier)
     assert snap.kind == "on_face"
     # ON the group's top face, not through it to the ground behind
     assert abs(snap.point.z() - 1.0) < 1e-4

@@ -10,25 +10,18 @@ Requires a native wgpu surface for pixel readback."""
 from __future__ import annotations
 
 from tests.shell_isolation import native_gpu_host, restore_shell_patches  # noqa: F401
-import os
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np
 import pytest
-from PySide6.QtGui import QImage
+from tests.raster_samples import pixels
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication
 
-_app = QApplication.instance() or QApplication([])
 PHOTO = (0x30, 0xC0, 0x40)          # a green the model never uses
 
 
-def _photo_share(img: QImage) -> float:
-    img = img.convertToFormat(QImage.Format_RGBA8888)
-    buf = np.frombuffer(img.constBits(), np.uint8)
-    px = buf.reshape(img.height(), img.bytesPerLine())[:, :img.width() * 4]
-    px = px.reshape(img.height(), img.width(), 4)[..., :3].astype(int)
+def _photo_share(img) -> float:
+    px = pixels(img)[..., :3].astype(int)
     near = np.abs(px - np.array(PHOTO)).sum(axis=2) < 40
     return float(near.mean())
 
@@ -40,8 +33,8 @@ def test_a_box_below_an_opaque_image_does_not_paint_over_it(native_gpu_host, tmp
     vp = win.viewport
     scene = vp.scene
     V = QVector3D
-    pic = QImage(8, 8, QImage.Format_RGBA8888)
-    pic.fill(0xFF000000 | (PHOTO[0] << 16) | (PHOTO[1] << 8) | PHOTO[2])
+    from tests.raster_samples import solid_raster
+    pic = solid_raster(8, 8, PHOTO)
     path = tmp_path / "photo.png"
     pic.save(str(path))
     scene.image_planes.append(ImagePlane(
@@ -49,7 +42,7 @@ def test_a_box_below_an_opaque_image_does_not_paint_over_it(native_gpu_host, tmp
     scene.version += 1
     vp.camera.set_view("iso")                  # from above the ground
     vp.camera.fit_to(V(-2, -2, -5), V(12, 12, 0))
-    alone = _photo_share(vp.render_image(400, 300, overlays=False))
+    alone = _photo_share(vp.render_raster(400, 300, overlays=False))
     if alone < 0.05:
         # a context that draws nothing textured (the offscreen platform
         # inside the full suite): nothing here could be measured
@@ -62,11 +55,11 @@ def test_a_box_below_an_opaque_image_does_not_paint_over_it(native_gpu_host, tmp
                 (2, 3, 7, 6), (3, 0, 4, 7)):
         scene.mesh.add_face([p[i] for i in idx])
     scene.version += 1
-    under = _photo_share(vp.render_image(400, 300, overlays=False))
+    under = _photo_share(vp.render_raster(400, 300, overlays=False))
     assert under == pytest.approx(alone, abs=0.01)   # the photo still shows
     # …and a face traced ON the photo still covers it
     scene.mesh.add_face([V(0, 0, 0), V(10, 0, 0), V(10, 10, 0),
                          V(0, 10, 0)])
     scene.version += 1
-    traced = _photo_share(vp.render_image(400, 300, overlays=False))
+    traced = _photo_share(vp.render_raster(400, 300, overlays=False))
     assert traced < alone * 0.2

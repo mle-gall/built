@@ -73,7 +73,5 @@ def build(folder, big=20000, *, suffix=".igz", scale=1.0):
 
 if __name__ == "__main__":
     import sys
-    from PySide6.QtWidgets import QApplication
-    QApplication.instance() or QApplication([])
     out = build(sys.argv[1], int(sys.argv[2]) if len(sys.argv) > 2 else 20000)
     print("\n".join(f"{k} {v}" for k, v in out.items()))

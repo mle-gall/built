@@ -9,7 +9,7 @@ it back and recorded nothing, so that undo took the user's own last step
 and the cleared redo stack lost it for good."""
 from __future__ import annotations
 
-from PySide6.QtCore import QPointF, Qt
+from ingetrazo_core import ScreenPoint, Input
 from ingetrazo_core import Vec3 as QVector3D
 
 from core.history import AddEdgeCommand, History
@@ -75,8 +75,8 @@ def _sweep_along(vp, profile, path_cmd):
     tool.on_activate(vp)
     assert tool._path is not None
     vp._pick = profile
-    ctx = ToolContext(viewport=vp, world=V(0, 0), screen=QPointF(0, 0),
-                      modifiers=Qt.NoModifier, snap=None)
+    ctx = ToolContext(viewport=vp, world=V(0, 0), screen=ScreenPoint(0, 0),
+                      modifiers=Input.NoModifier, snap=None)
     tool.on_hover(ctx)
     tool.on_click(ctx)
     return tool

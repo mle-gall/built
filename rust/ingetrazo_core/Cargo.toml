@@ -11,6 +11,7 @@ name = "ingetrazo_core"
 crate-type = ["cdylib"]
 
 [dependencies]
+weezl = "0.1"
 built_python_bindings = { path = "../python_bindings" }
 encoding_rs = "0.8"
 glam = { version = "0.29.3", features = ["serde"] }

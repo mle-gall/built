@@ -204,6 +204,10 @@ impl Panels {
             }
         }
     }
+    pub(super) fn visible(&self, instance: &str) -> bool {
+        self.utility.as_deref() == Some(instance)
+            || (self.showing && self.dock.as_deref() == Some(instance))
+    }
     pub(super) fn available(&self) -> bool {
         !self.models.is_empty() || !self.commands.is_empty()
     }

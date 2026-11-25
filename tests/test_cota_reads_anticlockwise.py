@@ -14,12 +14,8 @@ projects the MODEL's dimensions onto a sheet, which is where Rafael saw it.
 """
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
-from PySide6.QtGui import QColor, QImage, QPainter
 from ingetrazo_core import Vec3 as QVector3D
 
 from core.composition import CotaItem, readable_deg
@@ -50,17 +46,6 @@ def test_a_line_and_its_reverse_give_the_very_same_text_angle():
     """Which way the drafter happened to drag is not information."""
     for dx, dy in ((40.0, 0.0), (0.0, 40.0), (30.0, 17.0), (-8.0, 25.0)):
         assert readable_deg(dx, dy) == pytest.approx(readable_deg(-dx, -dy))
-
-
-# ---- the sheet cota paints it -------------------------------------------
-
-
-def _ink(img) -> int:
-    return sum(1 for y in range(img.height()) for x in range(img.width())
-               if img.pixelColor(x, y) != QColor(255, 255, 255))
-
-
-# ---- and so do the MODEL's dimensions on a sheet -------------------------
 
 
 # ---- reglas 1, 5 y 18: la norma del DOCUMENTO ----------------------------

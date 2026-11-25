@@ -40,17 +40,11 @@ fn tr(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
     py.import("core.i18n")?.getattr("tr")
 }
 
-/// Put `text` on the clipboard: the shell's pasteboard, else Qt's.
+/// Put `text` on the clipboard (the system pasteboard; false where there
+/// is none, as headless).
 pub fn copy_text(py: Python<'_>, text: &str) -> PyResult<bool> {
-    if in_shell(py)? {
-        let item = ("public.utf8-plain-text", PyBytes::new(py, text.as_bytes()));
-        return py.import("app_shell.native")?.call_method1("pasteboard_write", (vec![item],))?.is_truthy();
-    }
-    py.import("PySide6.QtWidgets")?
-        .getattr("QApplication")?
-        .call_method0("clipboard")?
-        .call_method1("setText", (text,))?;
-    Ok(true)
+    let item = ("public.utf8-plain-text", PyBytes::new(py, text.as_bytes()));
+    py.import("app_shell.native")?.call_method1("pasteboard_write", (vec![item],))?.is_truthy()
 }
 
 // ---- CSV (Python's csv module, QUOTE_MINIMAL) ------------------------------------------
@@ -114,19 +108,10 @@ pub fn about_review<'py>(
         }
     }
     let shell = in_shell(py)?;
-    let (mut qt, mut pyside) = (String::new(), String::new());
-    // The values as Python has them (ints print as 1280, not 1280.0).
+    // The window's size as Python has it (ints print as 1280, not 1280.0).
     let mut size: Option<Bound<'py, PyAny>> = None;
     if let Some(host) = &host {
         size = Some(PyList::new(py, [host.getattr("width")?, host.getattr("height")?, host.getattr("scale")?])?.into_any());
-    } else if !shell {
-        qt = py.import("PySide6.QtCore")?.call_method0("qVersion")?.extract()?;
-        pyside = py.import("PySide6")?.getattr("__version__")?.extract()?;
-        let screen = py.import("PySide6.QtGui")?.getattr("QGuiApplication")?.call_method0("primaryScreen")?;
-        if !screen.is_none() {
-            let s = screen.call_method0("size")?;
-            size = Some(PyList::new(py, [s.call_method0("width")?, s.call_method0("height")?, screen.call_method0("devicePixelRatio")?])?.into_any());
-        }
     }
     let has_env = |k: &str| environ.call_method1("get", (k,)).and_then(|v| v.is_truthy()).unwrap_or(false);
     let frozen = opt(&sys, "frozen").is_some_and(|v| v.is_truthy().unwrap_or(false));
@@ -142,8 +127,6 @@ pub fn about_review<'py>(
     let os_version: String = if system == "Darwin" { platform.call_method0("mac_ver")?.get_item(0)?.extract()? } else { call("version")? };
     d.set_item("os_version", os_version)?;
     d.set_item("python", call("python_version")?)?;
-    d.set_item("qt", qt)?;
-    d.set_item("pyside", pyside)?;
     d.set_item("gl", gl_line)?;
     let backend = renderer.as_ref().and_then(|r| opt(r, "backend_label"));
     d.set_item("renderer", match backend {
@@ -195,11 +178,6 @@ impl AboutSheet {
     #[getter]
     fn id(&self) -> &'static str {
         "about"
-    }
-
-    #[getter]
-    fn watchdog(&self) -> bool {
-        true
     }
 
     fn build<'py>(&mut self, py: Python<'py>, ctx: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
@@ -308,11 +286,6 @@ impl CutListSheet {
     #[getter]
     fn id(&self) -> &'static str {
         "cutlist"
-    }
-
-    #[getter]
-    fn watchdog(&self) -> bool {
-        true
     }
 
     fn signature(&self, ctx: &Bound<'_, PyAny>) -> PyResult<(usize, i64, usize)> {
@@ -620,11 +593,6 @@ impl ExtensionsSheet {
         "extensions"
     }
 
-    #[getter]
-    fn watchdog(&self) -> bool {
-        true
-    }
-
     fn closed(&mut self, py: Python<'_>, _ctx: &Bound<'_, PyAny>) -> PyResult<()> {
         let kwargs = [("wait", false), ("cancel_futures", true)].into_py_dict(py)?;
         self.pool.bind(py).call_method("shutdown", (), Some(&kwargs))?;
@@ -657,9 +625,7 @@ impl ExtensionsSheet {
                 host.call_method1("wake_after", (100,))?;
             } else if let Some(view) = opt(ctx, "view") {
                 if self.timer.is_none() {
-                    let timer = py.import("PySide6.QtCore")?.getattr("QTimer")?.call1((&view,))?;
-                    timer.call_method1("setSingleShot", (true,))?;
-                    timer.getattr("timeout")?.call_method1("connect", (view.getattr("update")?,))?;
+                    let timer = py.import("core.timers")?.call_method1("timer", (&view, view.getattr("update")?))?;
                     self.timer = Some(timer.unbind());
                 }
                 let timer = self.timer.as_ref().expect("made above").bind(py);

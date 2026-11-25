@@ -304,27 +304,26 @@ type Cache = HashMap<PathBuf, (Option<(SystemTime, u64)>, Arc<Document>)>;
 static CACHE: OnceLock<Mutex<Cache>> = OnceLock::new();
 fn load(path: &Path) -> io::Result<Arc<Document>> {
     let mut cache = CACHE.get_or_init(Default::default).lock().unwrap();
-    let file = match File::open(path) {
-        Ok(f) => Some(f),
+    // A stat answers whether the parsed copy is current; the file is opened
+    // only when it changed. Every preference read (several a frame) paid an
+    // open and an fstat before.
+    let stamp = match std::fs::metadata(path) {
+        Ok(m) => Some((m.modified()?, m.len())),
         Err(e) if e.kind() == io::ErrorKind::NotFound => None,
         Err(e) => return Err(e),
     };
-    let stamp = file
-        .as_ref()
-        .map(|f| -> io::Result<_> {
-            let m = f.metadata()?;
-            Ok((m.modified()?, m.len()))
-        })
-        .transpose()?;
     if let Some((old, doc)) = cache.get(path) {
         if *old == stamp {
             return Ok(doc.clone());
         }
     }
-    let text = match file {
-        Some(f) => io::read_to_string(f)?,
-        None => String::new(),
+    let text = match File::open(path) {
+        Ok(f) => io::read_to_string(f)?,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => String::new(),
+        Err(e) => return Err(e),
     };
+    // Changed between the stat and the read: the next stat differs from
+    // this stamp and reads it again.
     let doc = Arc::new(Document::parse(text));
     cache.insert(path.to_owned(), (stamp, doc.clone()));
     Ok(doc)

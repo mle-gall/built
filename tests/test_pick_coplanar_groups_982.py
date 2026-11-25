@@ -12,18 +12,13 @@ wins), so the two now answer alike, for faces and objects, loose or not.
 from __future__ import annotations
 
 import math
-import os
 from types import SimpleNamespace
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest  # noqa: E402
-from PySide6.QtCore import QPoint, Qt  # noqa: E402
+from ingetrazo_core import PixelPoint, Input  # noqa: E402
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
-from PySide6.QtWidgets import QApplication  # noqa: E402
 
-if QApplication.instance() is None:
-    QApplication([])
 
 from core.group import Group  # noqa: E402
 from core.history import MakeGroupCommand  # noqa: E402
@@ -128,9 +123,9 @@ CAMERAS = [(yaw, pitch, dist)
            for dist in (2.5, 15, 40)]
 
 
-def _ctx(vp, px, modifiers=Qt.NoModifier):
+def _ctx(vp, px, modifiers=Input.NoModifier):
     return SimpleNamespace(viewport=vp, modifiers=modifiers,
-                           screen=QPoint(round(px[0]), round(px[1])))
+                           screen=PixelPoint(round(px[0]), round(px[1])))
 
 
 @pytest.mark.parametrize("lazy", [False, True], ids=["baked", "lazy"])

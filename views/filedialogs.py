@@ -19,13 +19,9 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from core.settings import settings as QSettings
-from app_shell.native import _shell
-if _shell is not None:
-    from app_shell.files import ShellFileDialog as QFileDialog
-else:
-    from PySide6.QtCore import QStandardPaths
-    from PySide6.QtWidgets import QFileDialog
+from app_shell.files import ShellFileDialog
+from core.settings import settings
+
 
 _KEY = "files/last_dir"
 
@@ -44,13 +40,13 @@ def _is_dir(path) -> bool:
 def last_dir(fallback: str | os.PathLike | None = None) -> str:
     """The folder to start a dialog in: the last one chosen, if it still
     exists; else *fallback*; else Documents; else home."""
-    saved = QSettings().value(_KEY, "")
+    saved = settings().value(_KEY, "")
     if saved and _is_dir(saved):
         return str(saved)
     if fallback and _is_dir(fallback):
         return str(fallback)
-    docs = (_shell.documents_directory() if _shell is not None else
-            QStandardPaths.writableLocation(QStandardPaths.DocumentsLocation))
+    from ingetrazo_render import documents_directory
+    docs = documents_directory()
     return str(docs) if docs and _is_dir(docs) else str(Path.home())
 
 
@@ -61,7 +57,7 @@ def remember(path: str | os.PathLike | None) -> None:
     p = Path(str(path))
     folder = p if _is_dir(p) else p.parent
     if _is_dir(folder):
-        QSettings().setValue(_KEY, str(folder))
+        settings().setValue(_KEY, str(folder))
 
 
 def start_in(directory: str | os.PathLike | None, fallback=None) -> str:
@@ -110,20 +106,20 @@ class file_dialogs:  # noqa: N801 — reads like QFileDialog at the call site
 
     @staticmethod
     def getOpenFileName(*args, **kwargs):  # noqa: N802
-        return file_dialogs._run(QFileDialog.getOpenFileName, args, kwargs,
+        return file_dialogs._run(ShellFileDialog.getOpenFileName, args, kwargs,
                                  lambda r: r[0] if r else None)
 
     @staticmethod
     def getOpenFileNames(*args, **kwargs):  # noqa: N802
-        return file_dialogs._run(QFileDialog.getOpenFileNames, args, kwargs,
+        return file_dialogs._run(ShellFileDialog.getOpenFileNames, args, kwargs,
                                  lambda r: (r[0][0] if r and r[0] else None))
 
     @staticmethod
     def getSaveFileName(*args, **kwargs):  # noqa: N802
-        return file_dialogs._run(QFileDialog.getSaveFileName, args, kwargs,
+        return file_dialogs._run(ShellFileDialog.getSaveFileName, args, kwargs,
                                  lambda r: r[0] if r else None)
 
     @staticmethod
     def getExistingDirectory(*args, **kwargs):  # noqa: N802
-        return file_dialogs._run(QFileDialog.getExistingDirectory, args,
+        return file_dialogs._run(ShellFileDialog.getExistingDirectory, args,
                                  kwargs, lambda r: r or None)

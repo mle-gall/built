@@ -1,4 +1,5 @@
 """Disk drawing caches are exact, disposable and never authoritative."""
+from tests.raster_samples import solid_raster
 from types import SimpleNamespace
 import numpy as np
 import pytest
@@ -85,7 +86,6 @@ def test_cached_bake_matches_fresh_and_invalidates_inputs(cache, tmp_path, monke
 def test_cache_covers_textures_transparency_hidden_faces_and_back_paint(cache, tmp_path, monkeypatch):
     import random
     from core import _native
-    from PySide6.QtGui import QImage
     from tests.test_array_bake import _paint_up
     from tests.test_deferred_mesh import _meshes, _random_scene
     if _native.available() is None or _native.qt_hypot() is None:
@@ -95,7 +95,7 @@ def test_cache_covers_textures_transparency_hidden_faces_and_back_paint(cache, t
     monkeypatch.setattr(igz, '_LARGE_DOCUMENT', 0)
     monkeypatch.setattr(igz, '_BULK_MIN', 1)
     png = tmp_path / 'texture.png'
-    image = QImage(4, 4, QImage.Format_RGBA8888); image.fill(0xffaabbcc);image.save(str(png))
+    image = solid_raster(4, 4, (170, 187, 204));image.save(str(png))
     rng = random.Random(24)
     scene = _random_scene(rng); _paint_up(scene, rng, png)
     path = tmp_path / 'painted.igz';igz.save_scene(scene, path)
@@ -112,7 +112,7 @@ def test_cache_covers_textures_transparency_hidden_faces_and_back_paint(cache, t
     m = next(m for m in _meshes(b) if array_bake.can_bake(m))
     paint = {'texture': {'path': str(png), 'sw': 1, 'sh': 1}}
     before = drawing_cache.key_for(vp, m, paint)
-    image.fill(0x00aabbcc);image.save(str(png))
+    solid_raster(image.width, image.height, (170, 187, 204, 0)).save(png)
     assert drawing_cache.key_for(vp, m, paint) != before
 
 

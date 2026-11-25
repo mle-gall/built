@@ -95,10 +95,10 @@ def test_typed_single_dimension_builds_square_when_locked():
 
 
 def _hover(t, vp, x, y):
-    from PySide6.QtCore import QPointF, Qt
+    from ingetrazo_core import ScreenPoint, Input
     from tools.base import ToolContext
-    t.on_hover(ToolContext(viewport=vp, world=V(x, y), screen=QPointF(0, 0),
-                           modifiers=Qt.NoModifier, snap=None))
+    t.on_hover(ToolContext(viewport=vp, world=V(x, y), screen=ScreenPoint(0, 0),
+                           modifiers=Input.NoModifier, snap=None))
 
 
 def test_lone_number_sets_the_side_being_stretched():
@@ -128,7 +128,7 @@ def test_lone_number_sets_the_width_when_the_width_moves():
 
 
 def test_lone_number_from_the_centre_keeps_the_whole_other_side():
-    from PySide6.QtCore import Qt
+    from ingetrazo_core import Input
     vp = _Stub()
     t = RectangleTool()
     t._set_from_center(vp, True)
@@ -155,7 +155,7 @@ def test_lone_number_needs_the_other_side():
 # ---- Ctrl: from the centre (issue #39, @pacaeiro) ------------------------
 
 def test_ctrl_toggles_centre_mode_and_the_badge():
-    from PySide6.QtCore import Qt
+    from ingetrazo_core import Input
     vp = _Stub()
     vp.flashed = []
     vp.flash_status = lambda t, *a, **k: vp.flashed.append(t)
@@ -163,24 +163,24 @@ def test_ctrl_toggles_centre_mode_and_the_badge():
     t.icon = "rectangle"
     t.on_activate(vp)
     assert t._from_center is False and t.icon == "rectangle"
-    assert t.on_key(vp, Qt.Key_Control, Qt.NoModifier) is True
+    assert t.on_key(vp, Input.Key_Control, Input.NoModifier) is True
     assert t._from_center is True and t.icon == "rectangle_center"
-    assert t.on_key(vp, Qt.Key_Control, Qt.NoModifier) is True
+    assert t.on_key(vp, Input.Key_Control, Input.NoModifier) is True
     assert t._from_center is False and t.icon == "rectangle"
     assert len(vp.flashed) == 2
 
 
 def test_from_the_centre_the_second_click_is_a_corner():
-    from PySide6.QtCore import QPointF, Qt
+    from ingetrazo_core import ScreenPoint, Input
     from tools.base import ToolContext
     vp = _Stub()
     t = RectangleTool()
     t.on_activate(vp)
-    t.on_key(vp, Qt.Key_Control, Qt.NoModifier)
+    t.on_key(vp, Input.Key_Control, Input.NoModifier)
 
     def ctx(x, y):
-        return ToolContext(viewport=vp, world=V(x, y), screen=QPointF(0, 0),
-                           modifiers=Qt.NoModifier, snap=None)
+        return ToolContext(viewport=vp, world=V(x, y), screen=ScreenPoint(0, 0),
+                           modifiers=Input.NoModifier, snap=None)
     t.on_click(ctx(1, 1))                      # the centre
     t.hover_point = V(3, 2)
     text, mid = t.value_label()
@@ -191,11 +191,11 @@ def test_from_the_centre_the_second_click_is_a_corner():
 
 
 def test_typed_sizes_from_the_centre_are_the_whole_width_and_height():
-    from PySide6.QtCore import Qt
+    from ingetrazo_core import Input
     vp = _Stub()
     t = RectangleTool()
     t.on_activate(vp)
-    t.on_key(vp, Qt.Key_Control, Qt.NoModifier)
+    t.on_key(vp, Input.Key_Control, Input.NoModifier)
     t.start_point = V(0, 0)
     t.hover_point = V(5, 4)
     assert t.on_value(vp, (4.0, 2.0)) is True
@@ -204,11 +204,11 @@ def test_typed_sizes_from_the_centre_are_the_whole_width_and_height():
 
 
 def test_picking_the_tool_up_again_starts_corner_wise():
-    from PySide6.QtCore import Qt
+    from ingetrazo_core import Input
     vp = _Stub()
     t = RectangleTool()
     t.on_activate(vp)
-    t.on_key(vp, Qt.Key_Control, Qt.NoModifier)
+    t.on_key(vp, Input.Key_Control, Input.NoModifier)
     t.on_activate(vp)
     assert t._from_center is False
 
@@ -257,7 +257,7 @@ def test_committing_a_square_from_the_centre_builds_real_square_corners():
 
 
 def test_shift_locks_square_inference_while_held():
-    from PySide6.QtCore import QPointF, Qt
+    from ingetrazo_core import ScreenPoint, Input
     from tools.base import ToolContext
 
     vp = _Stub()
@@ -265,39 +265,39 @@ def test_shift_locks_square_inference_while_held():
     t.start_point = V(0, 0)
 
     def hover(x, y, modifiers):
-        t.on_hover(ToolContext(viewport=vp, world=V(x, y), screen=QPointF(0, 0),
+        t.on_hover(ToolContext(viewport=vp, world=V(x, y), screen=ScreenPoint(0, 0),
                                modifiers=modifiers, snap=None))
 
-    hover(4.0, 3.9, Qt.ShiftModifier)
+    hover(4.0, 3.9, Input.ShiftModifier)
     assert t._square_locked()
-    hover(6.0, 2.0, Qt.ShiftModifier)
+    hover(6.0, 2.0, Input.ShiftModifier)
     _, far = t._span(t.hover_point)
     assert t._dimensions(t.start_point, far) == (6.0, 6.0)
 
-    hover(6.0, 2.0, Qt.NoModifier)
+    hover(6.0, 2.0, Input.NoModifier)
     assert not t._square_locked()
     _, far = t._span(t.hover_point)
     assert t._dimensions(t.start_point, far) == (6.0, 2.0)
 
 
 def test_down_toggles_square_lock_after_square_inference():
-    from PySide6.QtCore import QPointF, Qt
+    from ingetrazo_core import ScreenPoint, Input
     from tools.base import ToolContext
 
     vp = _Stub()
     t = RectangleTool()
     t.start_point = V(0, 0)
-    t.on_hover(ToolContext(viewport=vp, world=V(4.0, 3.9), screen=QPointF(0, 0),
-                           modifiers=Qt.NoModifier, snap=None))
+    t.on_hover(ToolContext(viewport=vp, world=V(4.0, 3.9), screen=ScreenPoint(0, 0),
+                           modifiers=Input.NoModifier, snap=None))
 
-    assert t.on_key(vp, Qt.Key_Down, Qt.NoModifier) is True
-    t.on_hover(ToolContext(viewport=vp, world=V(6.0, 2.0), screen=QPointF(0, 0),
-                           modifiers=Qt.NoModifier, snap=None))
+    assert t.on_key(vp, Input.Key_Down, Input.NoModifier) is True
+    t.on_hover(ToolContext(viewport=vp, world=V(6.0, 2.0), screen=ScreenPoint(0, 0),
+                           modifiers=Input.NoModifier, snap=None))
     _, far = t._span(t.hover_point)
     assert t._dimensions(t.start_point, far) == (6.0, 6.0)
 
-    assert t.on_key(vp, Qt.Key_Down, Qt.NoModifier) is True
-    t.on_hover(ToolContext(viewport=vp, world=V(6.0, 2.0), screen=QPointF(0, 0),
-                           modifiers=Qt.NoModifier, snap=None))
+    assert t.on_key(vp, Input.Key_Down, Input.NoModifier) is True
+    t.on_hover(ToolContext(viewport=vp, world=V(6.0, 2.0), screen=ScreenPoint(0, 0),
+                           modifiers=Input.NoModifier, snap=None))
     _, far = t._span(t.hover_point)
     assert t._dimensions(t.start_point, far) == (6.0, 2.0)

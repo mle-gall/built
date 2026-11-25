@@ -1,4 +1,13 @@
 {
+ "No": "No",
+ "Discard": "Descartar",
+ "Abort": "Interrumpir",
+ "Ignore": "Ignorar",
+ "Retry": "Reintentar",
+ "Restore Defaults": "Restaurar los valores predeterminados",
+ "Open": "Abrir",
+ "Yes": "Sí",
+ "OK": "Aceptar",
  "Map": "Mapa",
  "Model origin (0,0)": "Origen del modelo (0,0)",
  "Place or address": "Lugar o dirección",

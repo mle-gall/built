@@ -6,7 +6,8 @@ from core.mesh import Mesh
 from core.group import Group
 from tests.controller_surface import live_image
 from tests.shell_isolation import native_gpu_host, restore_shell_patches  # noqa: F401
-from tests.test_rendering_surface_regressions import viewport, pixels
+from tests.test_rendering_surface_regressions import viewport
+from tests.raster_samples import pixels
 from tests.test_viewport_smooth_shading import _cylinder
 
 
@@ -35,7 +36,7 @@ def test_hidden_geometry_reveals_soft_seams(viewport, placement):
     vp.camera.pitch = .2
     vp.camera.yaw = .7
     before_flags = [e.soft for e in mesh.edges]
-    off = pixels(live_image(vp))
+    off = pixels(live_image(vp)).astype(int)
     content = vp.scene.content_version
     vp.window()._set_hidden_view('show_hidden_geometry', True)
     assert vp.scene.content_version == content

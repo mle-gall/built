@@ -1,4 +1,13 @@
 {
+ "No": "否",
+ "Discard": "丟棄",
+ "Abort": "終止",
+ "Ignore": "忽略",
+ "Retry": "重試",
+ "Restore Defaults": "還原到預設值",
+ "Open": "開啟",
+ "Yes": "是",
+ "OK": "確定",
  "Map": "地圖",
  "Model origin (0,0)": "模型原點 (0,0)",
  "Place or address": "地點或地址",

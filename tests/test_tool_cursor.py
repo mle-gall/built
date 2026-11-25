@@ -5,50 +5,27 @@ into the tool's icon; Offset has an arrow with a badge, Select keeps the arrow."
 from __future__ import annotations
 
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-import sys
-
-from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication
-
-if QApplication.instance() is None:
-    QApplication(sys.argv[:1])
+from ingetrazo_render import tool_cursor_art, tool_cursor_name
 
 
 def test_tool_cursor_builds_bitmap_with_hotspot():
-    from views.icons import tool_cursor
-    cur = tool_cursor("line")                  # pencil, hotspot at the TIP
-    assert cur is not None
-    assert not cur.pixmap().isNull()
-    hs = cur.hotSpot()
-    assert (hs.x(), hs.y()) == (4, 28)         # (6,42) in 48-space → ×32/48
-    ers = tool_cursor("eraser").hotSpot()
-    assert (ers.x(), ers.y()) == (10, 21)      # middle of the rubber's accent end
-    mv = tool_cursor("move").hotSpot()
-    assert (mv.x(), mv.y()) == (16, 16)        # centre of the cross
-    assert tool_cursor("select") is None       # Select keeps the arrow
-    assert tool_cursor("no_such_tool") is None
-    assert tool_cursor(None) is None
-    assert tool_cursor("line") is cur          # cached
-    orb = tool_cursor("orbit")                 # wheel-drag shows it
-    assert orb is not None and (orb.hotSpot().x(), orb.hotSpot().y()) == (16, 16)
-    assert tool_cursor("pan") is not None
-    zoom = tool_cursor("zoom")                 # Z shows the magnifier, not a cross
-    assert zoom is not None
-    assert (zoom.hotSpot().x(), zoom.hotSpot().y()) == (14, 14)  # lens centre
-    assert tool_cursor("zoom_window") is not None
+    for name, hotspot in {"line": (4, 28), "eraser": (10, 21), "move": (16, 16),
+                          "orbit": (16, 16), "zoom": (14, 14)}.items():
+        rgba, hot = tool_cursor_art(name, 32)
+        assert len(rgba) == 32 * 32 * 4 and any(rgba[3::4])
+        assert tuple(round(v * 32 / 48) for v in hot) == hotspot
+        assert tool_cursor_name(name, False, "tool") == f"tool:{name}"
+    for name in ("select", "no_such_tool", None):
+        assert tool_cursor_name(name, False, "tool") is None
+    for name in ("pan", "zoom_window"):
+        assert tool_cursor_art(name, 32)
 
 
 def test_offset_keeps_an_arrow_tip_with_its_icon_beside_it():
-    from views.icons import tool_cursor
-    cur = tool_cursor("offset")
-    assert cur.hotSpot().x() == cur.hotSpot().y() == 2
-    pm = cur.pixmap()
-    assert pm.deviceIndependentSize().width() == 32
-    image, dpr = pm.toImage(), pm.devicePixelRatio()
-    # The pointer occupies the upper-left; the tool badge is below-right.
-    assert image.pixelColor(round(3 * dpr), round(7 * dpr)).alpha() > 0
-    assert image.pixelColor(round(18 * dpr), round(18 * dpr)).alpha() > 0
-    assert tool_cursor("offset") is cur
+    rgba, hot = tool_cursor_art("offset", 32)
+    assert tuple(round(v * 32 / 48) for v in hot) == (2, 2)
+    for x, y in ((3, 7), (18, 18)):
+        assert rgba[4 * (32 * y + x) + 3] > 0
 
 
 def test_activating_tools_swaps_the_viewport_cursor(native_host):
@@ -63,20 +40,8 @@ def test_activating_tools_swaps_the_viewport_cursor(native_host):
     assert not str(vp.cursor()).startswith("tool:")   # back to the arrow
 
 
-def test_tool_cursor_respects_cursor_style_preference():
-    from core import general_settings as _gs
-    from views.icons import tool_cursor
-
-    try:
-        _gs.set_value("cursor_style", "tool")
-        cur_tool = tool_cursor("line")
-        assert cur_tool is not None and cur_tool.shape() == Qt.BitmapCursor
-
-        _gs.set_value("cursor_style", "crosshair")
-        cur_cross = tool_cursor("line")
-        assert cur_cross is not None and cur_cross.shape() == Qt.CrossCursor
-
-        _gs.set_value("cursor_style", "arrow")
-        assert tool_cursor("line") is None
-    finally:
-        _gs.set_value("cursor_style", "tool")
+def test_tool_cursor_respects_cursor_style_preference(native_host):
+    from core import general_settings
+    for style, expected in (("tool", "tool:line"), ("crosshair", "crosshair"), ("arrow", None)):
+        general_settings.set_value("cursor_style", style)
+        assert native_host.tool_cursor("line") == expected

@@ -21,7 +21,7 @@ from core import shortcuts as sc
 def test_redo_answers_both_keys(ventana):  # noqa: F811
     from core.history import AddEdgeCommand
     from ingetrazo_core import Vec3
-    from PySide6.QtCore import Qt
+    from ingetrazo_core import Input as Qt
     action = ventana._registry_actions["menu:redo"]
     assert set(_keys(action)) == {"Ctrl+Y", "Ctrl+Shift+Z"}
     vp = ventana.viewport

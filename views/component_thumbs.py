@@ -125,28 +125,17 @@ def _rgb(attrs, inherited):
     return _DEFAULT
 
 
-def thumbnail(definition, size: int = SIZE) -> QPixmap:
-    """The icon for ``definition`` (a component instance or a kept
-    template), from the cache when nothing it shows has changed."""
-    from PySide6.QtCore import Qt
-    from PySide6.QtGui import QPixmap
-    # Imported family previews survive save/load in the definition extension.
-    encoded = (getattr(definition, "ext", None) or {}).get("rfa", {}).get("preview_png_base64")
-    if encoded:
-        import base64
-        import binascii
-        try:
-            pm = QPixmap()
-            if pm.loadFromData(base64.b64decode(encoded, validate=True), "PNG"):
-                return pm.scaled(size, size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-        except (ValueError, TypeError, binascii.Error):
-            pass  # Invalid preview: use the geometry thumbnail below.
+def thumbnail(definition, size: int = SIZE):
+    """A cached native raster shared by copies with the same geometry and artwork."""
+    from ingetrazo_render import component_raster
+    artwork = (getattr(definition, "ext", None) or {}).get("rfa", {}).get("preview_png_base64")
     sig = _signature(definition)
     key = (sig[0][0], size)
+    sig = (sig, artwork)
     hit = _cache.get(key)
     if hit is not None and hit[0] == sig:
         return hit[1]
-    pm = _draw(definition, size)
+    pm = component_raster(definition, size)
     # Past this, definitions long gone. (256 was below the 1 815 of a big
     # plant, and scrolling its list drew every picture again, #158.)
     if len(_cache) > 4096:
@@ -211,13 +200,6 @@ def _polygons(definition):
                         for p in pts) / len(pts)
             polys.append((depth, xy, _rgb(attrs, paint), lam))
     return polys
-
-
-def _draw(definition, size: int):
-    from PySide6.QtGui import QImage, QPixmap
-    from ingetrazo_render import component_pixels
-    pixels = component_pixels(definition, size)
-    return QPixmap.fromImage(QImage(pixels, size, size, 4 * size, QImage.Format_RGBA8888_Premultiplied))
 
 
 def _normal(pts):

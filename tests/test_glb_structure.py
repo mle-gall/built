@@ -12,18 +12,13 @@ shows as triangles in the wrong place.
 """
 from __future__ import annotations
 
-import os
+from tests.raster_samples import solid_raster
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np  # noqa: E402
 import pytest  # noqa: E402
-from PySide6.QtGui import QImage, QColor
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
-from PySide6.QtWidgets import QApplication  # noqa: E402
 
-if QApplication.instance() is None:
-    QApplication([])
 
 from core.group import Group  # noqa: E402
 from core.mesh import Mesh  # noqa: E402
@@ -93,8 +88,7 @@ def test_a_nested_component_keeps_its_parent(tmp_path):
 
 
 def _figure(tmp_path, x=0.0):
-    img = QImage(8, 16, QImage.Format.Format_ARGB32)
-    img.fill(QColor(30, 90, 200))
+    img = solid_raster(8, 16, (30, 90, 200))
     png = tmp_path / "persona.png"
     img.save(str(png))
     m = Mesh()

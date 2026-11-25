@@ -168,7 +168,7 @@ fn on_key<'py>(a: &Args<'py>) -> Reply<'py> {
     let tool = a.get_item(0)?;
     let update: Obj<'py>;
     let viewport = a.get_item(1)?;
-    let qt = imported(py, "core.input_types")?.getattr("Qt")?;
+    let qt = imported(py, "ingetrazo_core")?.getattr("Input")?;
     let name = fields!(py; qt.getattr("Key_Control")? => "Control", qt.getattr("Key_Down")? => "ArrowDown", qt.getattr("Key_Right")? => "ArrowRight", qt.getattr("Key_Left")? => "ArrowLeft", qt.getattr("Key_Up")? => "ArrowUp").into_any().call_method1("get", (&key,))?;
     if !name.is_none() && tool.call_method1("_send_framed", (&viewport, fields!(py; "type" => "key", "key" => &name, "mods" => module.call_method1("_mods", (&modifiers,))?).into_any(),))?.get_item("consumed")?.is_truthy()? {
 if name.eq("Control")? {
@@ -188,7 +188,7 @@ fn on_key_release<'py>(a: &Args<'py>) -> Reply<'py> {
     let key = a.get_item(2)?;
     let tool = a.get_item(0)?;
     let viewport = a.get_item(1)?;
-    let qt = imported(py, "core.input_types")?.getattr("Qt")?;
+    let qt = imported(py, "ingetrazo_core")?.getattr("Input")?;
     if key.ne(qt.getattr("Key_Control")?)? {
         return false.into_bound_py_any(py);
     }

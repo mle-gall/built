@@ -3,7 +3,7 @@ import sys
 from functools import lru_cache
 
 from core.i18n import current_language, source_of, tr
-from core.settings import settings as QSettings
+from core.settings import settings as native_settings
 from ingetrazo_render import shortcut_alternatives, shortcut_domains
 
 _GROUP = "shortcuts"
@@ -33,9 +33,7 @@ def collect_actions(window) -> list:
     """The window's actions a user can press: with text, not a separator,
     not a submenu, one per key (the first wins)."""
     seen: dict = {}
-    gui = sys.modules.get("PySide6.QtGui")
-    widget_actions = window.findChildren(gui.QAction) if gui and hasattr(window, "findChildren") else ()
-    for act in (*vars(window).get("_command_actions", {}).values(), *widget_actions):
+    for act in vars(window).get("_command_actions", {}).values():
         if act.isSeparator() or act.menu() is not None:
             continue
         if not _plain(act.text()):
@@ -63,9 +61,6 @@ def action_keys(action):
 
 
 def set_action_keys(action, keys):
-    if not hasattr(action, "portable_keys"):
-        from PySide6.QtGui import QKeySequence
-        keys = [QKeySequence(s) for s in keys]
     action.setShortcuts(keys)
 
 
@@ -103,7 +98,7 @@ def _read_key(stored: str) -> str:
 
 
 def _saved_shortcuts() -> dict:
-    st = QSettings()
+    st = native_settings()
     st.beginGroup(_GROUP)
     saved = {_read_key(k): str(st.value(k) or "") for k in st.allKeys()}
     st.endGroup()
@@ -125,7 +120,7 @@ def apply_user_shortcuts(window) -> int:
 
 
 def save_shortcut(action, seqs: list) -> None:
-    st = QSettings()
+    st = native_settings()
     key = action_key(action)
     legacy = action.property("legacyShortcutKey")
     if legacy and legacy != key:

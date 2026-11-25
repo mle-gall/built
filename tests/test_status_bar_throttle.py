@@ -6,7 +6,7 @@ from unittest.mock import Mock
 
 from ingetrazo_core import Vec3
 from ingetrazo_render import sync_status_readout
-from core.input_types import QPointF
+from ingetrazo_core import ScreenPoint as QPointF
 from georef.datum import SceneDatum
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from views.wgpu_ui import _cursor_value

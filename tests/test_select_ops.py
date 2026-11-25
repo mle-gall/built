@@ -73,7 +73,7 @@ def test_same_layer_takes_faces_edges_and_groups_on_it():
 
 
 def test_the_triple_click_still_selects_the_whole_piece(monkeypatch):
-    from core.input_types import QPointF, Qt
+    from ingetrazo_core import ScreenPoint as QPointF, Input as Qt
     from tools.base import ToolContext
     from tools.rust_tools import SelectTool
     scene = Scene()

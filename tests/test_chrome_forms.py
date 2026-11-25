@@ -12,7 +12,7 @@ import sys
 import types
 
 import pytest
-from core.input_types import Qt
+from ingetrazo_core import Input as Qt
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 from ingetrazo_render import chrome_dialogs as cd
@@ -290,7 +290,7 @@ def test_a_form_in_the_shell_with_no_chrome_cancels_instead_of_a_qt_dialog(monke
 # ---- File pickers ------------------------------------------------------------------
 def test_a_path_field_picks_through_file_dialogs(monkeypatch, tmp_path):
     """Qt's picker here; in the shell the same call is ShellFileDialog's
-    native panel (app_shell.files.install swaps filedialogs.QFileDialog)."""
+    native file panel."""
     from views import filedialogs
     seen = []
 
@@ -299,7 +299,7 @@ def test_a_path_field_picks_through_file_dialogs(monkeypatch, tmp_path):
         def getSaveFileName(parent, caption, directory, flt, *a, **k):
             seen.append((caption, flt))
             return str(tmp_path / "out.ifc"), flt
-    monkeypatch.setattr(filedialogs, "QFileDialog", Picker)
+    monkeypatch.setattr(filedialogs, "ShellFileDialog", Picker)
     changes = []
     form = cf.Form("Export", [cf.Field("to", "path", "Save to", "", pick="save", filters="IFC4 (*.ifc)")],
                    on_change=lambda f, fid, v: changes.append(v))
@@ -316,5 +316,5 @@ def test_the_library_image_picker_follows_the_host(monkeypatch, tmp_path):
         @staticmethod
         def getOpenFileName(parent, caption, directory, flt, *a, **k):
             return str(tmp_path / "wood.png"), flt
-    monkeypatch.setattr(filedialogs, "QFileDialog", Picker)
+    monkeypatch.setattr(filedialogs, "ShellFileDialog", Picker)
     assert wgpu_library._pick_image(None, "Base image") == str(tmp_path / "wood.png")

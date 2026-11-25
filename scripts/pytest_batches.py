@@ -38,8 +38,7 @@ def main() -> int:
     totals: dict[str, int] = {}
     crashed = []
     t0 = time.monotonic()
-    env = dict(os.environ, QT_QPA_PLATFORM=os.environ.get(
-        "QT_QPA_PLATFORM", "offscreen"))
+    failed = False
     for i, chunk in enumerate(chunks, 1):
         cmd = [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider"]
         if args.marker:
@@ -48,9 +47,8 @@ def main() -> int:
         # codepage (cp1252 on Windows), which died on the first byte it
         # has no character for and left stdout None (ronda Windows 0.5.9).
         with tempfile.TemporaryDirectory() as home, tempfile.TemporaryDirectory() as settings:
-            profile = dict(env, HOME=home, CFFIXED_USER_HOME=home,
-                           BUILT_SETTINGS_DIR=settings, BUILT_BACKGROUND="1",
-                           QT_MAC_DISABLE_FOREGROUND_APPLICATION_TRANSFORM="1")
+            profile = dict(os.environ, HOME=home, CFFIXED_USER_HOME=home,
+                           BUILT_SETTINGS_DIR=settings, BUILT_BACKGROUND="1")
             proc = subprocess.run(cmd + chunk, env=profile, capture_output=True,
                                   text=True, encoding="utf-8", errors="replace")
         lines = [ln for ln in proc.stdout.splitlines() if ln.strip()]
@@ -63,6 +61,9 @@ def main() -> int:
             crashed.append(f"batch {i} (exit {proc.returncode})")
             sys.stderr.write(proc.stdout[-3000:] + proc.stderr[-3000:])
         elif proc.returncode == 1:
+            failed = True
+            if not _COUNT.search(last):
+                sys.stderr.write(proc.stdout[-3000:] + proc.stderr[-3000:])
             # The failures' own report too: a test that fails once in a
             # while must leave its reason behind, not only its name.
             out = proc.stdout
@@ -81,7 +82,7 @@ def main() -> int:
     parts += [f"CRASHED: {c}" for c in crashed]
     print(", ".join(parts) + f" in {time.monotonic() - t0:.0f}s "
           f"({n} batches)")
-    return 1 if totals.get("failed") or totals.get("errors") or crashed \
+    return 1 if failed or totals.get("errors") or crashed \
         else 0
 
 

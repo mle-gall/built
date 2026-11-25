@@ -15,7 +15,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import QSettings
+from ingetrazo_core import NativeSettings
 
 from core import general_settings
 
@@ -24,9 +24,9 @@ APP = Path(__file__).resolve().parents[1]
 
 def _read_in_new_process(ini: Path, name: str) -> str:
     code = (
-        "from PySide6.QtCore import QSettings\n"
+        "from ingetrazo_core import NativeSettings\n"
         "from core import general_settings\n"
-        f"st = QSettings({str(ini)!r}, QSettings.IniFormat)\n"
+        f"st = NativeSettings({str(ini.parent.parent)!r})\n"
         f"print(general_settings.value({name!r}, 'MISSING', st))\n")
     out = subprocess.run([sys.executable, "-c", code], cwd=APP,
                          capture_output=True, text=True, check=True)
@@ -34,8 +34,8 @@ def _read_in_new_process(ini: Path, name: str) -> str:
 
 
 def test_a_general_setting_survives_a_restart(tmp_path):
-    ini = tmp_path / "IngeTrazo.conf"
-    st = QSettings(str(ini), QSettings.IniFormat)
+    ini = tmp_path / "IngeTrazo/IngeTrazo.ini"
+    st = NativeSettings(tmp_path)
     general_settings.set_value("theme", "light", st)
     st.sync()
     assert "[%General]" in ini.read_text()
@@ -44,7 +44,8 @@ def test_a_general_setting_survives_a_restart(tmp_path):
 
 def test_what_earlier_versions_saved_is_still_read(tmp_path):
     # Written by 0.5.7 as general/theme: the file is the reporter's.
-    ini = tmp_path / "IngeTrazo.conf"
+    ini = tmp_path / "IngeTrazo/IngeTrazo.ini"
+    ini.parent.mkdir()
     ini.write_text("[%General]\nautosave=0\ntheme=light\nundo_steps=50\n")
     assert _read_in_new_process(ini, "theme") == "light"
     assert _read_in_new_process(ini, "autosave") == "0"
@@ -54,7 +55,7 @@ def test_what_earlier_versions_saved_is_still_read(tmp_path):
 def test_the_old_lower_case_key_is_the_fallback(tmp_path):
     # A macOS plist keeps «general/…» exactly as written; nobody loses a
     # setting on the way to the new key.
-    st = QSettings(str(tmp_path / "x.ini"), QSettings.IniFormat)
+    st = NativeSettings(tmp_path)
     st.setValue("general/backup", "0")
     assert general_settings.value("backup", "1", st) == "0"
     general_settings.set_value("backup", "1", st)
@@ -62,5 +63,5 @@ def test_the_old_lower_case_key_is_the_fallback(tmp_path):
 
 
 def test_a_missing_setting_gives_the_default(tmp_path):
-    st = QSettings(str(tmp_path / "y.ini"), QSettings.IniFormat)
+    st = NativeSettings(tmp_path)
     assert general_settings.value("platform", "auto", st) == "auto"

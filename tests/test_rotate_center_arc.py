@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import math
 
-from PySide6.QtCore import QPointF, Qt
+from ingetrazo_core import ScreenPoint, Input
 from ingetrazo_core import Vec3 as QVector3D
 
 from core.edits import build_add_edges
@@ -43,14 +43,14 @@ class _Vp:
 
 def _click(vp, tool, x, y, z=0.0):
     tool.on_click(ToolContext(viewport=vp, world=QVector3D(x, y, z),
-                              screen=QPointF(0, 0),
-                              modifiers=Qt.NoModifier, snap=None))
+                              screen=ScreenPoint(0, 0),
+                              modifiers=Input.NoModifier, snap=None))
 
 
 def _hover(vp, tool, x, y, z=0.0):
     tool.on_hover(ToolContext(viewport=vp, world=QVector3D(x, y, z),
-                              screen=QPointF(0, 0),
-                              modifiers=Qt.NoModifier, snap=None))
+                              screen=ScreenPoint(0, 0),
+                              modifiers=Input.NoModifier, snap=None))
 
 
 def _rect(scene, hist, x0, y0, x1, y1):
@@ -312,8 +312,8 @@ def _cube(scene, vp):
     pp.hovered_face = scene.mesh.faces[0]
     pp._hover_group = None
     pp.on_click(ToolContext(viewport=vp, world=QVector3D(0, 0, 0),
-                            screen=QPointF(0, 0),
-                            modifiers=Qt.NoModifier, snap=None))
+                            screen=ScreenPoint(0, 0),
+                            modifiers=Input.NoModifier, snap=None))
     pp.extrusion = 3.0
     pp._commit(vp)
 
@@ -330,8 +330,8 @@ def test_double_click_face_selects_face_plus_edges():
     vp._face = top
     t = SelectTool()
     t.on_double_click(ToolContext(viewport=vp, world=QVector3D(),
-                                  screen=QPointF(0, 0),
-                                  modifiers=Qt.NoModifier, snap=None))
+                                  screen=ScreenPoint(0, 0),
+                                  modifiers=Input.NoModifier, snap=None))
     sel = scene.selection
     assert top in sel
     from core.mesh import Edge
@@ -352,8 +352,8 @@ def test_triple_click_selects_whole_connected_solid():
     vp._face = top
     t = SelectTool()
     t.on_triple_click(ToolContext(viewport=vp, world=QVector3D(),
-                                  screen=QPointF(0, 0),
-                                  modifiers=Qt.NoModifier, snap=None))
+                                  screen=ScreenPoint(0, 0),
+                                  modifiers=Input.NoModifier, snap=None))
     sel = scene.selection
     faces = [s for s in sel if isinstance(s, Face)]
     edges = [s for s in sel if isinstance(s, Edge)]
@@ -382,7 +382,7 @@ def test_ctrl_copy_rotates_a_group_copy():
 
     t = RotateTool()
     t.on_activate(vp)
-    assert t.on_key(vp, Qt.Key_Control, Qt.NoModifier) is True
+    assert t.on_key(vp, Input.Key_Control, Input.NoModifier) is True
     _click(vp, t, 0, 0)
     _click(vp, t, 1, 0)
     _hover(vp, t, 0, 1)
@@ -413,7 +413,7 @@ def test_ctrl_copy_of_instance_shares_prototype():
 
     t = RotateTool()
     t.on_activate(vp)
-    t.on_key(vp, Qt.Key_Control, Qt.NoModifier)
+    t.on_key(vp, Input.Key_Control, Input.NoModifier)
     _click(vp, t, 0, 0)
     _click(vp, t, 1, 0)
     _hover(vp, t, 0, 1)
@@ -432,7 +432,7 @@ def test_ctrl_copy_duplicates_loose_faces_rotated():
 
     t = RotateTool()
     t.on_activate(vp)
-    t.on_key(vp, Qt.Key_Control, Qt.NoModifier)
+    t.on_key(vp, Input.Key_Control, Input.NoModifier)
     _click(vp, t, 0, 0)
     _click(vp, t, 1, 0)
     _hover(vp, t, 0, 1)
@@ -534,7 +534,7 @@ def test_rotate_mixed_selection_groups_and_loose():
 
 
 def test_move_mixed_selection_groups_and_loose():
-    from PySide6.QtCore import QPointF
+    from ingetrazo_core import ScreenPoint
     from core.group import Group
     from core.mesh import Mesh
     from tools.move import MoveTool

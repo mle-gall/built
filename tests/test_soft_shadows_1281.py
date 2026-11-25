@@ -8,26 +8,15 @@ whole-model map, the detail map of a settled view (#958) and an export's
 bigger map soften alike."""
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
-from PySide6.QtCore import QSettings
+from ingetrazo_core import NativeSettings
 from ingetrazo_core import Vec3 as V
-from PySide6.QtWidgets import QApplication, QWidget
 
-_inst = QApplication.instance()
-if _inst is None:
-    _app = QApplication([])
-elif not isinstance(_inst, QApplication):
-    pytest.skip("a non-widget QGuiApplication is already active",
-                allow_module_level=True)
 
 from tests.preferences_chrome import Controls, settings_file
 from views.document_interaction import SOFT_SHADOW_SPREAD, _load_soft_shadows
 from tests.controller_surface import ControllerSurface as Viewport
-
 
 
 class _VP:
@@ -45,7 +34,7 @@ class _VP:
         self.updates += 1
 
 
-class _Win(QWidget):
+class _Win:
     def __init__(self):
         super().__init__()
         self.viewport = _VP()
@@ -57,7 +46,7 @@ class _Win(QWidget):
 
 
 def _fresh(path):
-    return QSettings(str(path), QSettings.IniFormat)
+    return NativeSettings(path.parent.parent)
 
 
 def test_off_by_default_with_its_level_greyed(settings_file):
@@ -115,14 +104,12 @@ def test_restore_defaults_turns_them_off(settings_file):
     (None, 0), ("0", 0), ("2", 2), ("3", 3), ("7", 0), ("lots", 0)])
 def test_the_viewport_reads_the_level_and_ignores_nonsense(
         tmp_path, monkeypatch, stored, level):
-    import PySide6.QtCore as qtcore
-    path = tmp_path / "prefs.ini"
-    st = QSettings(str(path), QSettings.IniFormat)
+    from core import settings
+    st = NativeSettings(tmp_path)
+    monkeypatch.setattr(settings, "_store", st)
     if stored is not None:
         st.setValue("display/soft_shadows", stored)
     st.sync()
-    monkeypatch.setattr(qtcore, "QSettings",
-                        lambda: QSettings(str(path), QSettings.IniFormat))
     assert _load_soft_shadows() == level
 
 
