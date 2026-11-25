@@ -17,11 +17,8 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np  # noqa: E402
 import pytest  # noqa: E402
-from PySide6.QtWidgets import QApplication  # noqa: E402
 
 import ingetrazo_core as NATIVE  # noqa: E402
-
-_app = QApplication.instance() or QApplication([])
 
 
 def _box(x, y=0.0, z=0.0, *, layer=None, soft=False, hide_top=False):

@@ -9,6 +9,7 @@ import pytest
 
 ezdxf = pytest.importorskip("ezdxf")
 
+from ingetrazo_core import Vec3
 from core.scene import Scene                              # noqa: E402
 from formats.dxf_in import (                              # noqa: E402
     RECENTER_BEYOND_M, load_dxf, read_unit_scale)
@@ -113,10 +114,8 @@ def test_inserts_become_component_instances_sharing_one_proto(tmp_path):
     assert a.mesh is b.mesh                  # SHARED prototype
     assert stats["components"] == {"ARBOL": 2}
     # the xform places the proto: local (0,0) lands at each insert point
-    pa = a.xform.map(__import__("PySide6.QtGui", fromlist=["QVector3D"])
-                     .QVector3D(0, 0, 0))
-    pb = b.xform.map(__import__("PySide6.QtGui", fromlist=["QVector3D"])
-                     .QVector3D(0, 0, 0))
+    pa = a.xform.map(Vec3(0, 0, 0))
+    pb = b.xform.map(Vec3(0, 0, 0))
     assert sorted((round(pa.x()), round(pb.x()))) == [10, 20]
     # and the circle inside the proto is still one contour
     curves = {e.curve for e in a.mesh.edges if e.curve is not None}

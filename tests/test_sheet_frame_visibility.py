@@ -12,11 +12,8 @@ import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest  # noqa: E402
-from PySide6.QtWidgets import QApplication  # noqa: E402
 
 import ingetrazo_core as NATIVE  # noqa: E402
-
-_app = QApplication.instance() or QApplication([])
 
 
 def _scene():

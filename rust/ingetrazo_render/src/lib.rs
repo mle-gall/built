@@ -85,6 +85,7 @@ mod forms_host;
 mod dialogs_host;
 mod window_commands;
 mod shell;
+pub mod platform_paths;
 pub mod ui;
 mod host_context;
 mod inspector;
@@ -105,9 +106,7 @@ mod sun;
 mod shadow_fit;
 mod textures;
 pub mod tool_cursors;
-pub mod icon_art;
-mod billboards;
-mod document_tabs;
+mod render_glue;
 mod annotation_canvas;
 mod tool_overlay;
 mod image_assets;
@@ -240,7 +239,7 @@ static NEXT_RENDERER_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::Atomi
 struct Renderer {
     id: u64,
     /// What the document ▾ and the project tabs were last sent (document_tabs.rs).
-    document_tabs: Option<Py<document_tabs::DocumentTabs>>,
+    document_tabs: Option<Py<render_glue::document_tabs::DocumentTabs>>,
     instance: wgpu::Instance,
     /// Inactive views of the same scene, addressed by a never-recycled id.
     targets: std::collections::HashMap<usize, Target>,
@@ -548,9 +547,13 @@ impl Renderer {
     #[pyo3(signature = (window, width, height, scale, *, display=0, platform=""))]
     fn new(window: usize, width: u32, height: u32, scale: f64, display: usize, platform: &str) -> PyResult<Self> {
         let instance = crate::backend::instance();
-        let surface = backend::surface(&instance, window, display, platform)?;
+        let surface = if window == 0 && platform == "offscreen" {
+            None
+        } else {
+            Some(backend::surface(&instance, window, display, platform)?)
+        };
         let a = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
-            compatible_surface: Some(&surface),
+            compatible_surface: surface.as_ref(),
             ..Default::default()
         }))
         .ok_or_else(|| PyValueError::new_err("no supported GPU backend for this window"))?;
@@ -569,13 +572,14 @@ impl Renderer {
             None,
         ))
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        let caps = surface.get_capabilities(&a);
-        let format = caps
-            .formats
-            .iter()
-            .copied()
-            .find(|f| f.is_srgb())
-            .ok_or_else(|| PyValueError::new_err("no sRGB surface"))?;
+        let (format, alpha_mode) = if let Some(surface) = &surface {
+            let caps = surface.get_capabilities(&a);
+            let format = caps.formats.iter().copied().find(|f| f.is_srgb())
+                .ok_or_else(|| PyValueError::new_err("no sRGB surface"))?;
+            (format, caps.alpha_modes[0])
+        } else {
+            (wgpu::TextureFormat::Bgra8UnormSrgb, wgpu::CompositeAlphaMode::Auto)
+        };
         let w = ((width as f64 * scale) as u32).max(1);
         let h = ((height as f64 * scale) as u32).max(1);
         let config = wgpu::SurfaceConfiguration {
@@ -585,10 +589,10 @@ impl Renderer {
             height: h,
             present_mode: wgpu::PresentMode::AutoNoVsync,
             desired_maximum_frame_latency: 2,
-            alpha_mode: caps.alpha_modes[0],
+            alpha_mode,
             view_formats: vec![format.remove_srgb_suffix()],
         };
-        surface.configure(&device, &config);
+        if let Some(surface) = &surface { surface.configure(&device, &config); }
         // Blend and resolve model colors in display space. UI paints through the sRGB view.
         let format = format.remove_srgb_suffix();
         let camera = buffer(
@@ -738,13 +742,23 @@ impl Renderer {
         );
         let profile_top = pipeline(wgpu::PrimitiveTopology::TriangleList, "profile_fs",
             wgpu::CompareFunction::Always, false, bias, 1);
+        // GPU timings are optional. A device that advertises timestamps can
+        // still fail to allocate the counter sample buffer (Metal, late in a
+        // long test run): without a scope wgpu's default handler panics on
+        // that. Then the renderer measures nothing instead.
         let queries = features.contains(wgpu::Features::TIMESTAMP_QUERY).then(|| {
-            device.create_query_set(&wgpu::QuerySetDescriptor {
+            for filter in [wgpu::ErrorFilter::Internal, wgpu::ErrorFilter::OutOfMemory, wgpu::ErrorFilter::Validation] {
+                device.push_error_scope(filter);
+            }
+            let set = device.create_query_set(&wgpu::QuerySetDescriptor {
                 label: None,
                 ty: wgpu::QueryType::Timestamp,
                 count: timing::COUNT,
-            })
-        });
+            });
+            let failed = (0..3).map(|_| pollster::block_on(device.pop_error_scope())).fold(false, |f, e| f | e.is_some());
+            (!failed).then_some(set)
+        }).flatten();
+        let timestamps = queries.is_some();
         let resolve = buffer(
             &device,
             &[0; timing::BYTES],
@@ -834,11 +848,11 @@ impl Renderer {
             last_pick_gpu: None,
             pass_gpu: Default::default(),
             last_counters: Default::default(),
-            detailed_timestamps: features.contains(wgpu::Features::TIMESTAMP_QUERY),
+            detailed_timestamps: timestamps,
             last_cpu: 0.,
             last_acquire: 0.,
             frame_stages: [0.; 5],
-            surface: Some(surface),
+            surface,
             device,
             queue,
             config,
@@ -2689,9 +2703,9 @@ impl Renderer {
     /// The window's documents as this renderer's chrome was last sent them
     /// (``DocumentTabs.sync``, document_tabs.rs): one per renderer, so the
     /// comparison is always with what it shows.
-    fn document_tabs(&mut self, py: Python<'_>) -> PyResult<Py<document_tabs::DocumentTabs>> {
+    fn document_tabs(&mut self, py: Python<'_>) -> PyResult<Py<render_glue::document_tabs::DocumentTabs>> {
         if self.document_tabs.is_none() {
-            self.document_tabs = Some(Py::new(py, document_tabs::DocumentTabs::default())?);
+            self.document_tabs = Some(Py::new(py, render_glue::document_tabs::DocumentTabs::default())?);
         }
         Ok(self.document_tabs.as_ref().unwrap().clone_ref(py))
     }
@@ -3317,14 +3331,7 @@ pub fn ingetrazo_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     scene_navigation::register(m)?;
     window_services::register(m)?;
     m.add_function(wrap_pyfunction!(tool_cursors::rail_icon,m)?)?;
-    m.add_function(wrap_pyfunction!(icon_art::icon_art, m)?)?;
-    m.add_function(wrap_pyfunction!(icon_art::icon_keys, m)?)?;
-    m.add_function(wrap_pyfunction!(icon_art::letter_art, m)?)?;
-    m.add_function(wrap_pyfunction!(icon_art::row_icon_art, m)?)?;
-    m.add_class::<document_tabs::DocumentTabs>()?;
-    m.add_function(wrap_pyfunction!(billboards::billboard_stances, m)?)?;
-    m.add_function(wrap_pyfunction!(billboards::billboard_worlds, m)?)?;
-    m.add_function(wrap_pyfunction!(billboards::sprite_mapping, m)?)?;
+    render_glue::register_render_glue(m)?;
     m.add_function(wrap_pyfunction!(tool_cursors::tool_cursor_name, m)?)?;
     m.add_function(wrap_pyfunction!(tool_cursors::tool_cursor_art, m)?)?;
     m.add_function(wrap_pyfunction!(image_assets::texture_has_alpha,m)?)?;

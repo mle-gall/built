@@ -1,7 +1,7 @@
 """Native tools retain the document command and cancellation contracts."""
 from types import SimpleNamespace
 import pytest
-from PySide6.QtCore import QPointF, Qt
+from core.input_types import QPointF, Qt
 from ingetrazo_core import Vec3 as QVector3D
 from tools.base import ToolContext
 from tools.rotate import RotateTool

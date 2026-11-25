@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import math
 
-from PySide6.QtCore import QPointF, Qt
+from core.input_types import ScreenPoint, Input
 from ingetrazo_core import Vec3 as QVector3D
 
 from core.history import History
@@ -37,8 +37,8 @@ class _VpScreen(_Vp):
 
 def _ctx(vp, x, y, z=0.0):
     return ToolContext(viewport=vp, world=QVector3D(x, y, z),
-                       screen=QPointF(x * 100.0, y * 100.0),
-                       modifiers=Qt.NoModifier, snap=None)
+                       screen=ScreenPoint(x * 100.0, y * 100.0),
+                       modifiers=Input.NoModifier, snap=None)
 
 
 def _click(vp, tool, x, y, z=0.0):
@@ -151,7 +151,7 @@ def test_arrow_keys_lock_the_plane():
     t = ProtractorTool()
     t.on_activate(vp)
     assert t.wireframe_color[:3] != (0, 0, 0)      # ground plan: blue (Z axis)
-    assert t.on_key(vp, Qt.Key_Right, Qt.NoModifier) is True
+    assert t.on_key(vp, Input.Key_Right, Input.NoModifier) is True
     _hover(vp, t, 0, 0)
     assert t._axis().x() == 1.0                    # locked to red
     _click(vp, t, 0, 0)
@@ -159,9 +159,9 @@ def test_arrow_keys_lock_the_plane():
     _hover(vp, t, 0, 0, 1)
     _click(vp, t, 0, 0, 1)                         # 90° → guide along Z
     assert abs(abs(scene.guides[0].direction.z()) - 1.0) < 1e-6
-    assert t.on_key(vp, Qt.Key_Right, Qt.NoModifier) is True  # toggle off
+    assert t.on_key(vp, Input.Key_Right, Input.NoModifier) is True  # toggle off
     assert t._axis_pick is None
-    assert t.on_key(vp, Qt.Key_Down, Qt.NoModifier) is False  # not consumed
+    assert t.on_key(vp, Input.Key_Down, Input.NoModifier) is False  # not consumed
 
 
 def test_guide_on_a_slanted_work_plane():
@@ -202,11 +202,11 @@ def test_reload_and_escape_release_the_arrow_lock():
     vp = _Vp(scene)
     t = ProtractorTool()
     t.on_activate(vp)
-    assert t.on_key(vp, Qt.Key_Up, Qt.NoModifier) is True
+    assert t.on_key(vp, Input.Key_Up, Input.NoModifier) is True
     assert t._axis_pick == "z"
     t.on_cancel(vp)                                 # Shift+H while held / Esc
     assert t._axis_pick is None
-    assert t.on_key(vp, Qt.Key_Up, Qt.NoModifier) is True
+    assert t.on_key(vp, Input.Key_Up, Input.NoModifier) is True
     t.on_deactivate(vp)
     t.on_activate(vp)                               # picked up again
     assert t._axis_pick is None
@@ -221,13 +221,12 @@ def test_changing_the_plane_after_the_centre_reanchors_it():
     t = ProtractorTool()
     t.on_activate(vp)
     _click(vp, t, 0, 0)                              # centre on the ground (XY)
-    assert t.on_key(vp, Qt.Key_Left, Qt.NoModifier) is True   # lock to XZ
+    assert t.on_key(vp, Input.Key_Left, Input.NoModifier) is True   # lock to XZ
     point, normal = t.work_plane
     assert (point - QVector3D(0, 0, 0)).length() < 1e-9   # anchored at centre
     assert abs(normal.y()) == 1.0                          # XZ plane
-    assert t.on_key(vp, Qt.Key_Left, Qt.NoModifier) is True   # release it
+    assert t.on_key(vp, Input.Key_Left, Input.NoModifier) is True   # release it
     assert abs(t.work_plane[1].z()) == 1.0                 # back to XY
-
 
 
 class _VpGrazing(_Vp):
@@ -261,11 +260,11 @@ def test_an_arrow_lock_after_the_base_arm_stays_on_the_centre():
     t.on_activate(vp)
     _click(vp, t, 2, 1)                              # centre
     _click(vp, t, 5, 1)                              # base arm
-    t.on_key(vp, Qt.Key_Left, Qt.NoModifier)         # lock to XZ
+    t.on_key(vp, Input.Key_Left, Input.NoModifier)         # lock to XZ
     point, normal = t.work_plane
     assert (point - QVector3D(2, 1, 0)).length() < 1e-9
     assert abs(normal.y()) == 1.0
-    t.on_key(vp, Qt.Key_Left, Qt.NoModifier)         # release
+    t.on_key(vp, Input.Key_Left, Input.NoModifier)         # release
     point, normal = t.work_plane
     assert (point - QVector3D(2, 1, 0)).length() < 1e-9
     assert abs(normal.z()) == 1.0

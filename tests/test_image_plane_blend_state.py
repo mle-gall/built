@@ -10,25 +10,18 @@ its way out. Marco, 2026-09-14: «puse sombras con el tif activo y orbité».
 Requires a native wgpu surface for pixel readback."""
 from __future__ import annotations
 
+from tests.raster_samples import solid_raster
 from tests.shell_isolation import native_gpu_host, restore_shell_patches  # noqa: F401
-import os
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np
 import pytest
-from PySide6.QtGui import QImage
+from tests.raster_samples import pixels
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication
-
-_app = QApplication.instance() or QApplication([])
 
 
-def _alpha_zero_share(img: QImage) -> float:
-    img = img.convertToFormat(QImage.Format_RGBA8888)
-    buf = np.frombuffer(img.constBits(), np.uint8)
-    px = buf.reshape(img.height(), img.bytesPerLine())[:, :img.width() * 4]
-    return float((px.reshape(img.height(), img.width(), 4)[..., 3] == 0).mean())
+def _alpha_zero_share(img) -> float:
+    return float((pixels(img)[..., 3] == 0).mean())
 
 
 def test_a_translucent_image_leaves_blending_on_for_the_shadow_catcher(native_gpu_host, tmp_path):
@@ -40,8 +33,7 @@ def test_a_translucent_image_leaves_blending_on_for_the_shadow_catcher(native_gp
     V = QVector3D
     scene.mesh.add_face([V(0, 0, 0), V(4, 0, 0), V(4, 4, 0), V(0, 4, 0)])
     scene.mesh.add_face([V(1, 1, 2), V(3, 1, 2), V(3, 3, 2), V(1, 3, 2)])
-    pic = QImage(8, 8, QImage.Format_RGBA8888)
-    pic.fill(0xFF3060A0)
+    pic = solid_raster(8, 8, (48, 96, 160))
     path = tmp_path / "scan.png"
     pic.save(str(path))
     scene.image_planes.append(ImagePlane(
@@ -51,8 +43,8 @@ def test_a_translucent_image_leaves_blending_on_for_the_shadow_catcher(native_gp
     scene.version += 1
     vp.camera.set_view("iso")
     vp.camera.fit_to(V(-20, -20, 0), V(20, 20, 2))
-    first = vp.render_image(160, 120, overlays=False)     # rebuilds the map
-    second = vp.render_image(160, 120, overlays=False)    # reuses it
+    first = vp.render_raster(160, 120, overlays=False)     # rebuilds the map
+    second = vp.render_raster(160, 120, overlays=False)    # reuses it
     assert first is not None and second is not None
     assert _alpha_zero_share(first) == 0.0
     assert _alpha_zero_share(second) == 0.0

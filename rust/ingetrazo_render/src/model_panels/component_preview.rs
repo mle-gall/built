@@ -9,6 +9,26 @@ pub(crate) fn component_pixels<'py>(
     definition: &Bound<'py, PyAny>,
     size: u32,
 ) -> PyResult<Bound<'py, PyBytes>> {
+    let image = preview(definition, size)?;
+    Ok(PyBytes::new(definition.py(), image.data()))
+}
+
+/// PNG export and CPU readers take straight alpha; the GPU uses premultiplied pixels.
+#[pyfunction]
+pub(crate) fn component_raster(
+    definition: &Bound<'_, PyAny>,
+    size: u32,
+) -> PyResult<crate::survey_raster::SurveyRaster> {
+    let image = preview(definition, size)?;
+    let mut pixels = image::RgbaImage::new(size, size);
+    for (target, source) in pixels.pixels_mut().zip(image.pixels()) {
+        let color = source.demultiply();
+        *target = image::Rgba([color.red(), color.green(), color.blue(), color.alpha()]);
+    }
+    Ok(crate::survey_raster::SurveyRaster { pixels })
+}
+
+fn preview(definition: &Bound<'_, PyAny>, size: u32) -> PyResult<Pixmap> {
     let py = definition.py();
     let mut image = Pixmap::new(size.min(1024), size.min(1024))
         .filter(|_| size <= 1024)
@@ -34,7 +54,7 @@ pub(crate) fn component_pixels<'py>(
                     let [r, g, b] = [r, g, b].map(|v| ((v as u16 * a as u16 + 127) / 255) as u8);
                     image.data_mut()[i..i + 4].copy_from_slice(&[r, g, b, a]);
                 }
-                return Ok(PyBytes::new(py, image.data()));
+                return Ok(image);
             }
         }
     }
@@ -88,7 +108,7 @@ pub(crate) fn component_pixels<'py>(
             None,
         );
     }
-    Ok(PyBytes::new(py, image.data()))
+    Ok(image)
 }
 
 pub(crate) fn upload(ctx: &Bound<'_, PyAny>, icons: &[String]) -> PyResult<()> {

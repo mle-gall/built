@@ -8,16 +8,12 @@ parts nowhere — for a shop model, the whole cut list gone. The parts now
 come in as Asm's children, each with its own name and geometry."""
 from __future__ import annotations
 
-import os
 from types import SimpleNamespace as NS
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest  # noqa: E402
-from PySide6.QtWidgets import QApplication  # noqa: E402
 
 pytest.importorskip("openskp")
-_app = QApplication.instance() or QApplication([])
 
 from core.scene import Scene  # noqa: E402
 from formats import skp, skp_reader  # noqa: E402

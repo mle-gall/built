@@ -8,6 +8,7 @@ skipped where the platform has none or draws nothing."""
 from __future__ import annotations
 
 from tests.controller_surface import live_image
+from tests.raster_samples import pixels
 from tests.shell_isolation import native_gpu_host, native_window, restore_shell_patches  # noqa: F401
 from tests.test_xray_toggle import _state
 from views import view_commands
@@ -90,12 +91,13 @@ def _reddish_near(vp, p, radius=3):
     vp.update()
     img = live_image(vp)
     x, y = vp._world_to_pixel(p)
-    r = img.devicePixelRatio()
+    rgb = pixels(img)
+    r = img.width / vp.width()
     cx, cy = int(x * r), int(y * r)
     for dx in range(-radius, radius + 1):
         for dy in range(-radius, radius + 1):
-            c = img.pixelColor(cx + dx, cy + dy)
-            if c.redF() > 0.6 and c.greenF() < 0.45 and c.blueF() < 0.5:
+            red, green, blue = rgb[cy + dy, cx + dx, :3] / 255
+            if red > 0.6 and green < 0.45 and blue < 0.5:
                 return True
     return False
 

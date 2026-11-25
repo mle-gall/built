@@ -5,7 +5,8 @@ docs/rust-app-shell.md)."""
 from pathlib import Path
 
 import pytest
-from PySide6.QtCore import Qt
+from core.input_types import Qt
+from ingetrazo_render import shortcut_text
 from tests.shell_isolation import restore_shell_patches  # noqa: F401  (autouse)
 
 FIXTURE = Path(__file__).parent / "fixtures" / "shell" / "slab-and-cube.igz"
@@ -27,11 +28,11 @@ def test_opens_a_document_headless(host):
     assert host.view.renderer is None          # nothing presents headless
 
 
-def test_borrowed_classes_are_no_widgets(host):
-    from PySide6.QtWidgets import QWidget
-    assert not isinstance(host.viewport, QWidget)
-    assert not isinstance(host.view, QWidget)
-    # Viewport's own state came through its borrowed __init__.
+def test_shell_view_owns_its_document(host):
+    from app_shell.view import ShellView
+    from views.document_controller import DocumentController
+    assert isinstance(host.view, ShellView)
+    assert isinstance(host.viewport, DocumentController)
     assert host.viewport.history is not None and host.viewport.scene is not None
     assert host.view.source_viewport is host.viewport
 
@@ -47,18 +48,17 @@ def test_tool_shortcut_goes_through_shortcut_override(host):
 
 
 def test_tool_shortcut_restored_in_new_shell(host, tmp_path):
-    from PySide6.QtGui import QKeySequence
     from app_shell.host import Host
     from core.shortcuts import save_shortcut
 
     action = host.window._tool_actions["line"]
-    save_shortcut(action, [QKeySequence("F11")])
+    save_shortcut(action, ["F11"])
     host.close()
     reopened = Host(0, 1280, 800, 2.0, settings=str(tmp_path))
     try:
         action = reopened.window._tool_actions["line"]
-        assert action.shortcut() == QKeySequence("F11")
-        reopened.key(True, Qt.Key_F11.value, 0, "")
+        assert action.portable_keys() == ["F11"]
+        reopened.key(True, shortcut_text("F11")[2], 0, "")
         assert type(reopened.viewport.active_tool).__name__ == "LineTool"
         assert not reopened.errors
     finally:
@@ -99,7 +99,7 @@ def test_events_answer_the_qt_calls_the_handlers_make():
 
 def test_window_input_answers_from_winit(host):
     from views import input_state
-    from PySide6.QtCore import QPoint
+    from core.input_types import QPoint
     host.pointer("move", 30, 40, 0, 0, Qt.ControlModifier.value)
     assert input_state.modifiers(host.viewport, query=True) & Qt.ControlModifier
     assert input_state.cursor_position(host.viewport) == QPoint(30, 40)
@@ -202,51 +202,45 @@ def test_annotation_font_options(host, tool):
         view.renderer = None
 
 
-def test_registered_shortcuts_use_rust_and_plugin_actions_still_trigger(host, monkeypatch):
-    from PySide6.QtGui import QAction, QKeySequence
+def test_registered_shortcuts_use_rust_and_plugin_actions_still_trigger(host):
     from ingetrazo_render import ShellAction
+    from views.extension_api import ExtensionApp
 
     win = host.window
     assert all(isinstance(a, ShellAction) for a in win._registry_actions.values())
-    assert not win.findChildren(QAction)
     line = win._registry_actions["tool:line"]
-    line.setShortcuts([QKeySequence("F12"), QKeySequence("Ctrl+X, Ctrl+C")])
+    f9 = shortcut_text("F9")[2]
+    f10 = shortcut_text("F10")[2]
+    f12 = shortcut_text("F12")[2]
+    line.setShortcuts(["F12", "Ctrl+X, Ctrl+C"])
     seen = []
     line.run = lambda: seen.append("registered")
-    assert host._shortcut(Qt.Key_F12, 0)
+    assert host._shortcut(f12, 0)
     assert not host._shortcut(Qt.Key_X, Qt.ControlModifier.value)
     line.setEnabled(False)
-    plugin = QAction("Plugin fixture", win)
-    plugin.setShortcut(QKeySequence("F12"))
-    plugin.triggered.connect(lambda: seen.append("plugin"))
-    assert host._shortcut(Qt.Key_F12, 0)
-    # Once observed, a raw extension action dispatches without walking the
-    # QObject tree. Observe later shortcut edits, disabling and reparenting.
-    with monkeypatch.context() as m:
-        m.setattr(win, "findChildren", lambda *_: pytest.fail("rescanned stable plugin actions"))
-        assert host._shortcut(Qt.Key_F12, 0)
-    plugin.setShortcut(QKeySequence("F10"))
-    assert not host._shortcut(Qt.Key_F12, 0)
-    assert host._shortcut(Qt.Key_F10, 0)
+    menu = ExtensionApp(win, "fixture").add_menu("Fixture")
+    plugin = menu.addAction("Plugin command", lambda: seen.append("plugin"))
+    plugin.setShortcut("F10")
+    win._extension_menus.refresh(win)
+    assert host._shortcut(f10, 0)
     plugin.setEnabled(False)
-    assert not host._shortcut(Qt.Key_F10, 0)
-    from PySide6.QtCore import QObject
-    container = QObject(win)
-    assert not host._shortcut(Qt.Key_F10, 0)
-    plugin.setParent(container)
+    host._shortcut(f10, 0)
+    assert seen == ["registered", "plugin"]
     plugin.setEnabled(True)
-    assert host._shortcut(Qt.Key_F10, 0)
-    container.setParent(None)
-    assert not host._shortcut(Qt.Key_F10, 0)
-    assert seen == ["registered"] + ["plugin"] * 4
+    plugin.setShortcut("F9")
+    win._extension_menus.refresh(win)
+    assert not host._shortcut(f10, 0)
+    assert host._shortcut(f9, 0)
+    menu.removeAction(plugin)
+    win._extension_menus.refresh(win)
+    assert not host._shortcut(f9, 0)
+    assert seen == ["registered", "plugin", "plugin"]
 
 
-def test_winit_tool_cursors_use_the_same_art_for_tools_and_navigation(host, monkeypatch):
+def test_winit_tool_cursors_use_the_same_art_for_tools_and_navigation(host):
     from core import general_settings
-    from views import icons
     from ingetrazo_render import tool_cursor_art
 
-    monkeypatch.setattr(icons, "tool_cursor", lambda *a: pytest.fail("Requested a Qt tool bitmap"))
     host.window._activate_tool("line")
     host.view._mirror_cursor()
     assert host._cursor == "tool:line"

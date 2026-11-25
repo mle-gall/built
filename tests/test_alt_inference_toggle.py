@@ -28,9 +28,9 @@ takes it.
 from __future__ import annotations
 
 
+from ingetrazo_render import KeyEvent, MouseEvent
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QFocusEvent, QKeyEvent
+from core.input_types import Qt
 from ingetrazo_core import Vec3 as QVector3D
 
 
@@ -40,11 +40,11 @@ def _viewport(native_host):
 
 
 def _press(vp, key, text=""):
-    vp.keyPressEvent(QKeyEvent(QKeyEvent.KeyPress, key, Qt.NoModifier, text))
+    vp.keyPressEvent(KeyEvent(True, key, Qt.NoModifier, text))
 
 
 def _release(vp, key, text=""):
-    ev = QKeyEvent(QKeyEvent.KeyRelease, key, Qt.NoModifier, text)
+    ev = KeyEvent(False, key, Qt.NoModifier, text)
     vp.keyReleaseEvent(ev)
     return ev
 
@@ -106,23 +106,18 @@ def test_losing_focus_drops_the_claim_on_the_release(native_host):
     win._activate_tool("line")
     _busy(vp)
     _press(vp, Qt.Key_Alt)
-    vp.focusOutEvent(QFocusEvent(QFocusEvent.FocusOut,
-                                 Qt.ActiveWindowFocusReason))
+    vp.focusOutEvent(None)
     assert vp._alt_tap is False
 
 
 def test_a_click_mid_operation_does_not_give_the_inferences_back(native_host):
     """The second click of a line is not a new gesture."""
-    from PySide6.QtCore import QPointF
-    from PySide6.QtGui import QMouseEvent
 
     win, vp = _viewport(native_host)
     win._activate_tool("line")
     _busy(vp)
     _press(vp, Qt.Key_Alt)
-    vp.mousePressEvent(QMouseEvent(
-        QMouseEvent.MouseButtonPress, QPointF(5, 5), Qt.LeftButton,
-        Qt.LeftButton, Qt.NoModifier))
+    vp.mousePressEvent(MouseEvent('press', 5, 5, Qt.LeftButton, Qt.LeftButton, Qt.NoModifier))
     assert vp.linear_inference_mode == "off"
 
 

@@ -220,7 +220,7 @@ fn release_document_view(view: &Bound<'_, PyAny>) -> PyResult<()> {
     let attrs = view.getattr("__dict__")?.cast_into::<PyDict>()?;
     for name in ["_ui_tree", "_ui_tree_model", "_ui_comp_cache", "_ui_lib",
                  "_ui_lib_sheet", "_ui_visibility_cache", "_ui_rules_cache",
-                 "_plugin_bindings", "_plugin_scene"] {
+                 "_plugin_bindings", "_plugin_scene", "_line_keys"] {
         if attrs.contains(name)? { attrs.del_item(name)?; }
     }
     for name in ["source_viewport", "scene", "packed", "tools", "_tool_source",

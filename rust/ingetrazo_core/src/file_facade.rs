@@ -59,6 +59,26 @@ fn built_displacement<'p>(
     }
     Ok(maximum * 1000.)
 }
+#[pyfunction(signature=(vertex,point,*,key))]
+fn built_vertex_init(vertex: &Obj<'_>, point: &Obj<'_>, key: &Obj<'_>) -> PyResult<()> {
+    let py = vertex.py();
+    let coords = py.get_type::<PyTuple>().call1((point,))?;
+    let position = py
+        .get_type::<crate::math::Vec3>()
+        .call(coords.cast::<PyTuple>()?, None)?;
+    let kw = PyDict::new(py);
+    kw.set_item("key", key)?;
+    py.import("core.mesh")?.getattr("Vertex")?.call_method(
+        "__init__",
+        (vertex, position),
+        Some(&kw),
+    )?;
+    vertex.setattr("_source", coords)?;
+    vertex.setattr(
+        "_projection",
+        vertex.getattr("position")?.call_method0("toTuple")?,
+    )
+}
 #[pyfunction]
 fn built_vertex_tuple<'p>(vertex: &Obj<'p>) -> PyResult<Obj<'p>> {
     let py = vertex.py();
@@ -83,6 +103,10 @@ fn document_native_io(py: Python<'_>) -> PyResult<Option<Obj<'_>>> {
     }
     let module = py.import("core._native")?.call_method0("available")?;
     Ok(module.hasattr("FileGroups")?.then_some(module))
+}
+#[pyfunction]
+fn igz_members_init(members: &Obj<'_>) -> PyResult<()> {
+    members.setattr("checked", PyDict::new(members.py()))
 }
 #[pyfunction(signature=(archive,name,pwd=None))]
 fn document_archive_read<'p>(
@@ -135,7 +159,9 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     add!(
         is_built,
         built_displacement,
+        built_vertex_init,
         built_vertex_tuple,
+        igz_members_init,
         document_archive_read,
         document_native_io
     );

@@ -41,11 +41,7 @@ def _plog(tag: str, ms: float, extra: str = "", floor: float = 50.0) -> None:
 from core.input_types import NATIVE, QEvent, Qt, QPointF, QRectF
 from core.host_callbacks import Signal
 from core.timers import later, timer as window_timer
-if not NATIVE:
-    from PySide6.QtCore import QObject, QTimer
 from views.paint_types import QColor, QFont, QPen, QPolygonF
-if not NATIVE:
-    from PySide6.QtGui import QFontMetrics, QImage, QPainter
 import numpy as np
 import ingetrazo_core
 import ingetrazo_render
@@ -75,21 +71,7 @@ from core.inference import InferenceEngine
 ingetrazo_render.register_document_module(globals())
 
 
-class _HoverEvent:
-    """Minimal stand-in for a QMouseEvent inside the coalesced hover path —
-    just what ``_build_ctx`` and the hover handlers read."""
-
-    __slots__ = ("_pos", "_mods")
-
-    def __init__(self, pos, mods) -> None:
-        self._pos = pos
-        self._mods = mods
-
-    def position(self):
-        return self._pos
-
-    def modifiers(self):
-        return self._mods
+_HoverEvent = ingetrazo_render.MouseEvent.hover
 
 
 #: Every chunk entry built (or loaded from disk) takes the next number.
@@ -170,7 +152,7 @@ _LIVE_VIEWS: "weakref.WeakSet" = weakref.WeakSet()
 
 
 #: Texture images decoded once per file, for every GL context that
-#: uploads them: ``path`` → ``(mtime, size, mirrored QImage, cutout)``,
+#: uploads them: ``path`` → ``(mtime, size, mirrored SurveyRaster, cutout)``,
 #: the newest last, held to a budget of bytes. Three views joining the
 #: plaza's decoded its textures again each (1.6 s of the 3.8 s); the GL
 #: texture itself belongs to each context and is made from this.
@@ -186,57 +168,6 @@ from ingetrazo_core import point_in_screen_hull as _point_in_screen_hull
 from ingetrazo_core import MIN_CIRCLE_DASHES as _MIN_CIRCLE_DASHES
 
 
-class _AltWatch(object if NATIVE else QObject):
-    """Hears Alt at APPLICATION level, without taking it, for the Paint
-    tool's eyedropper pointer (@pacaeiro, #47: «press Alt and release it —
-    icon changed but we're still on Paint mode»). The viewport's own key
-    events miss every other tap: the first release hands keyboard focus to
-    the menu bar, so the next press lands there. The function followed (it
-    reads the mouse event's modifiers); only the pointer lagged.
-
-    ONE filter for the whole application, telling every live viewport: an
-    application filter runs on every event, and one per viewport made the
-    test suite crawl (hundreds of viewports alive)."""
-
-    _instance = None
-
-    def __init__(self, app) -> None:
-        super().__init__(app)
-        import weakref
-        self._viewports = weakref.WeakSet()
-        self._clean = False       # Alt down, nothing else pressed since
-
-    @classmethod
-    def watch(cls, viewport) -> None:
-        from PySide6.QtWidgets import QApplication
-        app = QApplication.instance()
-        if app is None:
-            return
-        if cls._instance is None:
-            cls._instance = cls(app)
-            app.installEventFilter(cls._instance)
-            # Off before Python tears itself down: Qt keeps delivering
-            # events (deferred deletes) through an application filter while
-            # the interpreter is half gone — the suite segfaulted on exit.
-            import atexit
-            atexit.register(cls._unwatch)
-        cls._instance._viewports.add(viewport)
-
-    @classmethod
-    def _unwatch(cls) -> None:
-        inst, cls._instance = cls._instance, None
-        if inst is None:
-            return
-        from PySide6.QtWidgets import QApplication
-        app = QApplication.instance()
-        try:
-            if app is not None:
-                app.removeEventFilter(inst)
-        except RuntimeError:
-            pass
-
-    def eventFilter(self, obj, ev) -> bool:
-        return ingetrazo_render.alt_filter(self, ev)
 
 
 from views.document_tools import DocumentTools
@@ -282,9 +213,6 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         self.active_view_key = None
         # The model and its camera are the same in every language: a right-
         # to-left interface (#1067) does not mirror what is drawn here.
-        if not NATIVE:
-            from views.rtl import keep_ltr
-            keep_ltr(self)
         self._configure_surface()
         self.setMinimumSize(640, 480)
         self.setFocusPolicy(Qt.StrongFocus)
@@ -293,8 +221,6 @@ class DocumentInteraction(DocumentTools, ViewNavigation):
         self._init_document()
 
         ingetrazo_render.init_document_interaction(self)
-        if not NATIVE:
-            _AltWatch.watch(self)
         ingetrazo_render.init_navigation(self)
 
     # Chunk arrays are a pure function of the mesh content; persisting them

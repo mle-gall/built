@@ -26,10 +26,9 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
-from PySide6.QtCore import QPointF, Qt
-from PySide6.QtGui import QMouseEvent
+from core.input_codes import Input as Qt
+from ingetrazo_render import MouseEvent
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
-from PySide6.QtWidgets import QApplication
 
 from core.group import Group
 from core.history import History
@@ -40,24 +39,20 @@ from tools.rust_tools import LineTool
 from tools.rust_tools import RectangleTool
 from tests.controller_surface import ControllerSurface as Viewport
 from views.wgpu_inference import prepare, surface
-from views.wgpu_view import WgpuView
-
-app = QApplication.instance() or QApplication([])
 
 
 # ---- An unshown Metal view driving the real tools --------------------------
 
 @pytest.fixture
-def view():
-    source = Viewport()
+def view(native_host):
+    source = native_host.viewport
     source.scene = Scene()
     source.history = History(source.scene)
     source.flash_status = lambda *a: None
     source.notify_scene_changed = lambda: None
     source.active_tool = LineTool()
-    v = WgpuView()
-    v.resize(800, 600)
-    source.resize(800, 600)
+    native_host.resize(800, 600, 1.)
+    v = native_host.view
     v.source_viewport = source
     v.camera = source.camera
     v.camera.target = V(1, 1, 0)
@@ -65,13 +60,10 @@ def view():
     v.camera.distance = 8
     v.camera.aspect = 800 / 600
     v.set_scene(source.scene)
-    v.setAttribute(Qt.WA_DontShowOnScreen)
-    v._upload = lambda: None
+    v._upload = lambda **kwargs: None
     v.pick_row = lambda x, y: _pick(v, x, y)
     yield v
     v.renderer = None
-    v.close()
-    source.close()
 
 
 def _pick(view, x, y):
@@ -99,18 +91,18 @@ def refresh(view):
 def _event(view, kind, p, buttons=Qt.NoButton, button=Qt.NoButton,
            modifiers=Qt.NoModifier):
     x, y = view._world_to_pixel(p)
-    q = QPointF(x, y)
-    QApplication.sendEvent(view, QMouseEvent(kind, q, q, button, buttons, modifiers))
+    handler = {"move": view.mouseMoveEvent, "press": view.mousePressEvent, "release": view.mouseReleaseEvent}[kind]
+    handler(MouseEvent(kind, x, y, button, buttons, modifiers))
 
 
 def move(view, p, modifiers=Qt.NoModifier):
-    _event(view, QMouseEvent.MouseMove, p, modifiers=modifiers)
+    _event(view, "move", p, modifiers=modifiers)
     return view.last_snap
 
 
 def click(view, p):
-    _event(view, QMouseEvent.MouseButtonPress, p, Qt.LeftButton, Qt.LeftButton)
-    _event(view, QMouseEvent.MouseButtonRelease, p, Qt.NoButton, Qt.LeftButton)
+    _event(view, "press", p, Qt.LeftButton, Qt.LeftButton)
+    _event(view, "release", p, Qt.NoButton, Qt.LeftButton)
     refresh(view)
 
 

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 import pytest
-from PySide6.QtCore import QPointF, Qt
+from core.input_types import QPointF, Qt
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
 
 from core.edits import build_add_edge
@@ -431,8 +431,8 @@ class _Metal:
     every placement."""
 
     def __init__(self, vp, monkeypatch):
-        from views.wgpu_view import WgpuView
-        self.view = view = WgpuView()
+        from app_shell.view import ShellView
+        self.view = view = ShellView(vp._host)
         view.source_viewport = vp
         view.camera = vp.camera
         view.set_scene(vp.scene)
@@ -452,7 +452,7 @@ class _Metal:
 
     def close(self):
         self.view.renderer = None
-        self.view.close()
+        self.view.closeEvent()
 
 
 def test_metal_follows_a_shared_assembly_edit_and_its_undo_incrementally(

@@ -6,23 +6,18 @@ bottom face wins some pixels, and they flicker while orbiting. Each case
 renders two frames 0.01 degrees apart and counts pixels that come out in
 the back colour.
 
-Default pytest runs Qt offscreen and skips the raster checks; run this file
-with QT_QPA_PLATFORM=cocoa on macOS to execute them (no widget is shown).
+The renderer uses an offscreen wgpu target.
 ``THIN_WALLS_REPORT=1`` prints the table instead of only asserting.
 """
 import importlib.util
 import math
 import os
-import sys
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np
 import pytest
 from ingetrazo_core import Vec3 as V
-from PySide6.QtWidgets import QApplication, QWidget
 
-_app = QApplication.instance() or QApplication([])
 
 from core.camera import OrbitCamera  # noqa: E402
 from core.scene import Scene  # noqa: E402
@@ -35,20 +30,11 @@ DISTANCE_M = (10, 50, 200)
 
 @pytest.fixture(scope="module")
 def native():
-    if (not HAS_RENDERER or sys.platform != "darwin"
-            or os.environ.get("QT_QPA_PLATFORM") != "cocoa"):
-        pytest.skip("Metal raster checks require the crate and an unshown Cocoa NSView")
-    from PySide6.QtCore import Qt
     from ingetrazo_render import Renderer
-    host = QWidget()
-    host.setAttribute(Qt.WA_DontShowOnScreen)
-    host.resize(SIZE, SIZE)
-    renderer = Renderer(int(host.winId()), SIZE, SIZE, 1.)
+    renderer = Renderer(0, SIZE, SIZE, 1., platform="offscreen")
     renderer.set_antialias(False)
     renderer.set_edges(False)
-    yield renderer
-    del renderer
-    host.close()
+    return renderer
 
 
 def plate_scene(distance, thickness, top=True, bottom=True):

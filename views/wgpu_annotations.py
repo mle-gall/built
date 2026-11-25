@@ -34,10 +34,8 @@ This shares annotation layout/localization rather than duplicating those rules.
 from copy import copy
 
 import numpy as np
-from core.input_types import NATIVE, QPointF, Qt
+from core.input_types import QPointF, Qt
 from views.paint_types import QColor, QPen
-if not NATIVE:
-    from PySide6.QtGui import QPainter
 from ingetrazo_core import Vec3 as QVector3D
 
 from views.document_interaction import DocumentInteraction, _guide_vertices, shown_guides
@@ -178,9 +176,6 @@ def draw_annotations(painter, scene, camera, logical_size, *, annotations_only=F
                               clear_segment=clear_segment)
     painter.save()
     try:
-        if not NATIVE and isinstance(painter, QPainter):
-            painter.setRenderHint(QPainter.Antialiasing)
-            painter.setRenderHint(QPainter.TextAntialiasing)
         if not annotations_only:
             if guide_lines:
                 draw_guide_lines(painter, layout)
@@ -275,19 +270,17 @@ def composite_pixels(rgba, width, height, scene, camera, *, logical_size,
 
 def composite_annotations(image, scene, camera, *, logical_size,
                           overlays=True, annotations_only=False, occluded=None):
-    """Adapter for callers holding a Qt image. Its DPR is presentation metadata."""
-    from PySide6.QtGui import QImage
+    """``composite_pixels`` for a caller holding a ``SurveyRaster``: a new
+    one with the marks."""
+    from ingetrazo_render import SurveyRaster
+    w, h = image.width, image.height
     if not overlays:
-        return image.copy()
-    if image.isNull():
+        return SurveyRaster(w, h, image.rgba())
+    if not w or not h:
         raise ValueError("Cannot annotate a null image")
-    w, h = image.width(), image.height()
-    src = image.convertToFormat(QImage.Format_RGBA8888)
-    rgba = composite_pixels(bytes(src.constBits()), w, h, scene, camera, logical_size=logical_size,
+    rgba = composite_pixels(image.rgba(), w, h, scene, camera, logical_size=logical_size,
                             annotations_only=annotations_only, occluded=occluded)
-    result = QImage(rgba, w, h, w * 4, QImage.Format_RGBA8888).copy()
-    result.setDevicePixelRatio(image.devicePixelRatio())
-    return result
+    return SurveyRaster(w, h, rgba)
 
 
 def draw_tool_overlays(painter, tools, *, labels=True):
@@ -325,21 +318,7 @@ def draw_tool_overlays(painter, tools, *, labels=True):
 
 
 def plugin_paint(target, draw):
-    """An extension requesting a Qt painter contributes its own transparent layer."""
-    if not hasattr(target, "composite_plugin"):
-        return draw(target)
-    from core.input_types import NATIVE
-    if NATIVE:
-        from app_shell.qt_host import enable_plugin_widgets
-        enable_plugin_widgets()
-    from PySide6.QtGui import QImage, QPainter
-    image = QImage(target.width(), target.height(), QImage.Format_RGBA8888_Premultiplied)
-    image.fill(0)
-    image.setDevicePixelRatio(target.devicePixelRatioF())
-    painter = QPainter(image)
-    painter.setRenderHint(QPainter.Antialiasing)
-    try:
-        draw(painter)
-    finally:
-        painter.end()
-    target.composite_plugin(bytes(image.constBits()))
+    """An extension's overlay hook paints on the annotation canvas itself,
+    which answers the painter calls it makes (pens, brushes, lines,
+    polygons, rectangles, ellipses, text). There is no Qt painter."""
+    return draw(target)

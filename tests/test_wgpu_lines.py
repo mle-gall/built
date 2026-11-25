@@ -7,10 +7,7 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
-from PySide6.QtGui import QPainter, QImage
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication
-
 from core.group import Group
 from core.guide import Guide
 from core.mesh import Mesh
@@ -19,9 +16,7 @@ from views.document_interaction import _box_edge_vertices
 from tests.controller_surface import ControllerSurface as Viewport
 from views.wgpu_lines import SEGMENT, sync
 from views.wgpu_scene import pack_scene
-from views.wgpu_view import WgpuView
-
-app = QApplication.instance() or QApplication([])
+from tests.headless_gpu import HeadlessView as WgpuView
 V = QVector3D
 
 
@@ -154,9 +149,8 @@ def test_live_annotations_leave_guide_lines_to_the_native_pass(monkeypatch):
     scene = Scene()
     scene.guides = [Guide(V(0, 0, 1), V(1, 0, 0))]
     from core.camera import OrbitCamera as Camera
-    image = QImage(64, 64, QImage.Format_ARGB32_Premultiplied)
+    from ingetrazo_render import AnnotationCanvas
     for guide_lines, expected in ((False, 0), (True, 1)):
-        painter = QPainter(image)
+        painter = AnnotationCanvas(64, 64, 64.)
         annotations.draw_annotations(painter, scene, Camera(), (64, 64), guide_lines=guide_lines)
-        painter.end()
         assert len(calls) == expected

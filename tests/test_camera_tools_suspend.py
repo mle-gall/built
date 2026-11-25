@@ -10,10 +10,10 @@ the Metal view also handed the tool a left-button release, which commits a
 Push/Pull in progress. Picking any other tool still resets it, as before.
 """
 import pytest
-from PySide6.QtCore import QPointF, Qt
-from PySide6.QtGui import QMouseEvent
+from core.input_codes import Input as Qt
+from ingetrazo_core import ScreenPoint as QPointF
+from ingetrazo_render import MouseEvent
 from ingetrazo_core import Vec3 as V
-from PySide6.QtWidgets import QApplication
 
 from tools.arc import ArcTool
 from tools.base import ToolContext
@@ -30,8 +30,6 @@ from tests.controller_surface import ControllerSurface as Viewport
 from tests.test_.skp_inference_gaps import (  # noqa: F401 (fixture)
     _event, click, move, refresh, view)
 
-app = QApplication.instance() or QApplication([])
-
 TOOLS = [LineTool, RectangleTool, MoveTool, RotateTool, TapeMeasureTool,
          ProtractorTool, PushPullTool, ArcTool, CircleTool]
 
@@ -40,32 +38,33 @@ def busy(tool):
     return Viewport._tool_busy(tool)
 
 
+def _send(view, steps):
+    handler = {"move": view.mouseMoveEvent, "press": view.mousePressEvent,
+               "release": view.mouseReleaseEvent}
+    for kind, (x, y), buttons, button in steps:
+        handler[kind](MouseEvent(kind, x, y, button, buttons, Qt.NoModifier))
+
+
 def middle_orbit(view, at):
     x, y = view._world_to_pixel(at)
-    for kind, pos, buttons, button in (
-            (QMouseEvent.MouseButtonPress, (x, y), Qt.MiddleButton, Qt.MiddleButton),
-            (QMouseEvent.MouseMove, (x + 40, y + 25), Qt.MiddleButton, Qt.NoButton),
-            (QMouseEvent.MouseButtonRelease, (x + 40, y + 25), Qt.NoButton, Qt.MiddleButton)):
-        q = QPointF(*pos)
-        QApplication.sendEvent(view, QMouseEvent(kind, q, q, button, buttons, Qt.NoModifier))
+    _send(view, (("press", (x, y), Qt.MiddleButton, Qt.MiddleButton),
+                 ("move", (x + 40, y + 25), Qt.MiddleButton, Qt.NoButton),
+                 ("release", (x + 40, y + 25), Qt.NoButton, Qt.MiddleButton)))
 
 
 def left_drag(view, at):
     """A drag of the left button: what Orbit / Pan from the toolbar take."""
     x, y = view._world_to_pixel(at)
-    for kind, pos, buttons, button in (
-            (QMouseEvent.MouseButtonPress, (x, y), Qt.LeftButton, Qt.LeftButton),
-            (QMouseEvent.MouseMove, (x + 30, y - 20), Qt.LeftButton, Qt.NoButton),
-            (QMouseEvent.MouseButtonRelease, (x + 30, y - 20), Qt.NoButton, Qt.LeftButton)):
-        q = QPointF(*pos)
-        QApplication.sendEvent(view, QMouseEvent(kind, q, q, button, buttons, Qt.NoModifier))
+    _send(view, (("press", (x, y), Qt.LeftButton, Qt.LeftButton),
+                 ("move", (x + 30, y - 20), Qt.LeftButton, Qt.NoButton),
+                 ("release", (x + 30, y - 20), Qt.NoButton, Qt.LeftButton)))
 
 
 def press(view, p):
     """A click that leaves the scene version alone: the shared ``click``
     bumps it, which Push/Pull reads as an outside edit and drops its drag."""
-    _event(view, QMouseEvent.MouseButtonPress, p, Qt.LeftButton, Qt.LeftButton)
-    _event(view, QMouseEvent.MouseButtonRelease, p, Qt.NoButton, Qt.LeftButton)
+    _event(view, "press", p, Qt.LeftButton, Qt.LeftButton)
+    _event(view, "release", p, Qt.NoButton, Qt.LeftButton)
 
 
 @pytest.fixture

@@ -7,12 +7,7 @@ separate tabs (26-09). No sheet navigator: the sheet
 strip at the bottom already switches sheets."""
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication
-
-_app = QApplication.instance() or QApplication([])
-
-
+from core.input_types import Qt
 def _close(comp, win):
     comp.close()
     win._saved_version = win.viewport.scene.version
@@ -25,12 +20,3 @@ def test_the_name_survives_the_igz(tmp_path):
     c.frames.append(MarcoVista(list_name="Alzado norte"))
     back = Composicion.from_dict(c.to_dict())
     assert back.frames[0].list_name == "Alzado norte"
-
-
-def _live_tree_iterators() -> int:
-    import gc
-    from PySide6.QtWidgets import QTreeWidgetItemIterator
-    gc.collect()
-    return sum(type(o) is QTreeWidgetItemIterator for o in gc.get_objects())
-
-

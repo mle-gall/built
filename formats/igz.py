@@ -3,6 +3,7 @@
 """Built and IGZ document codecs, schema constants and script-facing exceptions."""
 from __future__ import annotations
 from contextvars import ContextVar
+from functools import partialmethod
 
 import json
 import math
@@ -14,7 +15,7 @@ from formats.igz_stream import Fragment, SaveStream
 from formats.native_io import DocumentArchive, native_io
 
 from ingetrazo_core import (
-    igz_empty_mesh as _empty_mesh, igz_note_constant as _note_constant,
+    igz_members_init, igz_empty_mesh as _empty_mesh, igz_note_constant as _note_constant,
     igz_mesh_blocks as _mesh_blocks,
     DocumentOutput as _atomic_output,
     igz_backup_previous as _backup_previous,
@@ -191,9 +192,7 @@ class _GeomMembers(dict):
     builds its arrays without scanning them again."""
     __slots__ = ("checked", "built_format")
 
-    def __init__(self):
-        super().__init__()
-        self.checked = {}
+    __init__ = partialmethod(igz_members_init)
 
 
 #: ZipInfo flag bits the native reader handles like ``zipfile``: the

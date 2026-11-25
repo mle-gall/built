@@ -4,7 +4,7 @@ import sys
 import numpy as np
 import pytest
 from views.wgpu_scene import _source_arrays, _texture_array
-from PySide6.QtGui import QImage, QColor
+from ingetrazo_render import SurveyRaster
 from ingetrazo_core import Vec3 as QVector3D
 from core.mesh import Mesh
 
@@ -52,12 +52,33 @@ def test_front_and_back_affines_preserve_leaf_grain():
     assert ids == {'unused.png': 1}
 
 
+def _png(path, w, h, pixels):
+    """Write ``pixels`` (rows of (r, g, b, a), top first) as a PNG."""
+    assert len(pixels) == w * h
+    assert SurveyRaster(w, h, bytes(v for px in pixels for v in px)).save(str(path))
+
+
+def _pdf(path, w, h, content):
+    """A one-page PDF of ``w`` × ``h`` points drawing ``content``."""
+    objects = [b"<< /Type /Catalog /Pages 2 0 R >>",
+               b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+               b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 %d %d] /Contents 4 0 R >>" % (w, h),
+               b"<< /Length %d >>\nstream\n%s\nendstream" % (len(content), content)]
+    out, offsets = bytearray(b"%PDF-1.4\n"), []
+    for n, body in enumerate(objects, 1):
+        offsets.append(len(out))
+        out += b"%d 0 obj\n%s\nendobj\n" % (n, body)
+    xref = len(out)
+    out += b"xref\n0 %d\n0000000000 65535 f \n" % (len(objects) + 1)
+    out += b"".join(b"%010d 00000 n \n" % o for o in offsets)
+    out += b"trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n" % (len(objects) + 1, xref)
+    path.write_bytes(bytes(out))
+
+
 def test_array_flips_v_and_supplies_mips(tmp_path):
-    image = QImage(2,2,QImage.Format_RGBA8888)
-    image.fill(QColor('red'))
-    image.setPixelColor(0,1,QColor('blue'))
+    red, blue = (255, 0, 0, 255), (0, 0, 255, 255)
     path = tmp_path/'tile.png'
-    assert image.save(str(path))
+    _png(path, 2, 2, [red, red, blue, red])
     w,h,layers,levels = _texture_array({str(path):1})
     assert (w,h,layers) == (2,2,2)
     assert [len(v) for v in levels] == [32,8]
@@ -66,14 +87,12 @@ def test_array_flips_v_and_supplies_mips(tmp_path):
 
 def test_material_pixels_use_native_codecs_and_preserve_alpha(tmp_path, monkeypatch):
     path = tmp_path / "transparent.png"
-    image = QImage(2, 1, QImage.Format_RGBA8888)
-    image.setPixelColor(0, 0, QColor(255, 20, 0, 0))
-    image.setPixelColor(1, 0, QColor(0, 20, 255, 255))
-    assert image.save(str(path))
+    pixels = [(255, 20, 0, 0), (0, 20, 255, 255)]
+    _png(path, 2, 1, pixels)
     monkeypatch.setitem(sys.modules, "PySide6.QtGui", None)
     w, h, count, mips = _texture_array([path, tmp_path / "missing.png"])
     assert (w, h, count) == (2, 1, 3)
-    assert mips[0][8:16] == bytes(image.constBits())
+    assert mips[0][8:16] == bytes(v for px in pixels for v in px)
     assert mips[0][-8:] == b"\xff" * 8
     r, g, b, a = mips[1][4:8]
     assert r == 0 and abs(g - 20) <= 1 and b >= 254 and abs(a - 128) <= 1
@@ -135,11 +154,8 @@ def test_reference_resizing_preserves_aspect_and_translucent_edges():
 def test_platform_image_keeps_top_row_and_straight_alpha(tmp_path, monkeypatch):
     import struct
     from ingetrazo_render import reference_texture, raster_dimensions
-    image = QImage(16, 16, QImage.Format_RGBA8888)
-    image.fill(QColor(0, 0, 255, 255))
-    image.setPixelColor(0, 0, QColor(255, 0, 0, 128))
     png = tmp_path / "art.png"
-    assert image.save(str(png))
+    _png(png, 16, 16, [(255, 0, 0, 128)] + [(0, 0, 255, 255)] * 255)
     data = png.read_bytes()
     path = tmp_path / "art.icns"
     path.write_bytes(b"icns" + struct.pack(">I", len(data) + 16)
@@ -174,31 +190,20 @@ def test_cursor_resource_hotspot_and_pixels(tmp_path):
     from ingetrazo_render import raster_dimensions, reference_texture
     import struct
     png = tmp_path / "frame.png"
-    im = QImage(16, 16, QImage.Format_RGBA8888)
-    im.fill(QColor(4, 19, 112, 172))
-    assert im.save(str(png))
+    _png(png, 16, 16, [(4, 19, 112, 172)] * 256)
     data = png.read_bytes()
     path = tmp_path / "cursor.cur"
     path.write_bytes(struct.pack("<HHHBBBBHHII", 0, 2, 1, 16, 16, 0, 0, 4, 9, len(data), 22) + data)
     assert raster_dimensions(path) == (16, 16)
-    assert bytes(reference_texture(path, 32)[2]) == bytes(im.constBits())
+    assert bytes(reference_texture(path, 32)[2]) == bytes((4, 19, 112, 172)) * 256
 
 
 @pytest.mark.skipif(__import__("sys").platform != "darwin", reason="Core Graphics PDF reader")
 def test_pdf_first_page_size_orientation_and_transparency(tmp_path, monkeypatch):
     from ingetrazo_render import raster_dimensions, reference_texture
-    from PySide6.QtCore import QSizeF, QMarginsF
-    from PySide6.QtGui import QPdfWriter, QPainter, QPageSize
     import sys
     path = tmp_path / "drawing.pdf"
-    pdf = QPdfWriter(str(path))
-    pdf.setResolution(72)
-    pdf.setPageSize(QPageSize(QSizeF(24, 32), QPageSize.Unit.Point))
-    pdf.setPageMargins(QMarginsF(0, 0, 0, 0))
-    painter = QPainter(pdf)
-    painter.fillRect(0, 0, 12, 16, QColor("red"))
-    painter.end()
-    del pdf
+    _pdf(path, 24, 32, b"1 0 0 rg 0 16 12 16 re f")    # red, the top-left quarter
     monkeypatch.setitem(sys.modules, "PySide6.QtGui", None)
     assert raster_dimensions(path) == (24, 32)
     _, _, rgba = reference_texture(path, 32)

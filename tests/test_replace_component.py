@@ -14,7 +14,7 @@ from core.history import History, ReplaceComponentCommand
 from core.mesh import Mesh
 from core.scene import Scene
 from core.select_ops import same_definition
-from tests.shell_isolation import restore_shell_patches  # noqa: F401
+from tests.shell_isolation import native_question_host, restore_shell_patches  # noqa: F401
 
 
 def _quad(size=1.0, z=0.0):
@@ -354,18 +354,14 @@ def test_the_list_shows_a_kept_definition_with_no_copy(native_components, monkey
 
 
 def _painted_pixels(pm):
-    img = pm.toImage()
-    return sum(1 for x in range(img.width()) for y in range(img.height())
-               if img.pixelColor(x, y).alpha() > 0)
+    return sum(alpha > 0 for alpha in pm.rgba()[3::4])
 
 
 def test_a_thumbnail_is_drawn_once_and_again_when_the_geometry_changes():
-    from PySide6.QtWidgets import QApplication
-    QApplication.instance() or QApplication([])
     from views.component_thumbs import SIZE, thumbnail
     _s, _h, sillas, _m, _c, _holder = _model()
     pm = thumbnail(sillas[0])
-    assert pm.width() == pm.height() == SIZE
+    assert pm.width == pm.height == SIZE
     assert _painted_pixels(pm) > SIZE * SIZE // 10
     assert thumbnail(sillas[1]) is pm               # same definition: cached
     sillas[0].mesh.vertices[0].position = V(0, 0, 4)
@@ -373,8 +369,6 @@ def test_a_thumbnail_is_drawn_once_and_again_when_the_geometry_changes():
 
 
 def test_every_copy_draws_the_same_wherever_it_stands():
-    from PySide6.QtWidgets import QApplication
-    QApplication.instance() or QApplication([])
     from views.component_thumbs import _signature
     a = _component(_quad(1.0), "A", dx=0.0)
     b = copy_group(a, V(30, 0, 0))
@@ -383,8 +377,6 @@ def test_every_copy_draws_the_same_wherever_it_stands():
 
 
 def test_an_empty_definition_gives_a_blank_icon():
-    from PySide6.QtWidgets import QApplication
-    QApplication.instance() or QApplication([])
     from views.component_thumbs import thumbnail
     g = _component(Mesh(), "Nada")
     assert _painted_pixels(thumbnail(g)) == 0
@@ -453,8 +445,8 @@ def test_purge_keeps_what_only_a_kept_definition_wears():
 # --- the four follow-ups -------------------------------------------------------
 
 @pytest.fixture
-def native_components(native_host):
-    win = native_host.window
+def native_components(native_question_host):
+    win = native_question_host.window
     scene = win.viewport.scene
     _s, _h, sillas, mesas, classic, holder = _model(moved=True)
     scene.groups.extend(sillas + mesas + [classic, holder])

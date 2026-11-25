@@ -796,10 +796,6 @@ fn show<'py>(py: Python<'py>, parent: &Bound<'py, PyAny>, form: &Bound<'py, PyAn
     form.setattr("win", &win)?;
     stack.call_method1("append", (form,))?;
     d.call_method1("engage", (&win,))?;
-    let view = d.call_method1("live", (parent,))?;
-    if !view.is_none() {
-        watch(&view, &win, form)?;
-    }
     forms_mod(py)?.call_method1("_repaint", (&win,))?;
     Ok("chrome")
 }
@@ -823,29 +819,6 @@ fn _repaint(win: &Bound<'_, PyAny>) -> PyResult<()> {
         view.setattr("_ui_dialog_sig", py.None())?;
         view.call_method0("update")?;
     }
-    Ok(())
-}
-
-/// Cancel a form that was never drawn (the Qt host).
-fn watch(view: &Bound<'_, PyAny>, win: &Bound<'_, PyAny>, form: &Bound<'_, PyAny>) -> PyResult<()> {
-    let py = view.py();
-    let d = dialogs(py)?;
-    if d.call_method0("in_shell")?.is_truthy()? {
-        return Ok(());
-    }
-    let frames = view.getattr("_ui_frames").unwrap_or_else(|_| obj(py, 0).expect("int").into_bound(py)).unbind();
-    let (v, w, f) = (view.clone().unbind(), win.clone().unbind(), form.clone().unbind());
-    let check = func(py, move |py, _a| {
-        let (view, form) = (v.bind(py), f.bind(py));
-        let now = view.getattr("_ui_frames").unwrap_or_else(|_| obj(py, 0).expect("int").into_bound(py));
-        if form.getattr("closed")?.is_truthy()? || form.getattr("shown")?.is_truthy()? || !now.eq(frames.bind(py))? {
-            return Ok(none(py));
-        }
-        w.bind(py).getattr("viewport")?.call_method1("flash_status", (format!("Built could not draw the {} form.", form.getattr("title")?.str()?),))?;
-        form.call_method0("close")?;
-        Ok(none(py))
-    })?;
-    py.import("PySide6.QtCore")?.getattr("QTimer")?.call_method1("singleShot", (d.getattr("WATCHDOG_MS")?, check))?;
     Ok(())
 }
 

@@ -1,10 +1,11 @@
 """Home and project sessions exercise real tabs with isolated test settings."""
+from tests.raster_samples import solid_raster
 from pathlib import Path
 import json
 import threading
 from tests.shell_isolation import native_host, restore_shell_patches  # noqa: F401
 import pytest
-from PySide6.QtCore import Qt
+from core.input_types import Qt
 from ingetrazo_core import Vec3 as QVector3D
 from core import project, recent
 from core.scene import Scene
@@ -120,14 +121,7 @@ def test_agent_tools_and_read_only_rejection(win, tmp_path):
 
 def test_thumbnail_is_additive_and_survives_resave(tmp_path):
     import zipfile
-    from PySide6.QtCore import QByteArray, QBuffer, QIODevice
-    from PySide6.QtGui import QImage
-    image = QImage(32, 20, QImage.Format_RGB32)
-    image.fill(Qt.white)
-    data = QByteArray()
-    buffer = QBuffer(data)
-    buffer.open(QIODevice.WriteOnly)
-    image.save(buffer, 'PNG')
+    data = solid_raster(32, 20, (255, 255, 255)).png()
     scene = Scene()
     scene._home_thumbnail_png = bytes(data)
     path = tmp_path / 'preview.igz'

@@ -27,8 +27,8 @@ def fresh(monkeypatch):
 
 
 def _forget_choice():
-    from PySide6.QtCore import QSettings
-    st = QSettings()
+    from core.settings import settings as preferences
+    st = preferences()
     for group in ("General/", "general/"):
         st.remove(group + "rust_engine")
 

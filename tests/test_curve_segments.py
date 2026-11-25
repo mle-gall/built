@@ -6,24 +6,19 @@ drawn; any other had to be erased and drawn again."""
 from __future__ import annotations
 
 import math
-import os
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest  # noqa: E402
 from tests.native_tree import action, inspector
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from views.wgpu_ui import _edit
-from PySide6.QtCore import QPointF, Qt  # noqa: E402
+from core.input_types import QPointF, Qt
 from ingetrazo_core import Vec3 as V
-from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from core.curve_segments import ResegmentCurveCommand, read_curve  # noqa: E402
 from tools.base import ToolContext  # noqa: E402
 from tools.circle import CircleTool, PolygonTool  # noqa: E402
 from tools.rust_tools import RectangleTool  # noqa: E402
-
-_app = QApplication.instance() or QApplication([])
 
 
 @pytest.fixture

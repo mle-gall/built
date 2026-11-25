@@ -407,6 +407,19 @@ closing the wall again; all in a submenu (`add_menu`) and the right-click
 menu (`add_context_menu`), each command one undo step. A port of Rick
 Wilson's Windowizer 3 by Bane Andreev, an architect, written with AI help.
 
+## Forms, questions and jobs
+
+An extension asks with the chrome's forms and sheets: `from ingetrazo_render
+import chrome_forms` (`Field`, `Form`, `show`, `ask_text`, `ask_number`,
+`ask_choice`, `request`/`flow`) and `from ingetrazo_render import
+chrome_dialogs` (`ask_later`, `notify`, `Job` for long work in the top bar).
+`views.extension_api` re-exports `chrome_forms`, `chrome_dialogs` and `Job`.
+
+**Deprecated:** the module names `views.chrome_forms` and
+`views.chrome_dialogs` from before the chrome moved to Rust still resolve to
+the same modules, for extensions written against them; they will go in a
+later API version.
+
 ## Bundled reference plugins
 
 - Model Info presents geometry, materials, layers and BIM statistics in a read-only utility panel.

@@ -7,11 +7,9 @@ reference the magnet still slides.
 Drives an unshown ``WgpuView`` with the real Line tool (the fixture of
 ``test_.skp_inference_gaps``)."""
 import pytest
-from PySide6.QtCore import QPointF, Qt
-from PySide6.QtGui import QMouseEvent
 from ingetrazo_core import Vec3 as V
-from PySide6.QtWidgets import QApplication
 
+from tests.headless_gpu import mouse
 from tests.test_.skp_inference_gaps import click, refresh, view  # noqa: F401
 
 
@@ -24,9 +22,7 @@ def _open_rectangle(view):
 
 
 def _move_px(view, x, y):
-    q = QPointF(x, y)
-    QApplication.sendEvent(view, QMouseEvent(
-        QMouseEvent.MouseMove, q, q, Qt.NoButton, Qt.NoButton, Qt.NoModifier))
+    mouse(view, "move", x, y)
     return view.last_snap
 
 

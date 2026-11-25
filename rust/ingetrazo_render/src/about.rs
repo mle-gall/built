@@ -97,9 +97,6 @@ impl AboutReview {
             ("OS", format!("{os} ({})", s("machine"))),
             ("Python", s("python").to_owned()),
         ];
-        if !s("qt").is_empty() {
-            facts.push(("Qt", format!("{}, PySide6: {}", s("qt"), s("pyside"))));
-        }
         if !s("gl").is_empty() {
             facts.push(("OpenGL", s("gl").into()));
         }

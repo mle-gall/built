@@ -9,7 +9,7 @@ views already went to the view clicked; now the picture, the lines and
 the SVG do too."""
 from __future__ import annotations
 
-from PySide6.QtGui import QImage
+from tests.raster_samples import solid_raster
 from tests.model_panes import grid  # noqa: F401
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
@@ -27,6 +27,8 @@ def _spy(grid, monkeypatch, name, result):
 def test_export_image_renders_the_active_view(grid, monkeypatch, tmp_path):
     from ingetrazo_render import chrome_forms
     from views.filedialogs import file_dialogs
+    from app_shell import native
+    monkeypatch.setattr(native, "available", lambda: True)
     win = grid.win
     top = grid.click("Top")
 
@@ -34,11 +36,7 @@ def test_export_image_renders_the_active_view(grid, monkeypatch, tmp_path):
     monkeypatch.setattr(file_dialogs, "getSaveFileName",
                         lambda *a, **k: (str(out), ""))
 
-    def picture():
-        img = QImage(64, 40, QImage.Format_RGB32)
-        img.fill(0)
-        return img
-    called = _spy(grid, monkeypatch, "render_image", picture)
+    called = _spy(grid, monkeypatch, "render_raster", lambda: solid_raster(64, 40, (0, 0, 0)))
     win._on_export_image()
     chrome_forms.current(win).press("ok")
     assert called == [top]
@@ -53,7 +51,7 @@ def test_the_view_lines_and_the_svg_take_the_active_view(grid, monkeypatch):
     assert called and set(called) == {top}
     # The SVG builder draws its picture and faces from the same view.
     called = _spy(grid, monkeypatch, "render_image",
-                  lambda: QImage(8, 8, QImage.Format_RGB32))
+                  lambda: solid_raster(8, 8, (0, 0, 0)))
     builder = win.view_svg_builder()
     builder._image_fn(64)
     assert called == [top]

@@ -6,7 +6,7 @@ but the keyboard never let the «s» into the value box."""
 from __future__ import annotations
 
 import pytest
-from PySide6.QtCore import Qt
+from core.input_types import Qt
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 

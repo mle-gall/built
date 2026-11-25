@@ -1,7 +1,7 @@
 """The native Keyboard table edits the same bindings the window dispatches."""
-from PySide6.QtCore import Qt
+from core.input_types import Qt
 from core.settings import settings
-from PySide6.QtGui import QKeySequence
+from ingetrazo_render import shortcut_text
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 
@@ -11,6 +11,7 @@ def test_tools_views_and_menus_reassign_and_reset_across_windows(tmp_path, monke
     from core.shortcuts import action_key
     from ingetrazo_render import view_commands
 
+    f9 = shortcut_text("F9")[2]
     profile = str(tmp_path / "profile")
     hosts = [Host(0, 900, 700, 1.0, settings=profile)]
     try:
@@ -31,39 +32,39 @@ def test_tools_views_and_menus_reassign_and_reset_across_windows(tmp_path, monke
         form.press("ok")
         assert tool.portable_keys() == ["F9"]
         for action, previous in [(view, tool), (menu, view)]:
-            sheet._assign(action, [QKeySequence("F9")])
+            sheet._assign(action, ["F9"])
             forms.pop().press("cancel")
-            assert previous.shortcut() == QKeySequence("F9")
-            sheet._assign(action, [QKeySequence("F9")])
+            assert previous.portable_keys() == ["F9"]
+            sheet._assign(action, ["F9"])
             forms.pop().press("ok")
-            assert not previous.shortcuts()
-            assert hosts[1].window._registry_actions[action_key(action)].shortcut() == QKeySequence("F9")
+            assert not previous.portable_keys()
+            assert hosts[1].window._registry_actions[action_key(action)].portable_keys() == ["F9"]
         # A new host reads the saved override before receiving the first key.
         hosts.append(Host(0, 900, 700, 1.0, settings=profile))
         fresh = hosts[-1]
         seen = []
         monkeypatch.setattr(fresh.window, "run_command", lambda command: seen.append(command))
-        assert fresh._shortcut(Qt.Key_F9, 0)
+        assert fresh._shortcut(f9, 0)
         assert seen == ["cutlist"]
         sheet.state.kb_focus = "sc:menu:cutlist"
         sheet._kb_verb("kb_default")
         assert not settings().contains("shortcuts/menu:cutlist")
-        assert not fresh._shortcut(Qt.Key_F9, 0)
+        assert not fresh._shortcut(f9, 0)
         sheet.state.kb_focus = "sc:view:orbit"
         sheet._kb_verb("kb_default")
         assert fresh.window._registry_actions["view:orbit"].portable_keys() == ["O"]
-        sheet._assign(tool, [QKeySequence("F9")])
+        sheet._assign(tool, ["F9"])
         sheet._kb_verb("kb_reset_all")
         forms.pop().press("ok")
-        assert all(h.window._registry_actions["tool:line"].shortcut() == QKeySequence("L") for h in hosts)
-        assert not fresh._shortcut(Qt.Key_F9, 0)
+        assert all(h.window._registry_actions["tool:line"].portable_keys() == ["L"] for h in hosts)
+        assert not fresh._shortcut(f9, 0)
     finally:
         for h in reversed(hosts):
             h.close()
 
 
 def test_keyboard_prompt_roundtrips_platform_text_and_reserved_keys():
-    from ingetrazo_render import shortcut_alternatives, shortcut_text
+    from ingetrazo_render import shortcut_alternatives
     from ingetrazo_render.settings_sheet import _keys_text, _parse_keys
 
     for source in ("⌥⇧⌘É", "Ctrl+Alt+Shift+É"):

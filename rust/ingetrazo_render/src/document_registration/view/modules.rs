@@ -19,7 +19,6 @@ pub(super) fn class<'py>(
     let py = module.py();
     attrs.set_item("__module__", module.name()?)?;
     if let Some(doc) = match name {
-        "QtViewHost"=> Some("Window services used by tools attached to a Qt wgpu surface."),
         "NdofInput"=> Some("One 3D mouse, whichever the platform. ``motion`` carries an\n:class:`NdofSample` and the seconds since the previous one; ``button``\nthe button number and whether it went down."),
         "WidgetShim"=> Some("The QWidget surface the borrowed methods use, over a host that\nknows the window's size and scale and when a frame is wanted."),
         _=>None,
@@ -30,9 +29,7 @@ pub(super) fn class<'py>(
     module.add(name, &cls)?;
     Ok(cls)
 }
-pub(super) fn classic(py: Python) -> PyResult<Bound<PyModule>> {
-    py.import("views._interaction_classic")
-}
+
 pub(super) fn py_super<'py>(
     module: &Bound<'py, PyModule>,
     name: &str,
@@ -135,7 +132,6 @@ pub(super) fn install_interaction_module(module: &Bound<PyModule>) -> PyResult<(
                 module,
                 "core.input_types",
                 &[
-                    ("NATIVE", "NATIVE"),
                     ("QPoint", "QPoint"),
                     ("QPointF", "QPointF"),
                     ("QRect", "QRect"),
@@ -145,7 +141,7 @@ pub(super) fn install_interaction_module(module: &Bound<PyModule>) -> PyResult<(
             )?;
             module.add(
                 "__doc__",
-                "Window geometry, frame requests, focus and cursor services for QObject hosts.",
+                "Window geometry, frame requests, focus and cursor services for document hosts.",
             )?;
             view_host(module)?;
         }
@@ -174,7 +170,6 @@ pub(super) fn install_interaction_module(module: &Bound<PyModule>) -> PyResult<(
                 "core.host_callbacks",
                 &[("HostService", "HostService"), ("Signal", "Signal")],
             )?;
-            import_names(module, "core.input_types", &[("NATIVE", "NATIVE")])?;
             import_names(
                 module,
                 "core.ndof",
@@ -199,16 +194,7 @@ fn document_tools(module: &Bound<PyModule>) -> PyResult<()> {
     register_view_functions(&module.dict())
 }
 fn can_warp<'py>(a: &Args<'py>) -> Reply<'py> {
-    let py = a.py();
-    if py
-        .import("core.input_types")?
-        .getattr("NATIVE")?
-        .is_truthy()?
-    {
-        false.into_bound_py_any(py)
-    } else {
-        classic(py)?.call_method0("can_warp_pointer")
-    }
+    false.into_bound_py_any(a.py())
 }
 fn view_navigation(module: &Bound<PyModule>) -> PyResult<()> {
     let attrs = fields!(module.py();"_ZOOM_OUT_STEP"=>0.05);
@@ -248,86 +234,6 @@ fn labels<'py>(a: &Args<'py>) -> Reply<'py> {
     }
     Ok(result.into_any())
 }
-#[pyfunction(signature=(window,key,on=false))]
-fn trigger_view_action(window: &Obj, key: &str, on: bool) -> PyResult<()> {
-    window
-        .py()
-        .import("views.view_commands")?
-        .call_method1("run_view_command", (window, key, on))?;
-    Ok(())
-}
-#[pyfunction]
-fn reflect_view_action(
-    window: &Obj,
-    action: &Obj,
-    key: &str,
-    bindings: &Bound<PyDict>,
-    native_text: &Obj,
-) -> PyResult<()> {
-    let shortcut = action
-        .call_method0("shortcut")?
-        .call_method1("toString", (native_text,))?;
-    let value = (shortcut, action.call_method0("isEnabled")?).into_bound_py_any(window.py())?;
-    if let Some(current) = bindings.get_item(key)? {
-        if current.eq(&value)? {
-            return Ok(());
-        }
-    }
-    bindings.set_item(key, value)?;
-    let attrs = window.getattr("__dict__")?;
-    let version = attrs
-        .call_method1("get", ("_view_binding_version", 0))?
-        .add(1)?;
-    window.setattr("_view_binding_version", version)
-}
-fn bind_view_action<'py>(a: &Args<'py>) -> Reply<'py> {
-    let py = a.py();
-    let window = a.get_item(0)?;
-    let action = a.get_item(1)?;
-    let key = a.get_item(2)?;
-    let sequence = classic(py)?.call_method0("shortcut_type")?;
-    let entries = py.import("views.view_commands")?.call_method0("entries")?;
-    let mut row = None;
-    for entry in entries.try_iter()? {
-        let entry = entry?;
-        if entry.get_item(1)?.eq(&key)? {
-            row = Some(entry);
-            break;
-        }
-    }
-    let row = row.ok_or_else(|| pyo3::exceptions::PyStopIteration::new_err(()))?;
-    let shortcuts = PyList::empty(py);
-    for shortcut in row.get_item(3)?.try_iter()? {
-        shortcuts.append(sequence.call1((shortcut?,))?)?;
-    }
-    action.call_method1("setShortcuts", (shortcuts,))?;
-    let signal = if a.get_item(3)?.is_truthy()? {
-        "toggled"
-    } else {
-        "triggered"
-    };
-    let partial = py.import("functools")?.getattr("partial")?;
-    let trigger = partial.call1((wrap_pyfunction!(trigger_view_action, py)?, &window, &key))?;
-    action
-        .getattr(signal)?
-        .call_method1("connect", (trigger,))?;
-    let bindings = window
-        .getattr("__dict__")?
-        .call_method1("setdefault", ("_view_bindings", PyDict::new(py)))?;
-    let reflect = partial.call1((
-        wrap_pyfunction!(reflect_view_action, py)?,
-        &window,
-        &action,
-        &key,
-        bindings,
-        sequence.getattr("NativeText")?,
-    ))?;
-    action
-        .getattr("changed")?
-        .call_method1("connect", (&reflect,))?;
-    reflect.call0()?;
-    Ok(none(py))
-}
 fn view_commands(module: &Bound<PyModule>) -> PyResult<()> {
     register_view_functions(&module.dict())?;
     install(
@@ -335,14 +241,6 @@ fn view_commands(module: &Bound<PyModule>) -> PyResult<()> {
         &module.dict(),
         &[
             ("entries", Mode::Function, entries, &[], "", ""),
-            (
-                "bind",
-                Mode::Function,
-                bind_view_action,
-                &["win", "action", "key", "*", "toggle=False"],
-                "",
-                "Connect a classic host action before its shortcut customizations load.",
-            ),
             ("_labels", Mode::Function, labels, &["language"], "", ""),
         ],
     )?;
@@ -377,16 +275,7 @@ fn shim_missing<'py>(a: &Args<'py>) -> Reply<'py> {
     Err(pyo3::exceptions::PyAttributeError::new_err(name))
 }
 fn shim_event<'py>(a: &Args<'py>) -> Reply<'py> {
-    let py = a.py();
-    if py
-        .import("views.view_host")?
-        .getattr("NATIVE")?
-        .is_truthy()?
-    {
-        false.into_bound_py_any(py)
-    } else {
-        classic(py)?.call_method1("widget_event", (a.get_item(0)?, a.get_item(1)?))
-    }
+    false.into_bound_py_any(a.py())
 }
 #[pyfunction(signature = (this,*args), text_signature = "(self, *args)")]
 fn redraw(this: &Obj, args: &Bound<PyTuple>) -> PyResult<()> {
@@ -408,13 +297,7 @@ fn noop(this: &Obj, args: &Bound<PyTuple>, kwargs: Option<&Bound<PyDict>>) {
 }
 fn view_host(module: &Bound<PyModule>) -> PyResult<()> {
     let py = module.py();
-    let base = if module.getattr("NATIVE")?.is_truthy()? {
-        py.import("builtins")?.getattr("object")?
-    } else {
-        let object = classic(py)?.call_method0("window_base")?;
-        module.add("QObject", &object)?;
-        object
-    };
+    let base = py.import("builtins")?.getattr("object")?;
     module.add("MISSING", module.getattr("Counter")?.call0()?)?;
     module.add("__annotations__", fields!(py; "MISSING"=>"Counter"))?;
     let cls = class(
@@ -507,40 +390,11 @@ fn controller_init<'py>(a: &Args<'py>) -> Reply<'py> {
     view.setattr("_enabled", false)?;
     Ok(none(py))
 }
-fn for_widget<'py>(a: &Args<'py>) -> Reply<'py> {
-    let py = a.py();
-    let display = a.get_item(1)?;
-    py.import("views.rtl")?
-        .call_method1("keep_ltr", (&display,))?;
-    let host = py
-        .import("views.document_controller")?
-        .call_method1("QtViewHost", (&display,))?;
-    let view = a.get_item(0)?.call1((host,))?;
-    view.call_method1("setParent", (&display,))?;
-    view.setattr("keys_stand_in", &display)?;
-    display.setattr("source_viewport", &view)?;
-    display.setattr("camera", view.getattr("camera")?)?;
-    Ok(view)
-}
+
 #[pyfunction(signature = (this,*size), text_signature = "(self, *size)")]
 fn resize(this: &Obj, size: &Bound<PyTuple>) -> PyResult<()> {
     this.getattr("keys_stand_in")?
         .call_method1("resize", size)?;
-    Ok(())
-}
-#[pyfunction(signature = (this,*args), text_signature = "(self, *args)")]
-fn controller_focus(this: &Obj, args: &Bound<PyTuple>) -> PyResult<()> {
-    let m = this.py().import("views.document_controller")?;
-    let display = optional(this, "keys_stand_in")?;
-    if this
-        .getattr("_host")?
-        .is_instance(&m.getattr("QtViewHost")?)?
-        && !display.is_none()
-    {
-        display.call_method1("setFocus", args)?;
-    } else {
-        py_super(&m, "DocumentController", this)?.call_method1("setFocus", args)?;
-    }
     Ok(())
 }
 fn map_to_global<'py>(a: &Args<'py>) -> Reply<'py> {
@@ -553,10 +407,7 @@ fn map_from_global<'py>(a: &Args<'py>) -> Reply<'py> {
         .getattr("keys_stand_in")?
         .call_method1("mapFromGlobal", (a.get_item(1)?,))
 }
-fn qt_host_init<'py>(a: &Args<'py>) -> Reply<'py> {
-    a.get_item(0)?.setattr("display", a.get_item(1)?)?;
-    Ok(none(a.py()))
-}
+
 fn document_controller(module: &Bound<PyModule>) -> PyResult<()> {
     let py = module.py();
     let cls = class(
@@ -582,14 +433,6 @@ fn document_controller(module: &Bound<PyModule>) -> PyResult<()> {
                 "",
             ),
             (
-                "for_widget",
-                Mode::Class,
-                for_widget,
-                &["cls", "display"],
-                "",
-                "",
-            ),
-            (
                 "mapToGlobal",
                 Mode::Method,
                 map_to_global,
@@ -608,25 +451,7 @@ fn document_controller(module: &Bound<PyModule>) -> PyResult<()> {
         ],
     )?;
     method(&cls, "resize", wrap_pyfunction!(resize, module)?.as_any())?;
-    method(
-        &cls,
-        "setFocus",
-        wrap_pyfunction!(controller_focus, module)?.as_any(),
-    )?;
-    let host = class(module, "QtViewHost", &[], &PyDict::new(py))?;
-    register_view_class(&host)?;
-    install(
-        &host,
-        &module.dict(),
-        &[(
-            "__init__",
-            Mode::Method,
-            qt_host_init,
-            &["self", "display"],
-            "",
-            "",
-        )],
-    )
+    Ok(())
 }
 fn ndof_input(module: &Bound<PyModule>) -> PyResult<()> {
     super::device::install_devices(module)

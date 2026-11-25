@@ -7,8 +7,6 @@ from types import SimpleNamespace
 
 import pytest
 from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
-from PySide6.QtCore import QByteArray, QBuffer, QIODevice
-from PySide6.QtGui import QImage
 from ingetrazo_core import Vec3 as QVector3D
 
 from core.scene import Scene
@@ -111,19 +109,15 @@ def test_reader_contract(monkeypatch):
 
 def test_thumbnail():
     from views.component_thumbs import thumbnail
-    image = QImage(16, 16, QImage.Format_RGB32)
-    image.fill(0xffff0000)
-    data = QByteArray()
-    buffer = QBuffer(data)
-    buffer.open(QIODevice.WriteOnly)
-    image.save(buffer, 'PNG')
+    from ingetrazo_render import SurveyRaster
+    image = SurveyRaster(16, 16, bytes([255, 0, 0, 255]) * 256)
     p = payload()
-    p['preview_png_base64'] = base64.b64encode(bytes(data)).decode()
+    p['preview_png_base64'] = base64.b64encode(image.png()).decode()
     scene = Scene()
     apply_payload(scene, p)
     pm = thumbnail(scene.kept_components[0])
-    assert pm.toImage().pixelColor(20, 20).red() == 255
-    assert pm.toImage().pixelColor(20, 20).green() == 0
+    i = (pm.width * 20 + 20) * 4
+    assert pm.rgba()[i:i + 4] == bytes([255, 0, 0, 255])
 
 
 def test_bad_indices_rollback():

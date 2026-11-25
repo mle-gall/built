@@ -8,17 +8,11 @@ the document's unit, so in a millimetre model «45» reached Rotate as
 the number reaches it as typed; lengths keep the document's unit."""
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest  # noqa: E402
-from PySide6.QtCore import Qt  # noqa: E402
+from core.input_types import Qt
 from ingetrazo_core import Vec3 as QVector3D
-from PySide6.QtWidgets import QApplication  # noqa: E402
 
-if QApplication.instance() is None:
-    QApplication([])
 
 from core import units  # noqa: E402
 from core.scene import Scene  # noqa: E402

@@ -203,8 +203,8 @@ impl ExportSheet {
             if let Ok(queue) = win.getattr("_host").and_then(|host| host.getattr("timers")) {
                 queue.call_method1("later", (&win, 180, task))?;
             } else {
-                py.import("PySide6.QtCore")?.getattr("QTimer")?
-                    .call_method1("singleShot", (180, task))?;
+                // A window without the shell's timers (tests): render now.
+                task.bind(py).call0()?;
             }
         }
         if preview {

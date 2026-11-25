@@ -16,11 +16,6 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from tests.controller_surface import live_image
 import pytest
 from ingetrazo_core import Vec3 as V
-from PySide6.QtWidgets import QApplication
-
-_app = QApplication.instance() or QApplication([])
-
-
 def _box(scene, x0, y0, z0, x1, y1, z1):
     p = [V(x0, y0, z0), V(x1, y0, z0), V(x1, y1, z0), V(x0, y1, z0),
          V(x0, y0, z1), V(x1, y0, z1), V(x1, y1, z1), V(x0, y1, z1)]

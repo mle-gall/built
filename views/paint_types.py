@@ -1,8 +1,4 @@
-"""Select native annotation styles or the widget host's painter values."""
-from core.input_types import NATIVE
+"""Native annotation styles exported to existing tool and painter plugins."""
+from ingetrazo_render import AnnotationFont as QFont, PaintColor as QColor, PaintPen as QPen
 
-if NATIVE:
-    from ingetrazo_render import AnnotationFont as QFont, PaintColor as QColor, PaintPen as QPen
-    QPolygonF = list
-else:
-    from PySide6.QtGui import QColor, QFont, QPen, QPolygonF
+QPolygonF = list

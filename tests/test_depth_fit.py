@@ -6,17 +6,12 @@ The raster check needs a real GL context: run this file with
 QT_QPA_PLATFORM=cocoa on macOS (no window is left open).
 """
 import math
-import os
-import sys
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np
 import pytest
 from ingetrazo_core import Vec3 as V
-from PySide6.QtWidgets import QApplication
 
-_app = QApplication.instance() or QApplication([])
 
 from core.camera import OrbitCamera  # noqa: E402
 
@@ -139,7 +134,7 @@ def test_depth_fit_keeps_all_editing_rays_exact(two_point):
 
 def test_metal_view_fits_the_shown_box_and_refuses_a_mesh_preview():
     from types import SimpleNamespace as NS
-    from views.wgpu_view import WgpuView
+    from tests.headless_gpu import HeadlessView as WgpuView
     c = camera()
     source = NS(camera=c, scene=NS(edit_group=None, guides=[], shadows=NS(enabled=False)),
                 _base_map_showing=lambda: False, _terrain_showing=lambda: False,

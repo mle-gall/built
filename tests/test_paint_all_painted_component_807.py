@@ -8,14 +8,9 @@ as in #408), so the click changed nothing on screen and read as «it won't
 let me paint components». The status bar now says why and what to do."""
 from __future__ import annotations
 
-import os
-
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from ingetrazo_core import Matrix4 as QMatrix4x4, Vec3 as V
-from PySide6.QtWidgets import QApplication  # noqa: E402
 
-_app = QApplication.instance() or QApplication([])
 
 from core.group import Group  # noqa: E402
 from core.mesh import Mesh  # noqa: E402
