@@ -53,33 +53,39 @@ def _random_boxes(rng, n):
     return lo, hi
 
 
-def _pairs(monkeypatch, use_native, *args):
-    monkeypatch.setattr(_native, "native",
-                        _native.available() if use_native else None)
-    return list(intersect._touching(*args))
+def _pairs(use_native, lo_a, hi_a, lo_b, hi_b, same):
+    if use_native:
+        i, j = _native.available().touching_boxes(lo_a, hi_a, lo_b, hi_b, same, EPS)
+    else:
+        overlap = np.all((lo_a[:, None] <= hi_b + EPS)
+                         & (lo_b <= hi_a[:, None] + EPS), axis=2)
+        if same:
+            overlap = np.triu(overlap, k=1)
+        i, j = np.nonzero(overlap)
+    return list(zip(i.tolist(), j.tolist()))
 
 
 @pytest.mark.parametrize("seed", range(8))
-def test_same_pairs_as_numpy(monkeypatch, seed):
+def test_same_pairs_as_numpy(seed):
     rng = random.Random(seed)
     lo_a, hi_a = _random_boxes(rng, rng.randrange(1, 900))
     lo_b, hi_b = _random_boxes(rng, rng.randrange(1, 900))
     for args in ((lo_a, hi_a, lo_a, hi_a, True),
                  (lo_a, hi_a, lo_b, hi_b, False)):
-        want = _pairs(monkeypatch, False, *args)
-        got = _pairs(monkeypatch, True, *args)
+        want = _pairs(False, *args)
+        got = _pairs(True, *args)
         assert got == want
     assert want, "the scene should have touching boxes"
 
 
-def test_one_box_and_empty(monkeypatch):
+def test_one_box_and_empty():
     lo = np.zeros((1, 3))
     hi = np.ones((1, 3))
     empty = np.zeros((0, 3))
     for args in ((lo, hi, lo, hi, True), (lo, hi, lo, hi, False),
                  (lo, hi, empty, empty, False)):
-        assert _pairs(monkeypatch, True, *args) == \
-            _pairs(monkeypatch, False, *args)
+        assert _pairs(True, *args) == \
+            _pairs(False, *args)
 
 
 def _plates(rng, n):
@@ -118,7 +124,7 @@ def test_intersect_faces_same_segments(monkeypatch, seed):
     assert out[0], "random plates should cross somewhere"
 
 
-def test_boxes_on_cell_borders_and_a_giant(monkeypatch):
+def test_boxes_on_cell_borders_and_a_giant():
     """Unit boxes on an integer lattice that stop half an eps short of the
     next one (they touch only through eps, across a cell border of the
     grid), plus one box far bigger than the grid's cell budget."""
@@ -136,5 +142,5 @@ def test_boxes_on_cell_borders_and_a_giant(monkeypatch):
         small_lo, small_hi = lattice[0] + 0.25, lattice[1] - 0.25
         for args in ((lo, hi, lo, hi, True), (lo, hi, lo, hi, False),
                      (small_lo, small_hi, lo, hi, False)):
-            want = _pairs(monkeypatch, False, *args)
-            assert _pairs(monkeypatch, True, *args) == want
+            want = _pairs(False, *args)
+            assert _pairs(True, *args) == want

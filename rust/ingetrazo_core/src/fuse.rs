@@ -263,7 +263,7 @@ fn boundary(faces: &[Face<'_>], region: &[usize]) -> Option<Vec<Vec<DVec3>>> {
 }
 #[pyfunction]
 #[pyo3(signature=(loops,cos_tol=0.99999,principal_planes=false))]
-fn fuse_coplanar_loops<'p>(
+pub(crate) fn fuse_coplanar_loops<'p>(
     loops: &Obj<'p>,
     cos_tol: f64,
     principal_planes: bool,

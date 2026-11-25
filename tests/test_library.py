@@ -9,7 +9,7 @@ import zipfile
 
 import pytest
 
-from core import library
+from ingetrazo_core import component_library as library
 
 
 @pytest.fixture
@@ -266,3 +266,23 @@ def test_a_model_is_named_in_the_interface_language():
         return [it["label"] for it in _catalogue_sheet(entries, lang)["content"]["blocks"][0]["items"]]
     assert names("en") == ["Chair", "Mesa", "unnamed"]
     assert names("es") == ["Mesa", "Silla", "unnamed"]
+
+
+def test_model_file_only_uses_the_downloaded_directory(served, tmp_path):
+    outside = tmp_path / "other.obj"
+    outside.write_text("v 1 2 3")
+    assert library.model_file({"id": "silla", "obj": str(outside)}).name == "chair.obj"
+
+
+def test_a_failed_unpack_can_be_retried(served):
+    with zipfile.ZipFile(served / "modelos" / "retry.zip", "w") as archive:
+        archive.writestr("first.obj", "v 0 0 0")
+        archive.writestr("texture.jpg", b"unique-payload")
+    path = served / "modelos" / "retry.zip"
+    original = path.read_bytes()
+    path.write_bytes(original.replace(b"unique-payload", b"broken-payload"))
+    assert library.model_dir("retry") is None
+    cache = library.library_cache() / "modelos"
+    assert not (cache / "retry").exists()
+    path.write_bytes(original)
+    assert (library.model_dir("retry") / "texture.jpg").read_bytes() == b"unique-payload"

@@ -74,6 +74,14 @@ pub fn igz_load_sheet<'py>(
     py: Python<'py>,
     raw: &Bound<'py, PyDict>,
 ) -> PyResult<Bound<'py, PyAny>> {
+    load_sheet(&py.import("core.composition")?.getattr("Composicion")?, raw)
+}
+
+pub(crate) fn load_sheet<'py>(
+    class: &Bound<'py, PyAny>,
+    raw: &Bound<'py, PyDict>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py = raw.py();
     let types = py.import("core.composition")?;
     let kwargs = PyDict::new(py);
     for key in ["name", "paper", "landscape", "margin_mm"] {
@@ -141,7 +149,7 @@ pub fn igz_load_sheet<'py>(
             }
         }
     }
-    let sheet = types.getattr("Composicion")?.call((), Some(&kwargs))?;
+    let sheet = class.call((), Some(&kwargs))?;
     types.call_method1("_migrate_fixed_scale_labels", (&sheet,))?;
     Ok(sheet)
 }

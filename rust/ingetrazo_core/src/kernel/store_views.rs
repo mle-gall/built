@@ -15,7 +15,7 @@ pub(crate) mod lifecycle;
 mod merge;
 mod mesh_queries;
 mod paint_classes;
-mod pieces;
+pub(crate) mod pieces;
 pub(crate) mod provenance;
 mod push;
 use crate::{math::Vec3, object_outline::positions, polygon::raw_newell, store::py::PyMeshStore};
@@ -139,7 +139,6 @@ pub(super) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     s.add_function(wrap_pyfunction!(cells_of, &s)?)?;
     s.add_function(wrap_pyfunction!(paint_classes::paint_classes, &s)?)?;
     provenance::register(&s)?;
-    pieces::register(&s)?;
     s.add_class::<state::MeshSnapshotRecord>()?;
     bulk::register(&s)?;
     lifecycle::register(&s)?;

@@ -6,7 +6,7 @@ import struct
 
 import pytest
 
-from core import extension_manager as manager
+from ingetrazo_core import extension_manager as manager
 from tests.extensions_chrome import Browser
 from tests.test_extension_manager import _extension
 
@@ -102,7 +102,7 @@ def test_the_background_rounds_fetch_the_missing_pictures_a_few_at_a_time(tmp_pa
         asked.append(url)
         assert gate.wait(5)
         return png()
-    monkeypatch.setattr(manager, "_get", fetch)
+    monkeypatch.setattr(manager, "download", fetch)
     try:
         p.signature(browser.ctx)
         assert len(p.requests) == 3

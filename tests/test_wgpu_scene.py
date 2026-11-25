@@ -7,7 +7,7 @@ from core.group import Group
 from core.mesh import Mesh
 from core.scene import Scene
 from core import _native
-from views.wgpu_scene import pack_scene, VERTEX, INSTANCE, COMMAND
+from ingetrazo_core import pack_scene, VERTEX, INSTANCE, COMMAND
 
 # A venv whose ingetrazo_core predates the R1 bake functions skips with the
 # reason instead of failing on an AttributeError; the GL viewport does not
@@ -151,9 +151,50 @@ def test_native_bake_rejects_invalid_ring_shape():
             np.zeros((1, 4), np.uint8), np.zeros(1, bool), _native.qt_hypot())
 
 
+def bake_mesh(mesh):
+    """The reference a pack's vertices are compared with: the array bake's
+    kernel outputs for one mesh, hole triangulation included."""
+    from core.geometry_arrays import arrays_of
+    from core.lazy_mesh import plan_of
+    from views.array_bake import _attrs_table
+    plan = plan_of(mesh)
+    if plan is not None:
+        arrays = plan
+        src = mesh.__dict__['_deferred_source']
+        table = _attrs_table(src)
+        attr = np.asarray(src['face_attr'], dtype=np.int64)
+        pos = plan.pos
+    else:
+        arrays = arrays_of(mesh)
+        pos = arrays.pos
+        if type(mesh).__name__ == 'StoreMesh':
+            from ingetrazo_core import store_views
+            table, attr = store_views.attr_columns(mesh)
+            attr = np.asarray(attr, np.int64)
+        else:
+            table = [f.attrs for f in mesh.faces]
+            attr = np.arange(len(table))
+    # Gather once through the attribute table; masking every face for each
+    # distinct colour is quadratic on large, per-face-painted prototypes.
+    palette = np.full((len(table)+1, 4), 255, np.uint8)
+    palette[:, :3] = 210
+    palette[:, 3] = 0
+    hidden_table = np.zeros(len(table)+1, bool)
+    for k, own in enumerate(table):
+        hidden_table[k+1] = bool(own.get('hidden'))
+        if own.get('color') is not None:
+            palette[k+1, :3] = np.clip(np.array(own['color'][:3])*255, 0, 255)
+            palette[k+1, 3] = 255
+    colors = palette[attr+1]
+    hidden = hidden_table[attr+1]
+    native = _native.available()
+    return native.bake_vertices(
+        np.asarray(pos, np.float32), arrays.corners, arrays.ring_sizes,
+        arrays.ring_counts, colors, hidden, _native.qt_hypot()).view(VERTEX)
+
+
 def test_batch_matches_reference_with_holes_concavity_and_legacy(tmp_path, monkeypatch):
     from formats import igz
-    from views.wgpu_scene import bake_mesh
     mesh = Mesh()
     v = lambda x, y: QVector3D(x, y, 0)
     face = mesh.add_face([v(0, 0), v(4, 0), v(4, 4), v(0, 4)],
@@ -190,7 +231,6 @@ def test_pack_never_builds_plan_and_calls_native_once(tmp_path, monkeypatch):
     from formats import igz
     from core.mesh import DeferredMesh
     import core.lazy_mesh
-    import views.wgpu_scene as packing
     native = _native.available()
     monkeypatch.setattr(_native, 'wanted', lambda: True)
     monkeypatch.setattr(igz, '_LARGE_DOCUMENT', 0)
@@ -201,16 +241,11 @@ def test_pack_never_builds_plan_and_calls_native_once(tmp_path, monkeypatch):
     def forbidden(*args, **kwargs):
         raise AssertionError('renderer built a Plan')
     monkeypatch.setattr(core.lazy_mesh, 'plan', forbidden)
-    monkeypatch.setattr(packing, 'plan_of', forbidden)
-    calls = []
-    original = packing.assemble_scene
-    def once(*args):
-        calls.append(True)
-        return original(*args)
-    # One assembly, which runs the one scene bake (resident/assemble.rs).
-    monkeypatch.setattr(packing, 'assemble_scene', once)
-    pack_scene(scene)
-    assert calls == [True]
+    monkeypatch.setattr(core.lazy_mesh, 'plan_of', forbidden)
+    # The pack reads the file's own arrays (resident/sources.rs) and bakes
+    # them in one pass (resident/assemble.rs): no Plan on the way.
+    packed = pack_scene(scene)
+    assert len(packed.instances) == 2 and len(packed.commands) == 2
     for group in scene.groups:
         assert type(group.mesh) is DeferredMesh
         assert '_deferred_plan' not in group.mesh.__dict__
@@ -219,14 +254,14 @@ def test_pack_never_builds_plan_and_calls_native_once(tmp_path, monkeypatch):
 def test_memoised_placement_state_matches_viewport():
     from types import SimpleNamespace
     from views.document_interaction import _paint_of
-    from views.wgpu_scene import _placement_state
+    from ingetrazo_core import PlacementState
     groups = [Group(triangle()) for _ in range(12)]
     for i, g in enumerate(groups):
         g.hidden = bool(i % 3 == 0)
         g.layer = 'missing' if i % 2 else None
         g.material = {'color': (i / 12, .5, .2)}
     scene = Scene(groups=groups)
-    resolve = _placement_state(scene)
+    resolve = PlacementState(scene)
     for g in groups:
         visible, packed = resolve(g)
         assert visible == scene.entity_visible(g)
@@ -234,7 +269,7 @@ def test_memoised_placement_state_matches_viewport():
         expected = np.array([*np.clip(np.array(rgb[:3])*255, 0, 255), 255], np.uint8).view('<u4')[0]
         assert packed == expected
     scene._navigator_allowed = {groups[2].uid}
-    resolve = _placement_state(scene)
+    resolve = PlacementState(scene)
     assert [resolve(g)[0] for g in groups] == [scene.entity_visible(g) for g in groups]
 
 

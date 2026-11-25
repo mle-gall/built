@@ -568,50 +568,6 @@ def _merged_placements(group, placements=None) -> Mesh:
 iter_placements = _NATIVE.group_iter_placements
 
 
-def visible_placements(scene, group):
-    """:func:`iter_placements` without the nested placements the viewport
-    does not draw, for a top-level ``group`` the caller already found
-    visible.
-
-    The same rule as ``Viewport._expand_placements``: Hide on a group takes
-    its whole subtree along; a nested group with no tag of its own takes the
-    nearest one above it; and a hidden or locked tag above puts every
-    instance below it on that tag, whatever its children are tagged. A
-    hidden group two levels down drew in a sheet while the viewport left it
-    out, because :func:`world_mesh` folds in every child."""
-    import ingetrazo_core   # a hidden folder hides its tags
-
-    def shown(layer):
-        ly = scene.layer(layer) if layer else None
-        return ly is None or ingetrazo_core.tag_edits.effective_visible(scene, ly)
-
-    def blocking(layer):
-        ly = scene.layer(layer) if layer else None
-        return ly is not None and (not ingetrazo_core.tag_edits.effective_visible(scene, ly)
-                                   or ly.locked)
-
-    def walk(node, world, hidden, forced, inherited):
-        for child in node.children:
-            m = (child.xform if world is None
-                 else (world * child.xform if child.xform is not None
-                       else world))
-            layer = forced or child.layer or inherited or node.layer
-            off = hidden or bool(child.hidden)
-            if not off and shown(layer):
-                yield child, m
-            if child.children:
-                kid_forced = forced
-                if kid_forced is None and blocking(layer):
-                    kid_forced = layer
-                yield from walk(child, m, off, kid_forced, layer)
-
-    m = getattr(group, "xform", None)
-    yield group, m
-    if getattr(group, "children", None):
-        forced = group.layer if blocking(group.layer) else None
-        yield from walk(group, m, bool(group.hidden), forced, None)
-
-
 def np_affine(m):
     """``QMatrix4x4`` → ``(rot, trans)`` NumPy arrays: ``pts @ rot.T + trans``
     is ``m.map(p)`` for every row. ``data()`` is column-major."""

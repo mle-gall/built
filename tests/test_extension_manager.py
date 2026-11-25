@@ -11,7 +11,7 @@ from dataclasses import replace
 from types import SimpleNamespace
 
 
-from core import extension_manager as manager
+from ingetrazo_core import extension_manager as manager
 from core.extensions import discover_plugins
 from tests.extensions_chrome import Browser
 
@@ -67,12 +67,13 @@ def test_catalog_validation_and_review_uses_the_reviewed_hash(
     monkeypatch.setattr(manager, "catalog_cache_path",
                         lambda: tmp_path / "catalog-cache.json")
     monkeypatch.setattr(
-        manager, "_get",
+        manager, "download",
         lambda url, _limit: (json.dumps(catalog).encode() if "catalog" in url
                              else b'[sample]\nsha256 = "'
                              + hashlib.sha256(source).hexdigest().encode()
                              + b'"\n'))
-    extensions, reviewed = manager.load_catalog()
+    snapshot = manager.refresh_catalog()
+    extensions, reviewed = snapshot.extensions, snapshot.reviewed
     assert manager.is_reviewed(extensions[0], reviewed)
     reviewed["sample"]["sha256"] = "0" * 64
     assert not manager.is_reviewed(extensions[0], reviewed)
@@ -101,7 +102,7 @@ def test_catalog_is_cached_and_used_when_refresh_is_offline(
     monkeypatch.setattr(manager, "catalog_cache_path",
                         lambda: tmp_path / "catalog-cache.json")
     monkeypatch.setattr(
-        manager, "_get",
+        manager, "download",
         lambda url, _limit: (json.dumps(catalog).encode()
                              if "catalog" in url else reviewed))
     live = manager.refresh_catalog()
@@ -110,7 +111,7 @@ def test_catalog_is_cached_and_used_when_refresh_is_offline(
 
     def offline(*_args):
         raise manager.ExtensionManagerError("offline")
-    monkeypatch.setattr(manager, "_get", offline)
+    monkeypatch.setattr(manager, "download", offline)
     cached = manager.refresh_catalog()
     assert cached.from_cache
     assert cached.fetched_at == live.fetched_at
@@ -120,16 +121,16 @@ def test_catalog_is_cached_and_used_when_refresh_is_offline(
 def test_catalog_refresh_without_cache_surfaces_failure(tmp_path, monkeypatch):
     monkeypatch.setattr(manager, "catalog_cache_path",
                         lambda: tmp_path / "missing-cache.json")
-    monkeypatch.setattr(manager, "_get", lambda *_args: (_ for _ in ()).throw(
+    monkeypatch.setattr(manager, "download", lambda *_args: (_ for _ in ()).throw(
         manager.ExtensionManagerError("offline")))
     with pytest.raises(manager.ExtensionManagerError, match="offline"):
         manager.refresh_catalog()
 
 
 def test_install_verify_disable_and_enable_extension(tmp_path, monkeypatch):
-    monkeypatch.setattr(manager, "user_plugins_dir", lambda: tmp_path)
+    monkeypatch.setattr("core.extensions.user_plugins_dir", lambda: tmp_path)
     extension = _extension(TOOL_SOURCE.encode())
-    monkeypatch.setattr(manager, "_get", lambda *_args: TOOL_SOURCE.encode())
+    monkeypatch.setattr(manager, "download", lambda *_args: TOOL_SOURCE.encode())
     manager.install_extension(extension)
     target = tmp_path / "sample"
     assert (target / "__init__.py").read_text() == TOOL_SOURCE
@@ -144,7 +145,7 @@ def test_install_verify_disable_and_enable_extension(tmp_path, monkeypatch):
     assert discover_plugins([tmp_path]) == ([], [])
 
     updated_source = TOOL_SOURCE + "\n# Updated package\n"
-    monkeypatch.setattr(manager, "_get", lambda *_args: updated_source.encode())
+    monkeypatch.setattr(manager, "download", lambda *_args: updated_source.encode())
     manager.install_extension(_extension(updated_source.encode()))
     assert not manager.is_extension_enabled("sample")
     assert not manager.restart_required("sample", {})
@@ -155,7 +156,7 @@ def test_install_verify_disable_and_enable_extension(tmp_path, monkeypatch):
     assert [p.stem for p in discover_plugins([tmp_path])[0]] == ["sample"]
     startup = manager.extension_startup_state()
     assert not manager.restart_required("sample", startup)
-    monkeypatch.setattr(manager, "_get",
+    monkeypatch.setattr(manager, "download",
                         lambda *_args: (updated_source + "# newer\n").encode())
     newer = (updated_source + "# newer\n").encode()
     manager.install_extension(_extension(newer))
@@ -163,9 +164,9 @@ def test_install_verify_disable_and_enable_extension(tmp_path, monkeypatch):
 
 
 def test_uninstall_removes_only_manager_owned_extension(tmp_path, monkeypatch):
-    monkeypatch.setattr(manager, "user_plugins_dir", lambda: tmp_path)
+    monkeypatch.setattr("core.extensions.user_plugins_dir", lambda: tmp_path)
     source = TOOL_SOURCE.encode()
-    monkeypatch.setattr(manager, "_get", lambda *_args: source)
+    monkeypatch.setattr(manager, "download", lambda *_args: source)
     manager.install_extension(_extension(source))
     startup = manager.extension_startup_state()
 
@@ -179,9 +180,9 @@ def test_uninstall_removes_only_manager_owned_extension(tmp_path, monkeypatch):
 
 
 def test_restart_required_detects_disable_against_startup(tmp_path, monkeypatch):
-    monkeypatch.setattr(manager, "user_plugins_dir", lambda: tmp_path)
+    monkeypatch.setattr("core.extensions.user_plugins_dir", lambda: tmp_path)
     source = TOOL_SOURCE.encode()
-    monkeypatch.setattr(manager, "_get", lambda *_args: source)
+    monkeypatch.setattr(manager, "download", lambda *_args: source)
     manager.install_extension(_extension(source))
     startup = manager.extension_startup_state()
     assert not manager.restart_required("sample", startup)
@@ -190,9 +191,9 @@ def test_restart_required_detects_disable_against_startup(tmp_path, monkeypatch)
 
 
 def test_download_checksum_mismatch_never_creates_install(tmp_path, monkeypatch):
-    monkeypatch.setattr(manager, "user_plugins_dir", lambda: tmp_path)
+    monkeypatch.setattr("core.extensions.user_plugins_dir", lambda: tmp_path)
     extension = _extension(b"expected")
-    monkeypatch.setattr(manager, "_get", lambda *_args: b"tampered")
+    monkeypatch.setattr(manager, "download", lambda *_args: b"tampered")
     with pytest.raises(manager.ExtensionManagerError, match="Checksum mismatch"):
         manager.install_extension(extension)
     assert not (tmp_path / "sample").exists()
@@ -200,7 +201,7 @@ def test_download_checksum_mismatch_never_creates_install(tmp_path, monkeypatch)
 
 def test_zip_package_is_extracted_and_traversal_is_rejected(
         tmp_path, monkeypatch):
-    monkeypatch.setattr(manager, "user_plugins_dir", lambda: tmp_path)
+    monkeypatch.setattr("core.extensions.user_plugins_dir", lambda: tmp_path)
     output = io.BytesIO()
     with zipfile.ZipFile(output, "w") as archive:
         archive.writestr("sample/__init__.py", TOOL_SOURCE)
@@ -208,7 +209,7 @@ def test_zip_package_is_extracted_and_traversal_is_rejected(
         archive.writestr("sample/helper.txt", "data")
     payload = output.getvalue()
     extension = _extension(payload)
-    monkeypatch.setattr(manager, "_get", lambda *_args: payload)
+    monkeypatch.setattr(manager, "download", lambda *_args: payload)
     manager.install_extension(extension)
     assert (tmp_path / "sample" / "__init__.py").read_text() == TOOL_SOURCE
     assert (tmp_path / "sample" / "subpackage" / "__init__.py").is_file()
@@ -219,17 +220,17 @@ def test_zip_package_is_extracted_and_traversal_is_rejected(
         archive.writestr("../escape.py", "no")
         archive.writestr("sample.py", TOOL_SOURCE)
     malicious = bad.getvalue()
-    monkeypatch.setattr(manager, "_get", lambda *_args: malicious)
+    monkeypatch.setattr(manager, "download", lambda *_args: malicious)
     with pytest.raises(manager.ExtensionManagerError, match="unsafe path"):
         manager.install_extension(_extension(malicious, "other"))
     assert not (tmp_path.parent / "escape.py").exists()
 
 
 def test_manual_plugin_collision_is_not_overwritten(tmp_path, monkeypatch):
-    monkeypatch.setattr(manager, "user_plugins_dir", lambda: tmp_path)
+    monkeypatch.setattr("core.extensions.user_plugins_dir", lambda: tmp_path)
     (tmp_path / "sample.py").write_text("user code")
     extension = _extension(b"catalog code")
-    monkeypatch.setattr(manager, "_get", lambda *_args: b"catalog code")
+    monkeypatch.setattr(manager, "download", lambda *_args: b"catalog code")
     with pytest.raises(manager.ExtensionManagerError, match="not managed"):
         manager.install_extension(extension)
     assert (tmp_path / "sample.py").read_text() == "user code"
@@ -245,7 +246,7 @@ def test_minimum_version_comparison():
 
 def test_incompatible_extension_is_rejected_before_download(
         tmp_path, monkeypatch):
-    monkeypatch.setattr(manager, "user_plugins_dir", lambda: tmp_path)
+    monkeypatch.setattr("core.extensions.user_plugins_dir", lambda: tmp_path)
     extension = manager.Extension(**{
         **_extension(b"future").__dict__,
         "minimum_version": "99.0",
@@ -257,7 +258,7 @@ def test_incompatible_extension_is_rejected_before_download(
         called = True
         return b"future"
 
-    monkeypatch.setattr(manager, "_get", unexpected_download)
+    monkeypatch.setattr(manager, "download", unexpected_download)
     with pytest.raises(manager.ExtensionManagerError, match="requires Built"):
         manager.install_extension(extension)
     assert not called
@@ -385,14 +386,14 @@ def test_browser_builds_in_the_extensions_sheet(tmp_path, monkeypatch):
 def test_zip_names_with_a_colon_are_rejected(tmp_path, monkeypatch):
     # On Windows «C:x» is drive-relative and «a.py:s» a data stream: both
     # can write outside the stage. Linux would extract them quietly.
-    monkeypatch.setattr(manager, "user_plugins_dir", lambda: tmp_path)
+    monkeypatch.setattr("core.extensions.user_plugins_dir", lambda: tmp_path)
     for name in ("sample/C:escape.py", "sample/helper.py:stream"):
         bad = io.BytesIO()
         with zipfile.ZipFile(bad, "w") as archive:
             archive.writestr("sample/__init__.py", TOOL_SOURCE)
             archive.writestr(name, "no")
         payload = bad.getvalue()
-        monkeypatch.setattr(manager, "_get", lambda *_a, p=payload: p)
+        monkeypatch.setattr(manager, "download", lambda *_a, p=payload: p)
         with pytest.raises(manager.ExtensionManagerError, match="unsafe path"):
             manager.install_extension(_extension(payload))
         assert not (tmp_path / "sample").exists()
@@ -410,7 +411,7 @@ def test_a_hand_installed_copy_under_another_name_is_set_aside(
         tmp_path, monkeypatch):
     # OpenTrace used to be unpacked by hand as «arquitetura_parametrica»;
     # installed from the catalog as «opentrace_bim» it loaded twice.
-    monkeypatch.setattr(manager, "user_plugins_dir", lambda: tmp_path)
+    monkeypatch.setattr("core.extensions.user_plugins_dir", lambda: tmp_path)
     old = tmp_path / "arquitetura_parametrica"
     (old / "nested").mkdir(parents=True)
     for name in ("beam.py", "column.py", "slab.py", "nested/roof.py"):
@@ -423,7 +424,7 @@ def test_a_hand_installed_copy_under_another_name_is_set_aside(
     payload = _zip({f"opentrace_bim/{n}": "# new\n" for n in (
         "__init__.py", "beam.py", "column.py", "slab.py", "nested/roof.py",
         "walls.py")})
-    monkeypatch.setattr(manager, "_get", lambda *_a: payload)
+    monkeypatch.setattr(manager, "download", lambda *_a: payload)
     extension = _extension(payload, "opentrace_bim")
 
     asked = []
@@ -444,12 +445,12 @@ def test_a_hand_installed_copy_under_another_name_is_set_aside(
 
 
 def test_an_identical_loose_file_counts_as_a_copy(tmp_path, monkeypatch):
-    monkeypatch.setattr(manager, "user_plugins_dir", lambda: tmp_path)
+    monkeypatch.setattr("core.extensions.user_plugins_dir", lambda: tmp_path)
     # newline="\n": byte for byte what the catalog serves (on Windows
     # write_text puts \r\n and the copy is no longer identical).
     (tmp_path / "my_old_name.py").write_text(TOOL_SOURCE, newline="\n")
     payload = TOOL_SOURCE.encode()
-    monkeypatch.setattr(manager, "_get", lambda *_a: payload)
+    monkeypatch.setattr(manager, "download", lambda *_a: payload)
     with pytest.raises(manager.ExtensionManagerError, match="my_old_name.py"):
         manager.install_extension(_extension(payload))
     assert not (tmp_path / "sample").exists()
@@ -460,11 +461,11 @@ def test_a_loose_file_with_crlf_line_endings_counts_as_a_copy(
     # #764: a hand-installed copy whose line endings were converted to
     # CRLF (a Windows editor, a zip tool, Path.write_text on Windows)
     # is the same extension, even though its raw bytes differ.
-    monkeypatch.setattr(manager, "user_plugins_dir", lambda: tmp_path)
+    monkeypatch.setattr("core.extensions.user_plugins_dir", lambda: tmp_path)
     crlf = TOOL_SOURCE.encode().replace(b"\n", b"\r\n")
     (tmp_path / "my_old_name.py").write_bytes(crlf)
     payload = TOOL_SOURCE.encode()
-    monkeypatch.setattr(manager, "_get", lambda *_a: payload)
+    monkeypatch.setattr(manager, "download", lambda *_a: payload)
     with pytest.raises(manager.ExtensionManagerError, match="my_old_name.py"):
         manager.install_extension(_extension(payload))
     assert not (tmp_path / "sample").exists()
@@ -474,11 +475,11 @@ def test_a_loose_file_with_a_bom_and_crlf_counts_as_a_copy(
         tmp_path, monkeypatch):
     # #764: a UTF-8 BOM saved by a Windows editor must not hide a copy
     # either.
-    monkeypatch.setattr(manager, "user_plugins_dir", lambda: tmp_path)
+    monkeypatch.setattr("core.extensions.user_plugins_dir", lambda: tmp_path)
     crlf = TOOL_SOURCE.encode().replace(b"\n", b"\r\n")
     (tmp_path / "my_old_name.py").write_bytes(b"\xef\xbb\xbf" + crlf)
     payload = TOOL_SOURCE.encode()
-    monkeypatch.setattr(manager, "_get", lambda *_a: payload)
+    monkeypatch.setattr(manager, "download", lambda *_a: payload)
     with pytest.raises(manager.ExtensionManagerError, match="my_old_name.py"):
         manager.install_extension(_extension(payload))
     assert not (tmp_path / "sample").exists()
@@ -489,7 +490,7 @@ def test_a_package_whose_entry_has_crlf_line_endings_counts_as_a_copy(
     # #764, the package form: only the entry module's endings changed.
     plugins = tmp_path / "plugins"
     plugins.mkdir()
-    monkeypatch.setattr(manager, "user_plugins_dir", lambda: plugins)
+    monkeypatch.setattr("core.extensions.user_plugins_dir", lambda: plugins)
     hand = plugins / "hand_copy"
     hand.mkdir()
     (hand / "__init__.py").write_bytes(
@@ -504,12 +505,12 @@ def test_a_different_loose_file_with_crlf_is_not_a_copy(
         tmp_path, monkeypatch):
     # Normalizing endings must not collapse different code into a copy:
     # a file that differs beyond its line endings stays unrelated.
-    monkeypatch.setattr(manager, "user_plugins_dir", lambda: tmp_path)
+    monkeypatch.setattr("core.extensions.user_plugins_dir", lambda: tmp_path)
     other = TOOL_SOURCE.replace("Catalog tool", "Another tool")
     (tmp_path / "my_old_name.py").write_bytes(
         other.encode().replace(b"\n", b"\r\n"))
     payload = TOOL_SOURCE.encode()
-    monkeypatch.setattr(manager, "_get", lambda *_a: payload)
+    monkeypatch.setattr(manager, "download", lambda *_a: payload)
     manager.install_extension(_extension(payload))
     assert (tmp_path / "sample" / "__init__.py").is_file()
     assert (tmp_path / "my_old_name.py").is_file()
@@ -526,15 +527,15 @@ def test_a_bad_thumb_or_print_is_ignored_and_the_extension_kept():
         "download": "https://example.org/sample.py", "sha256": "a" * 64,
         "ingetrazo": "0.1.0", "name": {"en": "S"}, "summary": {"en": "S"},
         "screenshot": "sample.png"}
-    good = manager._parse_extension(
+    good = manager.parse_extension(
         {**base, "thumb": "sample.webp", "screenshot_sha": _SHA_A})
     assert (good.thumb, good.screenshot_sha) == ("sample.webp", _SHA_A)
     for thumb, sha in (("../sample.webp", "0123456789ABCDEF"),
                        ("a/b.webp", "0123"), ("a\\b.webp", 12345),
                        ("sample.exe", "g" * 16), (7, None), ("", "")):
-        parsed = manager._parse_extension(
+        parsed = manager.parse_extension(
             {**base, "thumb": thumb, "screenshot_sha": sha})
         assert parsed.id == "sample" and parsed.screenshot == "sample.png"
         assert parsed.thumb is None and parsed.screenshot_sha is None
-    old = manager._parse_extension(base)              # an older catalog
+    old = manager.parse_extension(base)              # an older catalog
     assert old.thumb is None and old.screenshot_sha is None

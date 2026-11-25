@@ -12,8 +12,8 @@ from core.mesh import Mesh
 from tools.base import ToolContext
 from tools.texture_position import TexturePositionTool
 from views.wgpu_overlay import rasterize, pixels
-from views.wgpu_scene import pack_scene
-from views.wgpu_updates import InstanceUpdates
+from ingetrazo_core import pack_scene
+from ingetrazo_core import InstanceUpdates
 from tests.test_wgpu_mesh_tools import harness
 
 

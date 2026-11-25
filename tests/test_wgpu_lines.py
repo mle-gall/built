@@ -15,7 +15,7 @@ from core.scene import Scene
 from views.document_interaction import _box_edge_vertices
 from tests.controller_surface import ControllerSurface as Viewport
 from views.wgpu_lines import SEGMENT, sync
-from views.wgpu_scene import pack_scene
+from ingetrazo_core import pack_scene
 from tests.headless_gpu import HeadlessView
 V = QVector3D
 

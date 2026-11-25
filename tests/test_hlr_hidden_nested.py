@@ -116,7 +116,7 @@ def test_nothing_hidden_keeps_every_placement_through_its_transform():
     tris = collect_geometry(scene)[0]
     assert len(tris) == 2 * BOX
     assert max(p[2] for t in tris for p in t) == pytest.approx(13.0)
-    from core.group import visible_placements
+    from ingetrazo_core import group_visible_placements as visible_placements
     assert [g for g, _m in visible_placements(scene, top)] == [top, child]
 
 

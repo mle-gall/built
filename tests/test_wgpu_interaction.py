@@ -11,7 +11,7 @@ from core.scene import Scene
 from core.mesh import Mesh
 from core.group import Group
 from core.snap import compute_snap
-from views.wgpu_scene import pack_scene
+from ingetrazo_core import pack_scene
 from views.wgpu_inference import prepare, snap
 from tests.headless_gpu import HeadlessView
 

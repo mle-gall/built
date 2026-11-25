@@ -740,8 +740,8 @@ def test_make_unique_from_the_browser_unlinks_too(native_host, tmp_path, monkeyp
 
 def test_metal_view_updates_in_place_and_draws_the_same(tmp_path, monkeypatch):
     from tests.test_wgpu_updates import _prototype, assert_matches_fresh_pack
-    from views.wgpu_scene import pack_scene
-    from views.wgpu_updates import InstanceUpdates
+    from ingetrazo_core import pack_scene
+    from ingetrazo_core import InstanceUpdates
     host, link, other, src = _host(tmp_path)
     before = pack_scene(host)
     updates = InstanceUpdates(host, pack_scene(host))

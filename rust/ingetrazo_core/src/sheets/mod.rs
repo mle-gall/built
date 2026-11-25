@@ -34,3 +34,4 @@ pub mod pymath;
 pub mod raster;
 pub mod svg;
 pub mod visibility;
+pub(crate) mod composition;

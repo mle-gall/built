@@ -92,7 +92,7 @@ def selection_box_vertices(view):
     """``(key, VERTEX array)``: the boxes as native preview line vertices
     in GL's selection orange, cached with the segments: a mesh tool's
     feedback asks for them on every frame."""
-    from views.wgpu_scene import VERTEX
+    from ingetrazo_core import VERTEX
     key, segments = selection_box_segments(view)
     cache = view.__dict__.setdefault('_selection_boxes', {})
     if cache.get('vertex_key') != key or 'vertices' not in cache:

@@ -4,7 +4,7 @@
 //! (`about.rs`, `extensions.rs`, `surfaces.rs`).
 //!
 //! What stays Python is what each one reports on or acts through: the
-//! extension installer and discovery (`core.extension_manager`,
+//! extension installer and discovery (`ingetrazo_core.extension_manager`,
 //! `core.extensions`), the parts of an assembly (`core.parts`) and the
 //! document's units, history and selection.
 use pyo3::{
@@ -453,7 +453,7 @@ fn need<'py>(d: &Bound<'py, PyDict>, key: &str) -> PyResult<Bound<'py, PyAny>> {
 }
 
 fn manager(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
-    py.import("core.extension_manager")
+    py.import("ingetrazo_core.extension_manager")
 }
 
 fn now_ms(py: Python<'_>) -> PyResult<u64> {
@@ -617,7 +617,7 @@ impl ExtensionsSheet {
         }
         for job in model.call_method1("jobs", (now,))?.try_iter()? {
             let job = job?;
-            let fut = self.pool.bind(py).call_method1("submit", (job.getattr("run")?, em.getattr("_get")?))?;
+            let fut = self.pool.bind(py).call_method1("submit", (job.getattr("run")?, em.getattr("download")?))?;
             requests.set_item(job.getattr("icon")?, fut)?;
         }
         if model.call_method0("pending")?.is_truthy()? || self.refreshing.is_some() {
@@ -773,7 +773,7 @@ impl ExtensionsSheet {
                         "folder" => {
                             let folder = match hands.get_item(&ident)? {
                                 Some(f) => f,
-                                None => em.call_method0("user_plugins_dir")?.div(&ident)?,
+                                None => py.import("core.extensions")?.call_method0("user_plugins_dir")?.div(&ident)?,
                             };
                             let target = if folder.call_method0("is_dir")?.is_truthy()? { folder } else { folder.getattr("parent")? };
                             open_url(target)?;

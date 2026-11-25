@@ -6,7 +6,7 @@ from ingetrazo_core import Vec3 as QVector3D
 from core.scene import Scene
 from core.section import SectionPlane
 from core.camera import OrbitCamera
-from views.wgpu_scene import pack_scene
+from ingetrazo_core import pack_scene
 from views.wgpu_sections import geometry, capture_rows
 from tests.test_section_fill import _box
 

@@ -9,7 +9,7 @@ from core.camera import OrbitCamera
 from core.group import Group
 from core.mesh import Mesh
 from core.scene import Scene
-from views.wgpu_scene import pack_scene, _source_arrays
+from ingetrazo_core import pack_scene, source_arrays
 from views.wgpu_billboards import Billboards
 from views.wgpu_axes import axes_state
 
@@ -49,13 +49,13 @@ def test_fitted_uv_and_no_edges_only_for_sprite_prototype():
     packed = pack_scene(Scene(groups=[sprite, ordinary]), texture_images=False)
     assert packed.edge_commands['count'].tolist() == [0, 8]
     assert packed.instances['info'][:, 0].tolist() == [0, 1]
-    arrays = _source_arrays(sprite.mesh, billboard=True)
+    arrays = source_arrays(sprite.mesh, billboard=True)
     points = arrays[0][arrays[1]]
     mapping = arrays[9][0].reshape(2, 2, 4)
     for side in mapping:
         uv = np.c_[points, np.ones(len(points))] @ side.T
         np.testing.assert_allclose(uv, [[0, 0], [1, 0], [1, 1], [0, 1]], atol=2e-7)
-    planar = _source_arrays(sprite.mesh)[9][0]
+    planar = source_arrays(sprite.mesh)[9][0]
     assert not np.array_equal(planar, arrays[9][0])
     assert sprite.mesh.faces[0].attrs['texture'] == {'path': 'resources/components/ingeniero.png', 'sw': .7186, 'sh': 1.7}
 
@@ -167,7 +167,7 @@ def test_nested_sprite_quad_matches_gl_and_survives_edit_context():
 
 
 def test_shared_billboard_prototype_edit_rebuilds_without_affecting_ordinary():
-    from views.wgpu_updates import InstanceUpdates
+    from ingetrazo_core import InstanceUpdates
     sprite = figure()
     scene = Scene(groups=[sprite, Group(sprite.mesh)])
     packed = pack_scene(scene, texture_images=False)

@@ -1282,7 +1282,7 @@ impl MeshToolAccess {
             let view = s.getattr("view")?;
             kw.set_item("roots", groups)?;
             kw.set_item("texture_images", false)?;
-            let pack = py.import("views.wgpu_scene")?.call_method("pack_scene", (s.getattr("scene")?,), Some(&kw))?;
+            let pack = py.import("ingetrazo_core")?.call_method("pack_scene", (s.getattr("scene")?,), Some(&kw))?;
             let renderer = view.getattr("renderer")?;
             renderer.call_method1("begin_group_feedback", (pack, view.getattr("packed")?.getattr("origin")?))?;
             return s.setattr("_clipboard_renderer", renderer);

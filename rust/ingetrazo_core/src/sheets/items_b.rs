@@ -53,9 +53,9 @@ fn arrow_head(p: &mut Painter, tip: [f64; 2], heading: f64, l: f64, base: f64, c
 
 // ---- Linear dimensions -----------------------------------------------------------------
 
-struct Cota<'a> {
-    f: &'a Fields,
-    label: String,
+pub(super) struct Cota<'a> {
+    pub(super) f: &'a Fields,
+    pub(super) label: String,
 }
 
 impl Cota<'_> {
@@ -68,14 +68,14 @@ impl Cota<'_> {
     fn text_mm(&self) -> f64 {
         self.f.num("text_mm", 2.8)
     }
-    fn normal(&self) -> (f64, f64) {
+    pub(super) fn normal(&self) -> (f64, f64) {
         let length = hypot(self.dx(), self.dy());
         if length < 1e-9 {
             return (0.0, -1.0);
         }
         (-self.dy() / length, self.dx() / length)
     }
-    fn line_points(&self) -> ([f64; 2], [f64; 2]) {
+    pub(super) fn line_points(&self) -> ([f64; 2], [f64; 2]) {
         let s = self.f.num("sep_mm", 0.0);
         match self.f.text("axis", "").as_str() {
             "h" => ([0.0, s], [self.dx(), s]),
@@ -86,7 +86,7 @@ impl Cota<'_> {
             }
         }
     }
-    fn line_deg(&self) -> f64 {
+    pub(super) fn line_deg(&self) -> f64 {
         let (a, b) = self.line_points();
         readable_deg(b[0] - a[0], b[1] - a[1])
     }
@@ -99,7 +99,7 @@ impl Cota<'_> {
     fn th(&self) -> f64 {
         self.text_mm() * 1.3 + 0.8
     }
-    fn label_extent_mm(&self) -> f64 {
+    pub(super) fn label_extent_mm(&self) -> f64 {
         let tw = self.tw();
         if !self.horizontal() {
             return tw;
@@ -113,7 +113,7 @@ impl Cota<'_> {
     fn dragged(&self) -> bool {
         self.f.num("text_dx_mm", 0.0).abs() > 1e-9 || self.f.num("text_dy_mm", 0.0).abs() > 1e-9
     }
-    fn text_tail(&self) -> Option<([f64; 2], [f64; 2])> {
+    pub(super) fn text_tail(&self) -> Option<([f64; 2], [f64; 2])> {
         let along = self.along();
         if along != "start" && along != "end" {
             return None;
@@ -294,7 +294,7 @@ pub fn dimension_size(f: &Fields) -> (f64, f64) {
 
 // ---- Angular dimensions -------------------------------------------------------------------
 
-fn angles(f: &Fields) -> (f64, f64) {
+pub(super) fn angles(f: &Fields) -> (f64, f64) {
     let a0 = f.num("ay_mm", 0.0).atan2(f.num("ax_mm", 30.0));
     let a1 = f.num("by_mm", -30.0).atan2(f.num("bx_mm", 0.0));
     let mut sweep = a1 - a0;
@@ -372,9 +372,9 @@ pub fn angular_size(f: &Fields) -> (f64, f64) {
 
 // ---- Radius and diameter ---------------------------------------------------------------------
 
-struct Radial<'a> {
-    f: &'a Fields,
-    label: String,
+pub(super) struct Radial<'a> {
+    pub(super) f: &'a Fields,
+    pub(super) label: String,
 }
 
 impl Radial<'_> {
@@ -387,11 +387,11 @@ impl Radial<'_> {
     fn text_mm(&self) -> f64 {
         self.f.num("text_mm", 2.8)
     }
-    fn heading(&self) -> (f64, f64) {
+    pub(super) fn heading(&self) -> (f64, f64) {
         let a = self.f.num("angle_deg", -30.0).to_radians();
         (a.cos(), a.sin())
     }
-    fn line_points(&self) -> ([f64; 2], [f64; 2]) {
+    pub(super) fn line_points(&self) -> ([f64; 2], [f64; 2]) {
         let (ux, uy) = self.heading();
         let r = self.r();
         if self.diameter() {
@@ -400,10 +400,10 @@ impl Radial<'_> {
             ([0.0, 0.0], [ux * r, uy * r])
         }
     }
-    fn label_width_mm(&self) -> f64 {
+    pub(super) fn label_width_mm(&self) -> f64 {
         self.label.chars().count() as f64 * self.text_mm() * 0.62 + 2.0
     }
-    fn outside(&self) -> bool {
+    pub(super) fn outside(&self) -> bool {
         let placement = self.f.text("placement", "auto");
         if placement == "in" || placement == "out" {
             return placement == "out";
@@ -413,7 +413,7 @@ impl Radial<'_> {
         let arrow = (self.f.num("stroke_mm", 0.25) * 6.0).max(1.8) * if self.diameter() { 2.0 } else { 1.0 };
         self.label_width_mm() + arrow + 1.0 > room
     }
-    fn text_anchor(&self) -> (f64, f64) {
+    pub(super) fn text_anchor(&self) -> (f64, f64) {
         let (ux, uy) = self.heading();
         if !self.outside() {
             if self.diameter() {
@@ -427,7 +427,7 @@ impl Radial<'_> {
         let reach = self.r() + self.label_width_mm() / 2.0 + 2.0;
         (ux * reach, uy * reach)
     }
-    fn tail_end(&self) -> (f64, f64) {
+    pub(super) fn tail_end(&self) -> (f64, f64) {
         let (ux, uy) = self.heading();
         if !self.outside() {
             return (ux * self.r(), uy * self.r());

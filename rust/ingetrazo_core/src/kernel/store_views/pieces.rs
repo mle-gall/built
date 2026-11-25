@@ -11,8 +11,7 @@ type Obj<'py> = Bound<'py, PyAny>;
 fn module<'py>(py: Python<'py>, name: &str) -> PyResult<Obj<'py>> {
     crate::model::module(py, name)
 }
-#[pyfunction]
-fn mesh_parts<'py>(mesh: &Obj<'py>, solid: bool) -> PyResult<Option<Bound<'py, PyList>>> {
+pub(crate) fn mesh_parts<'py>(mesh: &Obj<'py>, solid: bool) -> PyResult<Option<Bound<'py, PyList>>> {
     let py = mesh.py();
     let facade = module(py, "core.store_mesh")?;
     if !mesh.get_type().is(facade.getattr("StoreMesh")?) {
@@ -77,8 +76,7 @@ fn column<'py>(elements: &Obj<'py>, class: &Obj<'py>) -> PyResult<Option<Column<
     }
     Ok(Some(result))
 }
-#[pyfunction]
-fn copy_mesh_part<'py>(faces: &Obj<'py>, edges: &Obj<'py>) -> PyResult<Option<Obj<'py>>> {
+pub(crate) fn copy_mesh_part<'py>(faces: &Obj<'py>, edges: &Obj<'py>) -> PyResult<Option<Obj<'py>>> {
     let py = faces.py();
     let model = module(py, "core.store_mesh")?;
     let Some(fs) = column(faces, &model.getattr("FaceView")?)? else {
@@ -151,9 +149,4 @@ fn copy_mesh_part<'py>(faces: &Obj<'py>, edges: &Obj<'py>) -> PyResult<Option<Ob
     cols.set_item("face", (fs.keys, store.call_method1("keys", ("face",))?))?;
     provenance::remember(&new, &mesh, CopiedKeys::new(cols))?;
     Ok(Some(new))
-}
-pub(super) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_function(wrap_pyfunction!(mesh_parts, m)?)?;
-    m.add_function(wrap_pyfunction!(copy_mesh_part, m)?)?;
-    Ok(())
 }

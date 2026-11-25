@@ -166,7 +166,7 @@ def test_ghost_pass_draws_and_unhide_selected_brings_them_back(native_gpu_host):
     if vp.keys_stand_in.renderer is None:
         pytest.skip("the Qt platform has no native GPU surface")
     from tests.controller_surface import live_image
-    from views.wgpu_scene import OBJECT_HIDDEN
+    from ingetrazo_core import OBJECT_HIDDEN
     live_image(vp)
     assert vp.keys_stand_in.packed.reveal_hidden == (False, False)
     win._set_hidden_view("show_hidden_objects", True)

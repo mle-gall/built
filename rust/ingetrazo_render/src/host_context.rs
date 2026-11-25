@@ -52,7 +52,7 @@ pub fn snapshot(
     let kwargs = PyDict::new(py);
     kwargs.set_item("texture_images", false)?;
     let packed = py
-        .import("views.wgpu_scene")?
+        .import("ingetrazo_core")?
         .getattr("pack_scene")?
         .call((scene,), Some(&kwargs))?;
     let vertices = bytes(&packed, "vertices")?;

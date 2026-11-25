@@ -19,7 +19,8 @@ def _scene():
 
 
 def test_visible_placements_follow_the_folder():
-    from core.group import Group, visible_placements
+    from core.group import Group
+    from ingetrazo_core import group_visible_placements as visible_placements
     from core.mesh import Mesh
     scene, f = _scene()
     child = Group(Mesh(), name="child")

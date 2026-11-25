@@ -331,7 +331,7 @@ impl PyMeshStore {
     }
 }
 
-fn op_err(e: OpError) -> PyErr {
+pub(crate) fn op_err(e: OpError) -> PyErr {
     match e {
         OpError::Nan => PyValueError::new_err("cannot convert float NaN to integer"),
         OpError::Inf => PyOverflowError::new_err("cannot convert float infinity to integer"),
