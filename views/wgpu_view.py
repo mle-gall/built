@@ -99,6 +99,23 @@ def _note_ctrl_tap(view, event):
         source._ctrl_alone = False
 
 
+def _index_worker():
+    """The view's one background worker (the snap index, the edit room).
+    Shutting it down, which closing the view does, first takes the
+    document back from a snap-index job (``SceneLease``)."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    class IndexWorker(ThreadPoolExecutor):
+        lease = None
+
+        def shutdown(self, wait=True, *, cancel_futures=False):
+            lease, self.lease = self.lease, None
+            if lease is not None:
+                lease.release()
+            super().shutdown(wait, cancel_futures=cancel_futures)
+    return IndexWorker(max_workers=1)
+
+
 class MetalView(ViewNavigation):
     frameReady = Signal(float, object, float)
     _ZOOM_OUT_STEP = 0.05
@@ -432,11 +449,10 @@ class MetalView(ViewNavigation):
     def _reserve_edit_room(self, tracker):
         """Entering a group: give the resident arrays spare room on the
         worker (InstanceUpdates.reserve), adopted once copied."""
-        from concurrent.futures import ThreadPoolExecutor
         if tracker._store is not None or tracker._reserving is not None:
             return
         if not hasattr(self, '_inference_worker'):
-            self._inference_worker = ThreadPoolExecutor(max_workers=1)
+            self._inference_worker = _index_worker()
         # Behind a snap index build still running: they would compete.
         tracker.reserve(self._inference_worker)
 
@@ -452,8 +468,7 @@ class MetalView(ViewNavigation):
             if old and packed is not None and packed is not self.packed and packed.vertices is old[0]:
                 # The index's open-time snapshot shares the old arrays;
                 # same contents, so let it read the new ones and free those.
-                from dataclasses import replace
-                index.packed = replace(packed, vertices=self.packed.vertices,
+                index.packed = packed.replace(vertices=self.packed.vertices,
                                        indices=self.packed.indices)
         later(self, 50, adopt)
 
@@ -511,21 +526,24 @@ class MetalView(ViewNavigation):
     def _prepare_inference(self):
         if getattr(self, '_closed', False):
             return
-        from concurrent.futures import ThreadPoolExecutor
-        from views.wgpu_inference import prepare
+        from views.wgpu_inference import SceneLease, prepare
         if not hasattr(self, '_inference_worker'):
-            self._inference_worker = ThreadPoolExecutor(max_workers=1)
+            self._inference_worker = _index_worker()
         previous = getattr(self, '_inference_future', None)
         if previous is not None:
             previous.cancel()
         self.inference_index = None
         packed = self._inference_snapshot()
-        scene = self.scene
+        # The job reads the document through a lease the worker's shutdown
+        # takes back: a closed document is not kept until the job ends.
+        scene = self._inference_worker.lease = SceneLease(self.scene)
         mvp = self.camera.projection_matrix() * self.camera.view_matrix()
         width, height = self.width(), self.height()
 
         def build():
             index = prepare(packed, scene)
+            if index is None:
+                return None
             if len(packed.instances):
                 from views.wgpu_inference import screen_boxes
                 # Use the immutable placement and camera snapshots. A resize,
@@ -536,8 +554,7 @@ class MetalView(ViewNavigation):
         self._inference_future = self._inference_worker.submit(build)
 
     def _inference_snapshot(self):
-        from dataclasses import replace
-        packed = replace(self.packed, instances=self.packed.instances.copy(),
+        packed = self.packed.replace(instances=self.packed.instances.copy(),
                          bounds=self.packed.bounds.copy(), commands=self.packed.commands.copy(),
                          edge_commands=self.packed.edge_commands.copy())
         if any(packed.origin) or any(any(o) for o in packed.prototype_origins):
