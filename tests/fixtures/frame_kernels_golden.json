@@ -13,6 +13,98 @@
    "d804fb683ee061f8ebbf597fcfda166743f38b3004a4af13011de0a2140b6846"
   ]
  },
+ "kernels": {
+  "across": {
+   "chords": [
+    216,
+    "0200276f38f5747538163a513bd68f7b8b99b4c06fe795c544eb3df9c10f6038"
+   ],
+   "fill": [
+    212,
+    "94c78712d6b7687315b163c6c81a4fd05695ea8e4d71c6a977c63b3c2c1be0b9"
+   ],
+   "hatch/0.25/False": [
+    92,
+    "da6aa7eab224de3809d2535ca2fb04cc9cb54cc7f960e9cf98a98cd65ae9c170"
+   ],
+   "hatch/0.25/True": [
+    183,
+    "8c3093b17586aafd5f0988255c96da5f5073c235612bba505ac448590dc30c39"
+   ],
+   "hatch/1.5/False": [
+    15,
+    "6a2678f4f47d46410abe88586bca443a9d19c4327b3352ef664e8d33f634e1c4"
+   ],
+   "hatch/1.5/True": [
+    29,
+    "9c4c75eec597189550f7f71fb19b587e81ab2eb4479434fea25c7f962e7457a3"
+   ],
+   "rings": [
+    2,
+    "efe31927fa7860b54db60f67d16b4f54be29ddaf20c5965241c9d3ad09097f01"
+   ]
+  },
+  "low": {
+   "chords": [
+    728,
+    "fce99ed013f67e4008ae6647f395daa000ab0656b1f88795fb8af61bd1d4f613"
+   ],
+   "fill": [
+    718,
+    "2e73d7065f41d1120751e6ce8ea160fb5101b098258f7c0897bee1df809ddaee"
+   ],
+   "hatch/0.25/False": [
+    388,
+    "7c8c91f2f36854b15af45ddcdca59427d0cd2bbc892da45fda828663112538ef"
+   ],
+   "hatch/0.25/True": [
+    771,
+    "b16fb65ca92c841ec4c6e6c4d1095fbb0e55e2d01afc4c5733ec1683c974d546"
+   ],
+   "hatch/1.5/False": [
+    66,
+    "ea57babd0bfa8fc7f9c20fdcd05fde5d57c5f66eac4de4904fda9c5c133b2a17"
+   ],
+   "hatch/1.5/True": [
+    127,
+    "c84b0b5fc504c5d21a79a56c5fb05f0597c9fa319a77899db0f465362cff220e"
+   ],
+   "rings": [
+    5,
+    "8258c04c1ad146809824061604ee4f7bdc179ffb6f6cc3ed8e5ebc49d803aadb"
+   ]
+  },
+  "oblique": {
+   "chords": [
+    509,
+    "930285c0bc849e18256e069d52bb748e93703a4874cf8a3b0176f8bec6fdc47c"
+   ],
+   "fill": [
+    503,
+    "d7ad6c06ce85dae788620a62193d851e35211036e8b6c73c4fa59f870b916e06"
+   ],
+   "hatch/0.25/False": [
+    375,
+    "ad38f3f8358cd2e64b5ad18f666c29b83aa5adfeb59e35eeef95dd1daa06b9c1"
+   ],
+   "hatch/0.25/True": [
+    695,
+    "dc7a5d531b9a44e3fa52808650869e7b1f664df8daf4d6655dd32a95ccb28e50"
+   ],
+   "hatch/1.5/False": [
+    62,
+    "bde5885ec27428f5f74143c518649536f54bc042c2fa84752af9e3cb6a3356bd"
+   ],
+   "hatch/1.5/True": [
+    118,
+    "6b9d4b8df07d348e68e27884d174d87632a3620f28b318eb9235a4a36d1dd227"
+   ],
+   "rings": [
+    13,
+    "2ae2b4ea89de1254a7c38c944e87c31e11f644965415f411a2f6529bb8d10697"
+   ]
+  }
+ },
  "sections": {
   "across/cross/shaded/camera0/1440": [
    72720,

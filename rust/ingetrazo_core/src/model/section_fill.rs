@@ -488,6 +488,40 @@ fn section_hatch_segments<'py>(py: Python<'py>, chords: &Bound<'py, PyAny>, norm
     arr(py, lines, &[l, 2, 3])
 }
 
+/// The filled areas of a cut, worked out once: the chaining and nesting of
+/// the chords is most of the fill's time and of the hatch's, and a hatched
+/// cut asks for both.
+#[pyclass(module = "ingetrazo_core", name = "SectionAreas", frozen)]
+pub struct SectionAreas {
+    groups: Vec<Area>,
+    basis: Option<(P, P)>,
+}
+
+#[pymethods]
+impl SectionAreas {
+    #[new]
+    fn new(chords: &Bound<'_, PyAny>, normal: &Bound<'_, PyAny>) -> PyResult<Self> {
+        let (groups, basis) = fill_groups(&chords_of(chords)?, xyz(normal)?);
+        Ok(Self { groups, basis })
+    }
+
+    /// `section_fill_triangles` of these chords.
+    fn triangles<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        tris_array(py, group_triangles(&self.groups))
+    }
+
+    /// `section_hatch_segments` of these chords.
+    #[pyo3(signature = (spacing, cross=false))]
+    fn hatch<'py>(&self, py: Python<'py>, spacing: f64, cross: bool) -> PyResult<Bound<'py, PyAny>> {
+        let lines = match self.basis {
+            Some(basis) if !self.groups.is_empty() && spacing > 0.0 => hatch(&self.groups, basis, spacing, cross),
+            _ => Vec::new(),
+        };
+        let count = lines.len() / 6;
+        arr(py, lines, &[count, 2, 3])
+    }
+}
+
 /// `_sheet_basis(normal)`: `(u, v)` as NumPy rows.
 #[pyfunction]
 fn section_sheet_basis<'py>(py: Python<'py>, normal: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyTuple>> {
@@ -639,6 +673,7 @@ fn section_plane_load<'py>(py: Python<'py>, cls: &Bound<'py, PyAny>, raw: &Bound
 
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PlaneReach>()?;
+    m.add_class::<SectionAreas>()?;
     m.add_function(wrap_pyfunction!(section_cut_chords, m)?)?;
     m.add_function(wrap_pyfunction!(section_fill_groups, m)?)?;
     m.add_function(wrap_pyfunction!(section_group_triangles, m)?)?;

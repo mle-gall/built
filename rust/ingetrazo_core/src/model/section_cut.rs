@@ -9,6 +9,7 @@
 //! whole comes back as the caller's own objects, as it did.
 
 use std::collections::HashMap;
+use std::hash::BuildHasherDefault;
 
 use numpy::{PyArray1, PyArrayMethods};
 use pyo3::prelude::*;
@@ -150,6 +151,25 @@ pub fn section_clip<'py>(py: Python<'py>, tris: &Bound<'py, PyAny>, hard: &Bound
     }
 }
 
+/// A hash for a cell's three indices: the map is asked 27 times per chord
+/// end, and the default hash was most of the chaining's time.
+#[derive(Default, Clone, Copy)]
+struct CellHasher(u64);
+
+impl std::hash::Hasher for CellHasher {
+    fn finish(&self) -> u64 {
+        self.0
+    }
+    fn write(&mut self, bytes: &[u8]) {
+        for byte in bytes {
+            self.write_i64(*byte as i64);
+        }
+    }
+    fn write_i64(&mut self, value: i64) {
+        self.0 = (self.0.rotate_left(5) ^ value as u64).wrapping_mul(0x517c_c1b7_2722_0a95);
+    }
+}
+
 /// The chords chained into closed rings (node ids), with the chord rows
 /// each ring was walked from. `tol`: endpoints closer than it are one.
 pub fn chain_loops(edges: &[[P; 2]], tol: Option<f64>) -> (Vec<P>, Vec<(Vec<usize>, Vec<usize>)>) {
@@ -170,15 +190,18 @@ pub fn chain_loops(edges: &[[P; 2]], tol: Option<f64>) -> (Vec<P>, Vec<(Vec<usiz
         (span * 1e-7).max(1e-9)
     });
     let inv = 1.0 / tol;
-    let mut cells: HashMap<(i64, i64, i64), Vec<usize>> = HashMap::new();
+    // The nodes of each cell of side `tol`, in the order they were made:
+    // the first one alone (nearly every cell has one), then the rest.
+    let mut cells: HashMap<(i64, i64, i64), (usize, Vec<usize>), BuildHasherDefault<CellHasher>> =
+        HashMap::with_capacity_and_hasher(edges.len() * 2, BuildHasherDefault::default());
     let mut nodes: Vec<P> = Vec::new();
     let mut node_of = |pt: &P| -> usize {
         let c = ((pt[0] * inv).floor() as i64, (pt[1] * inv).floor() as i64, (pt[2] * inv).floor() as i64);
         for dx in [-1, 0, 1] {
             for dy in [-1, 0, 1] {
                 for dz in [-1, 0, 1] {
-                    if let Some(ids) = cells.get(&(c.0 + dx, c.1 + dy, c.2 + dz)) {
-                        for &i in ids {
+                    if let Some((first, more)) = cells.get(&(c.0 + dx, c.1 + dy, c.2 + dz)) {
+                        for &i in std::iter::once(first).chain(more) {
                             let q = nodes[i];
                             if (q[0] - pt[0]).abs() <= tol && (q[1] - pt[1]).abs() <= tol
                                 && (q[2] - pt[2]).abs() <= tol {
@@ -190,10 +213,17 @@ pub fn chain_loops(edges: &[[P; 2]], tol: Option<f64>) -> (Vec<P>, Vec<(Vec<usiz
             }
         }
         nodes.push(*pt);
-        cells.entry(c).or_default().push(nodes.len() - 1);
-        nodes.len() - 1
+        let id = nodes.len() - 1;
+        match cells.entry(c) {
+            std::collections::hash_map::Entry::Occupied(mut cell) => cell.get_mut().1.push(id),
+            std::collections::hash_map::Entry::Vacant(cell) => {
+                cell.insert((id, Vec::new()));
+            }
+        }
+        id
     };
-    let mut adj: HashMap<usize, Vec<usize>> = HashMap::new();
+    // The chords at each node, in the order they came.
+    let mut adj: Vec<Vec<usize>> = Vec::new();
     let mut chords: Vec<(usize, usize)> = Vec::new();
     let mut rows: Vec<usize> = Vec::new();
     for (k, e) in edges.iter().enumerate() {
@@ -205,8 +235,11 @@ pub fn chain_loops(edges: &[[P; 2]], tol: Option<f64>) -> (Vec<P>, Vec<(Vec<usiz
         let idx = chords.len();
         chords.push((a, b));
         rows.push(k);
-        adj.entry(a).or_default().push(idx);
-        adj.entry(b).or_default().push(idx);
+        if adj.len() <= a.max(b) {
+            adj.resize(a.max(b) + 1, Vec::new());
+        }
+        adj[a].push(idx);
+        adj[b].push(idx);
     }
     let mut used = vec![false; chords.len()];
     let mut loops = Vec::new();
@@ -221,7 +254,7 @@ pub fn chain_loops(edges: &[[P; 2]], tol: Option<f64>) -> (Vec<P>, Vec<(Vec<usiz
         let (mut cur, mut prev) = (b0, start);
         let mut closed = false;
         loop {
-            let next = adj.get(&cur).and_then(|cs| cs.iter().copied().find(|&c| c != prev && !used[c]));
+            let next = adj.get(cur).and_then(|cs| cs.iter().copied().find(|&c| c != prev && !used[c]));
             let Some(next) = next else { break };
             used[next] = true;
             walked.push(next);
