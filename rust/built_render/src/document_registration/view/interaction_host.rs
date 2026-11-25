@@ -166,8 +166,17 @@ fn plog(py: Python, tag: &str, ms: f64, extra: &str, floor: f64) -> PyResult<()>
             .getattr("_PERF")?
             .is_truthy()?
     {
-        py.import("built_core.history")?
-            .call_method1("_plog", (tag, ms, extra, floor))?;
+        use std::{fs::OpenOptions, io::Write, path::PathBuf};
+        let path = match std::env::var_os("BUILT_PERF_LOG").filter(|s| !s.is_empty()) {
+            Some(path) => PathBuf::from(path),
+            None => py.import("pathlib")?.getattr("Path")?.call_method0("home")?
+                .extract::<PathBuf>()?.join("built-perf.log"),
+        };
+        let time = py.import("time")?.call_method1("strftime", ("%H:%M:%S",))?;
+        let pid = std::process::id();
+        let space = if extra.is_empty() { "" } else { " " };
+        let line = format!("{time} [{pid}] {tag} {ms:.0}ms{space}{extra}\n");
+        OpenOptions::new().create(true).append(true).open(path)?.write_all(line.as_bytes())?;
     }
     Ok(())
 }
