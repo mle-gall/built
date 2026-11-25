@@ -65,14 +65,18 @@ impl Faces {
         &mut self,
         view: &Obj,
         scene: &Obj,
-        faces: &Obj,
+        mesh: &Obj,
         owner: &Obj,
         entities: &Bound<PyList>,
     ) -> PyResult<()> {
         let area_of = view.getattr_opt("_area_of")?;
         let tris_of = view.getattr_opt("_tris_of")?;
-        for face in faces.try_iter()? {
-            let face = face?;
+        let py = view.py();
+        let faces = PyList::new(py, mesh.getattr("faces")?.try_iter()?.collect::<PyResult<Vec<_>>>()?)?;
+        // The scene's rules for every face at once (`scene_mesh_states`).
+        let ((shown, picks), _) = crate::model::scene_mesh_states::scene_mesh_states(
+            py, scene, mesh, faces.as_any(), PyList::empty(py).as_any())?;
+        for ((face, visible), selectable) in faces.iter().zip(shown).zip(picks) {
             let index = entities.len() as i64;
             entities.append((&face, owner))?;
             let area = match &area_of {
@@ -80,14 +84,7 @@ impl Faces {
                 None => face.call_method0("area")?,
             };
             self.areas.push(area.extract()?);
-            self.vis.push(
-                scene
-                    .call_method1("entity_visible", (&face,))?
-                    .is_truthy()?,
-            );
-            let selectable = scene
-                .call_method1("entity_selectable", (&face,))?
-                .is_truthy()?;
+            self.vis.push(visible);
             self.sel.push(owner.is_none() && selectable);
             self.infer.push(selectable);
             let triangles = match &tris_of {
@@ -115,11 +112,11 @@ fn loose_faces<'py>(view: &Obj<'py>, scene: &Obj<'py>, key: &Obj<'py>) -> PyResu
     }
     let entities = PyList::empty(py);
     let mut faces = Faces::default();
-    faces.collect(view, scene, &scene.getattr("faces")?, &none(py), &entities)?;
+    faces.collect(view, scene, &scene.getattr("mesh")?, &none(py), &entities)?;
     for mesh in outside_meshes(view)?.try_iter()? {
         let mesh = mesh?;
         let owner = view.call_method1("_loose_mesh_wrapper", (&mesh,))?;
-        faces.collect(view, scene, &mesh.getattr("faces")?, &owner, &entities)?;
+        faces.collect(view, scene, &mesh, &owner, &entities)?;
     }
     let count = faces.triangle_entities.len();
     let triangles = if count == 0 {
@@ -165,25 +162,22 @@ impl Edges {
         &mut self,
         scene: &Obj,
         list: &Bound<PyList>,
-        edges: &Obj,
+        mesh: &Obj,
         active: bool,
     ) -> PyResult<()> {
         let reveal = attr(scene, "show_hidden_geometry")?.is_truthy()?;
-        for e in edges.try_iter()? {
-            let e = e?;
+        let py = scene.py();
+        let edges = PyList::new(py, mesh.getattr("edges")?.try_iter()?.collect::<PyResult<Vec<_>>>()?)?;
+        // The scene's rules for every edge at once (`scene_mesh_states`).
+        let (_, (_, snaps, picks)) = crate::model::scene_mesh_states::scene_mesh_states(
+            py, scene, mesh, PyList::empty(py).as_any(), edges.as_any())?;
+        for ((e, snappable), selectable) in edges.iter().zip(snaps).zip(picks) {
             list.append(&e)?;
             self.a.extend(xyz(&e.getattr("a")?)?.to_array());
             self.b.extend(xyz(&e.getattr("b")?)?.to_array());
             self.soft.push(attr(&e, "soft")?.is_truthy()?);
-            self.snappable
-                .push(scene.call_method1("edge_snappable", (&e,))?.is_truthy()?);
-            self.selectable.push(
-                active
-                    && scene
-                        .call_method1("entity_selectable", (&e,))?
-                        .is_truthy()?
-                    && (reveal || !attr(&e, "hidden")?.is_truthy()?),
-            );
+            self.snappable.push(snappable);
+            self.selectable.push(active && selectable && (reveal || !attr(&e, "hidden")?.is_truthy()?));
         }
         Ok(())
     }
@@ -192,9 +186,9 @@ impl Edges {
         let py = view.py();
         let list = PyList::empty(py);
         let mut edges = Self::default();
-        edges.collect(scene, &list, &scene.getattr("edges")?, true)?;
+        edges.collect(scene, &list, &scene.getattr("mesh")?, true)?;
         for mesh in outside_meshes(view)?.try_iter()? {
-            edges.collect(scene, &list, &mesh?.getattr("edges")?, false)?;
+            edges.collect(scene, &list, &mesh?, false)?;
         }
         idx.setattr("edges", &list)?;
         if list.is_empty() {

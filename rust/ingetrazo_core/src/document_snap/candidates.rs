@@ -89,10 +89,12 @@ fn snap_dropped_loose<'py>(v: &Obj<'py>) -> PyResult<Obj<'py>> {
     }
     let drops = PySet::empty(py)?;
     let identity = h.getattr("element_identity")?;
-    let show = sc.getattr("edge_snappable")?;
-    for e in sc.getattr("edges")?.try_iter()? {
-        let e = e?;
-        if !show.call1((&e,))?.is_truthy()? {
+    let mesh = sc.getattr("mesh")?;
+    let edges = PyList::new(py, mesh.getattr("edges")?.try_iter()?.collect::<PyResult<Vec<_>>>()?)?;
+    let (_, (_, snaps, _)) = crate::model::scene_mesh_states::scene_mesh_states(
+        py, &sc, &mesh, PyList::empty(py).as_any(), edges.as_any())?;
+    for (e, snappable) in edges.iter().zip(snaps) {
+        if !snappable {
             drops.add(identity.call1((e,))?)?;
         }
     }
