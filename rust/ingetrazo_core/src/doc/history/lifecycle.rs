@@ -99,9 +99,7 @@ fn dirty(host: &Obj<'_>) -> PyResult<()> {
         let fields = PyList::new(host.py(), ["layer", "hidden", "material"])?;
         let groups = txn.call_method1("placements", (fields,))?;
         if groups.is_truthy()? {
-            host.py()
-                .import("core.history")?
-                .call_method1("_dirty_placements", (groups,))?;
+            crate::doc::history_support::dirty_placements(&groups)?;
         }
     }
     Ok(())
@@ -130,21 +128,15 @@ pub(super) fn execute<'py>(host: &Obj<'py>, cmd: &Obj<'py>, nested: bool) -> PyR
                 "last_error",
                 format!("{}: {}", cmd.get_type().getattr("__name__")?, e.value(py)),
             )?;
-            host.call_method1("_log_failure", (cmd, e.value(py)))?;
+            log_failure(host, cmd, &e)?;
         }
         return Ok(py.None().into_bound(py));
     }
     dirty(host)?;
     host.setattr("last_error", py.None())?;
-    if api.getattr("_PERF")?.is_truthy()? {
-        api.call_method1(
-            "_plog",
-            (
-                "command",
-                start.elapsed().as_secs_f64() * 1000.,
-                cmd.get_type().getattr("__name__")?,
-            ),
-        )?;
+    let elapsed = start.elapsed().as_secs_f64() * 1000.;
+    if elapsed >= 100. && perf_logging() {
+        log_timing(cmd, elapsed)?;
     }
     cmd.setattr("_history_mesh", scene.getattr("mesh")?)?;
     if !scene.getattr("edit_group")?.is_none() {
@@ -238,6 +230,83 @@ fn keep_geometry_caches(host: &Obj<'_>, cmd: &Obj<'_>, before: &Obj<'_>) -> PyRe
                 ((cv, n, edit, mesh_id), anchors.get_item(1)?),
             )?;
         }
+    }
+    Ok(())
+}
+
+fn perf_logging() -> bool {
+    static ENABLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ENABLED.get_or_init(|| std::env::var_os("INGETRAZO_PERF").is_some_and(|s| !s.is_empty()))
+}
+
+fn log_timing(cmd: &Obj<'_>, elapsed: f64) -> PyResult<()> {
+    use std::{fs::OpenOptions, io::Write, path::PathBuf};
+    let py = cmd.py();
+    let path = if let Some(path) = std::env::var_os("INGETRAZO_PERF_LOG").filter(|v| !v.is_empty())
+    {
+        PathBuf::from(path)
+    } else {
+        py.import("pathlib")?
+            .getattr("Path")?
+            .call_method0("home")?
+            .extract::<PathBuf>()?
+            .join("ingetrazo-perf.log")
+    };
+    let time = py.import("time")?.call_method1("strftime", ("%H:%M:%S",))?;
+    let mut file = OpenOptions::new().create(true).append(true).open(path)?;
+    writeln!(
+        file,
+        "{} [{}] command {:.0}ms {}",
+        time,
+        std::process::id(),
+        elapsed,
+        cmd.get_type().getattr("__name__")?
+    )?;
+    Ok(())
+}
+
+/// The traceback must include the original Python frames even though the
+/// command error has already crossed the extension boundary.
+fn log_failure(host: &Obj<'_>, cmd: &Obj<'_>, err: &PyErr) -> PyResult<()> {
+    use std::{fs::OpenOptions, io::Write, path::PathBuf};
+    let py = host.py();
+    let date = py
+        .import("datetime")?
+        .getattr("datetime")?
+        .call_method0("now")?;
+    let kw = PyDict::new(py);
+    kw.set_item("timespec", "seconds")?;
+    let stamp = date.call_method("isoformat", (), Some(&kw))?;
+    let lines = py
+        .import("traceback")?
+        .call_method1("format_exception", (err.value(py),))?;
+    let traceback = lines.extract::<Vec<String>>()?.concat();
+    let text = format!(
+        "[{stamp}] command {} failed and was rolled back:\n{traceback}\n",
+        cmd.get_type().getattr("__name__")?
+    );
+    let stderr = py.import("sys")?.getattr("stderr")?;
+    if !stderr.is_none() {
+        stderr.call_method1("write", (format!("{text}\n"),))?;
+    }
+    let mut path = host.getattr("error_log")?;
+    if path.eq(py
+        .import("core.history")?
+        .getattr("History")?
+        .getattr("error_log")?)?
+    {
+        match host.call_method0("default_error_log") {
+            Ok(resolved) => path = resolved,
+            Err(e) if e.is_instance_of::<pyo3::exceptions::PyException>(py) => (),
+            Err(e) => return Err(e),
+        }
+    }
+    if let Ok(mut file) = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path.extract::<PathBuf>()?)
+    {
+        let _ = file.write_all(text.as_bytes());
     }
     Ok(())
 }

@@ -295,7 +295,7 @@ fn parse_stl<'py>(
                 new_faces.add(face)?;
             }
             kwargs.set_item("coplanar_merge", true)?;
-            py.import("core.history")?.call_method(
+            py.import("ingetrazo_core")?.call_method(
                 "run_stitch",
                 (&mesh, seed, &new_faces),
                 Some(&kwargs),

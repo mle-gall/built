@@ -75,7 +75,7 @@ pub(super) fn resolve_placements<'py>(
     Ok(ordered)
 }
 
-fn one<'py>(h: &Obj<'py>, uid: &Obj<'py>) -> PyResult<Obj<'py>> {
+pub(super) fn one<'py>(h: &Obj<'py>, uid: &Obj<'py>) -> PyResult<Obj<'py>> {
     resolve_placements(h, PyList::new(h.py(), [uid])?.as_any())?.get_item(0)
 }
 

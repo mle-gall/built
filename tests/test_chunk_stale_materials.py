@@ -116,7 +116,7 @@ def test_the_flag_reaches_nested_placements(images):
     """A nested placement's mesh renders as part of its parent, so it needs
     the same signal — scene.groups as a flat list never reached it."""
     from ingetrazo_core import Matrix4 as QMatrix4x4
-    from core.history import _dirty_group_chunks
+    from ingetrazo_core import dirty_group_chunks
     scene = Scene()
     deep = Mesh()
     deep.add_face([V(0, 0), V(2, 0), V(2, 2), V(0, 2)])
@@ -126,7 +126,7 @@ def test_the_flag_reaches_nested_placements(images):
     parent.adopt([child])
     scene.groups.append(parent)
     deep._attrs_dirty = False
-    _dirty_group_chunks(scene)
+    dirty_group_chunks(scene)
     assert getattr(deep, "_attrs_dirty", False), "the nested mesh was missed"
 
 

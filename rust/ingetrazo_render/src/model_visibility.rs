@@ -22,7 +22,7 @@ fn add_hidden<'py>(
 fn hidden_everywhere<'py>(scene: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyList>> {
     let py = scene.py();
     let out = PyList::empty(py);
-    let hidden = py.import("core.history")?.getattr("_is_hidden")?;
+    let hidden = py.import("ingetrazo_core")?.getattr("is_hidden")?;
     let groups = py
         .import("core.purge")?
         .call_method1("iter_groups", (scene.getattr("groups")?,))?;
@@ -38,7 +38,7 @@ fn last<'py>(
     hide: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyList>> {
     let py = history.py();
-    let hidden = py.import("core.history")?.getattr("_is_hidden")?;
+    let hidden = py.import("ingetrazo_core")?.getattr("is_hidden")?;
     let stack = py
         .import("builtins")?
         .call_method1("reversed", (history.getattr("undo_stack")?,))?;
@@ -76,7 +76,7 @@ fn change_visibility(win: &Bound<'_, PyAny>, verb: &str) -> PyResult<()> {
         ),
         "selected" => {
             let selection = scene.getattr("selection")?;
-            let hidden = lib.getattr("_is_hidden")?;
+            let hidden = py.import("ingetrazo_core")?.getattr("is_hidden")?;
             let out = PyList::empty(py);
             for (module, name) in [
                 ("core.mesh", "Edge"),

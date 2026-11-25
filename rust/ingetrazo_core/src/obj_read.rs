@@ -393,7 +393,7 @@ fn editable(mesh: &Obj<'_>, rows: &Bound<'_, PyList>, error: Option<&str>) -> Py
     }
     let kw = PyDict::new(py);
     kw.set_item("coplanar_merge", true)?;
-    py.import("core.history")?
+    py.import("ingetrazo_core")?
         .call_method("run_stitch", (mesh, seed, added), Some(&kw))?;
     py.import("core.orient")?
         .call_method1("orient_outward", (mesh,))?;

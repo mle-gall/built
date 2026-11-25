@@ -530,15 +530,15 @@ class SolidOperationCommand(Command):
             self.removed, self.created = run(self.op, self.groups)
 
     def do(self, scene) -> None:
-        from core.history import group_owner_list
+        from ingetrazo_core import definition_edits
         self.prepare()                     # once; redo reuses the result
         self._selection = set(scene.selection)
-        home = group_owner_list(scene, self.groups[-1 if self.op in (
+        home = definition_edits.group_owner(scene, self.groups[-1 if self.op in (
             SUBTRACT, TRIM) else 0]) or scene.groups
         self._home = home
         self._slots = []
         for g in self.removed:
-            owner = group_owner_list(scene, g)
+            owner = definition_edits.group_owner(scene, g)
             if owner is None:
                 continue
             i = owner.index(g)

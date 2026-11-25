@@ -113,8 +113,7 @@ pub fn tag_template_file(scene: &Bound<'_, PyAny>, path: PathBuf, save: bool) ->
     let (added, updated): (usize, usize) = crate::model::module(backend.py(), "ingetrazo_core")?.getattr("tag_edits")?
         .call_method1("apply_template", (scene, data))?
         .extract()?;
-    py.import("core.history")?
-        .call_method1("_dirty_group_chunks", (scene,))?;
+    crate::doc::history_support::dirty_group_chunks(scene)?;
     scene.setattr("version", scene.getattr("version")?.extract::<u64>()? + 1)?;
     Ok(format!("{added} layers added, {updated} updated"))
 }

@@ -3,7 +3,7 @@
 use super::*;
 use pyo3::types::PyTuple;
 
-fn vec3<'py>(p: &Obj<'py>) -> PyResult<Obj<'py>> {
+pub(super) fn vec3<'py>(p: &Obj<'py>) -> PyResult<Obj<'py>> {
     let py = p.py();
     let args = py
         .get_type::<PyTuple>()

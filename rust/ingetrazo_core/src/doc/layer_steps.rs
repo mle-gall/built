@@ -30,10 +30,7 @@ fn rejected(py: Python<'_>, why: &str) -> PyErr {
     }
 }
 
-fn dirty_chunks(py: Python<'_>, scene: &Obj<'_>) -> PyResult<()> {
-    py.import("core.history")?.getattr("_dirty_group_chunks")?.call1((scene,))?;
-    Ok(())
-}
+
 
 // ------------------------------------------------------------ ensure layers
 
@@ -125,7 +122,7 @@ fn run_delete_layer(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResult
     s.publish("name", key.clone());
     s.remember(vec![key, PyList::new(py, &carried)?.into_any()]);
     if !all_placements(&carried) {
-        dirty_chunks(py, scene)?;
+        crate::doc::history_support::dirty_group_chunks(scene)?;
     }
     version(scene)
 }
@@ -137,7 +134,7 @@ fn after_delete_layer(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>, phase: Op
                 assign_layer(&e?, &key)?;
             }
         }
-        dirty_chunks(py, scene)?;
+        crate::doc::history_support::dirty_group_chunks(scene)?;
     }
     version(scene)
 }

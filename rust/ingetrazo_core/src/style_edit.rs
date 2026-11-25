@@ -52,8 +52,7 @@ impl StyleEdit {
                 .bind(py)
                 .setattr(*attr, copy.call1((if forward { new } else { old },))?)?;
         }
-        py.import("core.history")?
-            .call_method1("_dirty_group_chunks", (scene,))?;
+        crate::doc::history_support::dirty_group_chunks(scene)?;
         scene.setattr("version", scene.getattr("version")?.extract::<u64>()? + 1)
     }
     fn submit(self, history: &Bound<'_, PyAny>) -> PyResult<()> {

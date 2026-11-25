@@ -146,7 +146,7 @@ fn run_transform(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResult<()
                 picked.push(f);
             }
         }
-        host(py, "_reverse_faces")?.call1((PyList::new(py, picked)?,))?;
+        crate::doc::history_support::reverse_faces(PyList::new(py, picked)?.as_any())?;
     }
     topology(py, "fold_nonplanar_faces")?.call1((&mesh,))?;
     snapshot_after(s, py, &mesh)
