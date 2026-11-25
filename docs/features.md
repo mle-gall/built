@@ -43,7 +43,7 @@ Built is pre-release. This is what the current build does.
 
 ## Drawings and sheets
 
-- The Sheets workspace places views of the model on paper at a scale and exports PDF, DXF, SVG or an image.
+- The Sheets workspace places views of the model on paper at a scale. Sheets export to PDF, SVG and DXF.
 
 ![The Sheets workspace with one A4 landscape sheet](images/built/sheets.png)
 
@@ -60,7 +60,7 @@ Built is pre-release. This is what the current build does.
 | `.built` | Built's own format: a ZIP with JSON and binary geometry, 64-bit coordinates. See [`built-format.md`](built-format.md). |
 | `.igz` | Opens. These are the files of the modeller Built grew from. |
 | `.skp` | Imports `.skp` files, with their materials. |
-| IFC | Exports IFC4 (and IFC4X3) from the object records. IDS checks need `ifcopenshell`, which `requirements.txt` does not install. See [`ifc-export.md`](ifc-export.md). |
+| IFC | Exports IFC4 (and IFC4X3) from the object records. IDS checks need both IfcOpenShell and IfcTester (`ifcopenshell`, `ifctester`), which `requirements.txt` does not install. See [`ifc-export.md`](ifc-export.md). |
 
 ## Architecture
 

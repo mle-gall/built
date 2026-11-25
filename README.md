@@ -45,10 +45,10 @@ Each of its actions is one undo step, and code that fails is rolled back whole. 
 
 ### Drawings and sheets
 
-<img src="docs/images/built/sheets.png" alt="The Sheets workspace: an A4 landscape sheet with a view of the model at 1:100, and export to PDF, DXF, SVG and image" width="100%">
+<img src="docs/images/built/sheets.png" alt="The Sheets workspace: an A4 landscape sheet with a view of the model at 1:100, and export to PDF, SVG and DXF" width="100%">
 
 Section planes cut the model with fills and hatches. Scenes save views of the model to come back to.
-The Sheets workspace places views of the model on paper at a scale, with dimensions, text and annotations, and exports PDF, DXF, SVG or an image.
+The Sheets workspace places views of the model on paper at a scale, with dimensions, text and annotations. Sheets export to PDF, SVG and DXF.
 
 ### Works with your files
 
@@ -86,7 +86,7 @@ The bundled plugins are the AI assistant, the MCP bridge, the console, a model s
 - Project tree with Filing, Drawing and Export columns
 - A record per object, stored in the file
 - Classification systems, types and systems
-- IDS checks (needs `ifcopenshell`)
+- IDS checks (need IfcOpenShell and IfcTester)
 - IFC4 and IFC4X3 export
 - Linked files that reload when the source changes
 - `.builtproject` shared projects
@@ -101,7 +101,7 @@ The bundled plugins are the AI assistant, the MCP bridge, the console, a model s
 - Styles: shaded, hidden line, wireframe, X-ray, monochrome
 - Parallel, perspective and two-point projection
 - Shadows and north
-- Sheets to PDF, DXF, SVG and image
+- Sheets export to PDF, SVG and DXF
 - Rendering through Blender (needs Blender)
 
 </td>
@@ -173,7 +173,7 @@ For the application bundle, with PyInstaller and ifcopenshell installed in the s
 packaging/build-macos-native.sh dist    # writes dist/Built.app
 ```
 
-IDS checks need `ifcopenshell`, which `requirements.txt` does not install.
+IDS checks need both IfcOpenShell and IfcTester (`ifcopenshell`, `ifctester`), which `requirements.txt` does not install.
 
 </details>
 
