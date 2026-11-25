@@ -62,8 +62,8 @@ fn view<'py>(a: &Args<'py>) -> Reply<'py> {
     let viewport = a.get_item(1)?;
     let w2p: Obj<'py>;
     let math = imported(py, "math")?.into_any();
-    let a_x_e_s = imported(py, "core.axes")?.getattr("AXES")?;
-    let plane_axes = imported(py, "core.axes")?.getattr("plane_axes")?;
+    let a_x_e_s = imported(py, "ingetrazo_core.axes")?.getattr("AXES")?;
+    let plane_axes = imported(py, "ingetrazo_core.axes")?.getattr("plane_axes")?;
     let lock = optional(&viewport, "axis_lock")?;
     let reading = fields!(py; "type" => "view", "axis_lock" => if lock.is_truthy()? && a_x_e_s.contains(&lock)? { module.call_method1("_tuple", (a_x_e_s.get_item(&lock)?,))? } else { none(py) }).into_any();
     let normal = optional(&viewport, "_work_plane_normal")?;
@@ -189,7 +189,7 @@ fn framed<'py>(a: &Args<'py>) -> Reply<'py> {
     let event = a.get_item(2)?;
     let tool = a.get_item(0)?;
     let viewport = a.get_item(1)?;
-    let axes = imported(py, "core.axes")?.into_any();
+    let axes = imported(py, "ingetrazo_core.axes")?.into_any();
     tool.call_method1(
         "_send",
         (

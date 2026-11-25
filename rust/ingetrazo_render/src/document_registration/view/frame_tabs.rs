@@ -136,7 +136,7 @@ pub(super) fn tip<'py>(a: &Args<'py>) -> Reply<'py> {
 
 fn pictures_on<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let stored = py.import("core.settings")?.call_method0("settings")?.call_method1("value", ("tabs/hover_picture", "1"))?;
+    let stored = py.import("ingetrazo_core.settings")?.call_method0("settings")?.call_method1("value", ("tabs/hover_picture", "1"))?;
     (stored.str()?.to_str()? != "0").into_bound_py_any(py)
 }
 

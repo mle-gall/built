@@ -48,7 +48,7 @@ impl CatalogueSession {
                 artwork: Vec::new(),
             },
         )?;
-        let timer = py.import("core.timers")?.getattr("timer")?.call(
+        let timer = py.import("ingetrazo_core.timers")?.getattr("timer")?.call(
             (win, session.getattr("poll")?, 80),
             Some(&[("repeat", true)].into_py_dict(py)?),
         )?;

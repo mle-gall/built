@@ -78,7 +78,7 @@ fn bundled_component<'py>(
 ) -> PyResult<Option<Bound<'py, PyAny>>> {
     let py = win.py();
     let base = py
-        .import("core.paths")?
+        .import("ingetrazo_core.paths")?
         .call_method0("app_root")?
         .extract::<PathBuf>()?
         .join("resources")

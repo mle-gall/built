@@ -48,7 +48,7 @@ fn sync_reach(v: &Obj) -> PyResult<()> {
         }
     }
     let mut bounds = Bounds::default();
-    bounds.add(xyz(&v.py().import("core.axes")?.getattr("ORIGIN")?)?);
+    bounds.add(xyz(&v.py().import("ingetrazo_core.axes")?.getattr("ORIGIN")?)?);
     let (a, b): (Obj, Obj) = sc.call_method0("bounds")?.extract()?;
     if !a.is_none() {
         bounds.add(xyz(&a)?);

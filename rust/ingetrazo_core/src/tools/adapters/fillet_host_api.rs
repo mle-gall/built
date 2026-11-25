@@ -558,7 +558,7 @@ fn preview_faces<'py>(a: &Args<'py>) -> Reply<'py> {
     if tool.getattr("_plan")?.is_none() {
         return Ok(PyList::empty(py).into_any());
     }
-    let preview_face = imported(py, "core.geometry")?.getattr("Face")?;
+    let preview_face = imported(py, "ingetrazo_core.geometry")?.getattr("Face")?;
     return Ok({
         let items = PyList::empty(py);
         for item in tool.getattr("_plan")?.getattr("new_faces")?.try_iter()? {

@@ -211,7 +211,7 @@ fn sun_dir_now<'py>(v: &Obj<'py>) -> PyResult<Obj<'py>> {
     {
         return Ok(none(py));
     }
-    py.import("core.sun")?
+    py.import("ingetrazo_core.sun")?
         .call_method1("scene_sun_direction", (v.getattr("scene")?,))
 }
 #[pyfunction]

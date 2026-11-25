@@ -115,7 +115,7 @@ impl PlacementState {
                 }
             }
         };
-        let materials = py.import("core.materials")?;
+        let materials = py.import("ingetrazo_core.materials")?;
         let material = py.import("core.group")?.call_method1("effective_material", (group,))?;
         let layer = py.import("ingetrazo_core")?.getattr("tag_styles")?.call_method1("object_layer", (group,))?;
         let key = (layer, materials.call_method1("material_sig", (material,))?);
@@ -135,7 +135,7 @@ impl PlacementState {
         }
         let mut rgb = resolved.call_method1("get", ("color",))?;
         if !rgb.is_truthy()? {
-            rgb = py.import("core.style")?.getattr("DEFAULT_FACE_COLOR")?;
+            rgb = py.import("ingetrazo_core.style")?.getattr("DEFAULT_FACE_COLOR")?;
         }
         let mut base = paint.call_method1("get", ("base", &paint))?;
         if !base.is_truthy()? {

@@ -8,7 +8,7 @@ import json
 import math
 from pathlib import Path
 
-from core.version import __version__
+from ingetrazo_core.version import __version__
 from formats import built
 from ingetrazo_core import Fragment, SaveStream, DocumentArchive, document_native_io as native_io
 

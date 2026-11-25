@@ -935,7 +935,7 @@ impl SettingsSheet {
                 let reset = func(py, move |py, _a| {
                     let me = me.bind(py);
                     let sc = shortcuts(py)?;
-                    let st = py.import("core.settings")?.call_method0("settings")?;
+                    let st = py.import("ingetrazo_core.settings")?.call_method0("settings")?;
                     st.call_method1("remove", (crate::keyboard_bindings::GROUP,))?;
                     st.call_method0("sync")?;
                     for a in me.call_method0("actions")?.try_iter()? {
@@ -1173,7 +1173,7 @@ pub fn edit_location_now(win: &Bound<'_, PyAny>, source: Option<Bound<'_, PyAny>
         Some(c) => c,
         None if !datum.is_none() => (datum.getattr("lat")?.extract()?, datum.getattr("lon")?.extract()?),
         None => {
-            let sun = py.import("core.sun")?;
+            let sun = py.import("ingetrazo_core.sun")?;
             (sun.getattr("DEFAULT_LAT")?.extract()?, sun.getattr("DEFAULT_LON")?.extract()?)
         }
     };

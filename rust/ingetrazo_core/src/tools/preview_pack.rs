@@ -61,7 +61,7 @@ pub fn pack_tool_preview<'py>(
 ) -> PyResult<(Buffer<'py>, Buffer<'py>)> {
     let mut tris = Vec::new();
     let mut lines = Vec::new();
-    let face_class = py.import("core.geometry")?.getattr("Face")?;
+    let face_class = py.import("ingetrazo_core.geometry")?.getattr("Face")?;
     for face in faces.try_iter()? {
         let face = face?;
         let rgba = face_color(&face)?;

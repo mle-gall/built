@@ -97,7 +97,7 @@ fn _facing_quad<'p>(mesh: &Obj<'p>, toward: &Obj<'p>) -> PyResult<Obj<'p>> {
 fn _shown<'p>(face: &Obj<'p>, paint: &Obj<'p>) -> PyResult<Obj<'p>> {
     let attrs = face
         .py()
-        .import("core.materials")?
+        .import("ingetrazo_core.materials")?
         .call_method1("effective_attrs", (face.getattr("attrs")?, paint))?;
     Ok(if attrs.is_truthy()? {
         attrs

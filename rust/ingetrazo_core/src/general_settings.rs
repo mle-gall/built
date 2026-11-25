@@ -6,7 +6,7 @@ type Obj<'p> = Bound<'p, PyAny>;
 fn source<'p>(py: Python<'p>, settings: Option<&Obj<'p>>) -> PyResult<Obj<'p>> {
     match settings {
         Some(store) => Ok(store.clone()),
-        None => py.import("core.settings")?.call_method0("settings"),
+        None => py.import("ingetrazo_core.settings")?.call_method0("settings"),
     }
 }
 #[pyfunction]

@@ -37,7 +37,7 @@ fn valid(win: &Obj<'_>, job: &Obj<'_>, capturing: bool) -> PyResult<bool> {
         return Ok(false);
     }
     let scene = doc.getattr("viewport")?.getattr("scene")?;
-    let store = win.py().import("core.autosave")?;
+    let store = win.py().import("ingetrazo_core.autosave")?;
     if !scene.is(&job.get_item("scene")?)
         || doc.getattr("path")?.ne(job.get_item("path")?)?
         || doc.getattr("untitled_no")?.ne(job.get_item("untitled")?)?
@@ -74,7 +74,7 @@ fn next_job<'p>(manager: &Obj<'p>, win: &Obj<'p>) -> PyResult<Obj<'p>> {
         if let Some(views) = win.getattr_opt("_views_dict")?.filter(|v| !v.is_none()) {
             scene.setattr("views_home", views.call1((&doc,))?)?;
         }
-        let store = py.import("core.autosave")?;
+        let store = py.import("ingetrazo_core.autosave")?;
         let path = doc.getattr("path")?;
         let untitled = doc.getattr("untitled_no")?;
         let slot = store.call_method1("slot_for", (&path, &untitled))?;
@@ -348,7 +348,7 @@ pub(crate) fn background_autosave<'p>(win: &Obj<'p>) -> PyResult<Obj<'p>> {
             .call_method0("ChangeCallbacks")?,
     )?;
     let timer = py
-        .import("core.timers")?
+        .import("ingetrazo_core.timers")?
         .call_method1("timer", (&manager, manager.getattr("advance")?, 16, true))?;
     manager.setattr("timer", timer)?;
     Ok(manager.into_any())

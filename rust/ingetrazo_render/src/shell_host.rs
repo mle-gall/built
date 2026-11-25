@@ -48,7 +48,7 @@ pub(crate) fn start_profile<'p>(
             "pytest must supply an isolated shell profile",
         ));
     }
-    let settings = py.import("core.settings")?;
+    let settings = py.import("ingetrazo_core.settings")?;
     settings.call_method1("use_native", (&profile,))?;
     let language = settings
         .call_method0("settings")?
@@ -105,7 +105,7 @@ fn drain_timers(h: &Obj<'_>) -> PyResult<()> {
     guarded(
         h,
         "hostless timers",
-        h.py().import("core.timers")?.call_method0("run_due"),
+        h.py().import("ingetrazo_core.timers")?.call_method0("run_due"),
     )?;
     Ok(())
 }
@@ -510,7 +510,7 @@ impl Host {
         }
         sooner(h.getattr("timers")?.call_method0("next_ms")?.extract()?);
         sooner(
-            py.import("core.timers")?
+            py.import("ingetrazo_core.timers")?
                 .call_method0("next_ms")?
                 .extract()?,
         );

@@ -501,7 +501,7 @@ pub(crate) fn gltf_read_triangles<'py>(
                     && !recipes.contains(id)?
                     && mat["extensions"]["KHR_materials_pbrSpecularGlossiness"].is_null()
                 {
-                    let module = py.import("core.materials")?;
+                    let module = py.import("ingetrazo_core.materials")?;
                     let pbr = crate::gltf_maps::gltf_import_recipe(
                         py, &pyvalue(py, mat)?, &pyvalue(py, &js["textures"])?, PyList::new(py, &paths)?.as_any(),
                     )?;

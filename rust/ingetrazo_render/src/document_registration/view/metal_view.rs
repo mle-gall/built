@@ -414,7 +414,7 @@ fn schedule_tool_sync(this: &Obj, _args: &Bound<PyTuple>) -> PyResult<()> {
     let tools = this.getattr("tools")?;
     let reset = !tools.getattr("start_point")?.is_none() && attr(&tool, "start_point")?.is_none();
     if this.call_method0("isVisible")?.is_truthy()? && (!tool.is(&tools.getattr("tool")?) || reset) {
-        py.import("core.timers")?.call_method1("later", (this, 0, this.getattr("_sync_tool_dispatch")?))?;
+        py.import("ingetrazo_core.timers")?.call_method1("later", (this, 0, this.getattr("_sync_tool_dispatch")?))?;
     }
     Ok(())
 }

@@ -290,7 +290,7 @@ pub fn initialize(py: Python<'_>) -> PyResult<()> {
     py.import("ingetrazo_core.python_tls")?.call_method0("ensure_once")?;
     let core = py.import("ingetrazo_core")?;
     core.call_method0("install_main_thread_collector")?;
-    let log = py.import("core.paths")?.call_method0("open_crash_log")?;
+    let log = py.import("ingetrazo_core.paths")?.call_method0("open_crash_log")?;
     if !log.is_none() {
         let faults = py.import("faulthandler")?;
         faults.call_method1("enable", (&log,))?;
@@ -353,7 +353,7 @@ pub fn self_check(layout: &python::Layout) -> i32 {
         if converter.is_none() {
             println!("DWG converter: MISSING");
             let frozen = py
-                .import("core.paths")?
+                .import("ingetrazo_core.paths")?
                 .call_method0("is_frozen")?
                 .is_truthy()?;
             if frozen && !cfg!(target_os = "macos") {
@@ -397,7 +397,7 @@ pub fn check_extensions(host: &python::Host) -> bool {
 pub fn exit_now(status: i32) -> ! {
     Python::attach(|py| {
         let flush = || -> PyResult<()> {
-            py.import("core.settings")?
+            py.import("ingetrazo_core.settings")?
                 .call_method0("settings")?
                 .call_method0("sync")?;
             py.import("logging")?.call_method0("shutdown")?;

@@ -43,7 +43,7 @@ fn status_chips<'py>(py: Python<'py>, prefix: &str, all: bool) -> PyResult<Bound
 }
 /// Items with an IFC class and no Status.
 fn missing_status<'py>(py: Python<'py>, groups: &Obj<'py>) -> PyResult<usize> {
-    let structure = py.import("core.structure")?;
+    let structure = py.import("ingetrazo_core.structure")?;
     let mut missing = 0;
     for group in groups.try_iter()? {
         let record = or_dict(group?.getattr("ifc")?)?;
@@ -114,7 +114,7 @@ fn inspector<'py>(a: &Args<'py>) -> Reply<'py> {
     let takeoff = own(&scene, "_inspector_takeoff")?;
     view.setattr("_ui_insp_sig", sig)?;
     let counter = py.import("collections")?.getattr("Counter")?;
-    let structure = py.import("core.structure")?;
+    let structure = py.import("ingetrazo_core.structure")?;
     let links = py.import("core.links")?;
     let group_type = py.import("core.group")?.getattr("Group")?;
     let groups = empty(py);

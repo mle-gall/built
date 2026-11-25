@@ -233,7 +233,7 @@ pub fn load_source<'py>(path: &Obj<'py>, select: Option<&Obj<'py>>, include_nest
         let vocabulary = module(py, "core.bim_registry")?.call_method1("get", (&src,))?;
         let nodes = vocabulary.call_method1("get", ("structure", PyDict::new(py)))?.call_method1("get", ("nodes", PyDict::new(py)))?;
         if nodes.is_truthy()? {
-            let resolve = module(py, "core.structure")?.getattr("resolve")?;
+            let resolve = module(py, "ingetrazo_core.structure")?.getattr("resolve")?;
             let structure = PyDict::new(py);
             for item in nodes.call_method0("items")?.try_iter()? {
                 let (k, node): (Obj<'py>, Obj<'py>) = item?.extract()?;
@@ -304,7 +304,7 @@ pub fn read_definition<'py>(registry: &Obj<'py>, path: &Obj<'py>, select: &Obj<'
         .call((path, registry, previous.map_or_else(|| none(py), |p| p.clone())), Some(&kw))?;
     let read = load_source(path, Some(select), include_nested.is_truthy()?, Some(&reader), progress)?;
     let (comp, tags, materials) = (read.get_item(0)?, read.get_item(1)?, read.get_item(2)?);
-    let register = module(py, "core.materials")?.getattr("register")?;
+    let register = module(py, "ingetrazo_core.materials")?.getattr("register")?;
     let renamed = PyDict::new(py);
     let items: Vec<(Obj<'py>, Obj<'py>)> = materials.call_method0("items")?.try_iter()?.map(|kv| kv?.extract()).collect::<PyResult<_>>()?;
     for (old, mat) in items {

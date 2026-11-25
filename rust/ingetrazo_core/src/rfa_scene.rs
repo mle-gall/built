@@ -204,7 +204,7 @@ fn material<'p>(
     opacity: Option<f64>,
 ) -> PyResult<Obj<'p>> {
     let py = name.py();
-    let m = py.import("core.materials")?;
+    let m = py.import("ingetrazo_core.materials")?;
     let kw = PyDict::new(py);
     kw.set_item("opacity", opacity)?;
     let mat = m.call_method("Material", (name, color), Some(&kw))?;

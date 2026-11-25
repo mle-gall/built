@@ -171,7 +171,7 @@ impl CopySelection {
                 }
                 store_edges(&store.inner, &self.segments)
             };
-            let class = py.import("core.store_mesh")?.getattr("EdgeView")?;
+            let class = py.import("ingetrazo_core.store_mesh")?.getattr("EdgeView")?;
             for key in edge_keys {
                 picked.add(class.call1((&mesh, key))?)?;
             }
@@ -231,7 +231,7 @@ fn translated(ring: &Bound<'_, PyAny>, delta: DVec3) -> PyResult<Vec<Vec3>> {
 }
 impl MoveCopies {
     fn member<'py>(&self, py: Python<'py>, d: DVec3) -> PyResult<Member<'py>> {
-        let geometry = py.import("core.geometry")?;
+        let geometry = py.import("ingetrazo_core.geometry")?;
         let edge = geometry.getattr("Edge")?;
         let face = geometry.getattr("Face")?;
         let edges = self

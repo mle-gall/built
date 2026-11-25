@@ -219,7 +219,7 @@ pub(super) fn open_view_export<'p>(
             builder: builder.clone().unbind(),
         },
     )?;
-    let settings = py.import("core.settings")?.call_method0("settings")?;
+    let settings = py.import("ingetrazo_core.settings")?.call_method0("settings")?;
     settings.call_method1("beginGroup", ("export_svg/v5",))?;
     let prefs = PyDict::new(py);
     for key in settings.call_method0("childKeys")?.try_iter()? {
@@ -231,7 +231,7 @@ pub(super) fn open_view_export<'p>(
         Some(&[("default", py.import("builtins")?.getattr("str")?)].into_py_dict(py)?),
     )?;
     let sun = py
-        .import("core.sun")?
+        .import("ingetrazo_core.sun")?
         .call_method1("scene_sun_direction", (&scene,))?;
     let switch = if names.is_empty() {
         None

@@ -230,7 +230,7 @@ pub(super) fn axis_cue<'p>(vp: &Obj<'p>, snap: &Obj<'p>, x: f64, y: f64) -> PyRe
     if name.is_none() {
         return Ok(snap.clone());
     }
-    let axes = py.import("core.axes")?;
+    let axes = py.import("ingetrazo_core.axes")?;
     let axis = axes.call_method1("axis", (&name,))?;
     let o = axes.call_method0("origin")?;
     let foot = if empty {

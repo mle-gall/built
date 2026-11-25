@@ -255,5 +255,5 @@ pub(crate) fn append<'p>(
 
 #[pyfunction]
 pub(crate) fn selected_tile_source(py: Python<'_>) -> PyResult<Obj<'_>> {
-    current(&py.import("core.settings")?.call_method0("settings")?)
+    current(&py.import("ingetrazo_core.settings")?.call_method0("settings")?)
 }

@@ -39,7 +39,7 @@ fn toggle_xray(win: &Bound<'_, PyAny>) -> PyResult<()> {
     let view = win.call_method0("_active_view")?;
     let scene = view.getattr("scene")?;
     let style = win.call_method0("active_style")?;
-    let styles = py.import("core.style")?;
+    let styles = py.import("ingetrazo_core.style")?;
     let restore = view
         .getattr("_style_before_xray")
         .ok()

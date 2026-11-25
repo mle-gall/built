@@ -10,7 +10,7 @@ type Obj<'p> = Bound<'p, PyAny>;
 #[pyfunction]
 fn copied_guide<'p>(guide: &Obj<'p>, m: &Obj<'p>) -> PyResult<Obj<'p>> {
     let py = guide.py();
-    let api = py.import("core.guide")?;
+    let api = py.import("ingetrazo_core.guide")?;
     let mapped = |attr: &str, method: &str| -> PyResult<Obj<'p>> {
         let p = guide.getattr(attr)?;
         if p.is_none() {

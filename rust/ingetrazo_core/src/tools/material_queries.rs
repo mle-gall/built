@@ -115,7 +115,7 @@ impl ViewportToolHost {
                     .import("core.group")?
                     .call_method1("effective_material", (&owner,))?;
                 let front = py
-                    .import("core.materials")?
+                    .import("ingetrazo_core.materials")?
                     .call_method1("effective_attrs", (&attrs, inherited))?;
                 let recipe = |d: &Bound<'_, PyAny>| -> PyResult<Value> {
                     if let Ok(d) = d.cast::<PyDict>() {
@@ -195,7 +195,7 @@ impl ViewportToolHost {
                 let mut point = None;
                 if edge.is_none() && arg[2] != true {
                     let snap = tool.getattr("_snap")?;
-                    let axes = py.import("core.axes")?.getattr("AXES")?;
+                    let axes = py.import("ingetrazo_core.axes")?.getattr("AXES")?;
                     let mut axis = if arg[1] == "on_axis" {
                         snap.getattr_opt("axis")?.filter(|a| !a.is_none())
                     } else {
@@ -216,7 +216,7 @@ impl ViewportToolHost {
                     }
                     if let Some(a) = axis.filter(|a| axes.contains(a).unwrap_or(false)) {
                         edge = Some(
-                            py.import("core.guide")?
+                            py.import("ingetrazo_core.guide")?
                                 .getattr("Guide")?
                                 .call1((Vec3::from(DVec3::ZERO), axes.get_item(a)?))?,
                         );

@@ -68,7 +68,7 @@ fn selection_dot_colors<'py>(v: &Obj<'py>, face: &Obj<'py>) -> PyResult<(Obj<'py
     let py = v.py();
     let h = host(py)?;
     let sc = v.getattr("scene")?;
-    let a = py.import("core.materials")?.call_method1(
+    let a = py.import("ingetrazo_core.materials")?.call_method1(
         "effective_attrs",
         (
             face.getattr("attrs")?,
@@ -240,7 +240,7 @@ fn packed<'py>(py: Python<'py>, coords: &[f32]) -> PyResult<Obj<'py>> {
 }
 #[pyfunction]
 fn axes_vertices(py: Python, spacing: f64, pos_len: f64) -> PyResult<(Obj, Bound<PyDict>)> {
-    let axes = py.import("core.axes")?;
+    let axes = py.import("ingetrazo_core.axes")?;
     let origin = xyz(&axes.getattr("ORIGIN")?)?;
     let mut coords = Vec::with_capacity(9378);
     let spans = PyDict::new(py);

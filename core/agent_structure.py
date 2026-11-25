@@ -3,7 +3,8 @@
 from collections import Counter
 from copy import deepcopy
 
-from core import bim_registry, structure
+from core import bim_registry
+from ingetrazo_core import structure
 from core.agent_records import page
 from ingetrazo_core.history import CompoundCommand, SetRegistryCommand, SetStructureNodeCommand
 

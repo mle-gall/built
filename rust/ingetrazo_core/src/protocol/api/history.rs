@@ -45,7 +45,7 @@ fn history_init(this: &Obj<'_>, scene: &Obj<'_>) -> PyResult<()> {
 #[pyfunction]
 fn default_error_log(py: Python<'_>) -> PyResult<Obj<'_>> {
     Ok(py
-        .import("core.paths")?
+        .import("ingetrazo_core.paths")?
         .call_method0("user_log_dir")?
         .call_method1("__truediv__", ("ingetrazo-errors.log",))?
         .str()?

@@ -142,7 +142,7 @@ pub fn push_light_faces<'py>(
         return Ok(faces);
     }
     let facet_cos = tool.getattr("_CURVE_FACET_COS")?.extract()?;
-    let face_record = py.import("core.geometry")?.getattr("Face")?;
+    let face_record = py.import("ingetrazo_core.geometry")?.getattr("Face")?;
     let caps = std::iter::once(Ok(base)).chain(tool.getattr("_extra_faces")?.try_iter()?);
     let normals = std::iter::once(Ok(normal)).chain(tool.getattr("_extra_normals")?.try_iter()?);
     for (face, n) in caps.zip(normals) {

@@ -109,9 +109,9 @@ fn bake<'py>(
         memo.clone()
     };
     let geom_of = h.getattr("_face_geometry")?;
-    let triangulate = py.import("core.triangulate")?.getattr("triangulate")?;
+    let triangulate = py.import("ingetrazo_core.triangulate")?.getattr("triangulate")?;
     let effective = h.getattr("effective_attrs")?;
-    let back_default = py.import("core.materials")?.getattr("back_is_default")?;
+    let back_default = py.import("ingetrazo_core.materials")?.getattr("back_is_default")?;
     let curved = h.call_method1("_curved_faces", (mesh,))?;
     let element = h.getattr("element_identity")?;
     let smoother = py

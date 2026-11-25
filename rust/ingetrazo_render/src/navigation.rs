@@ -5,7 +5,7 @@ use std::time::{Duration, Instant};
 type Obj<'py> = Bound<'py, PyAny>;
 
 pub fn setting(py: Python<'_>, key: &str, default: &str) -> PyResult<String> {
-    py.import("core.settings")?
+    py.import("ingetrazo_core.settings")?
         .getattr("settings")?
         .call0()?
         .call_method1("value", (key, default))?

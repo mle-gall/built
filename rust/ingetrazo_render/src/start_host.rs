@@ -36,7 +36,7 @@ fn recent(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
 }
 
 fn store(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
-    py.import("core.settings")?.call_method0("settings")
+    py.import("ingetrazo_core.settings")?.call_method0("settings")
 }
 
 /// The view in front of the window (the document's stand-in).
@@ -194,7 +194,7 @@ fn monotonic(py: Python<'_>) -> PyResult<f64> {
 }
 
 fn timer<'py>(py: Python<'py>, win: &Bound<'py, PyAny>, f: Bound<'py, PyAny>, kw: Option<(u32, bool)>) -> PyResult<Bound<'py, PyAny>> {
-    let timers = py.import("core.timers")?;
+    let timers = py.import("ingetrazo_core.timers")?;
     match kw {
         Some((ms, repeat)) => timers.getattr("timer")?.call((win, f, ms), Some(&[("repeat", repeat)].into_py_dict(py)?)),
         None => timers.call_method1("timer", (win, f)),
@@ -396,7 +396,7 @@ impl Page {
                 focus_view(py, v.bind(py));
                 Ok(none(py))
             })?;
-            py.import("core.timers")?.call_method1("later", (&win, 0, focus))?;
+            py.import("ingetrazo_core.timers")?.call_method1("later", (&win, 0, focus))?;
         }
         Ok(())
     }
@@ -793,7 +793,7 @@ fn _load_one<'py>(py: Python<'py>, path: &str) -> PyResult<Bound<'py, PyDict>> {
     let links = py.import("ingetrazo_core").and_then(|m| m.call_method1("scan_document_links", (&p,)));
     entry.set_item("links", links.unwrap_or_else(|_| PyList::empty(py).into_any()))?; // the preview only loses its links
     let newer = (|| -> PyResult<bool> {
-        let slot = py.import("core.autosave")?.call_method1("pending", (&p,))?;
+        let slot = py.import("ingetrazo_core.autosave")?.call_method1("pending", (&p,))?;
         if slot.is_none() {
             return Ok(false);
         }

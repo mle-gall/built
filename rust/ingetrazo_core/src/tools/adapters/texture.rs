@@ -616,7 +616,7 @@ fn preview_faces<'py>(a: &Args<'py>) -> Reply<'py> {
     if tex.is_none() {
         return Ok(PyList::empty(py).into_any());
     }
-    let preview_face = imported(py, "core.geometry")?.getattr("Face")?;
+    let preview_face = imported(py, "ingetrazo_core.geometry")?.getattr("Face")?;
     return Ok(PyList::new(
         py,
         [preview_face.call1((
