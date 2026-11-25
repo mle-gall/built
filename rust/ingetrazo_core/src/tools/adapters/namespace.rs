@@ -210,7 +210,7 @@ fn definition(name: &str) -> Option<&'static Module> {
     MODULES.iter().find(|m| m.name == leaf)
 }
 
-const CORE_MODULES: &[&str] = &["units", "composition", "push_pull", "solids", "sweep", "make_faces", "intersect", "pieces", "inference", "geometry_arrays", "outliner", "solid_analysis", "offset", "text3d", "render_blender", "extensions"];
+const CORE_MODULES: &[&str] = &["vista_caras", "units", "composition", "push_pull", "solids", "sweep", "make_faces", "intersect", "pieces", "inference", "geometry_arrays", "outliner", "solid_analysis", "offset", "text3d", "render_blender", "extensions"];
 const VIEW_MODULES: &[&str] = &[
     "document_interaction",
     "documents",
@@ -286,6 +286,7 @@ impl ToolModules {
         let full: String = module.name()?.extract()?;
         if self.package == "core" {
             return match full.as_str() {
+                "core.vista_caras" => crate::model::vista::install(module),
                 "core.units" => crate::model::units_api::install(module),
                 "core.composition" => crate::sheets::composition::install(module),
                 "core.push_pull" => crate::push_operation::install(module),

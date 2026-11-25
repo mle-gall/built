@@ -68,7 +68,7 @@ def test_every_stretch_of_the_work_is_heard(monkeypatch):
 
     def where(done=None):
         import sys
-        heard.append(sys._getframe(1).f_code.co_name)
+        heard.append((sys._getframe(1).f_code.co_name, done))
         real_tick(done)
 
     monkeypatch.setattr(P, "tick", where)
@@ -76,8 +76,12 @@ def test_every_stretch_of_the_work_is_heard(monkeypatch):
     with P.reporting(lambda done: None):
         VC.view_faces(scene, cam, shadows=True)
     # Gathering, cutting down (the Rust engine's batches), the shadows.
-    assert {"view_faces", "_cast_shadows"} <= set(heard)
-    assert any(name.startswith("_visible_parts") for name in heard)
+    # Each group contributes six gathering ticks. The native visibility pass
+    # reports fractions between gathering and the receiver/caster ticks.
+    fractions = [i for i, (_, done) in enumerate(heard) if done is not None]
+    assert fractions[0] == 40 * 6
+    assert len(fractions) > 1
+    assert len(heard) - fractions[-1] - 1 >= 40 * 6
     # And the hidden lines drawn over them (8.7 s of the plaza's export
     # after the faces, with nothing said).
     from core.hlr import hlr_drawing
@@ -86,7 +90,7 @@ def test_every_stretch_of_the_work_is_heard(monkeypatch):
         hlr_drawing(scene, cam)
     # The walk is heard; the classification runs in Rust in one call
     # (ingetrazo_core sheets::drawing).
-    assert "eat_mesh" in heard
+    assert any(name == "eat_mesh" for name, _ in heard)
 
 
 # ---- The bar ----------------------------------------------------------------
