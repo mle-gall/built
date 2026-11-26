@@ -294,6 +294,18 @@ fn mesh_usage<'py>(mesh: &Bound<'py, PyAny>) -> PyResult<(Paints, HashSet<String
     Ok((paint, front))
 }
 
+/// Native registry edits from scripts can precede the scene-version bump.
+#[pyfunction]
+pub(crate) fn library_material_revision(scene: &Bound<'_, PyAny>) -> PyResult<(i64, u64)> {
+    let version = scene.getattr("content_version")?.extract()?;
+    let root = scene.getattr("_root")?;
+    let epoch = if root.is_none() { 0 } else {
+        let key = crate::doc::py::handle_key(&root)?;
+        *crate::doc::lock().reader_epochs.entry(key).or_default()
+    };
+    Ok((version, epoch))
+}
+
 // A revision-local survey for the open Library. A worker owns its accumulators,
 // and drops them if an edit overtakes it. Never borrow the history feed here.
 #[pyfunction]

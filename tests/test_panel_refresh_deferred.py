@@ -33,7 +33,7 @@ def test_hidden_library_waits_until_shown(win, monkeypatch, kind):
     assert calls == []
     library.open_library(win, kind)
     frame(win)
-    assert len(calls) == 1
+    assert 1 <= len(calls) <= (2 if kind == "materials" else 1)  # the completed usage survey enriches material rows
 
 
 def test_a_burst_of_edits_refreshes_the_visible_panels_once(win, monkeypatch):
@@ -70,11 +70,11 @@ def test_a_selection_leaves_the_in_model_lists_as_they_are(win, monkeypatch):
     frame(win)
     scene.select([group])
     frame(win)
-    assert len(comp) == len(mat) == 1
+    assert len(comp) == 1 and not mat
     group.name = "After edit"
     scene.version += 1
     assert any("After edit" in str(row) for row in tiles(frame(win)))
-    assert len(comp) == len(mat) == 2
+    assert len(comp) == 2 and not mat
 
 
 def test_component_selection_changes_actions_without_rescanning_either_provider(win, monkeypatch):
@@ -95,7 +95,7 @@ def test_component_selection_changes_actions_without_rescanning_either_provider(
     assert eligible() == {"Table"}
     scene.select([table])
     assert eligible() == {"Chair"}
-    assert len(comp) == len(mat) == 1
+    assert len(comp) == 1 and not mat
 
 
 def test_hidden_panels_let_the_previous_document_go(win):

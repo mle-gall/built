@@ -221,10 +221,14 @@ fn survey<'py>(scene: &Bound<'py, PyAny>, history: Option<Bound<'py, PyAny>>) ->
     py.import("built_core")?.call_method1("material_survey", (scene, history))
 }
 
+fn material_revision<'py>(scene: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    scene.py().import("built_core")?.call_method1("library_material_revision", (scene,))
+}
+
 /// Return the completed revision's survey, or None while its worker runs.
 fn sheet_usage<'py>(scene: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let py = scene.py();
-    let version = scene.getattr("content_version")?;
+    let version = material_revision(scene)?;
     if scene.getattr_opt("_library_usage_failure")?.is_some_and(|v| v.eq(&version).unwrap_or(false)) {
         return Ok(py.None().into_bound(py));
     }
@@ -254,7 +258,7 @@ fn sheet_usage<'py>(scene: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
             pool
         }
     };
-    let future = executor.call_method1("submit", (py.import("built_core")?.getattr("library_usage")?, scene, &version))?;
+    let future = executor.call_method1("submit", (py.import("built_core")?.getattr("library_usage")?, scene, version.get_item(0)?))?;
     scene.setattr("_library_usage_job", (version, future))?;
     Ok(py.None().into_bound(py))
 }
@@ -1368,6 +1372,9 @@ impl ComponentsProvider {
 #[pyclass(module = "built_render.wgpu_library", extends = LibraryProvider, dict)]
 pub struct FamiliesProvider;
 
+#[pyclass]
+struct FamilyCollections(Vec<serde_json::Value>);
+
 #[pymethods]
 impl FamiliesProvider {
     #[new]
@@ -1410,9 +1417,15 @@ impl FamiliesProvider {
         Ok(())
     }
 
-    fn items<'py>(&self, py: Python<'py>, _ctx: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-        let rows: Vec<_> = collections::manifests()?.into_iter()
-            .flat_map(|mut manifest| manifest["items"].take().as_array().cloned().unwrap_or_default()).collect();
+    fn items<'py>(&self, py: Python<'py>, ctx: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+        let mut manifests = collections::manifests()?;
+        let mut rows = Vec::new();
+        for manifest in &mut manifests {
+            if let serde_json::Value::Array(items) = manifest["items"].take() {
+                rows.extend(items);
+            }
+        }
+        ctx.getattr("view")?.setattr("_library_collections", Bound::new(py, FamilyCollections(manifests))?)?;
         json(py)?.call_method1("loads", (serde_json::Value::Array(rows).to_string(),))
     }
 }
@@ -1809,7 +1822,7 @@ impl LibrarySheet {
         let material_tab = st.get_item("type")?.eq("materials")?;
         let usage_ready = material_tab && !sheet_usage(&scene)?.is_none();
         if material_tab && !usage_ready && !scene.getattr_opt("_library_usage_failure")?
-            .is_some_and(|v| scene.getattr("content_version").and_then(|r| v.eq(r)).unwrap_or(false)) {
+            .is_some_and(|v| material_revision(&scene).and_then(|r| v.eq(r)).unwrap_or(false)) {
             if let Some(host) = ctx.getattr("win")?.getattr_opt("_host")? {
                 host.call_method1("wake_after", (32,))?;
             }
@@ -1821,6 +1834,7 @@ impl LibrarySheet {
             st.get_item("mine_rev")?,
             obj(py, collections::REVISION.load(std::sync::atomic::Ordering::Relaxed))?.into_bound(py),
             if st.get_item("type")?.eq("components")? { scene.getattr("version")? } else { py.None().into_bound(py) },
+            if material_tab { material_revision(&scene)? } else { py.None().into_bound(py) },
             obj(py, usage_ready)?.into_bound(py),
             PyTuple::new(py, recent)?.into_any(),
         ])
@@ -1839,7 +1853,7 @@ impl LibrarySheet {
 
         let revision_key = (scene.as_ptr() as usize, scene.getattr("content_version")?, st.get_item("mine_rev")?,
             collections::REVISION.load(std::sync::atomic::Ordering::Relaxed)).into_pyobject(py)?;
-        let generation = (&revision_key, !usage.is_none());
+        let generation = (&revision_key, !usage.is_none(), if tab == "materials" { material_revision(&scene)? } else { py.None().into_bound(py) });
         let revision = scene.getattr("version")?;
         // A selection edit only changes which component rows offer Replace.
         if components {
@@ -2004,12 +2018,14 @@ impl LibrarySheet {
             sheet.call_method1("menu",("group",format!("Group: {label}"),options.to_vec(),group))?;
         }
         sheet.setattr("side", out.get_item("side")?.call_method0("copy")?)?;
-        let collections = if prov_id == "families" { collections::manifests()? } else { Vec::new() };
+        let manifests = if prov_id == "families" { view.getattr_opt("_library_collections")? } else { None };
+        let manifests = manifests.as_ref().map(|v| v.extract::<PyRef<FamilyCollections>>()).transpose()?;
+        let collections = manifests.as_ref().map_or(&[][..], |m| m.0.as_slice());
         if !has_target {
             sheet.call_method1("verb", ("import-collection", "Import collection…"))?;
         }
         if prov_id == "families" {
-            for collection in &collections {
+            for collection in collections {
                 let scope = format!("s:{}", collection["source"].as_str().unwrap_or(""));
                 sheet.call_method("side_item", (&scope, collection["name"].as_str().unwrap_or("")), Some(&[("on", st.get_item("scope")?.eq(&scope)?)].into_py_dict(py)?))?;
             }
@@ -2063,7 +2079,7 @@ impl LibrarySheet {
                 content.call_method("rows", (items,), Some(&kwargs))?;
             }
         }
-        for collection in &collections {
+        for collection in collections {
             let scope = format!("s:{}", collection["source"].as_str().unwrap_or(""));
             if st.get_item("scope")?.eq("s:all")? || st.get_item("scope")?.eq(scope)? {
                 for report in collection["reports"].as_array().into_iter().flatten() {

@@ -601,6 +601,7 @@ fn built_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     swatch::register(m)?;
     m.add_function(wrap_pyfunction!(material_library::bundled_materials, m)?)?;
     m.add_function(wrap_pyfunction!(material_library::pick_library_paint, m)?)?;
+    m.add_function(wrap_pyfunction!(material_survey::library_material_revision, m)?)?;
     m.add_function(wrap_pyfunction!(material_survey::library_usage, m)?)?;
     m.add_function(wrap_pyfunction!(material_survey::material_survey, m)?)?;
     m.add_function(wrap_pyfunction!(material_library::material_inspector, m)?)?;
