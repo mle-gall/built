@@ -145,7 +145,6 @@ class BlenderLink:
         self.review = rb.LinkReview()
         self.peer = None
         self.notice = ""
-        self.revision = None
         self.queue = []
         self.sent_values = {}
         self.values_dirty = True
@@ -153,6 +152,8 @@ class BlenderLink:
         self.textures = {}
         self.show_code = False
         self.process = None
+        self.unsubscribe = None
+        self.review_dirty = False
         self.timer = panel.host.timers.timer(self.tick, 100, True)
 
     # ------------------------------------------------------------ identity
@@ -195,10 +196,10 @@ class BlenderLink:
     def start(self):
         if self.server is None:
             self.server = rb.LinkServer()
-            # One tracker for the drawer's life: the feed is read while
+            # One tracker for the drawer's life: every step is read while
             # Blender is away too, so a reconnect gets only what changed.
             self.tracker = rb.LinkTracker()
-            self.revision = self.app.viewport.history.revision
+            self._listen()
         self.server.start(rb.LINK_PORT)
         self.server.set_document(self.document_id(create=True), self.document_name())
         self.timer.start()
@@ -236,7 +237,29 @@ class BlenderLink:
         self.queue = []
         self.progress = None
 
+    def _listen(self):
+        """Read each History step from the change feed as it runs (the
+        hook the renderer's incremental updates use). The listener holds
+        the link weakly: a closed document is not kept alive through it."""
+        import weakref
+        me = weakref.ref(self)
+
+        def after(command, phase, ran):
+            link = me()
+            if link is None or not ran or link.tracker is None:
+                return
+            history = link.app.viewport.history
+            step = history.feed.step(history.revision)
+            if step is not None:
+                link.tracker.observe(step)
+            link.values_dirty = True
+            link.review_dirty = True
+        self.unsubscribe = self.app.viewport.history.add_listener(after=after)
+
     def close(self):
+        if self.unsubscribe is not None:
+            self.unsubscribe()
+            self.unsubscribe = None
         self.timer.stop()
         if self.server is not None:
             self.server.stop()
@@ -260,7 +283,11 @@ class BlenderLink:
         for msg in self.server.poll():
             self.handle(msg)
             changed = True
-        self.observe_feed()
+        if self.review_dirty:
+            self.review_dirty = False
+            if len(self.review):
+                self.review.revalidate(rb.link_values(self.app.scene, self.app.key, self.review.keys()))
+                changed = True
         if self.linked:
             if self.tracker.pending():
                 self.queue.extend(self.tracker.plan(self.app.scene))
@@ -298,21 +325,6 @@ class BlenderLink:
             }.get(msg.get("reason"), tr("A Blender session was refused."))
         elif kind == "changes":
             self.receive(msg.get("items") or [], msg.get("_payload") or b"")
-
-    def observe_feed(self):
-        history = self.app.viewport.history
-        if history.revision == self.revision:
-            return
-        got = history.feed.since(self.revision or 0)
-        for step in got["steps"]:
-            self.tracker.observe(step)
-        if not got["complete"]:
-            self.tracker.widen()
-        self.revision = history.revision
-        self.values_dirty = True
-        current = rb.link_values(self.app.scene, self.app.key, self.review.keys()) if len(self.review) else {}
-        if current:
-            self.review.revalidate(current)
 
     def send_queue(self):
         import time
