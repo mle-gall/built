@@ -1,4 +1,9 @@
 {
+ "Click the first corner. Arrows pick the plane.": "انقر على الركن الأول. اختر المستوى بمفاتيح الأسهم.",
+ "Click the start of the angle.": "انقر على بداية الزاوية.",
+ "Click the end, or type degrees and Enter.": "انقر على النهاية أو اكتب الدرجات واضغط Enter.",
+ "Press Enter to apply.": "اضغط Enter للتطبيق.",
+ "Type 3x or /3, then Enter.": "اكتب 3x أو /3 ثم اضغط Enter.",
  "Import .rfa family": "استيراد عائلة .rfa",
  "Import .dxf": "استيراد .dxf",
  "Import .dwg": "استيراد .dwg",

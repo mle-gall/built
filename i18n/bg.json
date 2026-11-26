@@ -1,4 +1,9 @@
 {
+ "Click the first corner. Arrows pick the plane.": "Щракнете върху първия ъгъл. Стрелките избират равнината.",
+ "Click the start of the angle.": "Щракнете в началото на ъгъла.",
+ "Click the end, or type degrees and Enter.": "Щракнете в края или въведете градуси и натиснете Enter.",
+ "Press Enter to apply.": "Натиснете Enter за прилагане.",
+ "Type 3x or /3, then Enter.": "Въведете 3x или /3 и натиснете Enter.",
  "Import .rfa family": "Импортиране на семейство .rfa",
  "Import .dxf": "Импортиране на .dxf",
  "Import .dwg": "Импортиране на .dwg",

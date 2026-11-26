@@ -1,4 +1,9 @@
 {
+ "Click the first corner. Arrows pick the plane.": "Erste Ecke anklicken. Pfeiltasten wählen die Ebene.",
+ "Click the start of the angle.": "Anfang des Winkels anklicken.",
+ "Click the end, or type degrees and Enter.": "Endpunkt anklicken oder Gradzahl eingeben und Enter drücken.",
+ "Press Enter to apply.": "Zum Anwenden Enter drücken.",
+ "Type 3x or /3, then Enter.": "3x oder /3 eingeben und Enter drücken.",
  "Import .rfa family": ".rfa-Familie importieren",
  "Import .dxf": ".dxf importieren",
  "Import .dwg": ".dwg importieren",

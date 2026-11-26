@@ -1,4 +1,9 @@
 {
+ "Click the first corner. Arrows pick the plane.": "Клацніть перший кут. Стрілками виберіть площину.",
+ "Click the start of the angle.": "Клацніть початкову точку кута.",
+ "Click the end, or type degrees and Enter.": "Клацніть кінцеву точку або введіть градуси й натисніть Enter.",
+ "Press Enter to apply.": "Натисніть Enter, щоб застосувати.",
+ "Type 3x or /3, then Enter.": "Введіть 3x або /3 і натисніть Enter.",
  "Import .rfa family": "Імпортувати сімейство .rfa",
  "Import .dxf": "Імпортувати .dxf",
  "Import .dwg": "Імпортувати .dwg",

@@ -338,7 +338,7 @@ impl ShellWindow {
     fn _activate_nav(slf: &Bound<'_, Self>, key: &str) -> PyResult<()> {
         let vp = slf.getattr("viewport")?;
         vp.call_method1("set_nav_mode", (key,))?;
-        slf.call_method0("_update_status_hint")?;
+        crate::native_view_actions::activate_tool_hint(slf.as_any())?;
         let tools = vp.getattr("keys_stand_in")?.getattr("tools")?;
         tools.call_method0("sync")?;
         tools.call_method0("_apply_tool_cursor")?;
@@ -372,7 +372,7 @@ impl ShellWindow {
         for (k, a) in actions.cast::<PyDict>()?.iter() {
             a.call_method1("setChecked", (k.eq(key)?,))?;
         }
-        slf.call_method0("_update_status_hint")?;
+        crate::native_view_actions::activate_tool_hint(slf.as_any())?;
         if !matches!(
             key,
             "select" | "texture_position" | "change_axes" | "scale_manager"

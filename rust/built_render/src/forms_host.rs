@@ -1085,7 +1085,7 @@ fn draft<'py>(py: Python<'py>, scene: &Bound<'py, PyAny>) -> PyResult<Bound<'py,
 #[pyo3(name = "UnitsQuestion")]
 fn units_form<'py>(py: Python<'py>, model: Py<PyAny>, done: Py<PyAny>) -> PyResult<Bound<'py, Form>> {
     let note: String = model.bind(py).getattr("note")?.str()?.to_string();
-    let mut form = Form::make(py, obj(py, tr(py, "Units")?)?, PyList::empty(py).as_any(), Some(obj(py, tr(py, &note)?)?), None, obj(py, "ok")?, obj(py, "cancel")?, None, 520.0, Some(done), None, None, None, Some(obj(py, "start_units")?))?;
+    let mut form = Form::make(py, obj(py, tr(py, "Units")?)?, PyList::empty(py).as_any(), Some(obj(py, crate::shortcut_text::modifier_text(&tr(py, &note)?))?), None, obj(py, "ok")?, obj(py, "cancel")?, None, 520.0, Some(done), None, None, None, Some(obj(py, "start_units")?))?;
     form.model = model;
     form.source = Source::Units;
     Bound::new(py, form)

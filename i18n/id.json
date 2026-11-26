@@ -1,4 +1,9 @@
 {
+ "Click the first corner. Arrows pick the plane.": "Klik sudut pertama. Tombol panah memilih bidang.",
+ "Click the start of the angle.": "Klik titik awal sudut.",
+ "Click the end, or type degrees and Enter.": "Klik titik akhir atau ketik derajat lalu tekan Enter.",
+ "Press Enter to apply.": "Tekan Enter untuk menerapkan.",
+ "Type 3x or /3, then Enter.": "Ketik 3x atau /3 lalu tekan Enter.",
  "Import .rfa family": "Impor famili .rfa",
  "Import .dxf": "Impor .dxf",
  "Import .dwg": "Impor .dwg",

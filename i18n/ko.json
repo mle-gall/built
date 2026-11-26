@@ -1,4 +1,9 @@
 {
+ "Click the first corner. Arrows pick the plane.": "첫 번째 모서리를 클릭하세요. 방향키로 평면을 선택합니다.",
+ "Click the start of the angle.": "각도의 시작점을 클릭하세요.",
+ "Click the end, or type degrees and Enter.": "끝점을 클릭하거나 각도를 입력하고 Enter를 누르세요.",
+ "Press Enter to apply.": "Enter를 눌러 적용하세요.",
+ "Type 3x or /3, then Enter.": "3x 또는 /3을 입력하고 Enter를 누르세요.",
  "Import .rfa family": ".rfa 패밀리 가져오기",
  "Import .dxf": ".dxf 가져오기",
  "Import .dwg": ".dwg 가져오기",

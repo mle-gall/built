@@ -1,4 +1,9 @@
 {
+ "Click the first corner. Arrows pick the plane.": "คลิกมุมแรก ใช้ปุ่มลูกศรเลือกระนาบ",
+ "Click the start of the angle.": "คลิกจุดเริ่มต้นของมุม",
+ "Click the end, or type degrees and Enter.": "คลิกจุดปลาย หรือพิมพ์องศาแล้วกด Enter",
+ "Press Enter to apply.": "กด Enter เพื่อนำไปใช้",
+ "Type 3x or /3, then Enter.": "พิมพ์ 3x หรือ /3 แล้วกด Enter",
  "Import .rfa family": "นำเข้าตระกูล .rfa",
  "Import .dxf": "นำเข้า .dxf",
  "Import .dwg": "นำเข้า .dwg",

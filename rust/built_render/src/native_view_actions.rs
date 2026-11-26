@@ -145,8 +145,15 @@ fn smart_zoom(win: &Bound<'_, PyAny>) -> PyResult<()> {
     Ok(())
 }
 
+pub(crate) fn activate_tool_hint(win: &Bound<'_, PyAny>) -> PyResult<()> {
+    let bar = win.call_method0("statusBar")?;
+    bar.call_method0("clearMessage")?;
+    bar.setattr("_tool_hint", win.py().None())?;
+    tool_hint(win)
+}
+
 #[pyfunction]
-fn tool_hint(win: &Bound<'_, PyAny>) -> PyResult<()> {
+pub(crate) fn tool_hint(win: &Bound<'_, PyAny>) -> PyResult<()> {
     let py = win.py();
     let vp = win.getattr("viewport")?;
     let tool = vp.getattr("active_tool")?;
@@ -155,7 +162,18 @@ fn tool_hint(win: &Bound<'_, PyAny>) -> PyResult<()> {
     let nav_mode: Option<String> = nav.extract()?;
     let mode = vp.getattr_opt("linear_inference_mode")?
         .map(|v| v.extract::<Option<String>>()).transpose()?.flatten();
-    let hint = crate::status_hints::hint_for(py, key.as_deref(), &tool, nav_mode.as_deref(), mode.as_deref())?;
+    let key = key.as_deref();
+    let array_pending = key == Some("move") && nav.is_none()
+        && tool.call_method1("array_pending", (&vp,))?.is_truthy()?;
+    let hint = if nav.is_none() && matches!(key, Some("rectangle" | "line" | "pushpull" | "offset" | "rotate"))
+        && vp.getattr_opt("_value_buffer")?.is_some_and(|v| v.is_truthy().unwrap_or(false)) {
+        crate::settings_rows::tr(py, "Press Enter to apply.")?
+    } else if array_pending {
+        crate::settings_rows::tr(py, "Type 3x or /3, then Enter.")?
+    } else {
+        crate::status_hints::hint_for(py, key, &tool, nav_mode.as_deref(), mode.as_deref())?
+    };
+    let hint = crate::shortcut_text::modifier_text(&hint);
     let name = if !nav.is_none() {
         nav.call_method1("replace", ("_", " "))?
             .call_method0("capitalize")?
@@ -172,7 +190,11 @@ fn tool_hint(win: &Bound<'_, PyAny>) -> PyResult<()> {
         .collect::<Vec<_>>()
         .join(" — ");
     let bar = win.call_method0("statusBar")?;
-    if !bar.getattr("_base")?.eq(&text)? {
+    if !bar.getattr_opt("_tool_hint")?.is_some_and(|previous| previous.eq(&text).unwrap_or(false)) {
+        if array_pending {
+            bar.call_method0("clearMessage")?;
+        }
+        bar.setattr("_tool_hint", &text)?;
         bar.call_method1("showMessage", (text,))?;
     }
     Ok(())

@@ -1,4 +1,9 @@
 {
+ "Click the first corner. Arrows pick the plane.": "Clique no primeiro canto. As setas escolhem o plano.",
+ "Click the start of the angle.": "Clique no início do ângulo.",
+ "Click the end, or type degrees and Enter.": "Clique no fim ou digite os graus e pressione Enter.",
+ "Press Enter to apply.": "Pressione Enter para aplicar.",
+ "Type 3x or /3, then Enter.": "Digite 3x ou /3 e pressione Enter.",
  "Import .rfa family": "Importar família .rfa",
  "Import .dxf": "Importar .dxf",
  "Import .dwg": "Importar .dwg",
