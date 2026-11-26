@@ -5,6 +5,8 @@ fresh profile gets; OK saves that, Cancel still touches nothing, and the
 language, the AI Assistant and the shortcuts stay as they were."""
 from __future__ import annotations
 
+import sys
+
 from built_core.settings import settings
 from tests.preferences_chrome import Controls
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
@@ -73,24 +75,27 @@ def test_restore_puts_every_control_back_to_its_default(native_host):
     assert not ui.select("general").value("autosave")
     ui.select("display").set("rest_mode", "fade")
     ui.set("rest_fade", 30)
-    ui.select("ndof").set("ndof_inv_right", True)
-    ui.set("ndof_speed_right", 200)
-    assert ui.value("ndof_preset") == "custom"
+    supported = sys.platform in {"linux", "win32"}
+    if supported:
+        ui.select("ndof").set("ndof_inv_right", True)
+        ui.set("ndof_speed_right", 200)
+        assert ui.value("ndof_preset") == "custom"
     ui.restore()
     expected = {
         "general": dict(autosave=True, autosave_min=5, backup=True, undo_steps=200,
                         scale_figure=True),
-        "navigation": dict(ask_section=True, invert_wheel=False, invert_orbit=False,
+        "navigation": dict(invert_wheel=False, invert_orbit=False,
                            look_sens=25, cursor_style="tool"),
         "display": dict(rest_mode="fade", rest_fade=75),
         "import": dict(dxf_unit="mm"),
-        "ndof": dict(ndof_on=True, ndof_speed=100, ndof_preset="original"),
     }
+    if supported:
+        expected["ndof"] = dict(ndof_on=True, ndof_speed=100, ndof_preset="original")
     for section, values in expected.items():
         ui.select(section)
         for key, value in values.items():
             assert ui.value(key) == value, key
-    for axis in AXES:
+    for axis in AXES if supported else ():
         assert not ui.value("ndof_inv_" + axis)
         assert ui.value("ndof_speed_" + axis) == 100
     ui.sheet.closed(ui.ctx)

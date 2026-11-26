@@ -1,10 +1,11 @@
-//! Detached Library draft. Only Apply can write the project's registry.
+//! Detached project registry draft. Only Apply can write the project's registry.
 use crate::ui::dialog::{Field, FULL, MULTILINE};
 use pyo3::{exceptions::PyValueError, prelude::*};
 use serde_json::{json, Value};
 
 #[pyclass]
 pub struct RegistryEditor {
+    #[pyo3(get)]
     scene: Py<PyAny>,
     original: Value,
     draft: String,
@@ -231,26 +232,25 @@ impl RegistryEditor {
         }
     }
 
-    fn build(slf: PyRef<'_, Self>, sheet: &Bound<'_, PyAny>) -> PyResult<()> {
-        let py = sheet.py();
-        let content = sheet.call_method1("content", ("Project registry",))?;
+    fn build(slf: PyRef<'_, Self>, content: &Bound<'_, PyAny>) -> PyResult<()> {
+        let py = content.py();
         let error = slf.error.clone();
-        content.call_method1("fields", (slf, "registry"))?;
         if !error.is_empty() {
             content.call_method1("text", (error, "error"))?;
         }
         let verb = py.import("built_render.chrome_sheet")?.getattr("verb")?;
-        let buttons = [
+        let mut buttons = [
             ("registry_add", "Add namespace"),
             ("registry_csv", "Import codes CSV…"),
         ]
         .map(|args| verb.call1(args))
         .into_iter()
         .collect::<PyResult<Vec<_>>>()?;
+        let options = pyo3::types::PyDict::new(py);
+        options.set_item("primary", true)?;
+        buttons.push(verb.call(("registry_apply", "Apply"), Some(&options))?);
         content.call_method1("buttons", (buttons, "left"))?;
-        let kw = pyo3::types::PyDict::new(py);
-        kw.set_item("primary", true)?;
-        sheet.call_method("verb", ("registry_apply", "Apply"), Some(&kw))?;
+        content.call_method1("fields", (slf, "registry"))?;
         Ok(())
     }
 }

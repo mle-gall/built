@@ -1,4 +1,4 @@
-"""Drive the Library's registry tab through its normal sheet commands."""
+"""Drive the model settings registry page through its normal sheet commands."""
 import json
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -9,7 +9,7 @@ from core import bim_registry
 from built_core.history import History
 from built_core.scene import Scene
 from built_render import chrome_sheet
-from built_render import wgpu_library
+from built_render import settings_sheet
 
 
 @pytest.fixture
@@ -18,12 +18,14 @@ def library(monkeypatch):
     view = SimpleNamespace(update=lambda: None)
     win = SimpleNamespace(viewport=SimpleNamespace(scene=scene, history=History(scene)))
     ctx = chrome_sheet.Ctx(win, view)
-    lib = wgpu_library.LibrarySheet(view)
-    monkeypatch.setattr(lib, "_items", lambda ctx: ([], {}))
+    lib = settings_sheet.SettingsSheet("registry")
     monkeypatch.setattr(chrome_sheet, "close", Mock())
-    lib.act(ctx, "tab", ["registry"])
     sheet = lib.build(ctx)
-    chrome_sheet.check_wire(json.dumps(sheet.wire()))
+    wire = sheet.wire()
+    chrome_sheet.check_wire(json.dumps(wire))
+    blocks = wire["content"]["blocks"]
+    assert [b["kind"] for b in blocks] == ["buttons", "fields"]
+    assert [b["id"] for b in blocks[0]["buttons"]] == ["registry_add", "registry_csv", "registry_apply"]
     return lib, ctx, sheet.forms()[0]
 
 

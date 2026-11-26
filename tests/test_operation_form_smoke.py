@@ -2,6 +2,7 @@
 from tests.raster_samples import solid_raster
 import json
 import os
+import sys
 from pathlib import Path
 
 import pytest
@@ -176,7 +177,10 @@ def test_native_settings_device_preferences(tmp_path):
     assert result.returncode == 0 and [s["large_sheet"] for s in states[:2]] == ["settings", "start"], log
     assert not any(s["errors"] or s["blocked_widgets"] for s in states), log
     settings = NativeSettings(profile)
-    assert settings.value("ndof/enabled") == "0"
+    if sys.platform in {"linux", "win32"}:
+        assert settings.value("ndof/enabled") == "0"
+    else:
+        assert settings.value("ndof/enabled") != "0"
 
 
 @pytest.mark.skipif(os.environ.get("BUILT_WINDOW_TESTS") != "1" or not BIN.exists(),
@@ -589,12 +593,12 @@ def fixture_menu(self, command):
     elif command == "fixture-close-camera":
         wgpu_ui._run(self.window, ['panel:["camera.close",null]'])
     elif command == "fixture-registry":
-        chrome_sheet.action(self.window, chrome_sheet.SEP.join(["library","tab","registry"]))
+        chrome_sheet.action(self.window, chrome_sheet.SEP.join(["settings","side","registry"]))
     elif command == "fixture-namespace":
         for args in (["v","registry_key","survey"],["v","registry_name","Survey"],["verb","registry_add"]):
-            chrome_sheet.action(self.window, chrome_sheet.SEP.join(["library",*args]))
+            chrome_sheet.action(self.window, chrome_sheet.SEP.join(["settings",*args]))
     elif command == "fixture-apply":
-        chrome_sheet.action(self.window, chrome_sheet.SEP.join(["library","verb","registry_apply"]))
+        chrome_sheet.action(self.window, chrome_sheet.SEP.join(["settings","verb","registry_apply"]))
     elif command == "fixture-text":
         self.window._act_3dtext.trigger()
     elif command == "fixture-preview":
@@ -627,7 +631,7 @@ menu fixture-shift
 menu fixture-close-camera
 wait 300
 state
-menu library
+menu prefs
 wait 350
 menu fixture-registry
 wait 300
@@ -668,7 +672,7 @@ quit
               if line.startswith("[built] state ")]
     camera, edited, draft, applied, picker, placed, console, preview = states[:8]
     assert camera["bound"] and edited["saved_shift"] == .25 and not edited["camera_open"], log
-    assert draft["large_sheet"] == "library" and not draft["namespace"], log
+    assert draft["large_sheet"] == "settings" and not draft["namespace"], log
     assert applied["namespace"] and not applied["large_sheet"], log
     assert picker["font"] and not placed["font"] and placed["tool"] == "PlaceGroupTool", log
     assert placed["selected_font"], log
