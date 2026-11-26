@@ -368,3 +368,25 @@ def test_every_addon_module_compiles():
     import py_compile
     for path in (ROOT / "integrations" / "blender" / "built_link").glob("*.py"):
         py_compile.compile(str(path), doraise=True)
+
+
+def test_open_in_blender_links_at_once_with_the_code_built_passes(monkeypatch):
+    bpy, mathutils, registered = _fake_bpy()
+    timers = []
+    bpy.app.timers.register = lambda f, **kw: timers.append(f)
+    monkeypatch.setitem(sys.modules, "bpy", bpy)
+    monkeypatch.setitem(sys.modules, "mathutils", mathutils)
+    for name in ("built_link.ui", "built_link.blender_scene"):
+        sys.modules.pop(name, None)
+    ui = importlib.import_module("built_link.ui")
+    calls = []
+    monkeypatch.setattr(ui, "link", lambda pairing, relink=False: calls.append(pairing))
+    monkeypatch.setattr(ui, "register", lambda: None)
+    monkeypatch.setenv("BUILT_LINK", "built:47815:ABCD-EFGH")
+    source = (ROOT / "integrations/blender/built_link/launch.py").read_text()
+    exec(compile(source, "launch.py", "exec"), {"__file__": str(ROOT / "integrations/blender/built_link/launch.py"),
+                                               "__name__": "__main__"})
+    (start,) = timers
+    assert start() is None and calls == ["built:47815:ABCD-EFGH"]
+    for name in ("built_link.ui", "built_link.blender_scene"):
+        sys.modules.pop(name, None)
