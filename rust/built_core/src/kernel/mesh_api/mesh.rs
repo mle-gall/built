@@ -588,7 +588,11 @@ fn resplit_curves(this: &O<'_>) -> PyResult<()> {
     let m = api(this.py())?;
     let st = st(this)?;
     let c = m.getattr("_CURVE_COUNTER")?;
-    let n = if st.getattr("_model_frame")?.is_truthy()? {
+    // A frame that only moves the origin (the tools' view frame on a model
+    // far from it) leaves every direction the split reads as it is: the
+    // store splits there too. The edge-view walk took ~0.2 s per line on a
+    // 200k-face mesh.
+    let n = if st.getattr("_model_frame")?.is_truthy()? || st.getattr("frame_matrix")?.is_none() {
         st.call_method1("resplit_curves", (c,))?
     } else {
         m.getattr("object_drawing")?
