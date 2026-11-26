@@ -79,6 +79,12 @@ enum Widget {
 struct Row {
     key: String,
     cells: Vec<String>,
+    /// Buttons at the row's end: `[id, label]` pairs (`row_action` events).
+    #[serde(default)]
+    actions: Vec<(String, String)>,
+    /// A warning dot before the first cell (a conflict).
+    #[serde(default)]
+    flag: bool,
 }
 #[derive(Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
@@ -603,6 +609,17 @@ fn draw_item(
             rows,
             selection,
         } => {
+            if rows.iter().any(|r| !r.actions.is_empty() || r.flag) {
+                let labels = |r: &Row| r.actions.iter().map(|(_, l)| l.clone()).collect::<Vec<_>>();
+                let reserve = rows.iter().map(|r| kit::review_actions_width(ui, &labels(r))).fold(0., f32::max);
+                kit::review_row(ui, columns, true, false, &[], reserve);
+                for row in rows {
+                    if let Some(at) = kit::review_row(ui, &row.cells, false, row.flag, &labels(row), reserve) {
+                        event = Some(("row_action", json!({"row": row.key, "action": row.actions[at].0})));
+                    }
+                }
+                return event;
+            }
             kit::table_row(ui, columns, false, true);
             for row in rows {
                 if kit::table_row(ui, &row.cells, selection.as_ref() == Some(&row.key), false)
@@ -800,6 +817,42 @@ mod tests {
             serde_json::from_str(events[0].strip_prefix("plugin:").unwrap()).unwrap();
         assert_eq!(event["event"], "selection");
         assert_eq!(event["value"], "faces");
+    }
+
+    #[test]
+    fn row_actions_send_the_row_key_and_the_action_id() {
+        let ctx = super::super::test_context();
+        let mut rows = Panels::default();
+        rows.set(
+            &descriptor(json!({"kind":"table","id":"changes","columns":["Change","Built","Blender"],
+                "rows":[{"key":"transform:u1","cells":["Seat · Position X","1.25 m","1.10 m"],"flag":true,
+                         "actions":[["take","Take Blender"],["keep","Keep Built"]]},
+                        {"key":"material:Oak","cells":["Oak · Roughness","0.80","0.35"],
+                         "actions":[["apply","Apply"],["ignore","Ignore"]]}]}))
+            .to_string(),
+        )
+        .unwrap();
+        let mut events = Vec::new();
+        // The last action sits at the row's right end: the first row's "Keep Built".
+        for press in [None, Some(true), Some(false)] {
+            let mut raw = egui::RawInput::default();
+            raw.screen_rect = Some(Rect::from_min_size(Pos2::ZERO, vec2(600., 200.)));
+            let point = pos2(575., 45.);
+            if let Some(pressed) = press {
+                raw.events = vec![
+                    egui::Event::PointerMoved(point),
+                    egui::Event::PointerButton { pos: point, button: egui::PointerButton::Primary, pressed, modifiers: Default::default() },
+                ];
+            }
+            let _ = ctx.run(raw, |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| rows.draw(ui, "doc1-demo", &mut events));
+            });
+        }
+        assert_eq!(events.len(), 1, "{events:?}");
+        let event: Value = serde_json::from_str(events[0].strip_prefix("plugin:").unwrap()).unwrap();
+        assert_eq!(event["event"], "row_action");
+        assert_eq!(event["value"]["row"], "transform:u1");
+        assert_eq!(event["value"]["action"], "keep");
     }
 
     #[test]

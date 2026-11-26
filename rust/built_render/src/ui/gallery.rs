@@ -232,6 +232,12 @@ impl Gallery {
                             property_control(controls, "Render", |ui| progress_bar(ui, 0.6, 4.));
                             table_row(controls, &["Entity".into(), "Count".into()], false, true);
                             table_row(controls, &["Face".into(), "24".into()], true, false);
+                            let pair = ["Keep Built".to_string(), "Take Blender".to_string()];
+                            let reserve = review_actions_width(controls, &pair);
+                            review_row(controls, &["Changed".into(), "Built".into(), "Blender".into()], true, false, &[], reserve);
+                            review_row(controls, &["Bench seat · Position X".into(), "1.25 m".into(), "1.10 m".into()], false, true, &pair, reserve);
+                            review_row(controls, &["Oak · Roughness".into(), "0.80".into(), "0.35".into()], false, false,
+                                       &["Apply".to_string(), "Ignore".to_string()], reserve);
                             let chrome = &mut cols[1];
                             chrome.horizontal(|ui| {
                                 ui.set_height(super::TOP_H);

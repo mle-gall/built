@@ -81,6 +81,8 @@ struct Writer<'py> {
     samplers: List<'py>,
     extensions: BTreeSet<String>,
     texture_ids: HashMap<PathBuf, usize>,
+    link: bool,
+    registry: Option<Obj<'py>>,
 }
 impl<'py> Writer<'py> {
     fn new(py: Python<'py>) -> Self {
@@ -94,6 +96,8 @@ impl<'py> Writer<'py> {
             samplers: PyList::empty(py),
             extensions: Default::default(),
             texture_ids: Default::default(),
+            link: false,
+            registry: None,
         }
     }
     fn view(&mut self, data: &[u8], target: Option<u32>) -> PyResult<usize> {
@@ -245,6 +249,19 @@ impl<'py> Writer<'py> {
             if mat.contains("alphaCutoff")? {
                 mat.del_item("alphaCutoff")?
             }
+        }
+        let registered = match &self.registry {
+            Some(r) if !r.is_none() => !r.call_method1("get", (name,))?.is_none(),
+            _ => false,
+        };
+        if self.link && registered {
+            // The Blender link names Built's material on its copy.
+            let extras = match mat.get_item("extras")? {
+                Some(e) => e.cast_into::<PyDict>()?,
+                None => PyDict::new(py),
+            };
+            extras.set_item("built_material", name)?;
+            mat.set_item("extras", extras)?;
         }
         self.materials.append(mat)
     }
@@ -398,6 +415,8 @@ struct Hierarchy<'py> {
     figures: List<'py>,
     smoother: Obj<'py>,
     tr: Obj<'py>,
+    /// Blender link export: no face-me figures, `built_uid` on every node.
+    link: bool,
 }
 impl<'py> Hierarchy<'py> {
     fn part(
@@ -427,7 +446,7 @@ impl<'py> Hierarchy<'py> {
         };
         let mesh = g.getattr("mesh")?;
         let kind = g.getattr("billboard")?;
-        let figure = kind.is_truthy()?;
+        let figure = kind.is_truthy()? && !self.link;
         let name = g.getattr("name")?;
         let name = if name.is_truthy()? {
             name
@@ -491,6 +510,9 @@ impl<'py> Hierarchy<'py> {
             return Ok(None);
         }
         let node = record!(py;"name"=>name,"matrix"=>m,"mesh"=>if self.meshes.get_item(&key)?.is_some_and(|r|r.len().unwrap_or(0)>0){Some(key)}else{None},"children"=>&kids);
+        if self.link {
+            node.set_item("extras", record!(py;"built_uid"=>g.getattr("uid")?))?;
+        }
         for child in g.getattr("children")?.try_iter()? {
             if let Some(node) = self.part(&child?, &world, &paint, depth + 1)? {
                 kids.append(node)?
@@ -501,6 +523,7 @@ impl<'py> Hierarchy<'py> {
     fn collect(
         scene: &Obj<'py>,
         only: Option<&Obj<'py>>,
+        link: Option<&Obj<'py>>,
     ) -> PyResult<(Obj<'py>, Obj<'py>, List<'py>)> {
         let py = scene.py();
         let helper = py.import("built_core.formats.meshexport")?;
@@ -511,7 +534,36 @@ impl<'py> Hierarchy<'py> {
             meshes: PyDict::new(py),
             figures: PyList::empty(py),
             tr: py.import("built_core.i18n")?.getattr("tr")?,
+            link: link.is_some(),
         };
+        if let Some(parts) = link {
+            // Each named top-level placement as a root in its own
+            // coordinates (the link sends its matrix separately), and the
+            // loose geometry when `"loose"` is named.
+            let roots = PyList::empty(py);
+            for part in parts.try_iter()? {
+                let part = part?;
+                if part.eq("loose")? {
+                    let prims = PyDict::new(py);
+                    for f in scene.getattr("loose_mesh")?.getattr("faces")?.try_iter()? {
+                        let f = f?;
+                        if scene.call_method1("entity_visible", (&f,))?.is_truthy()? {
+                            h.helper.call_method1("_add_face", (f, &h.materials, &prims, py.None(), &h.smoother))?;
+                        }
+                    }
+                    h.meshes.set_item("loose", &prims)?;
+                    roots.append(record!(py;"name"=>h.tr.call1(("Loose geometry",))?,"matrix"=>py.None(),"mesh"=>"loose","children"=>PyList::empty(py),"extras"=>record!(py;"built_uid"=>"loose")))?;
+                    continue;
+                }
+                let none = py.None().into_bound(py);
+                if let Some(node) = h.part(&part, &none, &none, 0)? {
+                    node.set_item("matrix", py.None())?;
+                    roots.append(node)?;
+                }
+            }
+            h.helper.call_method1("_resolve_finishes", (scene, &h.materials))?;
+            return Ok((h.materials.into_any(), h.meshes.into_any(), roots));
+        }
         let visible = |f: &Obj<'py>| -> PyResult<bool> {
             Ok(scene.call_method1("entity_visible", (f,))?.is_truthy()?
                 && match only {
@@ -581,7 +633,7 @@ fn emit<'py>(part: &Obj<'py>, nodes: &List<'py>, mesh_ids: &Dict<'py>) -> PyResu
     Ok(i)
 }
 #[pyfunction]
-#[pyo3(signature=(scene,path,face_me=None,only=None,*,embed_textures=true))]
+#[pyo3(signature=(scene,path,face_me=None,only=None,*,embed_textures=true,link=None))]
 fn gltf_save<'py>(
     py: Python<'py>,
     scene: &Obj<'py>,
@@ -589,14 +641,16 @@ fn gltf_save<'py>(
     face_me: Option<&Obj<'py>>,
     only: Option<&Obj<'py>>,
     embed_textures: bool,
+    link: Option<&Obj<'py>>,
 ) -> PyResult<()> {
     let helper = py.import("built_core.formats.meshexport")?;
+    let face_me = face_me.filter(|_| link.is_none());
     let (mat, sources, parts) = if let Some(camera) = face_me {
         helper
             .call_method1("collect_geometry_split", (scene, camera))?
             .extract()?
     } else {
-        Hierarchy::collect(scene, only)?
+        Hierarchy::collect(scene, only, link)?
     };
     let keys = PyDict::new(py);
     let add = |source: &Obj<'py>| -> PyResult<()> {
@@ -618,6 +672,10 @@ fn gltf_save<'py>(
     let keys = keys.keys();
     let names = helper.call_method1("export_names", (&mat,))?;
     let mut writer = Writer::new(py);
+    writer.link = link.is_some();
+    if writer.link {
+        writer.registry = scene.getattr_opt("materials")?;
+    }
     for key in keys.iter() {
         writer.material(&mat.get_item(&key)?, &names.get_item(&key)?, embed_textures)?;
     }

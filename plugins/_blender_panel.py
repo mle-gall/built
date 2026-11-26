@@ -11,6 +11,7 @@ from built_render import blender_availability
 
 from built_core import render_blender as rb
 from built_core.desktop_open import open_url
+from built_core.i18n import tr
 from built_core.settings import settings as native_settings
 
 _SETTINGS = "render/"
@@ -32,10 +33,12 @@ def _state(app) -> dict:
 
 
 def _store(app, st: dict) -> None:
-    """Write back — one undo step, the document becomes unsaved."""
-    app.set_document_data({"ambience": st["ambience"],
-                           "sun_scale": st["sun_scale"],
-                           "lights": st["lights"]})
+    """Write back — one undo step, the document becomes unsaved. Other
+    keys (the Blender link's id) are kept."""
+    raw = app.document_data({}) or {}
+    raw = raw if isinstance(raw, dict) else {}
+    raw.update(ambience=st["ambience"], sun_scale=st["sun_scale"], lights=st["lights"])
+    app.set_document_data(raw)
 
 
 class CameraSession:
@@ -125,6 +128,389 @@ class CameraSession:
             self.last_camera = camera
 
 
+class BlenderLink:
+    """The two-way link with Blender for one document (Render drawer).
+
+    Built listens on loopback; the Built add-on in Blender pairs with the
+    code shown here (Open in Blender passes it on). Geometry goes out as
+    GLB chunks per top-level placement, then only what the change feed
+    names; Blender's changes wait in ``review`` for Apply / Ignore.
+    """
+    BATCH = 48          # placements per GLB message
+    BUDGET = 0.04       # seconds of export per tick
+
+    def __init__(self, panel):
+        self.panel, self.app = panel, panel.app
+        self.server = self.tracker = None
+        self.review = rb.LinkReview()
+        self.peer = None
+        self.notice = ""
+        self.revision = None
+        self.queue = []
+        self.sent_values = {}
+        self.values_dirty = True
+        self.progress = None
+        self.textures = {}
+        self.show_code = False
+        self.process = None
+        self.timer = panel.host.timers.timer(self.tick, 100, True)
+
+    # ------------------------------------------------------------ identity
+
+    def document_id(self, create=False):
+        raw = self.app.document_data({}) or {}
+        raw = raw if isinstance(raw, dict) else {}
+        if not raw.get("link_id") and create:
+            raw["link_id"] = rb.link_new_id()
+            self.app.set_document_data(raw)
+        return raw.get("link_id", "")
+
+    def document_name(self):
+        path = getattr(self.app.window, "_current_path", "") or ""
+        return Path(str(path)).name if path else tr("Untitled")
+
+    @property
+    def linked(self):
+        return self.peer is not None
+
+    def state(self):
+        """(chip label, available) for the drawer."""
+        if self.linked:
+            n, conflicts = len(self.review), self.review.conflicts
+            if conflicts:
+                return tr("Linked · {n} conflict").format(n=conflicts) if conflicts == 1 else \
+                    tr("Linked · {n} conflicts").format(n=conflicts), False
+            if n:
+                return (tr("1 change from Blender") if n == 1 else
+                        tr("{n} changes from Blender").format(n=n)), True
+            return tr("Linked · {file}").format(file=self.peer.get("file") or "Blender"), True
+        if len(self.review):
+            return tr("{n} changes waiting").format(n=len(self.review)), True
+        if self.server is not None and self.server.running:
+            return tr("Waiting for Blender"), True
+        return tr("Not linked"), False
+
+    # ------------------------------------------------------------ lifecycle
+
+    def start(self):
+        if self.server is None:
+            self.server = rb.LinkServer()
+            # One tracker for the drawer's life: the feed is read while
+            # Blender is away too, so a reconnect gets only what changed.
+            self.tracker = rb.LinkTracker()
+            self.revision = self.app.viewport.history.revision
+        self.server.start(rb.LINK_PORT)
+        self.server.set_document(self.document_id(create=True), self.document_name())
+        self.timer.start()
+        return self.server.pairing
+
+    def open_blender(self):
+        pairing = self.start()
+        found = self.panel.found
+        if found is None:
+            raise RuntimeError(tr("Blender was not found. Set its path in Settings › Blender."))
+        argv = list(found.command)
+        blend = native_settings().value(_SETTINGS + "blend/" + self.document_id(), "") or ""
+        if blend and Path(blend).is_file():
+            argv.append(blend)
+        argv += ["--python", str(Path(rb.addon_source()) / "launch.py")]
+        env = rb.clean_env()
+        env["BUILT_LINK"] = pairing
+        self.process = subprocess.Popen(argv, env=env, stdin=subprocess.DEVNULL,
+                                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                        start_new_session=True)
+        self.notice = tr("Opening Blender…")
+
+    def install_addon(self):
+        dest = rb.work_base().parent / "Blender add-on" / "built_link.zip"
+        path = rb.write_addon_zip(dest)
+        self.notice = tr("Add-on written to {path}").format(path=path)
+        self.app.window.notify("success", tr("Blender add-on saved: install it in Blender › Preferences › Add-ons"),
+                               [(tr("Show in Finder"), lambda: open_url(Path(path).parent))])
+        return path
+
+    def unlink(self):
+        if self.server is not None:
+            self.server.disconnect("unlinked")
+        self.peer = None
+        self.queue = []
+        self.progress = None
+
+    def close(self):
+        self.timer.stop()
+        if self.server is not None:
+            self.server.stop()
+            self.server = None
+        self.peer = None
+
+    def copy_code(self):
+        from built_render.shell_services import pasteboard_write
+        if self.server is None:
+            self.start()
+        pasteboard_write([("public.utf8-plain-text", self.server.pairing.encode())])
+        self.notice = tr("Pairing code copied. Paste it in Blender › Built › Link to Built.")
+
+    # ------------------------------------------------------------ the loop
+
+    def tick(self):
+        if self.server is None:
+            self.timer.stop()
+            return
+        changed = False
+        for msg in self.server.poll():
+            self.handle(msg)
+            changed = True
+        self.observe_feed()
+        if self.linked:
+            if self.tracker.pending():
+                self.queue.extend(self.tracker.plan(self.app.scene))
+            if self.queue:
+                self.send_queue()
+                changed = True
+            elif self.progress is not None:
+                self.server.send({"type": "end"})
+                self.progress = None
+                changed = True
+            if self.values_dirty:
+                self.send_values()
+        if changed:
+            self.panel.invalidate()
+
+    def handle(self, msg):
+        kind = msg.get("type")
+        if kind == "_linked":
+            self.peer = msg
+            self.notice = ""
+            self.tracker.reset(msg.get("have") or {})
+            self.queue, self.sent_values, self.values_dirty = [], {}, True
+            if msg.get("path"):
+                native_settings().setValue(_SETTINGS + "blend/" + self.document_id(), msg["path"])
+        elif kind == "_closed":
+            if self.peer is not None:
+                self.notice = tr("Blender closed the link. It reconnects when Blender opens the file again.")
+            self.peer, self.queue, self.progress = None, [], None
+        elif kind == "_refused":
+            self.notice = {
+                "token": tr("A Blender session used an old pairing code."),
+                "document": tr("{file} is linked to another Built model.").format(file=msg.get("file") or "A .blend"),
+                "busy": tr("Another Blender session tried to link while one is linked."),
+                "protocol": tr("Blender's add-on is from another Built version: install it again."),
+            }.get(msg.get("reason"), tr("A Blender session was refused."))
+        elif kind == "changes":
+            self.receive(msg.get("items") or [], msg.get("_payload") or b"")
+
+    def observe_feed(self):
+        history = self.app.viewport.history
+        if history.revision == self.revision:
+            return
+        got = history.feed.since(self.revision or 0)
+        for step in got["steps"]:
+            self.tracker.observe(step)
+        if not got["complete"]:
+            self.tracker.widen()
+        self.revision = history.revision
+        self.values_dirty = True
+        current = rb.link_values(self.app.scene, self.app.key, self.review.keys()) if len(self.review) else {}
+        if current:
+            self.review.revalidate(current)
+
+    def send_queue(self):
+        import time
+        end = time.monotonic() + self.BUDGET
+        if self.progress is None:
+            self.progress = [0, len(self.queue)]
+            self.server.send({"type": "begin", "count": len(self.queue)})
+        else:
+            self.progress[1] = max(self.progress[1], self.progress[0] + len(self.queue))
+        while self.queue and time.monotonic() < end:
+            if self.server.queued > 64 << 20:
+                break  # Blender is still reading: wait for the socket
+            head = self.queue[0]
+            if head["op"] != "chunk":
+                self.queue.pop(0)
+                if head["op"] == "transform":
+                    self.server.send({"type": "transform", "uid": head["uid"], "matrix": head["matrix"]})
+                else:
+                    self.server.send({"type": "remove", "uid": head["uid"]})
+                self.progress[0] += 1
+                continue
+            batch = []
+            while self.queue and self.queue[0]["op"] == "chunk" and len(batch) < self.BATCH:
+                batch.append(self.queue.pop(0))
+            work = rb.work_base()
+            work.mkdir(parents=True, exist_ok=True)
+            fd, name = tempfile.mkstemp(suffix=".glb", prefix="built-link-", dir=work)
+            import os
+            os.close(fd)
+            path = Path(name)
+            try:
+                written = set(rb.export_chunks(self.app.scene, [a["uid"] for a in batch], path))
+                data = path.read_bytes() if written else b""
+            except Exception as exc:
+                for a in batch:
+                    self.tracker.forget(a["uid"])
+                self.notice = tr("Could not send part of the model: {error}").format(error=exc)
+                written, data = set(), b""
+            finally:
+                path.unlink(missing_ok=True)
+            items = [{k: a[k] for k in ("uid", "name", "matrix", "fp")} for a in batch if a["uid"] in written]
+            if items:
+                self.server.send({"type": "chunk", "items": items}, data)
+            self.progress[0] += len(batch)
+
+    def send_values(self):
+        self.values_dirty = False
+        values = rb.link_values(self.app.scene, self.app.key)
+        groups = {"material:": [], "light:": [], "camera:": []}
+        for key, value in values.items():
+            for prefix in groups:
+                if key.startswith(prefix):
+                    groups[prefix].append((key, value))
+        for key, value in groups["material:"]:
+            if self.sent_values.get(key) != value:
+                self.server.send({"type": "material", "name": key.split(":", 1)[1], "value": value})
+                self.sent_values[key] = value
+        for prefix, kind, field in (("light:", "lights", "id"), ("camera:", "cameras", "name")):
+            now = dict(groups[prefix])
+            before = {k: v for k, v in self.sent_values.items() if k.startswith(prefix)}
+            if now != before:
+                items = [{field: k.split(":", 1)[1], **v} for k, v in now.items()]
+                self.server.send({"type": kind, "items": items})
+                for k in before:
+                    self.sent_values.pop(k, None)
+                self.sent_values.update(now)
+
+    # ------------------------------------------------------------ review
+
+    def receive(self, items, payload):
+        textures = rb.work_base().parent / "Blender textures"
+        for it in items:
+            image = it.pop("image", None)
+            if image and it.get("kind") == "material":
+                data = payload[image["offset"]:image["offset"] + image["size"]]
+                if len(data) == image["size"]:
+                    textures.mkdir(parents=True, exist_ok=True)
+                    safe = "".join(c if c.isalnum() or c in "-_." else "_" for c in image.get("name", "image.png"))
+                    path = textures / f"{(it.get('value') or {}).get('texture', {}).get('crc', 'image')}-{safe}"
+                    path.write_bytes(data)
+                    self.textures[it["key"]] = str(path)
+        current = rb.link_values(self.app.scene, self.app.key, [it["key"] for it in items if "key" in it])
+        got = self.review.receive(items, current)
+        for key in got["same"]:
+            self.answer(key, "applied", current.get(key))
+        if got["added"]:
+            n = len(self.review)
+            self.app.window.notify("info", tr("1 change from Blender") if n == 1 else
+                                   tr("{n} changes from Blender").format(n=n))
+
+    def answer(self, key, resolution, value=None, message=None):
+        if self.server is not None and self.linked:
+            self.server.send({"type": "resolved", "key": key, "resolution": resolution,
+                              "value": value, "message": message})
+
+    def rows(self):
+        out = []
+        for r in self.review.rows():
+            if r["unsupported"]:
+                actions = [["ignore", tr("Dismiss")]]
+            elif r["conflict"]:
+                actions = [["take", tr("Take Blender")], ["keep", tr("Keep Built")]]
+            else:
+                actions = [["apply", tr("Apply")], ["ignore", tr("Ignore")]]
+            out.append(dict(key=r["key"], cells=[r["label"], r["built"], r["blender"]],
+                            actions=actions, flag=bool(r["conflict"])))
+        return out
+
+    def resolve(self, keys, how):
+        """Apply (one undo step), ignore, keep Built's or take Blender's."""
+        if keys is None:
+            keys = [i["key"] for i in self.review.items()
+                    if (how == "ignore" or not i["conflict"]) and not (how == "apply" and i["unsupported"])]
+        if not keys:
+            return
+        current = rb.link_values(self.app.scene, self.app.key, keys)
+        for key in self.review.revalidate(current):
+            self.answer(key, "applied", current.get(key))
+        items = self.review.take([k for k in keys if k in self.review.keys()])
+        if how in ("apply", "take"):
+            textures = {k: p for k, p in self.textures.items() if any(i["key"] == k for i in items)}
+            command, applied, failed = rb.link_apply(self.app.scene, items, self.app.key, textures)
+            if command is not None:
+                vp = self.app.viewport
+                vp.history.execute(command)
+                notify = getattr(vp, "notify_scene_changed", None)
+                if callable(notify):
+                    notify()
+                vp.update()
+            now = rb.link_values(self.app.scene, self.app.key, applied) if applied else {}
+            for key in applied:
+                self.answer(key, "applied", now.get(key))
+                self.textures.pop(key, None)
+            for key, why in failed.items():
+                self.answer(key, "failed", None, why)
+            if failed:
+                self.notice = "; ".join(failed.values())
+        elif how == "keep":
+            for it in items:
+                self.answer(it["key"], "kept_built", current.get(it["key"]))
+        else:
+            for it in items:
+                self.answer(it["key"], "ignored")
+                self.textures.pop(it["key"], None)
+        self.panel.invalidate()
+
+    def sections(self):
+        from built_core.plugin_panels import field, item
+        label, available = self.state()
+        out = [item("chip", "link_state", label, available=available)]
+        if self.progress is not None:
+            done, total = self.progress
+            out.append(item("progress", "link_progress", tr("Sending the model · {done} / {total}").format(
+                done=min(done, total), total=total), fraction=min(1.0, done / max(1, total))))
+        if self.notice:
+            out.append(item("log", "link_notice", lines=[self.notice]))
+        if self.linked:
+            out.append(item("button", "link_unlink", tr("Unlink")))
+        else:
+            out.append(item("button", "link_open", tr("Open in Blender"), enabled=self.panel.found is not None))
+            out.append(item("button", "link_pair", tr("Pairing code…")))
+            out.append(item("button", "link_install", tr("Install Blender add-on…")))
+        if self.show_code and self.server is not None and not self.linked:
+            out.append(field("link_code", tr("Pairing code"), "text", self.server.pairing, enabled=False))
+            out.append(item("button", "link_copy", tr("Copy code")))
+        rows = self.rows()
+        if rows:
+            out.append(item("table", "link_changes", columns=[tr("Changed"), tr("Built"), tr("Blender")], rows=rows))
+            plain = [r for r in self.review.items() if not r["conflict"] and not r["unsupported"]]
+            if plain:
+                out.append(item("button", "link_apply_all",
+                                tr("Apply {n} changes").format(n=len(plain)) if len(plain) > 1 else tr("Apply 1 change")))
+            out.append(item("button", "link_ignore_all", tr("Ignore all")))
+        return out
+
+    def event(self, control, event, value):
+        if control == "link_open":
+            self.open_blender()
+        elif control == "link_pair":
+            self.start()
+            self.show_code = not self.show_code
+        elif control == "link_copy":
+            self.copy_code()
+        elif control == "link_install":
+            self.install_addon()
+        elif control == "link_unlink":
+            self.unlink()
+        elif control == "link_apply_all":
+            self.resolve(None, "apply")
+        elif control == "link_ignore_all":
+            self.resolve(None, "ignore")
+        elif control == "link_changes" and event == "row_action":
+            self.resolve([value["row"]], value["action"])
+        else:
+            return False
+        return True
+
+
 class BlenderPanel:
     """Blender job controller for the host-drawn panel."""
     id, title, slot = "render", "Render", "utility"
@@ -162,6 +548,7 @@ class BlenderPanel:
         self.fraction = 0.
         self.found, self.status = blender_availability(self.opts["binary"])
 
+        self.link = BlenderLink(self)
         self.view_pick = None
         app.add_pickable(self.pick_light, on_select=self.on_light_picked, delete=self.delete_light)
         self.pickables = app.viewport._ext_pickables
@@ -211,7 +598,8 @@ class BlenderPanel:
     def add_light(self, kind, point, on_face=False):
         state = _state(self.app)
         height = point.z() + (0.1 if on_face and kind == "point" else 0)
-        light = dict(kind=kind, pos=[point.x(), point.y(), height], kelvin=rb.DEFAULT_KELVIN, angle=60)
+        light = dict(kind=kind, pos=[point.x(), point.y(), height], kelvin=rb.DEFAULT_KELVIN, angle=60,
+                     id=rb.link_new_id()[:12])
         state["lights"].extend(rb.clean_lights([light]))
         self.selected = str(len(state["lights"]) - 1)
         _store(self.app, state)
@@ -275,13 +663,12 @@ class BlenderPanel:
         self._settings()
         if self.camera not in cameras or self.selected_camera_key != rb.camera_key(self.app.viewport.camera):
             self.camera = cameras[0]
-        result = [item("chip", "availability", "Blender · One-way export" if self.found else "Blender unavailable",
-                       available=self.found is not None),
-                  field("quality", "Preset", "choice", opts["quality"], options=["Draft", "Final"]),
+        result = [field("quality", "Preset", "choice", opts["quality"], options=["Draft", "Final"]),
                   field("camera", "Camera", "choice", self.camera, options=cameras),
                   item("progress", "activity", self.status, fraction=self.fraction),
                   item("button", "render", "Render", primary=True, enabled=self.found is not None and self.proc is None)]
         if not self.found:
+            result.insert(0, item("chip", "availability", "Blender unavailable", available=False))
             result.append(item("button", "settings", "Blender settings…"))
         if self.proc:
             result.append(item("button", "cancel", "Cancel render"))
@@ -307,7 +694,8 @@ class BlenderPanel:
                              item("list", "lights", columns=["Scene lights"], rows=light_rows, selection=self.selected),
                              item("button", "point", "Place point"), item("button", "spot", "Place spot"),
                              item("button", "aim", "Aim…", enabled=editing), *details])
-        return [section("job", "", *result),
+        return [section("link", tr("Blender link"), *self.link.sections()),
+                section("job", "", *result),
                 section("preview_output", "", *preview),
                 section("output", "Output",
                         field("width", "Width", "number", opts["width"], min=64, max=16384, unit=" px"),
@@ -317,6 +705,8 @@ class BlenderPanel:
                 section("lighting", "Lighting", *lighting)]
 
     def event(self, control, event, value):
+        if control.startswith("link_") and self.link.event(control, event, value):
+            return
         if event == "commit" and control in ("quality", "width", "height", "ground", "keep_blend"):
             self.opts[control] = int(value) if control in ("width", "height") else value
         elif event == "commit" and control in ("sun_scale", "ambience"):
@@ -422,6 +812,7 @@ class BlenderPanel:
         return self.scene.content_version, tuple(self.opts.items())
 
     def _close(self):
+        self.link.close()
         self.pickables[:] = [p for p in self.pickables if p["pick"] != self.pick_light]
         self.sync_timer.stop()
         self.camera_session.close()
