@@ -39,10 +39,14 @@ def test_pointer_moves_wait_for_the_end_of_a_zoom(tmp_path):
             out += [f"move {x} {y}", event.format(x=x, y=y, n=-1 if i < 15 else 1)]
         return out
 
+    # The pause that ends a zoom is two seconds here (150 ms in use), and the
+    # script waits it out between blocks: the counts below then follow from
+    # the order of the steps, not from how fast the machine ran them.
+    over = "wait 2300"
     lines = ["wait 600", "menu view:zoom_extents", "tool line", "move 900 430", "wait 300", "state"]
-    lines += zoom("notch {x} {y} {n}") + ["state", "wait 300"]                        # read at once
-    lines += zoom("pinch {x} {y} {n}") + ["wait 400", "state"]                        # read after the pause
-    lines += zoom("wheel {x} {y} {n} move") + ["click 902 431", "state", "wait 300"]   # a press reads the hover
+    lines += zoom("notch {x} {y} {n}") + ["state", over]                        # read at once
+    lines += zoom("pinch {x} {y} {n}") + [over, "state"]                        # read after the pause
+    lines += zoom("wheel {x} {y} {n} move") + ["click 902 431", "state", over]   # a press reads the hover
     lines += ["move 910 440", "move 920 450", "move 930 460", "state", "quit"]
     steps = tmp_path / "steps"
     steps.write_text("\n".join(lines) + "\n")
@@ -53,7 +57,8 @@ def test_pointer_moves_wait_for_the_end_of_a_zoom(tmp_path):
     result = subprocess.run([binary, "--root", root, "--venv", root / ".venv", "--new-instance",
                              "--script", steps, "--size", "1600x1000", model],
                             env=dict(os.environ, HOME=str(home), CFFIXED_USER_HOME=str(home),
-                                     BUILT_SETTINGS_DIR=str(settings), BUILT_PERF="1", BUILT_PERF_LOG=str(timings)),
+                                     BUILT_SETTINGS_DIR=str(settings), BUILT_PERF="1", BUILT_PERF_LOG=str(timings),
+                                     BUILT_NAVIGATION_SETTLE_MS="2000"),
                             capture_output=True, text=True, timeout=90, check=True)
     states = _lines(result.stdout, "state")
     perf = _lines(result.stdout, "perf")

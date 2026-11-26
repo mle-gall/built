@@ -33,7 +33,9 @@ else
     export BUILT_PACKAGE_RFA=0
 fi
 bash packaging/macos-icon.sh "$ROOT" "$WORK"
-export CARGO_TARGET_DIR="$WORK/cargo"
+# BUILT_CARGO_TARGET_DIR: build on a target directory that already holds the
+# launcher's dependencies (CI builds the launcher once for its tests).
+export CARGO_TARGET_DIR="${BUILT_CARGO_TARGET_DIR:-$WORK/cargo}"
 BUILT_MACOS_BUNDLE=1 cargo build --locked --release --manifest-path rust/built_app/Cargo.toml
 PYTHONPATH="$ROOT" isolated "$PYTHON" -m PyInstaller --clean --noconfirm \
     --workpath "$WORK/work" --distpath "$WORK/collect" packaging/native.spec

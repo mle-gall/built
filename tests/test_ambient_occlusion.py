@@ -208,6 +208,11 @@ def test_a_dark_corner_stays_darker_than_a_light_one(
         corner_blocks, monkeypatch):
     """The bounce follows the face's colour: dark walls pass on little
     light, so their corner keeps more of its darkening."""
+    from built_render import store_and_resolve_probe
+    if store_and_resolve_probe() is False:
+        pytest.skip("this GPU leaves the resolve empty when a multisampled pass also keeps its samples; "
+                    "ambient occlusion reads the faces' colours from that resolve")
+
     def difference(antialias):
         def samples(color):
             vp = corner_blocks(color)
