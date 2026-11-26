@@ -30,7 +30,7 @@ pub(crate) fn choose_origin(center: [f64; 3], previous: [f64; 3]) -> [f64; 3] {
 }
 
 /// `row · linear`, the terms added in index order (NumPy's `ni,nij->nj`).
-fn through(row: [f64; 3], linear: &[[f64; 3]; 3]) -> [f64; 3] {
+pub(crate) fn through(row: [f64; 3], linear: &[[f64; 3]; 3]) -> [f64; 3] {
     std::array::from_fn(|j| (0..3).fold(0., |sum, i| sum + row[i] * linear[i][j]))
 }
 

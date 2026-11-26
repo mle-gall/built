@@ -16,6 +16,29 @@ struct Prepared {
     bounds: [f32; 8],
 }
 
+/// A multiply-rotate hash for the vertex-pair keys (SipHash was a large
+/// part of baking a 200k-face prototype).
+#[derive(Default, Clone, Copy)]
+struct FastHash(u64);
+impl std::hash::Hasher for FastHash {
+    fn finish(&self) -> u64 {
+        self.0 ^ (self.0 >> 29)
+    }
+    fn write(&mut self, bytes: &[u8]) {
+        for chunk in bytes.chunks(8) {
+            let mut word = [0u8; 8];
+            word[..chunk.len()].copy_from_slice(chunk);
+            self.write_u64(u64::from_le_bytes(word));
+        }
+    }
+    fn write_u32(&mut self, word: u32) {
+        self.write_u64(u64::from(word));
+    }
+    fn write_u64(&mut self, word: u64) {
+        self.0 = (self.0.rotate_left(5) ^ word).wrapping_mul(0x517c_c1b7_2722_0a95);
+    }
+}
+
 fn prepare(
     p: &[V3],
     c: &[u32],
@@ -47,59 +70,90 @@ fn prepare(
             }
         }
     }
-    let mut edge_list = Vec::new();
-    let mut edge_flags = Vec::new();
-    let mut seen = HashMap::new();
-    let mut insert = |a: u32, b: u32, flag: u8| {
+    let mut edge_list = Vec::with_capacity(edges.len() + c.len());
+    let mut edge_flags = Vec::with_capacity(edges.len() + c.len());
+    let mut seen: HashMap<(u32, u32), usize, std::hash::BuildHasherDefault<FastHash>> =
+        HashMap::with_capacity_and_hasher(edges.len() + c.len() / 2, Default::default());
+    let mut insert = |a: u32, b: u32, flag: u8| -> Option<usize> {
         if a == b {
-            return;
+            return None;
         }
         let key = (a.min(b), a.max(b));
-        if let Some(&i) = seen.get(&key) {
-            edge_flags[i] |= flag;
-        } else {
-            seen.insert(key, edge_list.len());
-            edge_list.push([a, b]);
-            edge_flags.push(flag);
-        }
+        Some(match seen.get(&key) {
+            Some(&i) => {
+                edge_flags[i] |= flag;
+                i
+            }
+            None => {
+                seen.insert(key, edge_list.len());
+                edge_list.push([a, b]);
+                edge_flags.push(flag);
+                edge_list.len() - 1
+            }
+        })
     };
     for (e, f) in edges.iter().zip(flags) {
         insert(e[0], e[1], *f);
     }
-    let mut triangles = Vec::new();
-    let mut normals = Vec::new();
-    let mut adjacency: HashMap<(u32, u32), Vec<i64>> = HashMap::new();
+    // (edge, face) for every ring side, faces ascending: the adjacency the
+    // smooth normals read, without a list per edge.
+    let mut sides: Vec<(u32, u32)> = Vec::with_capacity(c.len());
+    let mut face_rings: Vec<(usize, usize)> = Vec::with_capacity(counts.len());
     let (mut r, mut k) = (0, 0);
     for (f, &count) in counts.iter().enumerate() {
-        let mut rings = Vec::with_capacity(count as usize);
+        let (first_ring, first_corner) = (r, k);
         for _ in 0..count {
             let n = sizes[r] as usize;
             let ring = &c[k..k + n];
             for i in 0..n {
                 let (a, b) = (ring[i], ring[(i + 1) % n]);
-                insert(a, b, 0);
-                adjacency
-                    .entry((a.min(b), a.max(b)))
-                    .or_default()
-                    .push(f as i64);
+                if let Some(edge) = insert(a, b, 0) {
+                    sides.push((edge as u32, f as u32));
+                }
             }
-            rings.push(ring);
             k += n;
             r += 1;
         }
-        let (tris, normal) = facegeom::resident_geometry(p, &rings, h);
+        face_rings.push((first_ring, first_corner));
+    }
+    // Triangulation is per face: in parallel for a large prototype.
+    let geometry = |f: usize| {
+        let (mut r, mut k) = face_rings[f];
+        let mut rings = Vec::with_capacity(counts[f] as usize);
+        for _ in 0..counts[f] {
+            let n = sizes[r] as usize;
+            rings.push(&c[k..k + n]);
+            k += n;
+            r += 1;
+        }
+        facegeom::resident_geometry(p, &rings, h)
+    };
+    let per_face: Vec<_> = if counts.len() >= 4096 {
+        use rayon::prelude::*;
+        (0..counts.len()).into_par_iter().map(geometry).collect()
+    } else {
+        (0..counts.len()).map(geometry).collect()
+    };
+    let mut triangles = Vec::new();
+    let mut normals = Vec::with_capacity(counts.len());
+    for (f, (tris, normal)) in per_face.into_iter().enumerate() {
         normals.push(normal);
         if retain_hidden || !hidden[f] {
             triangles.extend(tris.into_iter().map(|t| (t, f, colors[f])));
         }
     }
-    let mut starts = vec![0i64];
-    let mut adjacent = Vec::new();
-    for e in &edge_list {
-        if let Some(fs) = adjacency.get(&(e[0].min(e[1]), e[0].max(e[1]))) {
-            adjacent.extend_from_slice(fs);
-        }
-        starts.push(adjacent.len() as i64);
+    let mut starts = vec![0i64; edge_list.len() + 1];
+    for &(edge, _) in &sides {
+        starts[edge as usize + 1] += 1;
+    }
+    for e in 0..edge_list.len() {
+        starts[e + 1] += starts[e];
+    }
+    let mut adjacent = vec![0i64; sides.len()];
+    let mut fill_at: Vec<i64> = starts[..edge_list.len()].to_vec();
+    for &(edge, face) in &sides {
+        adjacent[fill_at[edge as usize] as usize] = i64::from(face);
+        fill_at[edge as usize] += 1;
     }
     let smooth_edges: Vec<_> = edge_list
         .iter()

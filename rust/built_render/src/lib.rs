@@ -187,6 +187,11 @@ struct Scene {
     counters: wgpu::Buffer,
     vertex_bytes: usize,
     index_data: Vec<u8>,
+    /// Prototype -> the ranges its last replacement was given, with room to
+    /// grow (vertex, index, edge record: first and length each). A rebake
+    /// goes back there while it fits: appending each one grew the buffers by
+    /// the whole prototype per edit (56 MB for a 200k-face mesh).
+    replaced: std::collections::HashMap<usize, [usize; 6]>,
     vertex: wgpu::Buffer,
     index: wgpu::Buffer,
     commands: wgpu::Buffer,
@@ -1164,6 +1169,7 @@ impl Renderer {
             capacity,
             vertex_bytes: v.len(),
             index_data: face_ix,
+            replaced: std::collections::HashMap::new(),
             flags: instances
                 .chunks_exact(80)
                 .map(|r| u32::from_le_bytes(r[72..76].try_into().unwrap()))
@@ -1217,10 +1223,17 @@ impl Renderer {
             Command { count: ix.len() as u32/4-faces, instances: 0, first: faces, base: 0, start: 0 }];
         let (edge, expanded_ix, mut commands) = edges::expand(v, ix, bytemuck::cast_slice(&source), 1).map_err(PyValueError::new_err)?;
         let (face, indices, shifts) = faces::compact(v, &expanded_ix, &mut commands, 1);
-        let edge_base = s.edge_data.len()/48;
-        let vertex_base = s.vertex_bytes/28;
-        let index_base = s.index_data.len()/4;
-        if (s.edge_data.len()+edge.len()).next_power_of_two() > self.device.limits().max_storage_buffer_binding_size as usize {
+        let lengths = [face.len()/28, indices.len()/4, edge.len()/48];
+        let reuse = s.replaced.get(&id).copied().filter(|a| lengths[0] <= a[1] && lengths[1] <= a[3] && lengths[2] <= a[5]);
+        let (vertex_base, index_base, edge_base) = match reuse {
+            Some(a) => (a[0], a[2], a[4]),
+            None => (s.vertex_bytes/28, s.index_data.len()/4, s.edge_data.len()/48),
+        };
+        // A new range keeps an eighth more for the next rebake of the same
+        // prototype (an edit mostly adds a few faces).
+        let room = |n: usize| n + n/8 + 64;
+        let slack = [room(lengths[0]), room(lengths[1]), room(lengths[2])];
+        if reuse.is_none() && (s.edge_data.len()+slack[2]*48).next_power_of_two() > self.device.limits().max_storage_buffer_binding_size as usize {
             return Err(PyValueError::new_err("edge capacity exceeds storage binding limit"));
         }
         if id == s.p as usize {
@@ -1243,9 +1256,17 @@ impl Renderer {
         s.face_ranges = face_ranges(&s.material_data, s.p);
         s.material_shifts[id] = vertex_base as i64 + shifts[0];
         s.prototype_data[id*32..(id+1)*32].copy_from_slice(bounds);
-        s.vertex_bytes += face.len();
-        s.index_data.extend_from_slice(&indices);
-        s.edge_data.extend_from_slice(&edge);
+        if reuse.is_some() {
+            s.index_data[index_base*4..index_base*4+indices.len()].copy_from_slice(&indices);
+            s.edge_data[edge_base*48..edge_base*48+edge.len()].copy_from_slice(&edge);
+        } else {
+            s.replaced.insert(id, [vertex_base, slack[0], index_base, slack[1], edge_base, slack[2]]);
+            s.vertex_bytes += slack[0]*28;
+            s.index_data.extend_from_slice(&indices);
+            s.index_data.resize(s.index_data.len() + (slack[1]-lengths[1])*4, 0);
+            s.edge_data.extend_from_slice(&edge);
+            s.edge_data.resize(s.edge_data.len() + (slack[2]-lengths[2])*48, 0);
+        }
         for (target, length, usage, offset, addition) in [
             (&mut s.vertex, s.vertex_bytes, wgpu::BufferUsages::VERTEX, vertex_base*28, face.as_slice()),
             (&mut s.index, s.index_data.len(), wgpu::BufferUsages::INDEX, index_base*4, indices.as_slice()),

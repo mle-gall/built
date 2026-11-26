@@ -818,3 +818,27 @@ def test_clipboard_group_preview_moves_nested_texture_and_preserves_scene(native
         np.testing.assert_array_equal(frame[32, off], original[32, off])
     assert list(root.children) == [child] and list(scene.groups) == []
     assert scene.version == version
+
+
+def test_rebaking_a_prototype_reuses_its_range(native):
+    """Each edit rebakes the prototype it changed. Appending every rebake
+    grew the resident buffers by the whole prototype per edit (56 MB for a
+    200k-face mesh); a rebake goes back into the range the last one got."""
+    v,i,b,c,r=upload(native,255)
+    native.set_style(dict(sky=False))
+    before=capture(native)
+    def resident():
+        counters=native.last_timings()[4]
+        return counters['vertices_resident'], counters['indices_resident']
+    args=(0,v.view(np.uint8).ravel(),i.view(np.uint8),b.view(np.uint8).ravel(),12)
+    native.replace_prototype(*args)
+    first=resident()
+    for _ in range(5):
+        native.replace_prototype(*args)
+        np.testing.assert_array_equal(capture(native),before)
+    assert resident()==first
+    # A smaller rebake (the back quad alone) fits the same range too, and
+    # what it no longer holds is not drawn.
+    native.replace_prototype(0,v[6:].view(np.uint8).ravel(),i[:6].view(np.uint8),b.view(np.uint8).ravel(),6)
+    assert resident()==first
+    assert not np.array_equal(capture(native),before)

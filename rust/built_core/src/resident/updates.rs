@@ -344,6 +344,96 @@ fn world_bytes(py: Python<'_>, matrix: &Obj<'_>) -> PyResult<[u8; 64]> {
     Ok(out)
 }
 
+/// A placement matrix in double precision (row-vector convention: the
+/// translation is the fourth row), the identity for None.
+fn world_f64(py: Python<'_>, matrix: &Obj<'_>) -> PyResult<[f64; 16]> {
+    if matrix.is_none() {
+        return Ok(std::array::from_fn(|k| if k % 5 == 0 { 1. } else { 0. }));
+    }
+    let np = py.import("numpy")?;
+    let values: Vec<f64> = np.call_method1("asarray", (matrix, np.getattr("float64")?))?.call_method1("reshape", (-1,))?.extract()?;
+    values.try_into().map_err(|_| PyValueError::new_err("a placement matrix is 4×4"))
+}
+
+fn linear_of(world: &[f64; 16]) -> [[f64; 3]; 3] {
+    std::array::from_fn(|r| std::array::from_fn(|c| world[r * 4 + c]))
+}
+
+/// The frame of a rebased pack (`model_translations` set): rows hold their
+/// matrix in the view frame, the prototype's anchor through the linear part
+/// added and the view origin taken off, as `assemble` writes them.
+struct Rebase {
+    origin: [f64; 3],
+    /// `prototype_origins`, one per prototype code.
+    anchors: std::cell::RefCell<Vec<[f64; 3]>>,
+}
+
+impl Rebase {
+    fn read(packed: &Obj<'_>) -> PyResult<Option<Self>> {
+        if packed.getattr("model_translations")?.is_none() {
+            return Ok(None);
+        }
+        let mut anchors = Vec::new();
+        for origin in packed.getattr("prototype_origins")?.try_iter()? {
+            anchors.push(origin?.extract::<[f64; 3]>()?);
+        }
+        let codes = packed.getattr("commands")?.len()?;
+        if anchors.len() != codes {
+            return Err(PyValueError::new_err("one frame anchor per prototype"));
+        }
+        Ok(Some(Self { origin: packed.getattr("origin")?.extract()?, anchors: std::cell::RefCell::new(anchors) }))
+    }
+    fn anchor(&self, code: u32) -> PyResult<[f64; 3]> {
+        self.anchors.borrow().get(code as usize).copied().ok_or_else(|| PyValueError::new_err("a prototype code without a frame"))
+    }
+}
+
+/// A resident row's 64 matrix bytes from a model-frame `world` drawing
+/// `code`, and the row's model-frame translation (anchor included).
+fn row_matrix(world: &[f64; 16], frame: Option<(&Rebase, u32)>) -> PyResult<([u8; 64], [f64; 3])> {
+    let mut out = *world;
+    let mut translation = [world[12], world[13], world[14]];
+    if let Some((rebase, code)) = frame {
+        let anchor = super::assemble::through(rebase.anchor(code)?, &linear_of(world));
+        for axis in 0..3 {
+            translation[axis] += anchor[axis];
+            out[12 + axis] = translation[axis] - rebase.origin[axis];
+        }
+    }
+    let mut bytes = [0u8; 64];
+    for (k, value) in out.iter().enumerate() {
+        bytes[k * 4..k * 4 + 4].copy_from_slice(&(*value as f32).to_le_bytes());
+    }
+    Ok((bytes, translation))
+}
+
+/// The centre of the box `source_arrays` anchors `mesh`'s prototype by, in
+/// the model frame (None: nothing to read).
+fn mesh_centre(py: Python<'_>, mesh: &Obj<'_>) -> PyResult<Option<[f64; 3]>> {
+    let own = mesh.getattr("__dict__")?;
+    let source = own.call_method1("get", ("_deferred_source",))?;
+    let store = own.call_method1("get", ("_store",))?;
+    let stored = mesh.get_type().name()? == "StoreMesh";
+    let frame = if stored { mesh.getattr("_store")?.getattr("frame_origin")?.extract::<[f64; 3]>()? } else { [0.; 3] };
+    let pos = if !source.is_none() {
+        source.get_item("pos")?
+    } else if stored && !store.is_none() {
+        store.call_method0("arrays")?.get_item("pos")?
+    } else {
+        return Ok(None);
+    };
+    let np = py.import("numpy")?;
+    let pos = np.call_method1("asarray", (pos, np.getattr("float64")?))?.call_method1("reshape", (-1, 3))?;
+    if pos.len()? == 0 {
+        return Ok(Some(frame));
+    }
+    let axis0 = PyDict::new(py);
+    axis0.set_item("axis", 0)?;
+    let low: [f64; 3] = pos.call_method("min", (), Some(&axis0))?.extract()?;
+    let high: [f64; 3] = pos.call_method("max", (), Some(&axis0))?.extract()?;
+    Ok(Some(std::array::from_fn(|k| (low[k] + high[k]) / 2. + frame[k])))
+}
+
 #[pyclass(module = "built_core", dict, weakref)]
 pub struct InstanceUpdates;
 
@@ -607,13 +697,14 @@ impl InstanceUpdates {
                 }
             }
             let Some(variant) = variant else { return Ok(none(py)) };
-            let float32 = np.getattr("float32")?;
+            // Double precision: a rebased pack shifts it to the view frame.
+            let float64 = np.getattr("float64")?;
             let world = if matrix.is_none() {
                 let kw = PyDict::new(py);
-                kw.set_item("dtype", float32)?;
+                kw.set_item("dtype", float64)?;
                 np.call_method("eye", (4,), Some(&kw))?
             } else {
-                np.call_method1("asarray", (matrix.call_method0("data")?, float32))?.call_method1("reshape", (4, 4))?
+                np.call_method1("asarray", (matrix.call_method0("data")?, float64))?.call_method1("reshape", (4, 4))?
             };
             out.append((row, chain.get_item(chain.len()? - 1)?, world, variant.get_item(0)?))?;
         }
@@ -662,7 +753,9 @@ impl InstanceUpdates {
     }
 
     /// Allocate a prototype code for a variant never drawn before.
-    fn _new_prototype<'py>(slf: &Bound<'py, Self>, mesh: &Obj<'py>, key: &Obj<'py>, paint: &Obj<'py>, mode: &Obj<'py>, old: &Obj<'py>, fresh: &Obj<'py>) -> Reply<'py> {
+    #[pyo3(signature = (mesh, key, paint, mode, old, fresh, anchor = None))]
+    #[allow(clippy::too_many_arguments)]
+    fn _new_prototype<'py>(slf: &Bound<'py, Self>, mesh: &Obj<'py>, key: &Obj<'py>, paint: &Obj<'py>, mode: &Obj<'py>, old: &Obj<'py>, fresh: &Obj<'py>, anchor: Option<[f64; 3]>) -> Reply<'py> {
         let py = slf.py();
         let s = slf.as_any();
         let packed = s.getattr("packed")?;
@@ -675,7 +768,7 @@ impl InstanceUpdates {
         packed.getattr("prototype_lookup")?.set_item(key, code)?;
         dict(s, "variants")?.call_method1("setdefault", (id(mesh), PyDict::new(py)))?.set_item(code, (paint, mode))?;
         fresh.set_item(code, mesh)?;
-        if packed.call_method0("append_prototype")?.extract::<usize>()? != code {
+        if packed.call_method1("append_prototype", (anchor,))?.extract::<usize>()? != code {
             return Err(PyValueError::new_err("the prototype tables are out of step"));
         }
         (code, old).into_bound_py_any(py)
@@ -692,14 +785,21 @@ impl InstanceUpdates {
         let s = slf.as_any();
         let nothing = || Ok(none(py));
         let packed = s.getattr("packed")?;
-        if !packed.getattr("model_translations")?.is_none() || !scene.is(&s.getattr("scene")?) {
+        if !scene.is(&s.getattr("scene")?) {
             return nothing();
         }
+        // A model far from the origin (site coordinates) is packed rebased:
+        // its rows are written in the view frame, each through its
+        // prototype's anchor (an edit there repacked the whole scene).
+        // Frames out of step with the prototypes: the full pack sets both.
+        let Ok(rebase) = Rebase::read(&packed) else { return nothing() };
+        let rebased = rebase.is_some();
         let meshes = dict(s, "meshes")?;
         let (pending_meshes, pending_materials) = (set(s, "pending_meshes")?, set(s, "pending_materials")?);
         let mut local = !s.getattr("unsubscribe")?.is_none()
             && s.getattr("journal_valid")?.is_truthy()?
             && resident_version(scene)?.eq(s.getattr("version")?)?;
+        let linked = !local;
         let mut swaps = if local { s.call_method0("_resolve_swaps")? } else { s.call_method0("_link_swaps")? };
         local = !swaps.is_none();
         if local {
@@ -779,6 +879,22 @@ impl InstanceUpdates {
         let resident_rows = current.len() / INSTANCE_BYTES;
         let known_groups = groups.len()?;
         let mut written = Written { ids: Vec::new(), rows: Vec::new() };
+        // Rebased: the model-frame translation of each written row.
+        let mut translations: Vec<(usize, [f64; 3])> = Vec::new();
+        let variants_now = dict(s, "variants")?;
+        let fresh_anchor = |mesh: &Obj<'py>| -> PyResult<Option<[f64; 3]>> {
+            let Some(rebase) = &rebase else { return Ok(None) };
+            // Another variant of the mesh: the frame it is baked in already.
+            if let Some(of_mesh) = variants_now.get_item(id(mesh))? {
+                if let Some(code) = of_mesh.try_iter()?.next() {
+                    return Ok(Some(rebase.anchor(code?.extract()?)?));
+                }
+            }
+            Ok(Some(match mesh_centre(py, mesh)? {
+                Some(centre) => super::assemble::choose_origin(centre, [0.; 3]),
+                None => [0.; 3],
+            }))
+        };
         let paint_of = |group: &Obj<'py>| -> Reply<'py> {
             core(py)?.getattr("baked_paint")?.call1((interaction.call_method1("_paint_of", (&vp, group))?,))
         };
@@ -792,9 +908,13 @@ impl InstanceUpdates {
             if code.is_none() || code.extract::<i64>()? < 0 {
                 // A new mesh, or a known mesh under a paint or billboard
                 // mode it was never drawn with: a prototype of its own.
-                let made = s.call_method1("_new_prototype", (mesh, &key, paint, mode, &old, &fresh))?;
+                let anchor = fresh_anchor(mesh)?;
+                let made = s.call_method1("_new_prototype", (mesh, &key, paint, mode, &old, &fresh, anchor))?;
                 code = made.get_item(0)?;
                 old = made.get_item(1)?;
+                if let (Some(rebase), Some(anchor)) = (&rebase, anchor) {
+                    rebase.anchors.borrow_mut().push(anchor);
+                }
             }
             if !old.get_item(1)?.eq(serial(mesh)?)? {
                 changed.set_item(id(mesh), &old)?;
@@ -873,7 +993,14 @@ impl InstanceUpdates {
             }
             resident.call_method1("see", (&uid,))?;
             let mut value = [0u8; INSTANCE_BYTES];
-            value[..64].copy_from_slice(&world_bytes(py, &matrix)?);
+            let translation = if let Some(rebase) = &rebase {
+                let (bytes, translation) = row_matrix(&world_f64(py, &matrix)?, Some((rebase, code)))?;
+                value[..64].copy_from_slice(&bytes);
+                Some(translation)
+            } else {
+                value[..64].copy_from_slice(&world_bytes(py, &matrix)?);
+                None
+            };
             let sprite = if mode.is_truthy()? { 8 } else { 0 };
             let mut info = [code, got.get_item(1)?.extract::<u32>()?, flags.extract::<u32>()? | sprite, 0];
             let existing = (at < resident_rows).then(|| &current[at * INSTANCE_BYTES..(at + 1) * INSTANCE_BYTES]);
@@ -886,6 +1013,9 @@ impl InstanceUpdates {
             }
             if existing.is_none_or(|existing| existing != value) {
                 written.push(at, &value);
+                if let Some(translation) = translation {
+                    translations.push((at, translation));
+                }
             }
         }
         if !swaps.is_none() {
@@ -903,10 +1033,30 @@ impl InstanceUpdates {
                 let existing = current.get(row * INSTANCE_BYTES..(row + 1) * INSTANCE_BYTES).ok_or_else(|| PyValueError::new_err("a swapped row is resident"))?;
                 let mut value = [0u8; INSTANCE_BYTES];
                 value.copy_from_slice(existing);
-                value[..64].copy_from_slice(&world_bytes(py, &world)?);
+                let mut translation = None;
+                if let Some(rebase) = &rebase {
+                    let mut model = world_f64(py, &world)?;
+                    if linked {
+                        // A link swap hands the row's own (view-frame) matrix:
+                        // back to the model frame, less its old anchor.
+                        let old_anchor = super::assemble::through(rebase.anchor(u32_at(existing, 64))?, &linear_of(&model));
+                        let before = packed.getattr("model_translations")?.get_item(row)?.extract::<[f64; 3]>()?;
+                        for axis in 0..3 {
+                            model[12 + axis] = before[axis] - old_anchor[axis];
+                        }
+                    }
+                    let (bytes, moved) = row_matrix(&model, Some((rebase, code)))?;
+                    value[..64].copy_from_slice(&bytes);
+                    translation = Some(moved);
+                } else {
+                    value[..64].copy_from_slice(&world_bytes(py, &world)?);
+                }
                 value[64..68].copy_from_slice(&code.to_le_bytes());
                 if existing != value {
                     written.push(row, &value);
+                    if let Some(translation) = translation {
+                        translations.push((row, translation));
+                    }
                 }
             }
         }
@@ -950,20 +1100,34 @@ impl InstanceUpdates {
                 }
             }
         }
-        // Incremental placement writes use unshifted matrices. A new remote
-        // placement or remote prototype needs bounds and a new full pack.
-        for row in written.rows.chunks_exact(INSTANCE_BYTES) {
-            let far = (0..3).any(|axis| f32::from_le_bytes(row[48 + axis * 4..52 + axis * 4].try_into().expect("four bytes")).abs() > REBASE_DISTANCE);
-            if far {
-                return nothing();
+        // An unshifted pack takes no remote placement or prototype: a new
+        // one needs the frame of a full pack. A rebased one writes its rows
+        // shifted; a rebaked prototype keeps its frame while its centre
+        // stays within reach (as the bake chooses it), else a full pack.
+        if !rebased {
+            for row in written.rows.chunks_exact(INSTANCE_BYTES) {
+                let far = (0..3).any(|axis| f32::from_le_bytes(row[48 + axis * 4..52 + axis * 4].try_into().expect("four bytes")).abs() > REBASE_DISTANCE);
+                if far {
+                    return nothing();
+                }
             }
         }
         let rebaked = PyDict::new(py);
         for mesh in bake.values().iter() {
             rebaked.set_item(id(&mesh), mesh)?;
         }
+        if let Some(rebase) = &rebase {
+            for (code, mesh) in bake.iter() {
+                let anchor = rebase.anchor(code.extract()?)?;
+                if let Some(centre) = mesh_centre(py, &mesh)? {
+                    if super::assemble::choose_origin(centre, anchor) != anchor {
+                        return nothing();
+                    }
+                }
+            }
+        }
         let np = py.import("numpy")?;
-        for mesh in rebaked.values().iter() {
+        for mesh in rebaked.values().iter().filter(|_| !rebased) {
             let store = mesh.getattr("__dict__")?.call_method1("get", ("_store",))?;
             if store.is_none() {
                 continue;
@@ -1022,6 +1186,26 @@ impl InstanceUpdates {
                 groups.call_method1("append", (group,))?;
             }
         }
+        if !translations.is_empty() {
+            let (at, values): (Vec<i64>, Vec<f64>) = translations.iter().map(|(row, t)| (*row as i64, *t)).fold((Vec::new(), Vec::new()), |(mut at, mut values), (row, t)| {
+                at.push(row);
+                values.extend_from_slice(&t);
+                (at, values)
+            });
+            let values = PyArray1::from_vec(py, values).call_method1("reshape", (-1, 3))?;
+            packed.getattr("model_translations")?.set_item(PyArray1::from_vec(py, at), values)?;
+        }
+        // Remote prototypes new from this edit: the tools' frames take them.
+        let remote = PyList::empty(py);
+        if let Some(rebase) = &rebase {
+            for (code, mesh) in fresh.iter() {
+                let anchor = rebase.anchor(code.extract()?)?;
+                if anchor.iter().any(|v| *v != 0.) {
+                    remote.append((mesh, PyTuple::new(py, anchor)?))?;
+                }
+            }
+        }
+        s.setattr("remote", remote)?;
         let rows = PyArray1::from_vec(py, written.rows).call_method1("view", (dtype(py, "INSTANCE")?,))?;
         (PyArray1::from_vec(py, written.ids), rows).into_bound_py_any(py)
     }
@@ -1037,6 +1221,66 @@ impl InstanceUpdates {
         slf.as_any().getattr("packed")?.call_method1("adopt_reserved", (wait,))
     }
 
+    /// Rows of prototypes baked in a new frame: their translations moved
+    /// by the anchor's change through each row's linear part. The rows go to
+    /// `out` (the snap index rereads them).
+    fn _reanchor<'py>(slf: &Bound<'py, Self>, moved: Vec<(usize, [f64; 3], [f64; 3])>, renderer: Option<Obj<'py>>, out: &Bound<'py, PyList>) -> PyResult<()> {
+        let py = slf.py();
+        let s = slf.as_any();
+        let packed = s.getattr("packed")?;
+        let resident = s.getattr("resident")?;
+        let mut origins: Vec<Obj<'py>> = packed.getattr("prototype_origins")?.try_iter()?.collect::<PyResult<_>>()?;
+        let translations = packed.getattr("model_translations")?;
+        let origin: [f64; 3] = if translations.is_none() { [0.; 3] } else { packed.getattr("origin")?.extract()? };
+        let instances = packed.getattr("instances")?;
+        let mut ids = Vec::new();
+        let mut rows = Vec::new();
+        {
+            let mut current = raw(py, &instances)?;
+            for (code, old, new) in &moved {
+                if *code < origins.len() {
+                    origins[*code] = PyTuple::new(py, new)?.into_any();
+                }
+                for row in resident.call_method1("members", (code,))?.try_iter()? {
+                    let row: usize = row?.extract()?;
+                    let bytes = &mut current[row * INSTANCE_BYTES..(row + 1) * INSTANCE_BYTES];
+                    let mut world = [0f64; 16];
+                    for (k, value) in world.iter_mut().enumerate() {
+                        *value = f32::from_le_bytes(bytes[k * 4..k * 4 + 4].try_into().expect("four bytes")) as f64;
+                    }
+                    let shift = super::assemble::through(std::array::from_fn(|k| new[k] - old[k]), &linear_of(&world));
+                    let mut model: [f64; 3] = if translations.is_none() {
+                        [world[12], world[13], world[14]]
+                    } else {
+                        translations.get_item(row)?.extract()?
+                    };
+                    for axis in 0..3 {
+                        model[axis] += shift[axis];
+                        bytes[48 + axis * 4..52 + axis * 4].copy_from_slice(&((model[axis] - origin[axis]) as f32).to_le_bytes());
+                    }
+                    if !translations.is_none() {
+                        translations.set_item(row, PyTuple::new(py, model)?)?;
+                    }
+                    ids.push(row as i64);
+                    rows.extend_from_slice(bytes);
+                    out.append(row)?;
+                }
+            }
+        }
+        packed.setattr("prototype_origins", PyTuple::new(py, origins)?)?;
+        if ids.is_empty() {
+            return Ok(());
+        }
+        let np = py.import("numpy")?;
+        let ids = PyArray1::from_vec(py, ids);
+        let rows = PyArray1::from_vec(py, rows).call_method1("view", (dtype(py, "INSTANCE")?,))?;
+        if let Some(renderer) = renderer.filter(|r| !r.is_none()) {
+            renderer.call_method1("update_instances", (ids.call_method0("tolist")?, rows.call_method1("view", (np.getattr("uint8")?,))?.call_method1("reshape", (-1,))?))?;
+        }
+        instances.set_item(ids, rows)?;
+        Ok(())
+    }
+
     #[pyo3(signature = (ids, rows, renderer = None))]
     fn apply<'py>(slf: &Bound<'py, Self>, ids: &Obj<'py>, rows: &Obj<'py>, renderer: Option<Obj<'py>>) -> PyResult<()> {
         let py = slf.py();
@@ -1047,6 +1291,9 @@ impl InstanceUpdates {
         let resident = s.getattr("resident")?;
         let changed = s.getattr("changed")?;
         let any_changed = changed.is_truthy()?;
+        // Prototypes the bake put in another frame than their rows assume
+        // (diff keeps them; this only guards it): code, old, new anchor.
+        let mut anchors_moved: Vec<(usize, [f64; 3], [f64; 3])> = Vec::new();
         let uint8 = np.getattr("uint8")?;
         let flat = |array: &Obj<'py>| -> Reply<'py> { array.call_method1("view", (&uint8,))?.call_method1("reshape", (-1,)) };
         if any_changed {
@@ -1072,7 +1319,10 @@ impl InstanceUpdates {
             let stage = py.import("built_core.scene")?.getattr("Scene")?.call((), Some(&kw))?;
             let kw = PyDict::new(py);
             kw.set_item("baked_paints", &paints)?;
+            // Each prototype in the frame it is drawn in (its rows say so).
+            kw.set_item("previous_pack", &packed)?;
             let baked = core(py)?.getattr("pack_scene")?.call((stage,), Some(&kw))?;
+            let baked_origins = baked.getattr("prototype_origins")?;
             let baked_row = PyDict::new(py);
             for (row, group) in baked.getattr("groups")?.try_iter()?.enumerate() {
                 baked_row.set_item(id(&group?), row)?;
@@ -1202,6 +1452,14 @@ impl InstanceUpdates {
                     target.set_item("first", offset + draw[1] as usize - start)?;
                 }
                 meshes.set_item(id(&mesh), (&mesh, mesh.getattr("_mut_serial")?, if prototype.is_some() { at as i64 } else { -1 }))?;
+                if let Some(p) = prototype {
+                    let new: [f64; 3] = baked_origins.get_item(p)?.extract()?;
+                    let origins = packed.getattr("prototype_origins")?;
+                    let old: [f64; 3] = if at < origins.len()? { origins.get_item(at)?.extract()? } else { [0.; 3] };
+                    if new != old {
+                        anchors_moved.push((at, old, new));
+                    }
+                }
             }
             let kept = PyList::empty(py);
             for (code, points) in exclusions.iter() {
@@ -1255,6 +1513,11 @@ impl InstanceUpdates {
             }
             instances.set_item(ids, rows)?;
         }
+        let reanchored = PyList::empty(py);
+        if !anchors_moved.is_empty() {
+            s.call_method1("_reanchor", (anchors_moved, renderer.clone(), &reanchored))?;
+        }
+        s.setattr("reanchored", &reanchored)?;
         let removed = s.getattr("removed")?;
         if removed.is_truthy()? {
             if let Some(renderer) = &renderer {
