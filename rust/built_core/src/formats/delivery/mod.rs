@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! Document-owned delivery records and a scoped scene for the selected writer.
+mod package;
+
 mod write;
 use super::Obj;
 use pyo3::{
