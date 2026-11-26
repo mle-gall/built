@@ -3009,6 +3009,10 @@ fn item_response(ui: &mut egui::Ui, item: &Item, icon: Option<&egui::TextureHand
 fn inspector_rows(ui: &mut egui::Ui, rows: &[(String, String)], edits: &mut std::collections::HashMap<String, String>,
                   actions: &mut Vec<String>) {
     for (label, value) in rows {
+        if let Some((id, name)) = value.strip_prefix("\u{1d}imagefile\u{1d}").and_then(|rest| rest.split_once('\u{1d}')) {
+            if kit::image_file_row(ui, label, name) { actions.push(format!("insp:{id}")); }
+            continue;
+        }
         if let Some(data) = value.strip_prefix("\u{1d}tagpicker\u{1d}") {
             if let Ok((mut at, options)) = serde_json::from_str::<(usize, Vec<(String, String)>)>(data) {
                 let before = at;

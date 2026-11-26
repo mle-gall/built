@@ -225,6 +225,7 @@ impl Gallery {
                         caption(ui, "Plugin controls and viewport chrome");
                         ui.columns(3, |cols| {
                             let controls = &mut cols[0];
+                            image_file_row(controls, "Image", "Quarter-sawn European beech.jpg");
                             property_control(controls, "Executable", |ui| { path_field(ui, &mut self.sample_path); });
                             property_control(controls, "Colour", |ui| { colour_well(ui, &mut self.sample_rgb); });
                             property_control(controls, "Lens", |ui| { select(ui, "lens_sample", "35 mm", &["24 mm", "35 mm", "50 mm"]); });

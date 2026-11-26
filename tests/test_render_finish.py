@@ -153,6 +153,15 @@ def test_blender_turns_the_finishes_into_materials(tmp_path):
     assert Path(tmp_path / "render.png").is_file()
 
 
+def test_material_inspector_displays_original_image_name_with_replacement():
+    from built_core import material_inspector
+    name = "Long grain (beech).jpg"
+    mat = Material("Wood", texture={"path": "textures/abcdef0123456789-0123456789abcdef-" + name})
+    _, sections = material_inspector(mat, 0)
+    image = next(value for _, rows in sections for label, value in rows if label == "Image")
+    assert image.split("\x1d") == ["", "imagefile", "lib:image:m:Wood", name]
+
+
 def test_the_material_inspector_sets_and_clears_the_finish(native_host):
     from built_core import material_inspector
     from built_render import wgpu_library
