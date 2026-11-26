@@ -184,6 +184,8 @@ pub struct Ui {
     jobs: Vec<Job>,
     history: Vec<ActivityRow>,
     activity_open: bool,
+    activity_secondary: std::collections::HashMap<String, String>,
+    hovered_toast: Option<String>,
     link_banner: String,
     /// The dock's width (points): dragged on its left edge, kept by Python.
     dock_w: f32,
@@ -370,6 +372,8 @@ impl Ui {
             jobs: Vec::new(),
             history: Vec::new(),
             activity_open: false,
+            activity_secondary: Default::default(),
+            hovered_toast: None,
             link_banner: String::new(),
             dock_w: DOCK_W,
             plugins: Default::default(),
@@ -1327,12 +1331,11 @@ impl Ui {
     pub fn top_empty(&self, x: f32, y: f32) -> bool {
         let p = pos2(x, y);
         !self.menu_hits.iter().any(|r| r.contains(p)) && !self.dismissible_menu_open() && self.gallery.is_none() && y <= TOP_H && !self.top_groups.iter().any(|r| r.contains(p))
-            && !((!self.lsheet.open || !self.jobs.is_empty()) && self.ctx.memory(|m| m.area_rect(egui::Id::new("jobs"))).is_some_and(|r| (!self.jobs.is_empty() || !self.history.is_empty()) && r.contains(p)))
+            && !((!self.lsheet.open || !self.jobs.is_empty()) && self.ctx.memory(|m| m.area_rect(egui::Id::new("jobs"))).is_some_and(|r| (!self.jobs.is_empty() || self.activity_open) && r.contains(p)))
             && !(self.projects.is_none() && x < 86.0)
     }
 
-    /// The bottom bar: units | tool, its options, hint or message | where
-    /// new geometry goes.
+    /// The active tool, its options and its gesture hint.
     fn bottom_bar(&mut self, ctx: &egui::Context, screen: Rect, retract: f32) {
         let mut clicked: Option<String> = None;
         egui::Area::new(egui::Id::new("bottom"))
@@ -1347,10 +1350,6 @@ impl Ui {
                     ui.spacing_mut().interact_size.y = 28.0;
                     ui.horizontal(|ui| {
                         ui.spacing_mut().item_spacing = vec2(SPACE_XS, 0.0);
-                        let (r, _) = ui.allocate_exact_size(vec2(56.0, 28.0), Sense::hover());
-                        ui.painter().text(r.center(), egui::Align2::CENTER_CENTER, &self.units, meta(), FAINT);
-                        bar_divider(ui);
-                        ui.add_space(SPACE_S);
                         let icon = self.groups.iter().flatten().find(|t| t.id == self.active).and_then(|t| t.icon.clone())
                             .or_else(|| self.icons.get(&self.active).cloned());
                         if let Some(tex) = icon {
@@ -1380,9 +1379,6 @@ impl Ui {
                         ui.add_space(SPACE_S);
                         let dock_w = if self.review { 0.0 } else { self.dock_w };
                         let room = (ui.available_width() - dock_w - 8.0).max(40.0);
-                        let coordinate = ui.painter().layout_no_wrap(self.coordinate.clone(), meta(), DIM);
-                        let show_coordinate = !self.coordinate.is_empty() && room >= coordinate.size().x + SPACE_S;
-                        let room = if show_coordinate { room - coordinate.size().x - SPACE_S } else { room };
                         let mut job = egui::text::LayoutJob::single_section(self.hint.clone(), egui::TextFormat {
                             font_id: body(), color: DIM, ..Default::default() });
                         job.wrap.max_width = room;
@@ -1391,21 +1387,6 @@ impl Ui {
                         let g = ui.painter().layout_job(job);
                         let (r, _) = ui.allocate_exact_size(vec2(room, 28.0), Sense::hover());
                         ui.painter().galley(pos2(r.min.x, r.center().y - g.size().y / 2.0), g, DIM);
-                        if show_coordinate {
-                            let (rect, response) = ui.allocate_exact_size(vec2(coordinate.size().x, 28.0), Sense::hover());
-                            ui.painter().galley(pos2(rect.left(), rect.center().y - coordinate.size().y / 2.0), coordinate, DIM);
-                            response.on_hover_text(&self.coordinate_tooltip);
-                        }
-                        if !self.review {
-                            if let Some((active, _, _)) = &self.delivery {
-                                if !active.is_empty() {
-                                    bar_divider(ui);
-                                    if text_button(ui, &format!("✎ {active}"), "New geometry goes here — click to see its items", true) {
-                                        clicked = Some("deliver:active".into());
-                                    }
-                                }
-                            }
-                        }
                     });
                 });
             });
@@ -2648,9 +2629,7 @@ impl Ui {
                         ui.horizontal(|ui| {
                             ui.spacing_mut().item_spacing = vec2(SPACE_S, 0.0);
                             let (glyph, ink) = match sheet.tone.as_str() {
-                                "error" => ("!", ERROR),
-                                "warning" => ("!", WARN),
-                                "info" => ("i", ACCENT),
+                                "error" | "warning" | "info" | "success" => notice_mark(&sheet.tone),
                                 _ => ("?", ACCENT),
                             };
                             let (r, _) = ui.allocate_exact_size(vec2(20.0, 20.0), Sense::hover());
@@ -2799,6 +2778,7 @@ impl Ui {
             self.command_palette(ctx, screen);
             self.dialog_popup(ctx, screen);
             if !sheet_up || !self.jobs.is_empty() { self.jobs_chip(ctx, screen); }
+            self.notices(ctx, screen);
             self.sheet_popup(ctx, screen);
             if let Some(picker) = &mut self.font_picker {
                 if let Some(apply) = picker.popup(ctx) {
@@ -2823,7 +2803,8 @@ impl Ui {
                      ("head_menu", model && self.column.as_ref().is_some_and(|c| c.head_menu.is_some())),
                      ("prompt", model && self.column.as_ref().is_some_and(|c| c.prompt.is_some())),
                      ("terrain_profile", work && model && self.panels.data["terrain"].is_object()),
-                     ("jobs", !self.jobs.is_empty() || (!sheet_up && !self.history.is_empty())),
+                     ("jobs", !self.jobs.is_empty() || (!sheet_up && self.activity_open)),
+                     ("notices", self.history.iter().any(|r| r.5 > 0.)),
                      ("dialog", self.dialog.is_some()),
                      ("tab_menu", self.strip.menu_open()),
                      ("tab_overflow", self.strip.overflow_open()),

@@ -347,26 +347,34 @@ pub(super) fn sheet_and_jobs<'py>(a: &Args<'py>) -> Reply<'py> {
     // being gone: look again soon while any shows.
     let now: f64 = py.import("time")?.call_method0("monotonic")?.extract()?;
     let recent = PyList::empty(py);
+    let secondary = PyDict::new(py);
+    let mut transient = false;
     for row in dialogs.call_method1("history", (&win,))?.try_iter()? {
         let row = row?;
-        let remaining = 5. - (now - row.getattr("created")?.extract::<f64>()?);
-        let opacity = if row.getattr("toast")?.is_truthy()? { remaining.min(1.0) } else { 0.0 };
+        let opacity: f64 = row.call_method1("opacity", (now,))?.extract()?;
+        transient |= opacity > 0. && !row.getattr("tone")?.eq("error")?;
+        let second = row.getattr("second_label")?;
+        if second.is_truthy()? { secondary.set_item(row.getattr("id")?, second)?; }
         recent.append((
             row.getattr("id")?,
             row.getattr("title")?,
             row.getattr("detail")?,
             row.getattr("tone")?,
             row.getattr("action_label")?,
-            if remaining > 0. { opacity } else { -1.0 },
+            opacity,
         ))?;
     }
     let banner = win.getattr("_doc")?.getattr_opt("_missing_link_banner")?.unwrap_or("".into_bound_py_any(py)?);
-    let activity = (&recent, &banner).into_bound_py_any(py)?;
+    let activity = (&recent, &banner, &secondary).into_bound_py_any(py)?;
     if activity.ne(state.call_method1("get", ("_ui_activity_sig",))?)? && renderer.hasattr("ui_set_activity")? {
-        renderer.call_method1("ui_set_activity", (&recent, &banner))?;
+        if secondary.is_empty() {
+            renderer.call_method1("ui_set_activity", (&recent, &banner))?;
+        } else {
+            renderer.call_method1("ui_set_activity", (&recent, &banner, &secondary))?;
+        }
         view.setattr("_ui_activity_sig", activity)?;
     }
-    view.setattr("_ui_poll_jobs", !rows.is_empty() || !recent.is_empty())?;
+    view.setattr("_ui_poll_jobs", !rows.is_empty() || transient)?;
     Ok(none(py))
 }
 
@@ -446,25 +454,13 @@ fn sync_units<'py>(a: &Args<'py>) -> Reply<'py> {
     Ok(none(py))
 }
 
-/// Resolve the current gesture and its temporary message together for this frame.
+/// Only the active gesture supplies the tool label and hint.
 fn sync_tool_status(view: &Obj, win: &Obj) -> PyResult<()> {
     let py = view.py();
     crate::native_view_actions::tool_hint(win)?;
     let bar = win.call_method0("statusBar")?;
-    let mut base = "".into_bound_py_any(py)?;
-    if !bar.is_none() {
-        for candidate in [attr(&bar, "_base")?, bar.call_method0("currentMessage")?] {
-            if candidate.is_truthy()? {
-                base = candidate;
-                break;
-            }
-        }
-    }
-    let [name, _, mut hint] = unpack::<3>(&base.call_method1("partition", (" — ",))?)?;
-    let timer = attr(&bar, "_timer")?;
-    if !timer.is_none() && timer.call_method0("isActive")?.is_truthy()? {
-        hint = bar.getattr("flash")?;
-    }
+    let base = bar.getattr("_tool_hint")?;
+    let [name, _, hint] = unpack::<3>(&base.call_method1("partition", (" — ",))?)?;
     render(py)?.call_method1("sync_status_readout", (view, name, hint))?;
     Ok(())
 }

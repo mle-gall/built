@@ -610,9 +610,10 @@ impl Gallery {
         sub(ui, pos2(tx, y), "Toast stack");
         put(ui, Rect::from_min_size(pos2(tx, y + 18.), vec2(w - (tx - at.x), h - 18.)), down(), |ui| {
             ui.spacing_mut().item_spacing = vec2(0., SPACE_XS);
-            let rows = [("Saved", 1.0_f32), ("Drawings exported", 0.7), ("Link reloaded", 0.4), ("Hidden", 0.)];
-            toast_stack(ui, rows.iter().map(|(t, a)| (t, *a)), |ui, t| {
-                ui.label(egui::RichText::new(*t).font(body()).color(INK));
+            let rows = [("error", "File not found"), ("warning", "Select a group first"), ("success", "Saved")];
+            toast_stack(ui, rows.iter().map(|row| (row, 1.)), |ui, (tone, title)| {
+                let (mark, ink) = notice_mark(tone);
+                ui.colored_label(ink, format!("{mark}  {title}"));
             });
         });
     }

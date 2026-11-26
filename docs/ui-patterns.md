@@ -157,3 +157,23 @@ where a subsystem is still Python.
 The Library's fast path is not the sheet: the **Paint strip** (the
 model's materials, the recent ones, the current name, *Browse all…*) and
 the dock's **inspector**, which edits the material Paint holds.
+
+## Command feedback and activity
+
+The bottom bar shows the active tool, its options and its gesture hint.
+A mode such as Move a copy lights its option chip. Commands publish their
+outcome with `window.notify(tone, text, actions)`. Plugins can obtain the
+window from `viewport.window()`. MCP Python scripts have the same `notify`
+call in scope. The optional actions are a list of up to two
+`(label, callback)` pairs. Each callback takes no arguments.
+
+Use `success` for a completed operation, `info` for a state change,
+`warning` for a command that needs a different selection, and `error`
+for a failed operation. The viewport shows the newest three toasts above
+the bottom bar. Info and success last four seconds, warnings six seconds.
+Hover pauses the timer. Errors stay until dismissed or acted on.
+Existing `showMessage` and `flash_status` calls publish info notices.
+
+While a job runs, the activity chip shows its label, phase and progress.
+Its result appears as a toast. Choose **View → Recent activity** or search
+for **Recent activity** in the command palette to revisit an outcome.

@@ -126,12 +126,17 @@ fn run_one<'py>(win: &Obj<'py>, action: &Obj<'py>, source_view: &Obj<'py>) -> Py
     }
     match kind {
         "plugin" => return crate::plugin_panels::dispatch(win, pyo3::types::PyString::new(py, arg).as_any()),
-        "activity" => {
+        "activity" | "activity2" | "dismiss" | "pause-toast" | "resume-toast" => {
             for row in dialogs.call_method1("history", (win,))?.try_iter()? {
                 let row = row?;
                 if row.getattr("id")?.eq(arg)? {
-                    if row.is_truthy()? && row.getattr("action")?.is_truthy()? {
-                        row.call_method0("action")?;
+                    match kind {
+                        "pause-toast" | "resume-toast" => { row.call_method1("hover", (kind == "pause-toast",))?; }
+                        _ => {
+                            row.setattr("toast", false)?;
+                            let cb = row.getattr(if kind == "activity2" { "second_action" } else { "action" })?;
+                            if kind != "dismiss" && cb.is_callable() { cb.call0()?; }
+                        }
                     }
                     break;
                 }

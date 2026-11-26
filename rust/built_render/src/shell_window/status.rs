@@ -19,8 +19,14 @@ impl ShellStatusBar {
         )?;
         Ok(status.unbind())
     }
-    #[pyo3(signature=(text,msec=0))]
-    fn showMessage(slf: &Bound<'_, Self>, text: &str, msec: i64) -> PyResult<()> {
+    #[pyo3(signature=(text,msec=0,tone="info"))]
+    fn showMessage(slf: &Bound<'_, Self>, text: &str, msec: i64, tone: &str) -> PyResult<()> {
+        if !text.is_empty() {
+            let win = slf.getattr("_window")?.call0()?;
+            if !win.is_none() {
+                win.call_method1("notify", (tone, text))?;
+            }
+        }
         if msec != 0 {
             slf.setattr("flash", text)?;
             slf.getattr("_timer")?.call_method1("start", (msec,))?;
