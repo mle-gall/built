@@ -3198,12 +3198,25 @@ pub(crate) fn fresh(py: Python<'_>) -> PyResult<()> {
     Ok(())
 }
 
+/// `fresh` for a read of one node's attributes: only the suspect containers
+/// anchored on `node` are written back first. A per-placement reader
+/// (`link_of` over a linked model's thousands of parts) must not convert
+/// every other node's suspects once per placement.
+pub(crate) fn fresh_node(py: Python<'_>, node: Key) -> PyResult<()> {
+    if let Some((suspects, _)) = SUSPECTS.get(py) {
+        if !suspects.bind(py).is_empty() {
+            crate::model::doc_model_api::flush_node(py, node)?;
+        }
+    }
+    Ok(())
+}
+
 /// The document's own value of attribute `name` of a handle, read from
 /// the node (not its Python view): what Rust code sees.
 #[pyfunction]
 fn doc_attr_value<'py>(py: Python<'py>, handle: &Bound<'py, PyAny>, name: &str) -> PyResult<Bound<'py, PyAny>> {
-    fresh(py)?;
     let k = handle_key(handle)?;
+    fresh_node(py, k)?;
     let a = super::attr_id(name).map_err(err)?;
     let v = { lock().need(k).map_err(err)?.attr(a).cloned() };
     match v {
