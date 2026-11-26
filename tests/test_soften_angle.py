@@ -385,6 +385,33 @@ def test_the_dialog_passes_smooth_normals_to_the_command(native_window, monkeypa
     assert _soft(group.mesh) == SEAMS and _flat(group.mesh) == SEAMS
 
 
+def test_soften_preview_tracks_the_slider_without_changing_the_document(native_window, monkeypatch):
+    from types import SimpleNamespace
+    from built_render import chrome_forms
+
+    win = native_window
+    scene = win.viewport.scene
+    group = Group(_cylinder(Mesh(), soft=False))
+    scene.groups = [group]
+    scene.selection = {group}
+    form_stack = chrome_forms.forms(win)
+    monkeypatch.setattr(chrome_forms, "show", lambda _, form: form_stack.append(form))
+    monkeypatch.setattr(win.viewport, "_world_to_pixel", lambda point: (point.x(), point.y()))
+    previews = []
+    display = SimpleNamespace(renderer=SimpleNamespace(
+        ui_set_dialog=lambda *args: None, ui_set_soften_preview=previews.append))
+    win._on_soften_edges()
+    form = form_stack[-1]
+    version = scene.version
+    for value in ["0", "400"]:
+        form.receive("slider", value)
+        chrome_forms.before_frame(display, win)
+    assert len(previews[0]) < len(previews[1])
+    form.press("cancel")
+    assert _soft(group.mesh) == 0
+    assert scene.version == version
+
+
 def _half_soft_only_cylinder():
     """A cylinder whose side seams are soft: half of them smooth, half
     soft only (``flat``)."""

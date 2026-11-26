@@ -14,7 +14,7 @@ use std::collections::HashMap;
 use egui::{pos2, vec2, Color32, CornerRadius, Margin, Rect, Sense, Stroke};
 
 use super::{SPACE_XS, SPACE_S, SPACE_M, CONTROL_H, SCRIM, SWATCH_FALLBACK, body, caption_at, chip_button, glass, menu_row, meta, parse_hex, sheet_button, title_font,
-            Surface, Ui, ACCENT, DIM, EDGE, FAINT, FIELD, GUT, HOVER, INK, OFF, R_ROW, TOP_H};
+            Surface, Ui, ACCENT, DIM, FAINT, FIELD, GUT, HOVER, INK, OFF, R_ROW, TOP_H};
 
 /// One field: (id, kind, label, text, value, min, max, options, flags, tip).
 /// Kinds: page (starts a tab), caption, text (a note), edit, number, check,
@@ -51,6 +51,7 @@ pub struct Dialog {
     title: String,
     note: String,
     width: f32,
+    soften_preview: Option<Vec<([f32; 2], [f32; 2])>>,
     join_marks: Option<Vec<(u8, f32, f32)>>,
     fields: Vec<Field>,
     buttons: Vec<Button>,
@@ -64,14 +65,13 @@ pub struct Dialog {
     /// Tab with nothing focused: the first field of the page takes it.
     tab_focus: bool,
     pub(super) choice_open: Option<String>,
-    color_open: Option<(String, Color32)>,
 }
 
 impl Dialog {
     pub(super) fn new(seq: String) -> Self {
-        Dialog { prefix: format!("dlg:{seq}"), seq, title: String::new(), note: String::new(), width: 420.0, join_marks: None, fields: Vec::new(),
+        Dialog { prefix: format!("dlg:{seq}"), seq, title: String::new(), note: String::new(), width: 420.0, soften_preview: None, join_marks: None, fields: Vec::new(),
                  buttons: Vec::new(), page: 0, bufs: HashMap::new(), sent: HashMap::new(),
-                 focus_pending: true, tab_focus: false, choice_open: None, color_open: None }
+                 focus_pending: true, tab_focus: false, choice_open: None }
     }
 
     pub(super) fn update(&mut self, title: String, note: String, width: f32, fields: Vec<Field>, buttons: Vec<Button>) {
@@ -101,7 +101,7 @@ impl Dialog {
 
     /// Inner controls handle Escape before their form or containing sheet.
     pub(super) fn escape_control(&mut self, ctx: &egui::Context, actions: &mut Vec<String>) -> bool {
-        if self.choice_open.take().is_some() || self.color_open.take().is_some() {
+        if self.choice_open.take().is_some() {
             return true;
         }
         let Some(focus) = ctx.memory(|m| m.focused()) else { return false };
@@ -155,6 +155,10 @@ impl Ui {
             self.dialog = Some(Dialog::new(seq));
         }
         if let Some(d) = self.dialog.as_mut() { d.update(title, note, width, fields, buttons); }
+    }
+
+    pub fn set_soften_preview(&mut self, lines: Vec<([f32; 2], [f32; 2])>) {
+        if let Some(d) = self.dialog.as_mut() { d.soften_preview = Some(lines); }
     }
 
     pub fn set_join_marks(&mut self, seq: &str, points: Vec<(u8, f32, f32)>) {
@@ -217,13 +221,14 @@ impl Ui {
         let review = self.review;
         let left = if review { GUT } else { GUT + 72.0 + GUT };
         let right = if review { screen.max.x - GUT } else { self.free_right(ctx, screen) - GUT };
+        let anchor = self.form_anchor(ctx, screen);
         let Some(d) = self.dialog.as_mut() else { return };
         let w = d.width.min((right - left).max(300.0)).min(screen.width() - 2.0 * GUT);
         let join = d.join_marks.is_some();
-        let x = (if join { right - w } else { (left + right - w) / 2.0 }).clamp(GUT, (screen.max.x - GUT - w).max(GUT));
+        let x = (if join { right - w } else { anchor.x - w / 2.0 }).clamp(GUT, (screen.max.x - GUT - w).max(GUT));
         let top = if join {
             (screen.bottom() - 184.0 - 24.0 * d.fields.len() as f32).max(TOP_H + GUT)
-        } else { TOP_H + 36.0 };
+        } else { anchor.y };
         let max_body = (screen.height() - top - 24.0 - 120.0).max(120.0);
         let mut out: Vec<String> = Vec::new();
         egui::Area::new(egui::Id::new("dialog"))
@@ -232,7 +237,12 @@ impl Ui {
             .order(egui::Order::Foreground)
             .show(ctx, |ui| {
                 let (all, _) = ui.allocate_exact_size(screen.size(), Sense::click_and_drag());
-                if let Some(marks) = &d.join_marks {
+                if let Some(lines) = &d.soften_preview {
+                    let painter = ui.painter().with_clip_rect(Rect::from_min_max(pos2(left, TOP_H), pos2(right, all.bottom())));
+                    for &(a, b) in lines {
+                        painter.line_segment([a.into(), b.into()], Stroke::new(2_f32, ACCENT));
+                    }
+                } else if let Some(marks) = &d.join_marks {
                     let paint = ui.painter().with_clip_rect(Rect::from_min_max(pos2(left, TOP_H), pos2(right, all.max.y)));
                     for &(reason, x, y) in marks {
                         let radius = if reason == 0 { 4.0 } else { 6.0 };
@@ -258,7 +268,6 @@ impl Ui {
                                 if i != d.page {
                                     d.page = i;
                                     d.choice_open = None;
-                                    d.color_open = None;
                                     out.push(d.act("p", &i.to_string(), None));
                                 }
                             }
@@ -475,43 +484,16 @@ pub(super) fn fields(ui: &mut egui::Ui, d: &mut Dialog, out: &mut Vec<String>) {
                 });
             }
             "color" => {
-                let mut open_now = false;
                 ui.horizontal(|ui| {
-                    if !full { label_cell(ui, label, tip, label_w, 26.0, enabled); }
-                    let (r, resp) = ui.allocate_exact_size(vec2(ui.available_width() - 4.0, 26.0),
-                                                           if enabled { Sense::click() } else { Sense::hover() });
-                    if resp.hovered() { ui.painter().rect_filled(r, CornerRadius::same(R_ROW), HOVER); }
-                    let sw = Rect::from_min_size(r.min + vec2(4.0, 4.0), vec2(36.0, 18.0));
-                    ui.painter().rect_filled(sw, CornerRadius::same(4), parse_hex(text).unwrap_or(SWATCH_FALLBACK));
-                    ui.painter().rect_stroke(sw, CornerRadius::same(4), Stroke::new(1.0_f32, EDGE), egui::StrokeKind::Inside);
-                    ui.painter().text(pos2(sw.max.x + 8.0, r.center().y), egui::Align2::LEFT_CENTER,
-                                      text.to_uppercase(), body(), INK);
-                    if resp.clicked() { open_now = true; }
-                });
-                if open_now {
-                    d.color_open = Some((id.clone(), parse_hex(text).unwrap_or(SWATCH_FALLBACK)));
-                }
-                let mut done = None;
-                if let Some((cid, c)) = d.color_open.as_mut().filter(|(cid, _)| cid == id) {
-                    ui.horizontal(|ui| {
-                        if !full { ui.add_space(label_w); }
-                        ui.vertical(|ui| {
-                            egui::widgets::color_picker::color_picker_color32(ui, c, egui::widgets::color_picker::Alpha::Opaque);
-                            ui.horizontal(|ui| {
-                                if chip_button(ui, "Apply") { done = Some(Some(format!("#{:02x}{:02x}{:02x}", c.r(), c.g(), c.b()))); }
-                                if chip_button(ui, "Cancel") { done = Some(None); }
-                            });
-                        });
-                    });
-                    let _ = cid;
-                }
-                if let Some(applied) = done {
-                    d.color_open = None;
-                    if let Some(hex) = applied {
+                    if !full { label_cell(ui, label, tip, label_w, CONTROL_H, enabled); }
+                    let color = parse_hex(text).unwrap_or(SWATCH_FALLBACK);
+                    let mut rgb = [color.r(), color.g(), color.b()];
+                    if ui.add_enabled_ui(enabled, |ui| super::kit::colour_well(ui, &mut rgb)).inner.changed() {
+                        let hex = format!("#{:02x}{:02x}{:02x}", rgb[0], rgb[1], rgb[2]);
                         if let Some(fm) = d.fields.iter_mut().find(|x| &x.0 == id) { fm.3 = hex.clone(); }
                         out.push(format!("{prefix}\u{1f}v\u{1f}{id}\u{1f}{hex}"));
                     }
-                }
+                });
             }
             "path" => {
                 ui.horizontal(|ui| {

@@ -213,7 +213,7 @@ impl Gallery {
                     self.organisms(ui, pos2(x, y + SPACE_S), w, board.max.y - BAND_H - SPACE_M);
                     self.surfaces(ui, pos2(o.x, board.max.y - BAND_H), board.max.x - o.x);
                     if let Some(picker) = &mut self.font_picker {
-                        if picker.popup(ctx).is_some() { self.font_picker = None; }
+                        if picker.popup(ctx, ctx.screen_rect().center_top() + vec2(0., SPACE_S)).is_some() { self.font_picker = None; }
                     }
                 });
             });

@@ -154,7 +154,7 @@ fn text3d(win: &Obj, params: &Obj, done: Py<PyAny>) -> PyResult<()> {
     lengths.set_item("text", shown)?;
     if !show(
         win,
-        tr(py, "3D Text")?,
+        tr(py, "Set 3D text")?,
         draft.get_item("text")?.extract()?,
         draft.get_item("font")?.extract()?,
         draft.get_item("bold")?.extract()?,

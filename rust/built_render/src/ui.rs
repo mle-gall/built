@@ -1780,6 +1780,11 @@ impl Ui {
         Rect::from_min_max(pos2(left, top), pos2(right.max(left + 120.), bottom))
     }
 
+    fn form_anchor(&self, ctx: &egui::Context, screen: Rect) -> Pos2 {
+        let free = self.utility_bay(ctx, screen);
+        pos2(free.center().x, free.top())
+    }
+
     /// The right edge of the free viewport (left of the column).
     fn free_right(&self, ctx: &egui::Context, screen: Rect) -> f32 {
         if self.column.is_none() { return screen.max.x; }
@@ -1793,6 +1798,7 @@ impl Ui {
         let mut cmds: Vec<String> = Vec::new();
         let (top, bottom) = self.band(ctx, screen);
         let self_icons = self.icons.clone();
+        let anchor = self.form_anchor(ctx, screen);
         let Some(col) = self.column.as_mut() else { return };
         #[allow(non_snake_case)]
         let W: f32 = self.dock_w.min((screen.width() * 0.45).max(DOCK_MIN_W));
@@ -2548,8 +2554,8 @@ impl Ui {
         if let Some((title, body_text, buttons)) = col.prompt.clone() {
             let mut answered = false;
             egui::Area::new(egui::Id::new("prompt"))
-                .pivot(egui::Align2::CENTER_CENTER)
-                .fixed_pos(pos2(screen.max.x - GUT - W / 2.0, top + 160.0))
+                .pivot(egui::Align2::CENTER_TOP)
+                .fixed_pos(anchor)
                 .order(egui::Order::Tooltip)
                 .show(ctx, |ui| {
                     glass(Surface::Raised).inner_margin(Margin::same(14)).show(ui, |ui| {
@@ -2573,10 +2579,11 @@ impl Ui {
                         }
                         ui.add_space(SPACE_M);
                         let typed = field.as_ref().map(|(id, _)| col.edits.get(&format!("prompt:{id}")).cloned().unwrap_or_default());
-                        ui.horizontal(|ui| {
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             ui.spacing_mut().item_spacing = vec2(SPACE_S, 0.0);
                             for (i, (id, label)) in buttons.iter().enumerate() {
-                                if chip_button(ui, label) || (enter && i == 0) {
+                                let hint = if i == 0 { "↩" } else if matches!(id.as_str(), "cancel" | "no") { "esc" } else { "" };
+                                if sheet_button(ui, label, hint, u8::from(i == 0)) || (enter && i == 0) {
                                     match &typed {
                                         Some(t) => actions.push(format!("prompt\u{1f}{id}\u{1f}{t}")),
                                         None => actions.push(format!("prompt\u{1f}{id}")),
@@ -2670,7 +2677,7 @@ impl Ui {
                             egui::ScrollArea::vertical().max_height(screen.height() * 0.45).show(ui, |ui| {
                                 for (id, label, _, role) in sheet.buttons.iter().filter(|b| b.3 >= 4) {
                                     let mut checked = *role == 5;
-                                    if ui.push_id(id, |ui| ui.checkbox(&mut checked, label)).inner.changed() {
+                                    if ui.push_id(id, |ui| kit::toggle(ui, &mut checked, label)).inner.changed() {
                                         clicked = Some(id.clone());
                                     }
                                 }
@@ -2802,8 +2809,9 @@ impl Ui {
             self.jobs_chip(ctx, screen);
             self.notices(ctx, screen);
             self.sheet_popup(ctx, screen);
+            let anchor = self.form_anchor(ctx, screen);
             if let Some(picker) = &mut self.font_picker {
-                if let Some(apply) = picker.popup(ctx) {
+                if let Some(apply) = picker.popup(ctx, anchor) {
                     let payload = if apply { serde_json::to_string(&picker.choice).unwrap() } else { String::new() };
                     self.actions.push(format!("font:{payload}"));
                     self.font_picker = None;

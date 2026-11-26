@@ -1331,12 +1331,9 @@ impl FontPicker {
         Some(next)
     }
 
-    pub fn popup(&mut self, ctx: &egui::Context) -> Option<bool> {
+    pub fn popup(&mut self, ctx: &egui::Context, anchor: Pos2) -> Option<bool> {
         let id = egui::Id::new("font_picker");
-        let area = egui::Modal::default_area(id).anchor(
-            egui::Align2::CENTER_BOTTOM,
-            vec2(0., -super::BOT_H - SPACE_S),
-        );
+        let area = egui::Modal::default_area(id).anchor(egui::Align2::CENTER_TOP, anchor - ctx.screen_rect().center_top());
         let modal = egui::Modal::new(id)
             .area(area)
             .frame(egui::Frame::NONE)
@@ -1458,9 +1455,11 @@ impl FontPicker {
                 });
             }
         });
+        ui.columns(2, |cols| {
+            if switch_row(&mut cols[0], "Bold", self.choice.bold, true).clicked() { self.choice.bold = !self.choice.bold; }
+            if switch_row(&mut cols[1], "Italic", self.choice.italic, true).clicked() { self.choice.italic = !self.choice.italic; }
+        });
         ui.horizontal(|ui| {
-            toggle(ui, &mut self.choice.bold, "Bold");
-            toggle(ui, &mut self.choice.italic, "Italic");
             ui.label("Size");
             if let Some(lengths) = &mut self.choice.lengths {
                 lengths.edit(0, ui, &mut self.choice.height, self.choice.minimum, self.choice.maximum);
@@ -1484,10 +1483,7 @@ impl FontPicker {
         }
         let lengths_valid = length_error.is_none();
         let mut answer = None;
-        ui.horizontal(|ui| {
-            if quiet(ui, "Cancel").clicked() || ui.input(|i| i.key_pressed(Key::Escape)) {
-                answer = Some(false);
-            }
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             let valid = lengths_valid && rows.contains(&self.choice.font)
                 && (!self.choice.editable || !self.choice.text.trim().is_empty());
             ui.add_enabled_ui(valid, |ui| {
@@ -1496,6 +1492,9 @@ impl FontPicker {
                     answer = Some(true);
                 }
             });
+            if sheet_button(ui, "Cancel", "esc", 0) || ui.input(|i| i.key_pressed(Key::Escape)) {
+                answer = Some(false);
+            }
         });
         answer
     }

@@ -109,7 +109,7 @@ impl UnitsDraft {
         if self.custom {
             ""
         } else {
-            "Which units do you work in? Lengths, areas, volumes and angles will be shown and typed in them. You can change this at any time in Preferences ▸ Units (Ctrl+U)."
+            "Which units do you work in? Lengths, areas, volumes and angles will be shown and typed in them. You can change this at any time in Settings ▸ Units ({key})."
         }
     }
 
