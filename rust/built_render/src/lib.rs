@@ -3086,58 +3086,28 @@ impl Renderer {
         if w == 0 || h == 0 {
             return Ok(vec![]);
         }
-        self.ensure_ids()?;
-        let stride = (w * 4).div_ceil(256) * 256;
-        let read = self.device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("rectangle pick"),
-            size: stride as u64 * h as u64,
-            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-        let mut e = self.device.create_command_encoder(&Default::default());
-        e.copy_texture_to_buffer(
-            wgpu::TexelCopyTextureInfo {
-                texture: &self.ids,
-                mip_level: 0,
-                origin: wgpu::Origin3d { x, y, z: 0 },
-                aspect: wgpu::TextureAspect::All,
-            },
-            wgpu::TexelCopyBufferInfo {
-                buffer: &read,
-                layout: wgpu::TexelCopyBufferLayout {
-                    offset: 0,
-                    bytes_per_row: Some(stride),
-                    rows_per_image: Some(h),
-                },
-            },
-            wgpu::Extent3d {
-                width: w,
-                height: h,
-                depth_or_array_layers: 1,
-            },
-        );
-        self.queue.submit([e.finish()]);
-        let (tx, rx) = std::sync::mpsc::channel();
-        read.slice(..).map_async(wgpu::MapMode::Read, move |r| {
-            let _ = tx.send(r);
-        });
-        self.device.poll(wgpu::Maintain::Wait);
-        rx.recv()
-            .map_err(|e| PyValueError::new_err(e.to_string()))?
-            .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        let bytes = read.slice(..).get_mapped_range();
         let mut ids = std::collections::BTreeSet::new();
-        for row in bytes.chunks_exact(stride as usize) {
-            for b in row[..w as usize * 4].chunks_exact(4) {
-                let id = u32::from_le_bytes(b.try_into().unwrap());
-                if id != 0 {
-                    ids.insert(id - 1);
-                }
-            }
-        }
-        drop(bytes);
-        read.unmap();
+        self.visit_pick_ids(x, y, w, h, |_, _, id| { ids.insert(id); })?;
         Ok(ids.into_iter().collect())
+    }
+    /// Pixel on visible geometry nearest the middle of its on-screen bounds.
+    /// Used only when aligning on background without a selection.
+    fn visible_focus_pixel(&mut self) -> PyResult<Option<(u32, u32)>> {
+        let (w, h) = (self.config.width, self.config.height);
+        let mut bounds = (w, h, 0, 0);
+        // Keep occupied spans per scanline. A single large surface needs one
+        // span per line, and disconnected surfaces keep the focus on-model.
+        let mut spans: Vec<(u32, u32, u32)> = Vec::new();
+        self.visit_pick_ids(0, 0, w, h, |x, y, _| {
+            bounds = (bounds.0.min(x), bounds.1.min(y), bounds.2.max(x), bounds.3.max(y));
+            if let Some(last) = spans.last_mut() {
+                if last.2 == y && last.1 + 1 == x { last.1 = x; return; }
+            }
+            spans.push((x, x, y));
+        })?;
+        let (cx, cy) = (bounds.0.midpoint(bounds.2), bounds.1.midpoint(bounds.3));
+        Ok(spans.into_iter().map(|(lo, hi, y)| (cx.clamp(lo, hi), y))
+            .min_by_key(|&(x,y)| i64::from(x.abs_diff(cx)).pow(2) + i64::from(y.abs_diff(cy)).pow(2)))
     }
     /// ``set_profile_exclusions`` touches only the prototypes it is given
     /// and keeps the result (older modules rebuilt every prototype from the
@@ -3218,6 +3188,60 @@ impl Renderer {
     }
 }
 impl Renderer {
+    fn visit_pick_ids(&mut self, x: u32, y: u32, w: u32, h: u32,
+        mut visit: impl FnMut(u32, u32, u32)) -> PyResult<()> {
+        if w == 0 || h == 0 { return Ok(()); }
+        self.ensure_ids()?;
+        let stride = (w * 4).div_ceil(256) * 256;
+        let read = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("rectangle pick"),
+            size: stride as u64 * h as u64,
+            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let mut e = self.device.create_command_encoder(&Default::default());
+        e.copy_texture_to_buffer(
+            wgpu::TexelCopyTextureInfo {
+                texture: &self.ids,
+                mip_level: 0,
+                origin: wgpu::Origin3d { x, y, z: 0 },
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::TexelCopyBufferInfo {
+                buffer: &read,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(stride),
+                    rows_per_image: Some(h),
+                },
+            },
+            wgpu::Extent3d {
+                width: w,
+                height: h,
+                depth_or_array_layers: 1,
+            },
+        );
+        self.queue.submit([e.finish()]);
+        let (tx, rx) = std::sync::mpsc::channel();
+        read.slice(..).map_async(wgpu::MapMode::Read, move |r| {
+            let _ = tx.send(r);
+        });
+        self.device.poll(wgpu::Maintain::Wait);
+        rx.recv()
+            .map_err(|e| PyValueError::new_err(e.to_string()))?
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let bytes = read.slice(..).get_mapped_range();
+        for (y, row) in bytes.chunks_exact(stride as usize).enumerate() {
+            for (x, b) in row[..w as usize * 4].chunks_exact(4).enumerate() {
+                let id = u32::from_le_bytes(b.try_into().unwrap());
+                if id != 0 { visit(x as u32, y as u32, id - 1); }
+            }
+        }
+        drop(bytes);
+        read.unmap();
+        Ok(())
+    }
+
     fn push_target(&mut self, surface: Option<wgpu::Surface<'static>>, width: u32, height: u32, scale: f64) -> PyResult<usize> {
         let w = ((width as f64 * scale) as u32).max(1);
         let h = ((height as f64 * scale) as u32).max(1);

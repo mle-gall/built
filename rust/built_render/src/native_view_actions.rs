@@ -51,11 +51,68 @@ pub(crate) fn glide_after(
     Ok(())
 }
 
+/// Preserve the depth and framing of the detail under the centre of the active pane.
+pub(crate) fn alignment_focus(vp: &Bound<'_, PyAny>) -> PyResult<()> {
+    use crate::document_host::{vec3, xyz};
+    let camera = vp.getattr("camera")?;
+    let display = vp.getattr_opt("keys_stand_in")?.filter(|v| !v.is_none());
+    let renderer = display.as_ref().map(|v| v.getattr_opt("renderer")).transpose()?.flatten()
+        .filter(|r| r.hasattr("pick").unwrap_or(false));
+    let model_point = |view: &Bound<'_, PyAny>, x, y| -> PyResult<Option<glam::DVec3>> {
+        let point = view.call_method1("_model_point_at", (x, y))?;
+        if point.is_none() { return Ok(None); }
+        let mut world = xyz(&point)?;
+        // The picking camera and packed triangles share a floating origin.
+        if !view.getattr("camera")?.is(&camera) {
+            let origin = view.getattr("packed")?.getattr("origin")?.extract()?;
+            world += glam::DVec3::from_array(origin);
+        }
+        Ok(Some(world))
+    };
+    let mut focus = None;
+    if let (Some(view), Some(_)) = (&display, &renderer) {
+        let w: f64 = view.call_method0("width")?.extract()?;
+        let h: f64 = view.call_method0("height")?.extract()?;
+        focus = model_point(view, w * 0.5, h * 0.5)?;
+    }
+    if focus.is_none() {
+        let bounds = vp.getattr("scene")?.call_method0("selection_bounds")?;
+        let lo = bounds.get_item(0)?;
+        if !lo.is_none() {
+            focus = Some((xyz(&lo)? + xyz(&bounds.get_item(1)?)?) * 0.5);
+        }
+    }
+    if focus.is_none() {
+        if let (Some(view), Some(renderer)) = (&display, &renderer) {
+            if let Some(read) = renderer.getattr_opt("visible_focus_pixel")? {
+                if let Some((x, y)) = read.call0()?.extract::<Option<(f64, f64)>>()? {
+                    let scale: f64 = view.call_method0("devicePixelRatioF")?.extract()?;
+                    focus = model_point(view, (x + 0.5) / scale, (y + 0.5) / scale)?;
+                }
+            }
+        }
+    }
+    if let Some(point) = focus.filter(|p| p.is_finite()) {
+        if camera.getattr("perspective")?.is_truthy()? {
+            // Both projections use distance * tan(vertical FOV / 2) as their
+            // half-height at the focal plane. Rebase distance to the picked depth.
+            let eye = xyz(&camera.call_method0("eye")?)?;
+            let depth = (point - eye).dot(xyz(&camera.call_method0("forward")?)?);
+            if depth.is_finite() && depth > 0. {
+                camera.setattr("distance", depth)?;
+            }
+        }
+        camera.setattr("target", vec3(vp.py(), point)?)?;
+    }
+    Ok(())
+}
+
 /// Top, Front, … from the gizmo, ⌘1–7 or the View menu.
 #[pyfunction]
 fn standard_view(win: &Bound<'_, PyAny>, key: &str) -> PyResult<()> {
     let auto = auto_perspective(win.py())?;
     glide_after(win, |vp| {
+        alignment_focus(vp)?;
         vp.getattr("camera")?.call_method1("align_to", (key, auto))?;
         Ok(())
     })?;

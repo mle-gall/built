@@ -1103,9 +1103,9 @@ impl Host {
             }
             "zoom_extents" | "view" => {
                 let cmd = if kind == "view" {
-                    format!("view_{arg}")
+                    crate::commands::native_view_command(arg)
                 } else {
-                    action.to_owned()
+                    action
                 };
                 guarded(
                     h,
@@ -1113,30 +1113,6 @@ impl Host {
                     py.import("views.view_commands")?
                         .call_method1("run", (&w, cmd)),
                 )?;
-                if kind == "view" {
-                    let bounds = w.call_method0("_extents_bounds")?;
-                    if bounds.is_truthy()? {
-                        let kw = PyDict::new(py);
-                        let visible = w
-                            .getattr("_doc")?
-                            .getattr("model_views")?
-                            .getattr("visible")?
-                            .is_truthy()?;
-                        kw.set_item(
-                            "free",
-                            if visible {
-                                none(py)
-                            } else {
-                                crate::document_registration::view::calls::free_area(&w)?
-                            },
-                        )?;
-                        Self::viewport(slf)?.getattr("camera")?.call_method(
-                            "fit_box",
-                            bounds.cast_into::<PyTuple>()?,
-                            Some(&kw),
-                        )?;
-                    }
-                }
             }
             _ => {
                 let handler = match (kind, arg) {

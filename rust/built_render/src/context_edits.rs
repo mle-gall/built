@@ -166,7 +166,7 @@ fn explode_curves(win: &Bound<'_, PyAny>) -> PyResult<()> {
 
 fn face_camera(
     vp: &Bound<'_, PyAny>,
-    point: &Bound<'_, PyAny>,
+    point: Option<&Bound<'_, PyAny>>,
     normal: &Bound<'_, PyAny>,
 ) -> PyResult<()> {
     let (x, y, z): (f64, f64, f64) = (
@@ -176,7 +176,11 @@ fn face_camera(
     );
     let cam = vp.getattr("camera")?;
     let before: (f64, f64) = (cam.getattr("yaw")?.extract()?, cam.getattr("pitch")?.extract()?);
-    cam.setattr("target", point)?;
+    if let Some(point) = point {
+        cam.setattr("target", point)?;
+    } else {
+        crate::native_view_actions::alignment_focus(vp)?;
+    }
     cam.setattr("pitch", z.clamp(-1., 1.).asin())?;
     if x.abs() > 1e-9 || y.abs() > 1e-9 {
         cam.setattr("yaw", y.atan2(x))?;
@@ -189,20 +193,8 @@ fn face_camera(
 
 #[pyfunction]
 fn align_face(vp: &Bound<'_, PyAny>, face: &Bound<'_, PyAny>) -> PyResult<()> {
-    face_camera(
-        vp,
-        &face.call_method0("centroid")?,
-        &face.call_method0("normal")?,
-    )?;
-    if vp
-        .getattr("camera")?
-        .call_method0("projection_mode")?
-        .eq("two_point")?
-    {
-        vp.call_method1("set_projection", ("perspective",))?;
-    } else {
-        vp.call_method0("update")?;
-    }
+    face_camera(vp, None, &face.call_method0("normal")?)?;
+    vp.call_method0("update")?;
     Ok(())
 }
 
@@ -225,7 +217,7 @@ fn section_action(win: &Bound<'_, PyAny>, verb: &str) -> PyResult<()> {
             let target = py
                 .import("built_core")?
                 .call_method1("Vec3", (plane.getattr("point")?,))?;
-            face_camera(&vp, &target, &plane.getattr("normal")?)?;
+            face_camera(&vp, Some(&target), &plane.getattr("normal")?)?;
         }
         "reverse" => {
             for plane in planes.iter() {
