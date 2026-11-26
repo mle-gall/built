@@ -304,7 +304,7 @@ do not create a new `ExtensionApp` and restore the layout on every command.
 
 ### Managing local extensions
 
-Use **Extensions ▸ Manage extensions** to install a local Python file, ZIP package or included example, enable or disable local plugins, and remove installed copies. Restart Built to apply changes. Plugins use the in-process API in `views.extension_api` and the model types in `built_core`.
+Use **Extensions ▸ Extension Manager…** to install a local Python file, ZIP package or included example, enable or disable local plugins, and remove installed copies. Restart Built to apply changes. Plugins use the in-process API in `views.extension_api` and the model types in `built_core`.
 
 ### Where your interface goes
 

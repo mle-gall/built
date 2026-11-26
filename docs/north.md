@@ -12,7 +12,7 @@ and the shadows turn at once. The model itself never moves.
 
 ## 1. Before you start
 
-North only shows in the shadows, so turn them on first: **Camera ▸ Shadows**,
+North only shows in the shadows, so turn them on first: **View ▸ Shadows**,
 or the Shadows button of the **Panels** toolbar. Pick a date and an
 afternoon hour, so the shadows are long and easy to follow.
 

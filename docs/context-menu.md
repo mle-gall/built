@@ -5,7 +5,7 @@ no More › and no submenus. Related verbs share one row as segments (for
 example **Intersect: Model | Selection | Context**). No kind has more than
 14 rows under its header.
 
-The native shell draws this menu with egui. The Select row grows the selection in the current editing context and leaves document history untouched. Extensions can declare actions in the Plugins menu. Their legacy right-click callbacks have no native host.
+The native shell draws this menu with egui. The Select row grows the selection in the current editing context and leaves document history untouched. Extensions can declare actions in the Extensions menu. Their legacy right-click callbacks have no native host.
 
 ## How it works
 
