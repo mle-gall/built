@@ -375,6 +375,10 @@ fn open_path<'py>(py: Python<'py>, win: &Any<'py>, path: &Any<'py>) -> PyResult<
     if win.getattr("_closed")?.is_truthy()? {
         return Ok(b(py, false));
     }
+    if !path.call_method0("exists")?.is_truthy()? {
+        crate::start_host::missing_file(win, &path)?;
+        return Ok(b(py, false));
+    }
     let opener = win.getattr("file_openers")?.call_method1("get", (&suffix,))?;
     if !opener.is_none() {
         return Ok(b(py, opener.call1((&path,))?.is_truthy()?));
@@ -406,10 +410,6 @@ fn open_path<'py>(py: Python<'py>, win: &Any<'py>, path: &Any<'py>) -> PyResult<
         other.setattr("focus_requested", true)?;
         other.call_method0("request_frame")?;
         return Ok(b(py, true));
-    }
-    if !path.call_method0("is_file")?.is_truthy()? {
-        cd(py)?.call_method1("warning", (win, tr(py, "Open")?, trf(py, "{name} is no longer there.", &[("name", path.getattr("name")?)])?))?;
-        return Ok(b(py, false));
     }
     let in_tab = |load: Py<PyAny>| -> PyResult<Any<'py>> { m.call_method1("_open_in_tab", (win, load)) };
     if suffix == ".obj" || suffix == ".stl" {

@@ -250,10 +250,10 @@ pub fn run_model_menu(win: &Bound<'_, PyAny>, id: &str) -> PyResult<bool> {
                     "duplicate" => scenes.call_method1("duplicate_view", (marked,))?,
                     _ => { scenes.call_method1("show_view", (&marked,))?; marked }
                 };
-                if !view.is_none() {
+                if action == "show" && !view.is_none() {
                     let values = pyo3::types::PyDict::new(win.py());
                     values.set_item("name", view.getattr("name")?)?;
-                    let caption = if action == "show" { "Scene '{name}'" } else { "Scene '{name}' added" };
+                    let caption = "Scene '{name}'";
                     let text = crate::model_edit::translated(win.py(), caption, Some(&values))?;
                     win.call_method0("statusBar")?.call_method1("showMessage", (text, 2000))?;
                 }

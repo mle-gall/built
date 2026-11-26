@@ -542,7 +542,7 @@ impl StartSheet {
             "pin" => action(py, win, &format!("pin{SEP}{path}"))?,
             "forget" => action(py, win, &format!("forget{SEP}{path}"))?,
             "locate" => {
-                start(py)?.call_method1("open_recent", (win, &path))?;
+                start(py)?.call_method1("open_recent", (win, &path, true))?;
             }
             "finder" => reveal(py, &path)?,
             _ => {}
@@ -1023,10 +1023,35 @@ fn open_dialog(win: &Bound<'_, PyAny>) -> PyResult<()> {
     Ok(())
 }
 
+/// Both recovery actions are deferred until the user chooses one.
+pub(crate) fn missing_file(win: &Bound<'_, PyAny>, path: &Bound<'_, PyAny>) -> PyResult<()> {
+    let py = win.py();
+    let held = py.import("weakref")?.call_method1("ref", (win,))?.unbind();
+    let mut actions = Vec::new();
+    for (label, locate) in [("Locate…", true), ("Remove from recents", false)] {
+        let w = held.clone_ref(py);
+        let path = path.clone().unbind();
+        actions.push((crate::settings_rows::tr(py, label)?, func(py, move |py, _| {
+            let win = w.bind(py).call0()?;
+            if !win.is_none() {
+                if locate { start(py)?.call_method1("open_recent", (&win, path.bind(py), true))?; }
+                else {
+                    recent(py)?.call_method1("forget", (path.bind(py),))?;
+                    page(&win)?.call_method0("changed")?;
+                }
+            }
+            Ok(none(py))
+        })?));
+    }
+    let text = crate::settings_rows::trf(py, "Couldn't open {name} — file not found", &[("name", path.getattr("name")?)])?;
+    crate::dialogs_host::post_notice(win, "error", &text, actions)
+}
+
 /// Open a recent file or project, offering to locate it if it moved. The
 /// page goes once it is in.
 #[pyfunction]
-fn open_recent(py: Python<'_>, win: &Bound<'_, PyAny>, path: &Bound<'_, PyAny>) -> PyResult<bool> {
+#[pyo3(signature=(win, path, locate=false))]
+fn open_recent(py: Python<'_>, win: &Bound<'_, PyAny>, path: &Bound<'_, PyAny>, locate: bool) -> PyResult<bool> {
     let pathlib = py.import("pathlib")?.getattr("Path")?;
     let original = path.str()?.to_string();
     let mut path = pathlib.call1((path,))?;
@@ -1039,6 +1064,10 @@ fn open_recent(py: Python<'_>, win: &Bound<'_, PyAny>, path: &Bound<'_, PyAny>) 
         }
     }
     if !is_file(&path)? {
+        if !locate {
+            missing_file(win, &path)?;
+            return Ok(false);
+        }
         let sfx = suffix(&path)?;
         let kind = if sfx == ".builtproject" || sfx == ".igzproj" {
             "Project"

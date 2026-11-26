@@ -39,6 +39,8 @@ fn mark_result<'p>(w: &Obj<'p>, result: &Obj<'p>) -> PyResult<Obj<'p>> {
     w.getattr("_scene_tabs")?
         .call_method1("mark_view", (&view,))?;
     touch(w)?;
+    let text = crate::settings_rows::trf(w.py(), "Scene '{name}' added", &[("name", view.getattr("name")?)])?;
+    w.call_method0("statusBar")?.call_method1("showMessage", (text, 2000, "success"))?;
     Ok(view)
 }
 #[pymethods]

@@ -660,7 +660,7 @@ impl<'a, 'py> Row<'a, 'py> {
                 })?;
                 glue.getattr("chrome_forms")?.call_method("ask_choice", (win, "Link selection", "Open source document", list(&sources)?), Some(&fields!(py; "done" => choose)))?;
             } else {
-                self.flash("Select groups in another saved, open document first")?;
+                win.call_method1("notify", ("warning", "Select groups in another saved, open document first"))?;
             }
         } else if self.is(&["linkregistry"]) {
             if let Some(path) = chosen(py, "getSaveFileName", (win, "Move registry to project", "", "Built project (*.builtproject)"))? {
