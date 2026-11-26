@@ -588,16 +588,11 @@ fn resplit_curves(this: &O<'_>) -> PyResult<()> {
     let m = api(this.py())?;
     let st = st(this)?;
     let c = m.getattr("_CURVE_COUNTER")?;
-    // A frame that only moves the origin (the tools' view frame on a model
-    // far from it) leaves every direction the split reads as it is: the
-    // store splits there too. The edge-view walk took ~0.2 s per line on a
-    // 200k-face mesh.
-    let n = if st.getattr("_model_frame")?.is_truthy()? || st.getattr("frame_matrix")?.is_none() {
-        st.call_method1("resplit_curves", (c,))?
-    } else {
-        m.getattr("object_drawing")?
-            .call_method1("resplit_curves", (this.getattr("edges")?, c))?
-    };
+    // The store splits in whatever frame it is in: the edge views read the
+    // same frame coordinates, and an instance view forwards the change to its
+    // definition like any store call. Walking the edge views instead took
+    // ~0.2-0.3 s per line on a 200k-face mesh in the tools' frame.
+    let n = st.call_method1("resplit_curves", (c,))?;
     m.setattr("_CURVE_COUNTER", n)
 }
 #[pyfunction]

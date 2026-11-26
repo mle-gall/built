@@ -168,39 +168,46 @@ def test_a_mesh_moved_out_of_reach_of_its_frame_repacks(far):
     assert updates.diff(scene) is None
 
 
-def _contour(seed, frame=None):
-    """A circle tagged as a curve with a few edges attached, split again,
-    inside the view frame at ``frame`` (the tools' frame on a far model)."""
+def _contour(seed):
+    """A circle tagged as a curve with a few edges attached."""
     import math
     import random
-    from built_core import mesh as mesh_api
-    from built_core.coordinate_frame import mesh_frame
     rng = random.Random(seed)
     mesh = Mesh()
     n = rng.randint(12, 36)
     points = [V(FAR + 2 * math.cos(math.tau * i / n), 2 * math.sin(math.tau * i / n), 3) for i in range(n)]
     mesh.add_face(points)
-    edges = list(mesh.edges)
     mesh.tag_curve(points, closed=bool(seed % 3))
     for i in rng.sample(range(n), 5):
         v = points[i]
         mesh.add_edge(v, v + (V(0, 0, 1) if i % 2 else V(0.2, -0.12, 0)))
-    if frame is None:
-        mesh.resplit_curves()
-    else:
-        with mesh_frame(mesh, frame):
-            assert not mesh._store._model_frame
-            mesh.resplit_curves()
-    return [e.curve for e in edges], mesh_api._CURVE_COUNTER
+    return mesh
 
 
-def test_curves_split_in_the_view_frame_as_in_the_model_frame(monkeypatch):
-    """The view frame only moves the origin: the store splits the curves
-    there itself (it walked every edge through Python, ~0.2 s per line on a
-    200k-face mesh), with the model frame's answer."""
+@pytest.mark.parametrize("matrix", [None, "turned"])
+def test_curves_split_by_the_store_in_a_tool_frame_as_by_the_edges(monkeypatch, matrix):
+    """In the tools' frame (the view frame of a far model, an open group's
+    placement) the store splits the curves itself, as walking the edge views
+    there did (~0.2-0.3 s per line on a 200k-face mesh)."""
+    import math
     from built_core import mesh as mesh_api
+    from built_core.coordinate_frame import mesh_frame
+    if matrix == "turned":
+        c, s = math.cos(0.5), math.sin(0.5)
+        matrix = (c, s, 0, 0, -s, c, 0, 0, 0, 0, 1, 0, FAR + 3.0, -2.0, 1.0, 1)
+    kw = {} if matrix is None else {"matrix": matrix}
     for seed in range(12):
-        monkeypatch.setattr(mesh_api, "_CURVE_COUNTER", 1000)
-        model = _contour(seed)
-        monkeypatch.setattr(mesh_api, "_CURVE_COUNTER", 1000)
-        assert _contour(seed, (FAR, 0.0, 0.0)) == model
+        results = []
+        for native in (True, False):
+            monkeypatch.setattr(mesh_api, "_CURVE_COUNTER", 1000)
+            mesh = _contour(seed)
+            edges = list(mesh.edges)
+            with mesh_frame(mesh, (FAR, 0.0, 0.0), **kw):
+                assert not mesh._store._model_frame
+                if native:
+                    mesh.resplit_curves()
+                else:
+                    mesh_api._CURVE_COUNTER = mesh_api.object_drawing.resplit_curves(
+                        list(mesh.edges), mesh_api._CURVE_COUNTER)
+            results.append(([e.curve for e in edges], mesh_api._CURVE_COUNTER))
+        assert results[0] == results[1]
