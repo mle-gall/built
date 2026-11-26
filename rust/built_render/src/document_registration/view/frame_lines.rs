@@ -754,9 +754,12 @@ pub(super) fn selection_box_segments<'py>(a: &Args<'py>) -> Reply<'py> {
         cache.call_method0("clear")?;
         cache.set_item(py.None(), &version)?;
     }
-    // Nothing changed since the last frame: no walk over the groups.
+    // Past the cap, nothing changed since the last frame means no walk over
+    // the groups (thousands of them); a few are walked every frame, so a
+    // group turned into a face-me figure loses its box at once.
+    let many = groups.len() > BOXED_GROUPS;
     let frame_key = (&version, super::metal_view_selection::selection_digest(&view)?.get_item(0)?, py.get_type::<pyo3::types::PyFrozenSet>().call1((&moving,))?).into_bound_py_any(py)?;
-    if cache.call_method1("get", ("frame_key",))?.eq(&frame_key)? {
+    if many && cache.call_method1("get", ("frame_key",))?.eq(&frame_key)? {
         return (cache.get_item("key")?, cache.get_item("segments")?).into_bound_py_any(py);
     }
     let (shown, ids) = (empty(py), empty(py));

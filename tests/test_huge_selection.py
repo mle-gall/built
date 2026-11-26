@@ -222,6 +222,13 @@ def test_many_selected_groups_show_one_box(view):
     assert len(vertices) == 24                      # 12 edges, one box
     xs = vertices["pos"][:, 0]
     assert xs.min() == pytest.approx(0.0) and xs.max() == pytest.approx(2.0 * 299 + 1)
+    # Past the cap, an unchanged selection costs no walk over its groups.
+    calls = []
+    real = view._rows_for_group
+    view._rows_for_group = lambda g: (calls.append(g), real(g))[1]
+    selection_box_vertices(view)
+    assert calls == []
+    del view._rows_for_group
     view.scene.select(groups[:1])
     one = len(selection_box_vertices(view)[1])
     view.scene.select(groups[:3])
