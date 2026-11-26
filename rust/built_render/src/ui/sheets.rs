@@ -716,6 +716,23 @@ mod tests {
     }
 
     #[test]
+    fn sheet_menu_offers_the_current_page_operations() {
+        let Some(mut chrome) = super::super::test_chrome() else { return };
+        chrome.sheets.row_menu = Some((0, pos2(40., 40.)));
+        let ctx = chrome.ctx.clone();
+        let frame = |chrome: &mut Ui| ctx.run(Default::default(), |ctx| chrome.sheets_row_menu(ctx));
+        let _ = frame(&mut chrome);
+        let labels: Vec<_> = frame(&mut chrome).shapes.into_iter().filter_map(|shape| {
+            if let egui::Shape::Text(text) = shape.shape {
+                Some(text.galley.text().to_owned())
+            } else {
+                None
+            }
+        }).collect();
+        assert_eq!(labels, ["Rename…", "Duplicate", "Move earlier", "Move later", "Delete…"]);
+    }
+
+    #[test]
     fn popups_hold_escape() {
         let mut s = Sheets::default();
         assert!(!s.popup_open());
