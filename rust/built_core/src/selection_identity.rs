@@ -168,6 +168,7 @@ pub(crate) fn selection_identity(
     let nodes = data.get_item("nodes")?;
     let mut result: Vec<Field> = vec![];
     let mut materials = Materials::default();
+    let mut inside_differs = false;
     for entry in scene.getattr("selection")?.try_iter()? {
         let obj = entry?;
         let mut key: Option<String> = member
@@ -256,7 +257,7 @@ pub(crate) fn selection_identity(
         } else {
             field(
                 "Tag",
-                tag.getattr("name")?.extract::<String>()?,
+                if tag.getattr("key")?.eq("Layer 0")? { "Untagged".into() } else { tag.getattr("name")?.extract::<String>()? },
                 format!(
                     "eye\x1fpreview-tag:{}",
                     tag.getattr("key")?.extract::<String>()?
@@ -267,6 +268,9 @@ pub(crate) fn selection_identity(
             tag_field.3 = Some(tag.getattr("visible")?.is_truthy()?);
         }
         let linked = source.is_some();
+        let file = source.unwrap_or_else(|| filename.into());
+        let inside = inside.join(" › ");
+        inside_differs |= inside != file;
         materials.visit(&obj, fallback)?;
         let fields = vec![
             field("Kind", kind, REVEAL),
@@ -282,7 +286,7 @@ pub(crate) fn selection_identity(
             tag_field,
             field(
                 "Inside",
-                inside.join(" › "),
+                inside,
                 if linked {
                     "insp:linkfile".into()
                 } else {
@@ -291,7 +295,7 @@ pub(crate) fn selection_identity(
             ),
             field(
                 "File",
-                source.unwrap_or_else(|| filename.into()),
+                file,
                 if linked { "insp:linkfile" } else { ROOT },
             ),
         ];
@@ -309,6 +313,7 @@ pub(crate) fn selection_identity(
     }
     if !result.is_empty() {
         result.insert(4, materials.field());
+        if !inside_differs { result.retain(|row| row.0 != "Inside"); }
     }
     Ok(result)
 }

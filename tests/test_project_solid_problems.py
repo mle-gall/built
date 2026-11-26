@@ -87,7 +87,7 @@ def test_dialog_repairs_a_group_without_entering_it(project):
     assert any(label == "Name" and value.endswith(g.name) for _, rows in sections for label, value in rows)
     wgpu_ui._tree_action(win, view, "insp:" + repair[0])
     assert not scene.edit_group and scene.selection == {g}
-    assert ("Watertight", "8.000 m³") in dict(solid_inspector_sections(scene, g))["Solid"]
+    assert ("Volume", "8.000 m³ · ✓ Watertight") in dict(solid_inspector_sections(scene, g))["Solid"]
     assert "4 open borders" in dict(solid_inspector_sections(scene, None))["Solid"][0][1]
     assert win.viewport.history.undo()
     assert "4 open borders" in dict(solid_inspector_sections(scene, g))["Solid"][0][1]
@@ -137,7 +137,7 @@ def test_repair_only_the_chosen_loose_fault_and_reject_stale_keys(project):
     assert dict(solid_inspector_sections(scene, None))["Solid"] == [("Not watertight", "1 stray edges")]
     wgpu_ui._tree_action(win, view, "insp:" + stray[0])
     assert len(win.viewport.history.undo_stack) == 2
-    assert "Watertight" in dict(dict(solid_inspector_sections(scene, None))["Solid"])
+    assert "Watertight" in dict(dict(solid_inspector_sections(scene, None))["Solid"])["Volume"]
     assert win.viewport.history.undo()
     assert "stray" in dict(solid_inspector_sections(scene, None))["Solid"][0][1]
 

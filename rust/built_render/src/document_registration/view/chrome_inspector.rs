@@ -247,6 +247,21 @@ fn inspector<'py>(a: &Args<'py>) -> Reply<'py> {
     }
     let identity = identity()?;
     let tag_row = glue.call_method1("inspector_tag_row", (&scene,))?;
+    let has_tag_picker = tag_row.is_truthy()?;
+    let facts = |offer_filing: bool| -> PyResult<Bound<'py, PyList>> {
+        let facts = empty(py);
+        for fact in identity.try_iter()? {
+            let fact = fact?;
+            let label = fact.get_item(0)?;
+            if label.eq("Tag")? && has_tag_picker { continue; }
+            if label.eq("Filed in")? && offer_filing {
+                facts.append(("Filing", "Not filed · File to…", "insp:file", py.None()))?;
+            } else {
+                facts.append(fact)?;
+            }
+        }
+        Ok(facts)
+    };
     let sel_kind = glue.call_method1("selection_kind", (&scene, &sel))?;
     let offered = |verb: &str| -> PyResult<bool> { glue.call_method1("verbs_offered", (&sel_kind, verb))?.is_truthy() };
     if sel.len() == 1 && !groups.is_empty() {
@@ -283,7 +298,7 @@ fn inspector<'py>(a: &Args<'py>) -> Reply<'py> {
         let needs = if link.is_truthy()? || part {
             ("Record", "Kept in the source file".to_owned())
         } else if !filed {
-            ("Filing", "Needed first".to_owned())
+            ("Filing", "Not filed".to_owned())
         } else if !record.is_truthy()? {
             ("Record", "Comes with a kind".to_owned())
         } else {
@@ -291,7 +306,8 @@ fn inspector<'py>(a: &Args<'py>) -> Reply<'py> {
         };
         let sections = empty(py);
         sections.append(("Item", rows))?;
-        sections.append(("What it needs", [needs]))?;
+        let offer_filing = !filed && offered("fileto")?;
+        if !offer_filing { sections.append(("What it needs", [needs]))?; }
         if get(&record, "class")?.is_truthy()? && offered("status")? {
             sections.append(("Actions", status_chips(py, "status:", false)?))?;
         }
@@ -388,11 +404,10 @@ fn inspector<'py>(a: &Args<'py>) -> Reply<'py> {
             [
                 ("IFC class", either("class", "Not set")?),
                 ("Predefined type", either("predefined_type", "—")?),
-                ("Tag", text_or(attr(&group, "layer")?, "—")?),
             ],
         ))?;
         show(&view, identity.get_item(0)?.get_item(1)?, sections)?;
-        renderer.call_method1("ui_set_identity", (identity,))?;
+        renderer.call_method1("ui_set_identity", (facts(offer_filing)?,))?;
         return Ok(none(py));
     }
     let by_node = counter.call0()?;
@@ -466,7 +481,7 @@ fn inspector<'py>(a: &Args<'py>) -> Reply<'py> {
         format!("{} selected", sel.len())
     };
     show(&view, title, sections)?;
-    renderer.call_method1("ui_set_identity", (identity,))?;
+    renderer.call_method1("ui_set_identity", (facts(false)?,))?;
     Ok(none(py))
 }
 

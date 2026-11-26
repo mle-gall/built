@@ -76,7 +76,9 @@ pub fn inspector_tag_row(scene: &Bound<'_, PyAny>) -> PyResult<Vec<(String, Stri
             at = options.len();
         }
         let folder: Option<String> = tag.getattr("folder")?.extract()?;
-        let label = if let Some(folder) = folder.filter(|f| !f.is_empty() && key != "Layer 0") {
+        let label = if key == "Layer 0" {
+            "Untagged".to_owned()
+        } else if let Some(folder) = folder.filter(|f| !f.is_empty()) {
             let path = paths.entry(folder.clone()).or_insert_with(|| {
                 let mut at = Some(&folder);
                 let mut seen = HashSet::new();

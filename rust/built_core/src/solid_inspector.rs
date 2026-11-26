@@ -85,9 +85,9 @@ pub(crate) fn solid_inspector_sections(
     if plugin.call_method1("is_sound", (&report,))?.is_truthy()? {
         let volume: Option<f64> = report.get_item("volume")?.extract()?;
         let value = volume
-            .map(|v| format!("{v:.3} m³"))
-            .unwrap_or_else(|| "yes".into());
-        return Ok(vec![("Solid".into(), vec![("Watertight".into(), value)])]);
+            .map(|v| format!("{v:.3} m³ · ✓ Watertight"))
+            .unwrap_or_else(|| "— · ✓ Watertight".into());
+        return Ok(vec![("Solid".into(), vec![("Volume".into(), value)])]);
     }
     let status = if report.get_item("watertight")?.is_truthy()? {
         "Faces reversed"

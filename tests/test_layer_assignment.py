@@ -57,7 +57,7 @@ def test_inspector_tag_field_single_mixed_and_empty_selection(native_host):
     group = Group(Mesh(), name="caja")
     scene.groups.append(group)
     key, labels = tag_picker(native_host, [face])
-    assert key == "Layer 0" and labels["Muros"] == "Muros"
+    assert key == "Layer 0" and labels[key] == "Untagged" and labels["Muros"] == "Muros"
     action(native_host, "tagpick", json.dumps("Muros"))
     assert layer_of(face) == "Muros" and native_host.viewport.history.undo()
     assert layer_of(face) == "Layer 0"
@@ -87,7 +87,7 @@ def test_right_click_tag_choice_and_new_tag(native_host):
     scene.groups.append(group)
     scene.select([group])
     form = tag_form(native_host)
-    assert form.fields[0].value == "Assign to Layer 0"
+    assert form.fields[0].value == "Assign to Untagged"
     form.receive("item", str(form.field("item").keys().index("Assign to Muros")))
     form.press("ok")
     assert layer_of(group) == "Muros"
