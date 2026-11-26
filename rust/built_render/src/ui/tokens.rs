@@ -71,6 +71,30 @@ palette! {
     IMAGE_BACK = Color32::from_rgba_premultiplied(0, 0, 0, 120);
     BRIGHT = Color32::WHITE;
     SWATCH_FALLBACK = Color32::GRAY;
+    // The model's axes, as the drawing axes paint them (axes.wgsl): the
+    // view gizmo and anything else that names X, Y or Z by colour.
+    AXIS_X = Color32::from_rgb(219, 56, 69);
+    AXIS_Y = Color32::from_rgb(41, 158, 92);
+    AXIS_Z = Color32::from_rgb(51, 102, 199);
+    // The view gizmo's hover disc: a dark wash that shows on a white sky
+    // and on a dark background alike.
+    GIZMO_DISC = Color32::from_black_alpha(36);
+}
+
+#[cfg(test)]
+mod axis_tests {
+    /// The gizmo's axes match the drawing axes the model shows.
+    #[test]
+    fn axis_tokens_match_the_drawing_axes() {
+        let shader = include_str!("../axes.wgsl");
+        for (token, rgb) in [(super::AXIS_X, "0.86,0.22,0.27"), (super::AXIS_Y, "0.16,0.62,0.36"), (super::AXIS_Z, "0.20,0.40,0.78")] {
+            assert!(shader.contains(&format!("vec3f({rgb})")), "{rgb}");
+            let c: Vec<f32> = rgb.split(',').map(|v| v.parse().unwrap()).collect();
+            for (have, want) in [token.r(), token.g(), token.b()].into_iter().zip(c) {
+                assert!((have as f32 - want * 255.).abs() <= 1.0, "{token:?}");
+            }
+        }
+    }
 }
 
 /// The sheet shows the blurred scene with neutral colour and no panel rim.
@@ -122,9 +146,17 @@ pub const MENU_H: f32 = if cfg!(any(target_os = "linux", windows)) { 26.0 } else
 pub const TOP_H: f32 = 40.0 + MENU_H;
 pub const BOT_H: f32 = 36.0;
 pub const GUT: f32 = 8.0;
+// The dock has one width, the user's: dragged on its inner edge between
+// DOCK_MIN_W and DOCK_MAX_SHARE of the window, the same under every column
+// preset of the tree. DOCK_MAX_W only bounds a stored value.
 pub const DOCK_W: f32 = 300.0;
-pub const DOCK_MIN_W: f32 = 260.0;
-pub const DOCK_MAX_W: f32 = 560.0;
+pub const DOCK_MIN_W: f32 = 280.0;
+pub const DOCK_MAX_SHARE: f32 = 0.45;
+pub const DOCK_MAX_W: f32 = 1200.0;
+/// The dock's width in a window `window` wide, from the width the user set.
+pub fn dock_width(wanted: f32, window: f32) -> f32 {
+    wanted.clamp(DOCK_MIN_W, (window * DOCK_MAX_SHARE).max(DOCK_MIN_W))
+}
 // Type scale (design pass 2026-11-23): four sizes. Meta 11 for labels,
 // captions, counts and shortcuts; body 12 for values and controls; title 13
 // semibold for a panel's subject; heading 16 semibold for a sheet. Weight

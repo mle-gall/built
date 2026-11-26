@@ -48,7 +48,8 @@ def test_native_input_ownership(tmp_path):
     assert s["cleared_filter"]["filter"] == "" and s["cleared_filter"]["input"]["filter_focus"]
     assert not s["blurred"]["input"]["filter_focus"] and s["blurred"]["dock_lens"] == 2
     assert s["tree"]["dock_mode"] == "" and s["tree"]["filter"] == ""
-    assert s["deliveries"]["dock_lens"] == 2 and s["filing"]["dock_lens"] == 0
+    # The Export columns are a preset, not a mode: Escape keeps them, the Columns control changes them.
+    assert s["tree"]["dock_lens"] == 2 and s["filing"]["dock_lens"] == 0
     assert s["formats"]["input"]["choice"]
     assert s["export"]["large_sheet"] == "export" and not s["export"]["input"]["choice"]
     assert not s["model_again"]["large_sheet"]

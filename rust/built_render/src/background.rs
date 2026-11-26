@@ -1,4 +1,44 @@
 //! Draw the GL style's hazed sky/ground ramp before geometry, without depth or IDs.
+
+/// The style uniform's float that asks for the flat background (`ground.a`):
+/// row 5, lane 3 of the look data.
+pub const FLAT_SLOT: (usize, usize) = (5, 3);
+
+/// Does a camera (column-major view and projection matrices) show a
+/// parallel view along a model axis? Its picture then has no horizon: Top,
+/// Front, Right and the others draw on the flat background (M32).
+pub fn flat_view(view: &[f32; 16], projection: &[f32; 16]) -> bool {
+    // A perspective projection divides by depth: its last element is 0.
+    if projection[15] == 0. {
+        return false;
+    }
+    // The view's third row is the camera's back direction in the model.
+    let back = [view[2], view[6], view[10]];
+    back.iter().any(|c| c.abs() > 1. - 1e-4)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::flat_view;
+    fn look(back: glam::Vec3, perspective: bool) -> bool {
+        let up = if back.z.abs() > 0.9 { glam::Vec3::Y } else { glam::Vec3::Z };
+        let view = glam::Mat4::look_at_rh(back * 10., glam::Vec3::ZERO, up);
+        let projection = if perspective {
+            glam::Mat4::perspective_rh(0.8, 1.5, 0.1, 100.)
+        } else {
+            glam::Mat4::orthographic_rh(-5., 5., -3., 3., 0.1, 100.)
+        };
+        flat_view(&view.to_cols_array(), &projection.to_cols_array())
+    }
+    #[test]
+    fn parallel_axis_views_are_flat_and_the_rest_keep_the_horizon() {
+        for back in [glam::Vec3::Z, -glam::Vec3::Y, glam::Vec3::X, -glam::Vec3::Z] {
+            assert!(look(back, false), "{back:?}");
+            assert!(!look(back, true), "{back:?} in perspective");
+        }
+        assert!(!look(glam::Vec3::new(1., -1., 0.8).normalize(), false));
+    }
+}
 pub struct Background {
     pipeline: wgpu::RenderPipeline,
     group: wgpu::BindGroup,

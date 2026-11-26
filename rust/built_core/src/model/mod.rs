@@ -10,6 +10,7 @@ use pyo3::prelude::*;
 pub mod anchor_broad;
 pub mod camera_live;
 mod orbit_camera;
+pub mod auto_perspective;
 pub mod dimension_frame;
 pub mod edit_context;
 pub mod group_frame;

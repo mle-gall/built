@@ -674,11 +674,27 @@ impl Gallery {
                 ui.spacing_mut().item_spacing = vec2(0., SPACE_XS);
                 let w = ui.available_width();
                 ui.set_width(w);
-                // The dock's header as it ships (sidebar A): the three lenses.
-                if let Some(index) = segmented(ui, &["Filing", "Drawing", "Export"], self.dock_tab, w) {
-                    self.dock_tab = index;
+                // The dock's header as it ships: the tree's columns (a preset
+                // or the user's own set), then the filter with its button.
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = SPACE_XS;
+                    let presets = ["Filing", "Drawing", "Export"];
+                    if dropdown(ui, "Columns", presets[self.dock_tab % 3], false, w - 2. * CONTROL_H).clicked() {
+                        self.dock_tab = (self.dock_tab + 1) % 3;
+                    }
+                    filter_button(ui, self.dock_tab == 1, false);
+                    filter_button(ui, false, true);
+                });
+                inspector_title(ui, "Walls", "Tag · 24 items");
+                tag_inspector(ui, "preview-tag:Walls", true, &mut Vec::new());
+                // One glyph per kind of tree row.
+                {
+                    let kinds = ["tag", "folder", "loose", "section", "scene", "sheet", "group", "component", "image", "link"];
+                    let (r, _) = ui.allocate_exact_size(vec2(w, ROW_H), Sense::hover());
+                    for (i, kind) in kinds.iter().enumerate() {
+                        row_glyph(ui.painter(), pos2(r.min.x + 12. + i as f32 * 20., r.center().y), kind, INK_2);
+                    }
                 }
-                tag_inspector(ui,"preview-tag:Walls","Walls",24,&[],&mut Vec::new());
                 host_visibility(ui,"Plaza.built",&[("Survey".into(),"Survey".into(),true)], &mut Vec::new());
                 path_bar(ui, &[("Plaza.built".into(), String::new()), ("Core block".into(), String::new())], &mut Vec::new());
                 scene_preview_row(ui,"Ground floor",true,None);
@@ -689,7 +705,7 @@ impl Gallery {
                     line_sample(ui, r.with_max_x(r.center().x), "0.35", "dashed", INK);
                     line_type_preview(ui,r.with_min_x(r.center().x),&[4., -1.], "GAS", 2.5, INK);
                 }
-                ui.add(search(&mut self.dock_filter, "Filter nodes").desired_width(w));
+                ui.add(search(&mut self.dock_filter, "Filter").desired_width(w));
                 ui.spacing_mut().item_spacing = vec2(0., 0.);
                 // (name, depth, expanded, selected, eye, lock, count, state dot, note)
                 let rows: [(&str, usize, Option<bool>, bool, i8, i8, &str, Option<Color32>, &str); 7] = [
@@ -854,7 +870,8 @@ mod coverage {
     /// Kit functions that are not components drawn on their own: the style
     /// installer, state helpers every molecule uses, and a variant of a
     /// component the gallery already shows.
-    const NOT_COMPONENTS: [&str; 5] = [
+    const NOT_COMPONENTS: [&str; 6] = [
+        "popover_pos",   // where a menu opens, not something drawn
         "install_style", // style, not a component
         "state_of",      // reads a response's state for every molecule
         "paint_state",   // paints that state under every molecule

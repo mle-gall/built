@@ -444,8 +444,11 @@ def test_native_svg_preview_and_delivery_edit(tmp_path):
     steps.write_text("wait 700\nkey escape\nmenu delivery_export\nwait 650\nclick 630 208\n"
                      "wait 450\nclick 470 377\nwait 450\nclick 843 269\nwait 250\n"
                      "click 260 329\nwait 900\ncapture one-off\nstate\nclick 392 127\n"
-                     "wait 650\nstate\nclick 1160 72\nwait 600\nclick 885 107\n"
-                     "wait 120\nclick 890 222\nwait 650\nclick 260 329\nwait 900\n"
+                     "wait 650\nstate\n"
+                     # The Export columns from the Columns control, then the delivery
+                     # picker over the tree and its "Edit delivery…" row.
+                     "click 1020 72\nwait 300\nclick 1040 174\nwait 600\nclick 1040 106\n"
+                     "wait 300\nclick 1040 198\nwait 650\nclick 260 329\nwait 900\n"
                      "capture named\nstate\ndrag 990 370 1030 380 left 8\nwait 600\n"
                      f"key enter\nwait 400\nstate\nmenu save_to:{saved}\nwait 600\nquit\n")
     result = run([str(BIN), "--root", str(ROOT), "--venv", str(venv), "--new-instance",

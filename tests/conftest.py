@@ -6,6 +6,9 @@ import sys
 import tempfile
 
 os.environ.setdefault("BUILT_BACKGROUND", "1")
+# Camera moves jump instead of gliding (as in `built --script`): a test reads
+# the camera right after a view command.
+os.environ.setdefault("BUILT_SCRIPTED", "1")
 # Also suppress activation in independently launched legacy test processes.
 os.environ.setdefault("QT_MAC_DISABLE_FOREGROUND_APPLICATION_TRANSFORM", "1")
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")

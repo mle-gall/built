@@ -176,11 +176,10 @@ fn open_line_type<'py>(a: &Args<'py>) -> Reply<'py> {
         win.getattr("viewport")?.call_method1("flash_status", ("Line type editing requires the native Drawing lens.",))?;
         return false.into_bound_py_any(py);
     }
-    view.setattr("_ui_lens", 1)?;
+    // The line editor opens in the inspector, whatever the tree's columns.
     view.setattr("_ui_mode", "")?;
     view.setattr("_ui_tree_sig", py.None())?;
     let module = ui(py)?;
-    module.call_method1("apply_dock_width", (&view,))?;
     module.call_method1("_tree", (&view, &win))?;
     let opened = view.getattr("renderer")?.call_method1("ui_open_line_type", (name, py.get_type::<PyList>().call1((tags,))?))?;
     view.call_method0("update")?;
@@ -196,16 +195,27 @@ fn sync_project_rows<'py>(a: &Args<'py>) -> Reply<'py> {
     }
     let module = ui(py)?;
     module.call_method1("_tree", (&view, &win))?;
-    let drawing = own(&view, "_ui_lens")?.is_some_and(|lens| lens.eq(1).unwrap_or(false));
-    if drawing && view.getattr("renderer")?.call_method1("ui_tick_tag_counts", (win.getattr("viewport")?.getattr("history")?,))?.is_truthy()? {
+    // The dock counts the entities of the tags in focus, under every preset.
+    if view.getattr("renderer")?.call_method1("ui_tick_tag_counts", (win.getattr("viewport")?.getattr("history")?,))?.is_truthy()? {
         view.call_method0("update")?;
     }
     module.call_method1("_inspector", (&view, &win))?;
     Ok(none(py))
 }
 
+/// Whether the dock shows the export checks: its Readiness column or the
+/// Fix checklist of the document inspector. The dock says so (`readiness`);
+/// until it has, the Export preset with its own columns asks for them.
+pub(super) fn wants_readiness(view: &Obj<'_>) -> PyResult<bool> {
+    if let Some(asked) = own(view, "_ui_readiness")?.filter(|asked| !asked.is_none()) {
+        return asked.is_truthy();
+    }
+    let export = own(view, "_ui_lens")?.is_some_and(|lens| lens.eq(2).unwrap_or(false));
+    Ok(export && !own(view, "_ui_columns")?.is_some_and(|mask| !mask.is_none()))
+}
+
 /// Bind the membership index, revision and disclosure state to the native
-/// sidebar providers.
+/// sidebar providers. The rows are the same under every column preset.
 fn tree<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let (view, win) = (a.get_item(0)?, a.get_item(1)?);
@@ -232,8 +242,8 @@ fn tree<'py>(a: &Args<'py>) -> Reply<'py> {
     };
     let sheet_revision = catalog.call_method1("refresh", (&scene,))?;
     view.setattr("_ui_sheet_revision", &sheet_revision)?;
-    // Watertight checks in Export must follow mesh edits.
-    let geometric = lens.eq(2)?;
+    // The export checks include watertightness: they must follow mesh edits.
+    let geometric = !discover && wants_readiness(&view)?;
     let content = scene.getattr("content_version")?;
     let version = if geometric { content.clone() } else { direct(py, tree_version, (&win, &scene))? };
     let kinds = outliner_kinds(&win)?;
@@ -254,7 +264,7 @@ fn tree<'py>(a: &Args<'py>) -> Reply<'py> {
             flt.clone(),
             if filtering { content.clone() } else { none(py) },
             direct(py, super::chrome_frame::sel_key, (scene.getattr("selection")?,))?,
-            lens.clone(),
+            geometric.into_bound_py_any(py)?,
             view.getattr_opt("_ui_layer_rev")?.unwrap_or(0.into_bound_py_any(py)?),
             scene.getattr("show_section_planes")?,
             sheet_revision,
@@ -265,7 +275,7 @@ fn tree<'py>(a: &Args<'py>) -> Reply<'py> {
         let old = attr(&view, "_ui_tree_sig")?;
         if sig.as_any().eq(&old)? { return Ok(none(py)); }
         // Selection is slot 8. All structural inputs must still match.
-        if !old.is_none() && !filtering && lens.eq(0)? && scene.getattr("edit_group")?.is_none()
+        if !old.is_none() && !filtering && !geometric && scene.getattr("edit_group")?.is_none()
             && sig.get_slice(0, 8).eq(old.get_item(slice(py, 0, 8))?)?
             && sig.get_slice(9, sig.len()).eq(old.get_item(slice(py, 9, isize::MAX))?)?
             && attr(&scene, "_browser_picks")?.is_none()
@@ -282,7 +292,7 @@ fn tree<'py>(a: &Args<'py>) -> Reply<'py> {
         view.setattr("_ui_tree_sig", &sig)?;
     }
     // The selected ids only once the signature (the selection's revision) moved.
-    let sel_ids = if discover || lens.ne(0)? {
+    let sel_ids = if discover {
         let ids = PySet::empty(py)?;
         for entity in scene.getattr("selection")?.try_iter()? {
             ids.add(id(&entity?))?;
@@ -332,7 +342,8 @@ fn tree<'py>(a: &Args<'py>) -> Reply<'py> {
             flt.clone(),
             discover.into_bound_py_any(py)?,
             module.getattr("ROW_CAP")?,
-            lens.clone(),
+            // Every row carries its tag's drawing cells: a preset only shows them.
+            1.into_bound_py_any(py)?,
             sel_ids.clone(),
             active.clone(),
             module.getattr("KINDS")?,
@@ -342,9 +353,8 @@ fn tree<'py>(a: &Args<'py>) -> Reply<'py> {
         ],
     )?)?;
     let path = current_path(&win)?;
-    let drawing = lens.eq(1)?;
-    let [mut rows, path_bar] = unpack::<2>(
-        &py.import("plugins._browser")?.call_method1("project_sidebar", (&scene, &tree, rows, &flt, &exp, &path, drawing, &sel_ids))?,
+    let [rows, path_bar] = unpack::<2>(
+        &py.import("plugins._browser")?.call_method1("project_sidebar", (&scene, &tree, rows, &flt, &exp, &path, false, &sel_ids))?,
     )?;
     rows.call_method1("extend", (catalog.call_method1("rows", (&flt, &exp))?,))?;
     let in_project = match win.getattr_opt("__dict__")? {
@@ -385,8 +395,8 @@ fn tree<'py>(a: &Args<'py>) -> Reply<'py> {
             view.setattr("_ui_rules_cache", &cache)?;
         }
         let key = if chosen.is_truthy()? { chosen } else { "".into_bound_py_any(py)? };
-        let [checked, readiness] = unpack::<2>(&core.call_method1("export_readiness", (&scene, &tree, &records, key, cache.get_item(1)?, &exp, &rows))?)?;
-        rows = checked;
+        // The checks annotate the rows (the Readiness column); they never change them.
+        let readiness = core.call_method1("export_readiness", (&scene, &tree, &records, key, cache.get_item(1)?))?;
         renderer.call_method1("ui_panel_set", ("readiness", readiness))?;
     }
     let rows = core.call_method1("mark_filing_selection", (rows,))?;
@@ -425,8 +435,9 @@ fn tree<'py>(a: &Args<'py>) -> Reply<'py> {
     for key in scene.getattr("line_types")?.try_iter()? {
         line_types.call_method1("append", (custom.add(key?)?,))?;
     }
-    renderer.call_method1("ui_set_style_catalog", (id(&scene), line_types, scene.getattr("hatch_patterns")?, if drawing || tree.getattr("_host_roots")?.lt(0)? { scene.clone() } else { none(py) }))?;
-    renderer.call_method1("ui_set_lens", (&lens,))?;
+    // A tag's drawing style is in its inspector under every preset.
+    renderer.call_method1("ui_set_style_catalog", (id(&scene), line_types, scene.getattr("hatch_patterns")?, scene.clone()))?;
+    renderer.call_method1("ui_set_columns", (&lens, own(&view, "_ui_columns")?.unwrap_or_else(|| none(py))))?;
     renderer.call_method1("ui_set_mode", (if mode.eq("library")? { "Library" } else { "" },))?;
     renderer.call_method1("ui_set_issues", (own(&view, "_ui_issues")?.is_some_and(|issues| issues.is_truthy().unwrap_or(false)),))?;
     if !truthy(&view, "_ui_kinds_sent")? {

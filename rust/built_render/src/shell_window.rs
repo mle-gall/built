@@ -761,7 +761,7 @@ impl ShellWindow {
     fn _on_standard_view<'p>(slf: &Bound<'p, Self>, key: &Obj<'p>) -> PyResult<Obj<'p>> {
         slf.py()
             .import(RENDER)?
-            .call_method1("standard_view", (Self::_active_view(slf)?, key))
+            .call_method1("standard_view", (slf, key))
     }
     fn _set_hidden_view<'p>(
         slf: &Bound<'p, Self>,

@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! The Filing lens presets edit the same query as the search field.
+//! The filter popover's quick choices edit the same query as the field.
 use super::kit;
 
-const FILING: [(&str, &str); 8] = [
+/// (query word, label). The last three only mean something for tags.
+const FILTERS: [(&str, &str); 11] = [
     ("", "All rows"),
     ("is:visible", "Visible"),
     ("is:hidden", "Hidden"),
@@ -11,41 +12,45 @@ const FILING: [(&str, &str); 8] = [
     ("is:component", "Components"),
     ("is:image", "Images"),
     ("is:section", "Section planes"),
+    ("is:unprinted", "Tags not printed"),
+    ("is:used", "Tags in use"),
+    ("is:unused", "Unused tags"),
 ];
+/// The choices for a tree without tag rows.
+const PLAIN: usize = 8;
 
-const DRAWING: [(&str, &str); 8] = [
-    ("", "All tags"),
-    ("is:visible", "Visible"),
-    ("is:hidden", "Hidden"),
-    ("is:locked", "Locked"),
-    ("is:unprinted", "Not printed"),
-    ("is:used", "In use"),
-    ("is:unused", "Unused"),
-    ("is:selected", "Tags of selection"),
-];
+type Filters = [(&'static str, &'static str)];
 
-type Presets = [(&'static str, &'static str); 8];
+fn filters(tags: bool) -> &'static Filters {
+    if tags { &FILTERS } else { &FILTERS[..PLAIN] }
+}
 
-fn preset(filters: &Presets, word: &str) -> Option<usize> {
+fn preset(filters: &Filters, word: &str) -> Option<usize> {
     filters
         .iter()
         .position(|(key, _)| !key.is_empty() && word.eq_ignore_ascii_case(key))
 }
 
-pub(super) fn controls(ui: &mut egui::Ui, query: &mut String, drawing: bool) -> bool {
-    let filters = if drawing { &DRAWING } else { &FILING };
+/// Whether the query holds a quick choice or is inverted (the field's
+/// button shows it).
+pub(super) fn active(query: &str) -> bool {
+    selection(&FILTERS, query) != (0, false)
+}
+
+/// The quick filter and its inversion. `tags`: the tree lists tags, so the
+/// tag choices are offered too. Returns whether the query changed.
+pub(super) fn controls(ui: &mut egui::Ui, query: &mut String, tags: bool) -> bool {
+    let filters = filters(tags);
     let (current, invert) = selection(filters, query);
     let mut choice = current;
     let mut inverted = invert;
-    kit::property_control(ui, "Filter", |ui| {
-        kit::choice(
-            ui,
-            "project_filter",
-            &mut choice,
-            &filters.map(|(_, label)| label),
-        );
+    kit::property_control(ui, "Show", |ui| {
+        let labels: Vec<&str> = filters.iter().map(|(_, label)| *label).collect();
+        kit::choice(ui, "project_filter", &mut choice, &labels);
     });
-    kit::toggle(ui, &mut inverted, "Invert filter");
+    if kit::switch_row(ui, "Invert the filter", inverted, true).clicked() {
+        inverted = !inverted;
+    }
     if current == choice && inverted == invert {
         return false;
     }
@@ -53,12 +58,12 @@ pub(super) fn controls(ui: &mut egui::Ui, query: &mut String, drawing: bool) -> 
     true
 }
 
-fn selection(filters: &Presets, query: &str) -> (usize, bool) {
+fn selection(filters: &Filters, query: &str) -> (usize, bool) {
     let current = query.split_whitespace().find_map(|word| preset(filters, word)).unwrap_or(0);
     (current, query.split_whitespace().next() == Some("!"))
 }
 
-fn replace_selection(filters: &Presets, query: &str, choice: usize, inverted: bool) -> String {
+fn replace_selection(filters: &Filters, query: &str, choice: usize, inverted: bool) -> String {
     let (current, invert) = selection(filters, query);
     // Preserve other user-typed predicates, including negative ones.
     let mut parts = Vec::new();
@@ -84,18 +89,20 @@ mod tests {
     use super::*;
 
     #[test]
-    fn drawing_presets_keep_the_name_query_and_invert_the_combined_filter() {
-        for (i, (key, _)) in DRAWING.iter().enumerate().skip(1) {
-            let query = replace_selection(&DRAWING, "Site* is:visible", i, true);
+    fn tag_choices_keep_the_name_query_and_invert_the_combined_filter() {
+        let all = filters(true);
+        for (i, (key, _)) in all.iter().enumerate().skip(1) {
+            let query = replace_selection(all, "Site* is:visible", i, true);
             assert_eq!(query, format!("! Site* {key}"));
-            assert_eq!(selection(&DRAWING, &query), (i, true));
-            assert_eq!(replace_selection(&DRAWING, &query, 0, false), "Site*");
+            assert_eq!(selection(all, &query), (i, true));
+            assert_eq!(replace_selection(all, &query, 0, false), "Site*");
         }
     }
 
     #[test]
     fn typed_queries_and_quick_choices_share_state() {
-        let filters = &FILING;
+        let filters = filters(false);
+        assert_eq!(filters.len(), PLAIN);
         assert_eq!(selection(filters, "muro custom:value"), (0, false));
         let section = preset(filters, "is:section").unwrap();
         let hidden = preset(filters, "is:hidden").unwrap();
@@ -111,5 +118,11 @@ mod tests {
             replace_selection(filters, "custom:value", hidden, false),
             "custom:value is:hidden"
         );
+    }
+
+    #[test]
+    fn the_field_button_shows_a_quick_choice_or_an_inversion() {
+        assert!(!active("") && !active("muro"));
+        assert!(active("muro is:hidden") && active("! muro") && active("is:unused"));
     }
 }

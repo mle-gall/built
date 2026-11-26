@@ -5,13 +5,63 @@ use pyo3::{
     types::{PyDict, PyList},
 };
 
-#[pyfunction]
-fn standard_view(vp: &Bound<'_, PyAny>, key: &str) -> PyResult<()> {
+/// How long a view command's camera move takes (UX pass 2, M03): 250 ms,
+/// or none in a scripted run (`built --script`), whose frames must come out
+/// the same every time.
+pub(crate) fn camera_motion_seconds(scripted: bool) -> f64 {
+    if scripted { 0. } else { 0.25 }
+}
+
+/// Is this a scripted run? The app sets `BUILT_SCRIPTED` for `--script`.
+pub(crate) fn scripted() -> bool {
+    std::env::var_os("BUILT_SCRIPTED").is_some_and(|v| !v.is_empty() && v != "0")
+}
+
+/// Settings > Navigation > Auto perspective (on by default): an aligned view
+/// shows in parallel until the next orbit.
+pub(crate) fn auto_perspective(py: Python<'_>) -> PyResult<bool> {
+    Ok(!matches!(
+        crate::navigation::setting(py, "nav/auto_perspective", "1")?.to_ascii_lowercase().as_str(),
+        "0" | "false"
+    ))
+}
+
+/// Run `change` on the window's active camera, then ease the camera there
+/// from where it was, when the window draws and the run is not scripted.
+pub(crate) fn glide_after(
+    win: &Bound<'_, PyAny>,
+    change: impl FnOnce(&Bound<'_, PyAny>) -> PyResult<()>,
+) -> PyResult<()> {
+    let py = win.py();
+    let vp = win.call_method0("_active_view")?;
     let camera = vp.getattr("camera")?;
-    if key == "iso" {
-        camera.call_method0("snap_iso")?;
-    } else {
-        camera.call_method1("set_view", (key,))?;
+    let pose = py.import("built_core")?.getattr("Pose")?;
+    let before = pose.call_method1("of_camera", (&camera,))?;
+    change(&vp)?;
+    let seconds = camera_motion_seconds(scripted());
+    let drawn = win
+        .getattr_opt("view")?
+        .and_then(|v| v.getattr_opt("renderer").ok().flatten())
+        .is_some_and(|r| !r.is_none());
+    if seconds > 0. && drawn {
+        if let Some(player) = win.getattr_opt("scene_player")?.filter(|p| !p.is_none()) {
+            player.call_method1("glide_camera", (before, seconds))?;
+        }
+    }
+    Ok(())
+}
+
+/// Top, Front, … from the gizmo, ⌘1–7 or the View menu.
+#[pyfunction]
+fn standard_view(win: &Bound<'_, PyAny>, key: &str) -> PyResult<()> {
+    let auto = auto_perspective(win.py())?;
+    glide_after(win, |vp| {
+        vp.getattr("camera")?.call_method1("align_to", (key, auto))?;
+        Ok(())
+    })?;
+    let vp = win.call_method0("_active_view")?;
+    if vp.hasattr("_sync_projection")? {
+        vp.call_method0("_sync_projection")?;
     }
     vp.call_method0("update")?;
     Ok(())
@@ -210,4 +260,13 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(smart_zoom, m)?)?;
     m.add_function(wrap_pyfunction!(tool_hint, m)?)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn a_scripted_run_jumps_and_a_live_one_glides_a_quarter_second() {
+        assert_eq!(super::camera_motion_seconds(true), 0.);
+        assert_eq!(super::camera_motion_seconds(false), 0.25);
+    }
 }

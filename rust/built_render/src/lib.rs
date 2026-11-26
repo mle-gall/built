@@ -1780,6 +1780,12 @@ impl Renderer {
             .map_err(|_| PyValueError::new_err("projection needs 16 floats"))?;
         let projection = depth::projection(&p, far_clip);
         self.ao.camera(projection);
+        let (row, lane) = background::FLAT_SLOT;
+        let flat = if background::flat_view(&v, &p) { 1f32 } else { 0. };
+        if self.look.data[row][lane] != flat {
+            self.look.data[row][lane] = flat;
+            self.queue.write_buffer(&self.look.buffer, ((row * 4 + lane) * 4) as u64, &flat.to_le_bytes());
+        }
         let vp = projection * glam::Mat4::from_cols_array(&v);
         let mut data = vp.to_cols_array().to_vec();
         data.extend([
@@ -2653,6 +2659,11 @@ impl Renderer {
     fn ui_set_cluster(&mut self, cluster: Vec<Vec<ui::Item>>, view_menu: Vec<(String, Vec<ui::Item>)>) {
         if let Some(ui) = self.ui.as_mut() { ui.set_cluster(cluster, view_menu); }
     }
+    /// The active camera for the axis gizmo: yaw and pitch (radians) and
+    /// the view label ("Front · Parallel").
+    fn ui_set_view_state(&mut self, yaw: f64, pitch: f64, label: String) {
+        if let Some(ui) = self.ui.as_mut() { ui.set_view_state(yaw, pitch, label); }
+    }
     fn ui_input_state(&self) -> std::collections::HashMap<&'static str, bool> {
         self.ui.as_ref().map(ui::Ui::input_state).unwrap_or_default()
     }
@@ -2890,13 +2901,15 @@ impl Renderer {
     fn ui_set_tree_sort(&mut self, sort: usize) {
         if let Some(ui) = self.ui.as_mut() { ui.set_tree_sort(sort); }
     }
-    #[pyo3(signature=(node, placements))]
-    fn ui_set_export_focus(&mut self, node: Option<String>, placements: Vec<Vec<String>>) {
-        if let Some(ui)=self.ui.as_mut() {ui.set_export_focus(node,placements);}
-    }
     fn ui_step_issue(&mut self, step: i32) { if let Some(ui) = self.ui.as_mut() { ui.step_issue(step); } }
     fn ui_set_lens(&mut self, lens: u8) {
         if let Some(ui) = self.ui.as_mut() { ui.set_lens(lens); }
+    }
+    /// The tree's columns: the preset and, when the user changed its
+    /// columns, the columns shown.
+    #[pyo3(signature=(lens, mask=None))]
+    fn ui_set_columns(&mut self, lens: u8, mask: Option<u16>) {
+        if let Some(ui) = self.ui.as_mut() { ui.set_columns(lens, mask); }
     }
     fn ui_set_dock_width(&mut self, width: f32) {
         if let Some(ui) = self.ui.as_mut() { ui.set_dock_width(width); }

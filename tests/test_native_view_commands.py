@@ -24,16 +24,12 @@ drag 600 400 730 465
 state
 key escape
 state
-click 1566 20
-wait 200
-click 1364 178
+click-command look_around
 wait 100
 state
 drag 600 400 730 465
 state
-click 1566 20
-wait 200
-click 1396 178
+click-command walk
 wait 100
 state
 move 600 400
@@ -59,8 +55,10 @@ quit
     start, orbit, resumed, looking, turned, walking, walked, done = states[:8]
     assert start["documents"] == [model.name] and start["active"] == 0
     assert len(start["tab_rects"]) == 1
+    # Every navigation tool on the top bar (UX pass 2, M04).
     assert start["cluster"] == [
-        "orbit", "pan", "zoom_extents", "xray", "hidden_geometry", "section_cuts",
+        "orbit", "pan", "zoom", "zoom_window", "zoom_extents", "zoom_selection",
+        "look_around", "walk", "position_camera", "xray", "hidden_geometry", "section_cuts",
     ]
     assert orbit["nav_mode"] == "orbit" and orbit["camera_eye"] != start["camera_eye"]
     assert resumed["nav_mode"] is None and resumed["tool"] == "LineTool"

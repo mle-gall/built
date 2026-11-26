@@ -143,6 +143,17 @@ fn glide(a: &Pose, b: &Pose, seconds: f64, t: f64) -> Pose {
         between(a, b, ease(t / seconds))
     }
 }
+/// Ease-out (cubic): a view command answers at once and settles softly.
+fn ease_out(u: f64) -> f64 {
+    1. - (1. - u.clamp(0., 1.)).powi(3)
+}
+fn glide_out(a: &Pose, b: &Pose, seconds: f64, t: f64) -> Pose {
+    if seconds <= 0. || t >= seconds {
+        *b
+    } else {
+        between(a, b, ease_out(t / seconds))
+    }
+}
 
 #[pyclass(get_all, module = "built_core", name = "SceneRun")]
 struct Run {
@@ -265,7 +276,7 @@ impl VideoTimeline {
     }
 }
 enum Motion {
-    Glide { from: Pose, to: Pose, duration: f64 },
+    Glide { from: Pose, to: Pose, duration: f64, out: bool },
     Play(Run),
 }
 
@@ -294,7 +305,8 @@ impl ScenePlayback {
         matches!(self.motion, Some(Motion::Play(_)))
     }
 
-    fn start_glide(&mut self, from_pose: Pose, to: Pose, seconds: f64, now: f64) -> bool {
+    #[pyo3(signature=(from_pose, to, seconds, now, ease_out=false))]
+    fn start_glide(&mut self, from_pose: Pose, to: Pose, seconds: f64, now: f64, ease_out: bool) -> bool {
         self.cancel();
         if seconds <= 0. || from_pose.close_to(&to, 1e-6) {
             return false;
@@ -304,6 +316,7 @@ impl ScenePlayback {
                 from: from_pose,
                 to,
                 duration: seconds,
+                out: ease_out,
             },
             from_pose,
             now,
@@ -353,8 +366,8 @@ impl ScenePlayback {
         }
         let elapsed = now - self.started;
         let (pose, reached) = match motion {
-            Motion::Glide { from, to, duration } => {
-                let pose = glide(from, to, *duration, elapsed);
+            Motion::Glide { from, to, duration, out } => {
+                let pose = if *out { glide_out(from, to, *duration, elapsed) } else { glide(from, to, *duration, elapsed) };
                 if elapsed >= *duration {
                     self.cancel();
                     return (Some(pose), Some(0));
@@ -491,4 +504,19 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(video_frame_count, m)?)?;
     m.add_function(wrap_pyfunction!(video_at, m)?)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod glide_tests {
+    use super::*;
+    #[test]
+    fn an_ease_out_glide_leaves_fast_and_lands_on_the_pose() {
+        assert_eq!((ease_out(0.), ease_out(1.)), (0., 1.));
+        assert!(ease_out(0.25) > 0.5 && ease_out(0.5) > ease(0.5));
+        let a = Pose::new((0., 0., 0.), 10., 0., 0., 45., true, false);
+        let b = Pose::new((1., 0., 0.), 10., 1., 0.5, 45., false, false);
+        assert!(glide_out(&a, &b, 0.25, 0.25) == b);
+        // Perspective while moving, the target's projection on arrival.
+        assert!(glide_out(&a, &b, 0.25, 0.1).perspective);
+    }
 }

@@ -109,7 +109,7 @@ impl Panels {
         self.rule.draw(ui, &self.data["rulePreview"], out);
         let p = &s["parts"];
         if p.is_object() {
-            ui.collapsing(format!("Parts · {}", label(&p["name"])), |ui| {
+            kit::disclosure(ui, ("parts", label(&p["uid"])), &format!("Parts · {}", label(&p["name"])), false, |ui| {
                 if ui.button("Cut list…").clicked() {
                     send(out, "parts.report", p["uid"].clone());
                 }
