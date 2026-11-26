@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 Built contributors.
+# Copyright (C) 2026 IngeTrazo contributors.
 """Legacy text curve labels must reopen as distinct, serializable curves."""
 from __future__ import annotations
 

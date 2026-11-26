@@ -26,7 +26,7 @@ pub fn sheet(data: &Value, copied: bool, t: impl Fn(&str) -> PyResult<String>) -
         {"kind":"text","text":t("Free 3D modeler for architecture, engineering and 3D design.")?},
         {"kind":"text","text":format!("{} Marco Sumari Tellez · {}",t("Created by")?,t("Civil Engineer — Arequipa, Peru")?)},
         {"kind":"text","text":"Built is based on IngeTrazo and distributed under GPL-3.0-or-later."},
-        {"kind":"buttons","align":"left","buttons":[{"id":"license","label":t("Licence")?},{"id":"upstream","label":"Built ↗"},{"id":"copy","label":t(if copied {"Copied"} else {"Copy to clipboard"})?}]},
+        {"kind":"buttons","align":"left","buttons":[{"id":"license","label":t("Licence")?},{"id":"upstream","label":"IngeTrazo ↗"},{"id":"copy","label":t(if copied {"Copied"} else {"Copy to clipboard"})?}]},
         {"kind":"caption","text":t("System information")?},
         {"kind":"kv","rows":data["facts"]},
         {"kind":"caption","text":t("With contributions from")?},
