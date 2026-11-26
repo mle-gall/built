@@ -33,6 +33,8 @@ fn reason_color(index: u8) -> Color32 {
     }
 }
 
+/// For a choice, max holds the number of selectable leading entries.
+pub const LIMIT_CHOICES: u32 = 64;
 pub const DISABLED: u32 = 1;
 pub const FOCUS: u32 = 2;
 pub const MULTILINE: u32 = 4;
@@ -430,7 +432,8 @@ pub(super) fn fields(ui: &mut egui::Ui, d: &mut Dialog, out: &mut Vec<String>) {
                         ui.vertical(|ui| {
                             for (j, opt) in options.iter().enumerate() {
                                 let item = (j.to_string(), opt.clone(), String::new(), "check".to_owned(),
-                                            if j as f64 == value { 1 } else { -1 }, true);
+                                            if j as f64 == value { 1 } else { -1 },
+                                            flags & LIMIT_CHOICES == 0 || (j as f64) < max);
                                 if menu_row(ui, &item) {
                                     if let Some(fm) = d.fields.iter_mut().find(|x| &x.0 == id) { fm.4 = j as f64; }
                                     out.push(format!("{prefix}\u{1f}v\u{1f}{id}\u{1f}{j}"));

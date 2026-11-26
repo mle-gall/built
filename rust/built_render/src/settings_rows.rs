@@ -156,6 +156,7 @@ pub struct Row {
     pub put: Py<PyAny>,
     pub press: Py<PyAny>,
     pub options: Py<PyAny>,
+    pub choice_limit: Option<usize>,
     pub lo: Py<PyAny>,
     pub hi: Py<PyAny>,
     pub decimals: Py<PyAny>,
@@ -198,6 +199,7 @@ impl Row {
             put: put.unwrap_or_else(|| none(py)),
             press: none(py),
             options: PyTuple::empty(py).into_any().unbind(),
+            choice_limit: None,
             lo: obj(py, 0.0)?,
             hi: obj(py, 0.0)?,
             decimals: obj(py, 0)?,
@@ -223,6 +225,7 @@ impl Row {
                 match name.as_str() {
                     "press" => row.press = v,
                     "options" => row.options = v,
+                    "choice_limit" => row.choice_limit = v.extract(py)?,
                     "lo" => row.lo = v,
                     "hi" => row.hi = v,
                     "decimals" => row.decimals = v,
@@ -288,6 +291,7 @@ impl Row {
         }
         let kw = PyDict::new(py);
         kw.set_item("options", if kind == "choice" { self.opts(py, env)?.into_any() } else { PyTuple::empty(py).into_any() })?;
+        kw.set_item("choice_limit", self.choice_limit)?;
         kw.set_item("lo", &self.lo)?;
         kw.set_item("hi", &self.hi)?;
         kw.set_item("decimals", &self.decimals)?;
@@ -514,20 +518,39 @@ fn general<'py>(py: Python<'py>, env: &Bound<'py, PyAny>) -> PyResult<Bound<'py,
     let system = i18n.getattr("SYSTEM")?;
     let names = i18n.getattr("LANGUAGE_NAMES")?;
     let options = PyList::new(py, [(system.clone(), s(py, &tr(py, "Same as the system")?))])?;
-    for c in i18n.call_method0("available_languages")?.try_iter()? {
-        let c = c?;
-        options.append((&c, names.call_method1("get", (&c, &c))?))?;
+    let coverage = i18n.call_method0("language_coverage")?;
+    let mut incomplete = Vec::new();
+    for code in coverage.try_iter()? {
+        let code = code?;
+        let name = names.call_method1("get", (&code, &code))?.str()?.to_string();
+        if i18n.call_method1("resolve_language", (&code,))?.eq(&code)? {
+            options.append((&code, name))?;
+        } else {
+            let (count, total): (usize, usize) = coverage.get_item(&code)?.extract()?;
+            let label = trf(py, "{name} · {percent} % — incomplete", &[
+                ("name", s(py, &name)), ("percent", obj(py, count * 100 / total)?.into_bound(py))
+            ])?;
+            incomplete.push((code, label));
+        }
     }
+    let selectable = options.len();
+    for option in incomplete { options.append(option)?; }
     let mut language = Binding::new(
         "language",
-        key_get(py, "language", system.unbind(), Kind::Str)?,
+        func(py, |py, a| {
+            let lang = py.import("built_core.i18n")?;
+            let saved = a.get_item(0)?.getattr("st")?.call_method1("value", ("language",))?;
+            if !saved.is_truthy()? || saved.eq("system")? { return obj(py, "system"); }
+            Ok(lang.call_method1("resolve_language", (saved,))?.unbind())
+        })?,
         func(py, |py, a| {
             let (env, value) = (a.get_item(0)?, a.get_item(1)?);
             apply(py)?.call_method1("apply_language", (value, env.getattr("st")?))?;
             Ok(none(py))
         })?,
     )
-    .with("options", options.into_any().unbind());
+    .with("options", options.into_any().unbind())
+    .with("choice_limit", obj(py, selectable)?);
     language.restart_value = Some(func(py, |py, a| Ok(py.import("built_core.i18n")?.call_method1("resolve_language", (a.get_item(0)?,))?.unbind()))?);
     language.start = Some(func(py, |py, _a| Ok(py.import("built_core.i18n")?.call_method0("current_language")?.unbind()))?);
     let mut rows = vec![

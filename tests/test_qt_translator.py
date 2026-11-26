@@ -4,14 +4,13 @@ import pytest
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 
 from built_core import i18n
-from plugins._widget_language import apply_widget_language
 from built_render.chrome_forms import Field, Form
 
 
 @pytest.fixture
-def language(native_host):
+def language():
     before = i18n.current_language()
-    yield lambda tag: apply_widget_language(native_host, tag)
+    yield i18n.set_language
     i18n.set_language(before)
 
 

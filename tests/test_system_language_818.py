@@ -7,12 +7,28 @@ in Preferences (and Window ▸ Language) and is what an unset choice means.
 """
 from __future__ import annotations
 
+import json
+import sys
+from pathlib import Path
+
 import pytest
 from built_render import shell_services as native
 from built_core import i18n, settings
 
 from tests.preferences_chrome import Controls, settings_file
 from built_render.settings_sheet import _PENDING
+
+
+@pytest.fixture(scope="module")
+def complete_catalogues(tmp_path_factory):
+    root = tmp_path_factory.mktemp("catalogues")
+    directory = root / "i18n"
+    directory.mkdir()
+    inventory = Path(__file__).resolve().parents[1] / "rust/built_core/src/core_bulk/translation_sources.json"
+    data = json.dumps(dict.fromkeys(json.loads(inventory.read_text("utf8")), "Translated"))
+    for code in i18n.LANGUAGE_NAMES:
+        (directory / f"{code}.json").write_text(data, encoding="utf8")
+    return root
 
 
 @pytest.mark.parametrize("locales, expected", [
@@ -36,7 +52,8 @@ from built_render.settings_sheet import _PENDING
     (["nl-NL"], "en"),
     ([], "en"),
 ])
-def test_system_locales_pick_the_closest_catalog(locales, expected):
+def test_system_locales_pick_the_closest_catalog(locales, expected, complete_catalogues, monkeypatch):
+    monkeypatch.setattr(sys, "_MEIPASS", str(complete_catalogues), raising=False)
     assert i18n.language_for_locales(locales) == expected
 
 
@@ -46,18 +63,18 @@ def system_is_french(monkeypatch):
     monkeypatch.setattr("built_render.preferred_languages", lambda: ["fr-FR", "en-US"])
 
 
-def test_unset_or_system_follows_the_os_and_a_pinned_one_stays(system_is_french):
-    assert i18n.resolve_language(None) == "fr"
-    assert i18n.resolve_language("") == "fr"
-    assert i18n.resolve_language(i18n.SYSTEM) == "fr"
-    assert i18n.resolve_language("de") == "de"
+def test_incomplete_system_and_saved_catalogues_use_english(system_is_french):
+    assert i18n.resolve_language(None) == "en"
+    assert i18n.resolve_language("") == "en"
+    assert i18n.resolve_language(i18n.SYSTEM) == "en"
+    assert i18n.resolve_language("fr") == "en"
 
 
 @pytest.fixture
 def prefs(settings_file, system_is_french):
     before = i18n.current_language()
     _PENDING.clear()
-    i18n.set_language("fr")
+    i18n.set_language("en")
     yield settings_file
     i18n.set_language(before)
     _PENDING.clear()
@@ -88,23 +105,26 @@ def test_going_back_to_the_system_language_is_saved(prefs):
     st.setValue("language", "fr")
     st.sync()
     ui = Controls(_Win(), "general")
-    assert ui.value("language") == "fr"
+    assert ui.value("language") == "en"
+    assert any(b.get("text") == "Using English because your saved language (Français) is unavailable."
+               for b in ui.wire()["content"]["blocks"])
     ui.set("language", i18n.SYSTEM)
     assert settings.settings().value("language") == "system"
     # The system's language is the one running: nothing to restart for.
     assert not _PENDING.labels()
-    assert i18n.current_language() == "fr"
+    assert i18n.current_language() == "en"
 
 
-def test_pinning_another_language_over_the_system_one_asks_a_restart(prefs):
+def test_incomplete_choice_is_disabled(prefs):
     ui = Controls(_Win(), "general")
-    ui.set("language", "de")
-    assert settings.settings().value("language") == "de"
-    assert len(_PENDING.labels()) == 1
-    assert i18n.current_language() == "de"
+    assert ui.options("language")["fr"].endswith(" % — incomplete")
+    ui.set("language", "fr")
+    assert settings.settings().value("language") is None
+    assert not _PENDING.labels()
+    assert i18n.current_language() == "en"
 
 
-@pytest.mark.parametrize("saved", [None, i18n.SYSTEM, "de"])
+@pytest.mark.parametrize("saved", [None, i18n.SYSTEM, "fr"])
 def test_startup_resolves_the_saved_choice(saved, tmp_path, monkeypatch,
                                            system_is_french):
     from built_render import start_profile
@@ -120,6 +140,11 @@ def test_startup_resolves_the_saved_choice(saved, tmp_path, monkeypatch,
     before = i18n.current_language()
     try:
         start_profile(str(tmp_path))
-        assert i18n.current_language() == ("de" if saved == "de" else "fr")
+        assert i18n.current_language() == "en"
     finally:
         i18n.set_language(before)
+
+
+def test_complete_saved_language_is_used(complete_catalogues, monkeypatch):
+    monkeypatch.setattr(sys, "_MEIPASS", str(complete_catalogues), raising=False)
+    assert i18n.resolve_language("fr") == "fr"
