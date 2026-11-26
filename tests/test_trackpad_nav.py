@@ -477,3 +477,21 @@ def test_off_centre_navigation_pose_sequence(vp):
     ]
     for observed, values in zip(actual, expected, strict=True):
         assert observed == pytest.approx((*angles, *values), rel=1e-10, abs=1e-10)
+
+
+@pytest.mark.parametrize("auto", [True, False])
+@pytest.mark.parametrize("motion", ["rotate", "trackpad", "touch", "pinch", "pan"])
+def test_gesture_projection_after_align(vp, auto, motion):
+    cam = vp.camera
+    cam.align_to("front", auto)
+    vp._trackpad_slide = "orbit"
+    if motion == "rotate":
+        gesture(vp, "rotate", 10.)
+    elif motion == "pinch":
+        pinch(vp, 0.2)
+    else:
+        finger_slide(vp, 12, 0, device=SCREEN if motion == "touch" else REAL_TRACKPAD,
+                     mods=Qt.ShiftModifier if motion == "pan" else Qt.NoModifier)
+    stays_aligned = motion in ("pan", "pinch")
+    assert cam.projection_mode() == ("parallel" if auto and stays_aligned else "perspective")
+    assert (cam.yaw == pytest.approx(-math.pi / 2)) == stays_aligned

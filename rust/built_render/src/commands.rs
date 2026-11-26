@@ -213,6 +213,12 @@ pub fn command_chrome(
     (cluster, menu)
 }
 
+/// The native menu uses short IDs for directions and registry IDs for other commands.
+pub(super) fn native_view_command(key: &str) -> &str {
+    COMMANDS.iter().find(|command| matches!(command.target, View(name) if name == key))
+        .map_or(key, |command| command.id)
+}
+
 #[pyfunction]
 pub fn activate_view_command(
     win: &Bound<'_, PyAny>,

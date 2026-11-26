@@ -813,7 +813,7 @@ fn sync_scene_camera<'py>(a: &Args<'py>) -> Reply<'py> {
     for item in py.import("builtins")?.call_method1("vars", (&source,))?.call_method0("items")?.try_iter()? {
         let item = item?;
         let name: String = item.get_item(0)?.extract()?;
-        if name.starts_with('_') || name == "aspect" || name == "depth_reach" {
+        if (name.starts_with('_') && name != "_auto_projection") || name == "aspect" || name == "depth_reach" {
             continue;
         }
         let value = item.get_item(1)?;

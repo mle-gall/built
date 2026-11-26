@@ -189,7 +189,7 @@ fn run<'py>(py: Python<'py>, name: &str, win: &Bound<'py, PyAny>, a: &Args<'_, '
         "_on_reverse_section" => call!("section_action", (win, "reverse")),
         "_on_toggle_active_section" => call!("section_action", (win, "toggle")),
         "_on_align_view_to_section" => call!("section_action", (win, "align")),
-        "_on_align_view_to_face" => call!("align_face", (viewport(win)?, a.req(0, "face")?)),
+        "_on_align_view_to_face" => call!("align_face", (win.call_method0("_active_view")?, a.req(0, "face")?)),
         "_on_set_surface" => done!(call!("set_path_surface", (win, a.req(0, "mode")?))),
         "_on_toggle_path_closed" => call!("toggle_paths", (win,)),
         "_assign_layer" => call!("assign_tag", (win, a.req(0, "name")?)),

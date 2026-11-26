@@ -130,6 +130,7 @@ impl OrbitCamera {
         for k in [
             "depth_reach",
             "_depth_range",
+            STASH,
             "clip_near",
             "clip_far",
             "frame_aspect",
@@ -334,6 +335,8 @@ impl OrbitCamera {
         live::camera_look_from(s, eye, direction)
     }
     fn turn(s: &Camera<'_>, d_yaw_deg: f64, d_pitch_deg: f64) -> PyResult<()> {
+        if d_yaw_deg == 0. && d_pitch_deg == 0. { return Ok(()); }
+        leave_aligned(s)?;
         live::camera_turn(s, d_yaw_deg, d_pitch_deg)
     }
     fn move_eye(s: &Camera<'_>, delta: &Obj<'_>) -> PyResult<()> {
@@ -495,9 +498,8 @@ impl OrbitCamera {
         Ok(())
     }
     fn orbit(s: &Camera<'_>, dx_pixels: f64, dy_pixels: f64, viewport_h: f64) -> PyResult<()> {
-        if dx_pixels != 0. || dy_pixels != 0. {
-            leave_aligned(s)?;
-        }
+        if dx_pixels == 0. && dy_pixels == 0. { return Ok(()); }
+        leave_aligned(s)?;
         let (y, p) = nav::orbit_angles(
             number(s, "yaw")?,
             number(s, "pitch")?,
@@ -782,8 +784,7 @@ fn write_stash(s: &Camera<'_>, stash: Option<Stash>) -> PyResult<()> {
     let attrs = s.getattr("__dict__")?.cast_into::<PyDict>()?;
     match stash {
         Some(st) => attrs.set_item(STASH, (st.before.name(), st.yaw, st.pitch)),
-        None if attrs.contains(STASH)? => attrs.del_item(STASH),
-        None => Ok(()),
+        None => attrs.set_item(STASH, s.py().None()),
     }
 }
 fn held_stash(s: &Camera<'_>) -> PyResult<Option<Stash>> {
