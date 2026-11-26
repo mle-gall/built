@@ -538,7 +538,14 @@ impl MeshToolAccess {
     fn _face_picker<'py>(slf: &Bound<'py, Self>, mesh: &Obj<'py>) -> Reply<'py> {
         let py = slf.py();
         let s = slf.as_any();
-        let store = own_dict(mesh)?.get_item("_store")?.filter(|st| !st.is_none());
+        let mut store = own_dict(mesh)?.get_item("_store")?.filter(|st| !st.is_none());
+        if store.is_none() && own_dict(mesh)?.contains("_deferred")? {
+            // A mesh not loaded yet (a group entered for the first time):
+            // load it now, so its faces come from the store natively rather
+            // than triangulated one handle at a time.
+            mesh.getattr("faces")?.len()?;
+            store = own_dict(mesh)?.get_item("_store")?.filter(|st| !st.is_none());
+        }
         let frame = match &store {
             Some(store) => py.get_type::<PyTuple>().call1((store.getattr("frame_origin")?,))?,
             None => none(py),

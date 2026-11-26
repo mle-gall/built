@@ -501,9 +501,14 @@ impl FacePicker {
     }
     pub(crate) fn from_store(store:&crate::store::Store, hypot:crate::store::geometry::Hypot) -> Self {
         use crate::store::keys::Kind;
+        use rayon::prelude::*;
         let mut picker = Self::empty();
-        for (i,slot) in store.live_slots(Kind::Face).into_iter().enumerate() {
-            picker.append(store.key(Kind::Face,slot) as i128, i, store.face_triangles(slot,None,hypot));
+        let slots = store.live_slots(Kind::Face);
+        // Triangulated in parallel, appended in list order (the same picker).
+        let triangles: Vec<_> = slots.par_iter().with_min_len(1024)
+            .map(|&slot| store.face_triangles(slot, None, hypot)).collect();
+        for (i, (slot, tris)) in slots.into_iter().zip(triangles).enumerate() {
+            picker.append(store.key(Kind::Face,slot) as i128, i, tris);
         }
         picker
     }
