@@ -1727,6 +1727,15 @@ impl Ui {
         (top + GUT, bottom - GUT)
     }
 
+    /// Where a plugin's utility pane may sit: right of the rail and left of
+    /// the dock, each with a gutter, from the band's top to its bottom.
+    fn utility_bay(&self, ctx: &egui::Context, screen: Rect) -> Rect {
+        let (top, bottom) = self.band(ctx, screen);
+        let left = if self.groups.is_empty() { GUT } else { GUT + self.rail_w + GUT };
+        let right = self.free_right(ctx, screen) - GUT;
+        Rect::from_min_max(pos2(left, top), pos2(right.max(left + 120.), bottom))
+    }
+
     /// The right edge of the free viewport (left of the column).
     fn free_right(&self, ctx: &egui::Context, screen: Rect) -> f32 {
         if self.column.is_none() { return screen.max.x; }
@@ -2781,7 +2790,8 @@ impl Ui {
                     self.bottom_bar(ctx, screen, retract);
                 }
                 if !self.review && !sheet_up {
-                    self.plugins.utility(ctx, screen, self.dock_w, &mut self.actions);
+                    let bay = self.utility_bay(ctx, screen);
+                    self.plugins.utility(ctx, bay, &mut self.actions);
                     self.paint_strip(ctx, screen);
                     if self.panels.data["terrain"].is_object() {
                         let bounds = Rect::from_min_max(pos2(12.,0.),pos2(self.free_right(ctx,screen)-8.,screen.bottom()-BOT_H-4.));
