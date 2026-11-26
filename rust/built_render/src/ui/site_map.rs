@@ -73,8 +73,35 @@ pub struct MapState {
     checked: HashSet<Tile>,
     revision: u64,
     anchor: Option<Pos2>,
+    hide_model: bool,
+    hide_survey: bool,
+    survey_opacity: Option<f64>,
 }
 impl MapState {
+    pub fn layers(&mut self, ui: &mut egui::Ui, model: &str, survey: &str, opacity: &str) {
+        if !model.is_empty() && kit::switch_row(ui, model, !self.hide_model, true).clicked() {
+            self.hide_model = !self.hide_model;
+        }
+        if survey.is_empty() {
+            return;
+        }
+        if kit::switch_row(ui, survey, !self.hide_survey, true).clicked() {
+            self.hide_survey = !self.hide_survey;
+        }
+        if !self.hide_survey {
+            ui.horizontal(|ui| {
+                ui.label(egui::RichText::new(opacity).font(meta()).color(DIM));
+                if let Some(value) = kit::percent_slider(
+                    ui,
+                    ui.id().with("survey_opacity"),
+                    self.survey_opacity.unwrap_or(85.),
+                    100.,
+                ) {
+                    self.survey_opacity = Some(value);
+                }
+            });
+        }
+    }
     fn tile(&mut self, ctx: &egui::Context, k: Tile) -> Option<&egui::TextureHandle> {
         if !self.textures.contains_key(&k) && self.checked.insert(k) {
             let path = Path::new(&self.cache)
@@ -247,7 +274,7 @@ impl MapState {
             );
         }
         if s.placement {
-            if s.footprint.len() >= 3 {
+            if !self.hide_model && s.footprint.len() >= 3 {
                 let points = s
                     .footprint
                     .iter()
@@ -259,15 +286,16 @@ impl MapState {
                     egui::Stroke::new(2.0_f32, ACCENT),
                 ));
             }
-            for (i, (lat, lon)) in s.markers.iter().enumerate() {
+            let opacity = (self.survey_opacity.unwrap_or(85.) / 100.) as f32;
+            for (i, (lat, lon)) in s.markers.iter().enumerate().filter(|_| !self.hide_survey) {
                 let at = project(*lat, *lon, center, rect, z);
-                painter.circle_filled(at, SPACE_S, OK);
+                painter.circle_filled(at, SPACE_S, OK.gamma_multiply(opacity));
                 painter.text(
                     at,
                     egui::Align2::CENTER_CENTER,
                     (i + 1).to_string(),
                     meta(),
-                    WELL,
+                    WELL.gamma_multiply(opacity),
                 );
             }
             if let Some((y, x)) = s.pin {

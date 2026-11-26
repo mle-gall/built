@@ -596,6 +596,7 @@ impl Draw<'_> {
                         });
                     });
                 }
+                "site_layers" => self.st.map.layers(ui, &b.text, &b.sub, &b.right),
                 "map" => { if let Some(spec) = &b.map { self.st.map.show(ui,spec,self.out); } }
                 "facts" => {
                     for (label, value, _) in &b.rows { kit::catalogue_fact(ui, label, value); }

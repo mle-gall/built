@@ -617,6 +617,17 @@ impl SettingsSheet {
             }
         }
         inspector.call_method1("caption", (tr(py, "Check alignment")?,))?;
+        let spec = blocks.get_item(0)?.get_item("map")?;
+        let layers = PyDict::new(py);
+        layers.set_item("kind", "site_layers")?;
+        if spec.get_item("footprint")?.len()? >= 3 {
+            layers.set_item("text", tr(py, "Show footprint")?)?;
+        }
+        if spec.get_item("markers")?.len()? > 0 {
+            layers.set_item("sub", tr(py, "Show survey reference")?)?;
+            layers.set_item("right", tr(py, "Reference opacity")?)?;
+        }
+        inspector.getattr("blocks")?.call_method1("append", (layers,))?;
         inspector.call_method1(
             "text",
             (site.call_method1("placement_check", (&translate,))?,),
