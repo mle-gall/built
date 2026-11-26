@@ -541,3 +541,32 @@ def test_hosted_window_through_cut_history_and_ifc(win, tmp_path):
     assert len(wall.ifc["openings"]) == 1 and len(wall.mesh.faces) == 10
     history.undo()
     assert len(wall.ifc["openings"]) == 2 and door in scene.groups
+
+
+@pytest.mark.parametrize("occupied", [True, False])
+def test_invalid_hosted_preview_stays_red_and_click_warns(occupied):
+    from types import SimpleNamespace
+    from built_core import ToolMachine, ViewportToolHost
+
+    notices = []
+    tool = SimpleNamespace()
+    from tests.test_geometry_arrays import cube
+    wall = cube()
+    if occupied:
+        wall.ifc["openings"] = [{"wall_rect": [.4, 0, .6, .4]}]
+    view = SimpleNamespace(
+        window=lambda: SimpleNamespace(notify=lambda *args: notices.append(args)),
+        scene=SimpleNamespace(groups=[wall]),
+        pick_face_placement=lambda *_: (wall.mesh.faces[2], wall),
+        _pixel_to_ray=lambda *_: (V(.5 if occupied else .03, -1, .1), V(0,1,0)),
+    )
+    host = ViewportToolHost(view, None, tool)
+    machine = ToolMachine("place_group")
+    machine.set("load", ["family", [0,0,0], True, [[[-.1,0,0],[.1,0,.4]]]])
+    machine.set("wall_family", "door")
+    event = {"type": "hover", "px": (12,15)}
+    machine.event(event, host)
+    assert len(machine.preview_lines()) >= 4 and not notices
+    assert tool.wireframe_color[0] > tool.wireframe_color[1] * 3
+    assert not machine.event(dict(event, type="click"), host)["committed"]
+    assert notices == [("warning", "Opening overlaps another opening or the wall edge.")]
