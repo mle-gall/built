@@ -844,7 +844,7 @@ impl Ui {
     /// fields has focus, or Escape while one of its popups is open.
     pub fn claims_key(&self, name: &str, mods: u8) -> bool {
         if self.gallery.is_some() || self.font_picker.is_some() { return true; }
-        if name == "Escape" && (self.activity_open || self.menu_hits.len() > 1 || self.ctx_menu.is_some() || self.strip.menus_open() || self.egui_popup_open() || self.panels.data["terrain"].is_object()) { return true; }
+        if name == "Escape" && (self.activity_open || self.menu_hits.len() > 1 || self.ctx_menu.is_some() || self.strip.menus_open() || self.egui_popup_open() || self.panels.data["terrain"].is_object() || self.panels.data["camera"].is_object()) { return true; }
         // The large sheet owns every key while it is up (Python keeps the
         // window's ⌘ shortcuts, sheet_runtime.rs).
         if self.lsheet.open { return true; }
@@ -938,6 +938,10 @@ impl Ui {
                     self.actions.push("form:close".into());
                 }
             }
+            return true;
+        }
+        if name == "Escape" && self.panels.data["camera"].is_object() && !self.ctx.wants_keyboard_input() {
+            if pressed { self.actions.push(r#"panel:["camera.close",null]"#.into()); }
             return true;
         }
         if name == "Escape" {
