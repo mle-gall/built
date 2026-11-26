@@ -208,29 +208,31 @@ def test_a_dark_corner_stays_darker_than_a_light_one(
         corner_blocks, monkeypatch):
     """The bounce follows the face's colour: dark walls pass on little
     light, so their corner keeps more of its darkening."""
-    def samples(color):
-        nonlocal vp_light
-        vp_light = vp = corner_blocks(color)
-        return [_render_at(vp, monkeypatch, enabled, 1000, 800) for enabled in ("0", "1")]
+    def difference(antialias):
+        def samples(color):
+            vp = corner_blocks(color)
+            renderer = vp.keys_stand_in.renderer
+            if renderer is not None and not antialias:
+                renderer.set_msaa(False)
+            return [_render_at(vp, monkeypatch, enabled, 1000, 800) for enabled in ("0", "1")] + [renderer]
 
-    vp_light = None
+        light_off, light_on, renderer = samples((0.85, 0.85, 0.82))
+        dark_off, dark_on, _ = samples((0.25, 0.25, 0.25))
+        if renderer is not None:
+            renderer.set_msaa(True)
+        # Compare the same wall pixels in both images. Selecting the darkest
+        # percentile independently can measure an unchanged ground or edge.
+        walls = (light_off > dark_off + 30) & (dark_off > 20)
+        light = light_on[walls] / light_off[walls]
+        dark = dark_on[walls] / dark_off[walls]
+        corner = light < 0.9
+        counts = renderer.msaa_levels() if renderer is not None else None
+        return (float(np.median(light[corner] - dark[corner])) if corner.sum() else None, int(corner.sum()),
+                round(float(np.median(light[corner])), 4), round(float(np.median(dark[corner])), 4), counts)
 
-    light_off, light_on = samples((0.85, 0.85, 0.82))
-    dark_off, dark_on = samples((0.25, 0.25, 0.25))
-    # Compare the same wall pixels in both images. Selecting the darkest
-    # percentile independently can measure an unchanged ground or edge.
-    walls = (light_off > dark_off + 30) & (dark_off > 20)
-    light = light_on[walls] / light_off[walls]
-    dark = dark_on[walls] / dark_off[walls]
-    corner = light < 0.9
-    assert corner.sum() > 100
-    renderer = getattr(vp_light.keys_stand_in, "renderer", None)
-    seen = {"light corner": float(np.median(light[corner])), "dark corner": float(np.median(dark[corner])),
-            "wall pixels": int(walls.sum()), "corner pixels": int(corner.sum()),
-            "light wall": float(np.median(light_off[walls])), "dark wall": float(np.median(dark_off[walls])),
-            "sample counts": renderer.msaa_levels() if renderer is not None else None}
-    assert np.median(light[corner] - dark[corner]) > 0.025, seen
-
+    seen = difference(True)
+    assert seen[1] > 100, seen
+    assert seen[0] > 0.025, {"antialiased": seen, "plain": difference(False)}
 
 
 def test_intensity_zero_leaves_the_picture_untouched(
