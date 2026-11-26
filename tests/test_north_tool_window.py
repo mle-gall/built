@@ -9,19 +9,19 @@ from tests.test_settings_sheet import act, fields, frame, win  # noqa: F401
 
 def test_the_tool_is_in_the_tools_menu_and_the_annotate_bar(native_host):
     from built_render import command_registry, rail_layout
-    from tools.north import NorthTool
+    from built_render.chrome_sheet import current
     assert any(("north", "") in group for group in rail_layout())
     assert any(row[1] == "Tools" and row[5] == "tool:north"
                for row in command_registry([], []))
     native_host.menu("tool:north")
-    assert isinstance(native_host.viewport.active_tool, NorthTool)
+    assert current(native_host.window).site.placing
 
 
 def test_shift_n_picks_up_the_tool(native_host):
     from built_core import Input as Qt
-    from tools.north import NorthTool
+    from built_render.chrome_sheet import current
     native_host.key(True, ord("N"), Qt.ShiftModifier.value, "N")
-    assert isinstance(native_host.viewport.active_tool, NorthTool)
+    assert current(native_host.window).site.placing
 
 
 def test_location_north_field_sets_and_follows(win):
@@ -35,8 +35,7 @@ def test_location_north_field_sets_and_follows(win):
     assert fields(frame(win))["north"][4] == pytest.approx(15.)
 
 
-def test_the_on_screen_button_picks_up_the_tool(win):
+def test_location_link_opens_site_placement(win):
     win.open_preferences(page="location")
-    assert "north_tool" in fields(frame(win))
-    assert not act(win, "b", "north_tool")
-    assert win.viewport.active_tool is win._tools["north"]
+    assert "add_location" in fields(frame(win))
+    assert act(win, "b", "add_location")["id"] == "site-placement"

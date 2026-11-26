@@ -256,6 +256,7 @@ fn command<'py>(py: Python<'py>, win: &Any<'py>, name: &str, args: &Bound<'py, P
         "export_igz" => m.call_method1("export_igz", (win,)),
         "link" => m.call_method1("link_document", (win,)),
         "reload_links" => win.call_method0("_reload_all_links"),
+        "site_placement" => py.import("built_render.settings_sheet")?.call_method1("edit_location", (win,)),
         "prefs" => m.call_method1("open_settings", (win,)),
         "library" => m.call_method1("open_library", (win,)),
         "undo" => win.call_method0("_on_undo"),

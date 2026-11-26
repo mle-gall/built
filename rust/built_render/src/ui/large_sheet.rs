@@ -600,6 +600,7 @@ impl Draw<'_> {
                         });
                     });
                 }
+                "site_layers" => self.st.map.layers(ui, &b.text, &b.sub, &b.right),
                 "map" => { if let Some(spec) = &b.map { self.st.map.show(ui,spec,self.out); } }
                 "facts" => {
                     for (label, value, _) in &b.rows { kit::catalogue_fact(ui, label, value); }
@@ -1154,6 +1155,10 @@ impl Ui {
                                                   &spec.content.sub, meta(), FAINT);
                             }
                             ui.add_space(SPACE_S);
+                        }
+                        if spec.id == "site-placement" {
+                            d.blocks(ui,&spec.content.blocks);
+                            return;
                         }
                         content_scroll(&spec.id)
                             .show(ui, |ui| {

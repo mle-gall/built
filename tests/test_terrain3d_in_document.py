@@ -66,7 +66,7 @@ def test_turning_it_on_is_kept_in_the_document(win, dem):
     vp = win.viewport
     model = _georef_scene()
     vp.scene.georef, vp.scene.tile_layer = model.georef, model.tile_layer
-    win.open_preferences(page="location")
+    win.open_preferences(page="appearance")
     assert fields(frame(win))["terrain3d"][4] == 0
     act(win, "v", "terrain3d", "1")
     assert vp.scene.tile_layer.terrain3d and win._is_dirty()
@@ -120,7 +120,7 @@ def test_a_new_capture_keeps_the_terrain_as_it_was(win, dem):
     def capture(size):
         win._set_survey_capture(scene.georef, Vec3(-size, -size, 0), Vec3(size, size, 0))
     capture(50)
-    win.open_preferences(page="location")
+    win.open_preferences(page="appearance")
     assert fields(frame(win))["terrain3d"][4] == 0
     act(win, "v", "terrain3d", "1")
     original = scene.terrain.bbox

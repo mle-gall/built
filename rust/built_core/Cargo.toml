@@ -11,6 +11,8 @@ name = "built_core"
 crate-type = ["cdylib"]
 
 [dependencies]
+proj4rs = "=0.1.5"
+
 weezl = "0.1"
 built_python_bindings = { path = "../python_bindings" }
 encoding_rs = "0.8"

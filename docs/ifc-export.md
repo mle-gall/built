@@ -69,7 +69,9 @@ type classes become IfcBuildingElementProxyType. General flow segment, fitting a
 terminal type bases are abstract, so use a concrete registry class such as
 IfcPipeSegment for precise type semantics.
 
-Georeferencing is not implemented. Geometry uses faceted B-reps, open shell
+The site placement inspector accepts a projection file with a root EPSG authority or a JSON calibration with numeric fields. For example, `{"epsg":2154,"easting":700000,"northing":6600000,"elevation":87,"north":30}` places the model origin at that Lambert-93 coordinate, with elevation in metres and true north 30° clockwise from model +Y. File values can be reviewed before Apply.
+
+Site placement writes the EPSG identifier and metre-based base point, elevation and grid rotation as IfcProjectedCRS and IfcMapConversion. A WGS 84 geographic base point is exported in its local UTM zone. Geometry uses faceted B-reps, open shell
 surface models, or indexed polygonal face sets. The view header identifies the
 selected view; it does not claim full model-view-definition certification.
 

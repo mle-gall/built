@@ -11,6 +11,16 @@ use std::{
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 pub struct MapSpec {
+    #[serde(default)]
+    pub placement: bool,
+    #[serde(default)]
+    pub markers: Vec<(f64, f64)>,
+    #[serde(default)]
+    pub footprint: Vec<(f64, f64)>,
+    #[serde(default)]
+    pub pin: Option<(f64, f64)>,
+    #[serde(default)]
+    pub offline: String,
     pub lat: f64,
     pub lon: f64,
     pub zoom: u8,
@@ -63,8 +73,35 @@ pub struct MapState {
     checked: HashSet<Tile>,
     revision: u64,
     anchor: Option<Pos2>,
+    hide_model: bool,
+    hide_survey: bool,
+    survey_opacity: Option<f64>,
 }
 impl MapState {
+    pub fn layers(&mut self, ui: &mut egui::Ui, model: &str, survey: &str, opacity: &str) {
+        if !model.is_empty() && kit::switch_row(ui, model, !self.hide_model, true).clicked() {
+            self.hide_model = !self.hide_model;
+        }
+        if survey.is_empty() {
+            return;
+        }
+        if kit::switch_row(ui, survey, !self.hide_survey, true).clicked() {
+            self.hide_survey = !self.hide_survey;
+        }
+        if !self.hide_survey {
+            ui.horizontal(|ui| {
+                ui.label(egui::RichText::new(opacity).font(meta()).color(DIM));
+                if let Some(value) = kit::percent_slider(
+                    ui,
+                    ui.id().with("survey_opacity"),
+                    self.survey_opacity.unwrap_or(85.),
+                    100.,
+                ) {
+                    self.survey_opacity = Some(value);
+                }
+            });
+        }
+    }
     fn tile(&mut self, ctx: &egui::Context, k: Tile) -> Option<&egui::TextureHandle> {
         if !self.textures.contains_key(&k) && self.checked.insert(k) {
             let path = Path::new(&self.cache)
@@ -132,8 +169,17 @@ impl MapState {
             self.revision = s.revision;
         }
         let z = s.zoom.clamp(1, 22);
-        let (rect, response) =
-            ui.allocate_exact_size(vec2(ui.available_width(), 240.), Sense::drag());
+        let (rect, response) = ui.allocate_exact_size(
+            vec2(
+                ui.available_width(),
+                if s.placement {
+                    ui.available_height().max(120.)
+                } else {
+                    240.
+                },
+            ),
+            Sense::drag(),
+        );
         let painter = ui.painter_at(rect);
         painter.rect_filled(rect, R_ROW, WELL);
         let origin = world(s.lat, s.lon, z);
@@ -178,8 +224,25 @@ impl MapState {
                         Rect::from_min_max(Pos2::ZERO, pos2(1., 1.)),
                         BRIGHT,
                     );
-                } else if self.requested.insert(k) {
-                    missing.push(format!("{},{},{}", k.0, k.1, k.2));
+                } else {
+                    if s.placement {
+                        for i in 0..4 {
+                            let d = i as f32 * TILE as f32 / 4.;
+                            painter.vline(
+                                r.left() + d,
+                                r.y_range(),
+                                egui::Stroke::new(1.0_f32, DIVIDER),
+                            );
+                            painter.hline(
+                                r.x_range(),
+                                r.top() + d,
+                                egui::Stroke::new(1.0_f32, DIVIDER),
+                            );
+                        }
+                    }
+                    if self.requested.insert(k) {
+                        missing.push(format!("{},{},{}", k.0, k.1, k.2));
+                    }
                 }
             }
         }
@@ -210,7 +273,96 @@ impl MapState {
                 egui::StrokeKind::Inside,
             );
         }
-        kit::site_pin(&painter, rect.center(), &s.origin);
+        if s.placement {
+            if !self.hide_model && s.footprint.len() >= 3 {
+                let points = s
+                    .footprint
+                    .iter()
+                    .map(|(y, x)| project(*y, *x, center, rect, z))
+                    .collect();
+                painter.add(egui::Shape::convex_polygon(
+                    points,
+                    ACTIVE,
+                    egui::Stroke::new(2.0_f32, ACCENT),
+                ));
+            }
+            let opacity = (self.survey_opacity.unwrap_or(85.) / 100.) as f32;
+            for (i, (lat, lon)) in s.markers.iter().enumerate().filter(|_| !self.hide_survey) {
+                let at = project(*lat, *lon, center, rect, z);
+                painter.circle_filled(at, SPACE_S, OK.gamma_multiply(opacity));
+                painter.text(
+                    at,
+                    egui::Align2::CENTER_CENTER,
+                    (i + 1).to_string(),
+                    meta(),
+                    WELL.gamma_multiply(opacity),
+                );
+            }
+            if let Some((y, x)) = s.pin {
+                kit::site_pin(&painter, project(y, x, center, rect, z), &s.origin);
+            }
+            let margin = vec2(SPACE_M, SPACE_M);
+            let panel = Rect::from_min_size(rect.min + margin, vec2(80., BUTTON_H));
+            ui.scope_builder(
+                egui::UiBuilder::new()
+                    .max_rect(panel)
+                    .layout(egui::Layout::left_to_right(egui::Align::Center)),
+                |ui| {
+                    for (label, step) in [("−", -1), ("+", 1)] {
+                        if kit::chip_button(ui, label) {
+                            let nz = (i32::from(z) + step).clamp(1, i32::from(s.max_zoom));
+                            out.push(format!(
+                                "site_center\u{1f}{}\u{1f}{}\u{1f}{nz}",
+                                s.lat, s.lon
+                            ));
+                        }
+                    }
+                },
+            );
+            painter.text(
+                rect.right_top() + vec2(-SPACE_L, SPACE_L),
+                egui::Align2::RIGHT_TOP,
+                "↑ N",
+                title_font(),
+                INK,
+            );
+            if self.textures.is_empty() {
+                painter.text(
+                    rect.left_top() + vec2(SPACE_M, BUTTON_H + SPACE_L),
+                    egui::Align2::LEFT_TOP,
+                    &s.offline,
+                    body(),
+                    DIM,
+                );
+            }
+            let mpp = 156543.033928 * s.lat.to_radians().cos() / 2f64.powi(i32::from(z));
+            let target = mpp * 100.;
+            let magnitude = 10f64.powf(target.log10().floor());
+            let factor = target / magnitude;
+            let meters = magnitude
+                * if factor >= 5. {
+                    5.
+                } else if factor >= 2. {
+                    2.
+                } else {
+                    1.
+                };
+            let start = rect.left_bottom() + vec2(SPACE_M, -SPACE_M);
+            painter.hline(
+                start.x..=start.x + (meters / mpp) as f32,
+                start.y,
+                egui::Stroke::new(2.0_f32, INK),
+            );
+            painter.text(
+                start - vec2(0., SPACE_XS),
+                egui::Align2::LEFT_BOTTOM,
+                format!("{meters} m"),
+                meta(),
+                INK,
+            );
+        } else {
+            kit::site_pin(&painter, rect.center(), &s.origin);
+        }
         if response.drag_stopped() {
             if dragging && delta.length() > 2. {
                 let (a, b) = point(origin, rect, self.anchor.unwrap(), z);
@@ -242,7 +394,17 @@ impl MapState {
                 }
             }
         }
-        ui.label(egui::RichText::new(&s.attribution).font(meta()).color(DIM));
+        if s.placement {
+            painter.text(
+                rect.right_bottom() - vec2(SPACE_M, SPACE_M),
+                egui::Align2::RIGHT_BOTTOM,
+                &s.attribution,
+                meta(),
+                DIM,
+            );
+        } else {
+            ui.label(egui::RichText::new(&s.attribution).font(meta()).color(DIM));
+        }
     }
 }
 
@@ -258,6 +420,11 @@ mod tests {
             .save_with_format(folder.join("4"), image::ImageFormat::Png)
             .unwrap();
         let spec = MapSpec {
+            placement: false,
+            markers: vec![],
+            footprint: vec![],
+            pin: None,
+            offline: String::new(),
             lat: 0.,
             lon: 0.,
             zoom: 3,

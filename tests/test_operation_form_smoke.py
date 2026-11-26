@@ -280,29 +280,27 @@ def test_native_location_coordinates_map_apply_and_cancel(tmp_path):
         "from georef.tile_fetcher import TileFetcher\nfrom pathlib import Path\n"
         f"TileFetcher.request = lambda self, src, x, y, z: Path({str(requested)!r}).touch()\n")
     steps = tmp_path / "commands"
-    # The script can open Settings but cannot address its pages by id. At
-    # 1000x920, Location & north follows Dimension style in the model sidebar.
-    steps.write_text("wait 600\nkey escape\nmenu prefs\nwait 350\nclick 116 535\nwait 150\n"
-                     "click 552 328\nwait 200\nclick 550 282\nkey a cmd\ntype 48.85\n"
-                     "click 550 311\nkey a cmd\ntype 2.35\nclick 340 351\nwait 450\n"
-                     "drag 590 585 625 585 left 7\nwait 250\nstate\nclick 492 747\nwait 250\n"
-                     "click 552 328\nwait 200\nclick 550 282\nkey a cmd\ntype 33\n"
-                     f"click 431 351\nwait 200\nkey escape\nwait 200\nmenu save_to:{saved}\nwait 500\nstate\nquit\n")
+    steps.write_text("wait 600\nkey escape\nmenu site_placement\nwait 400\n"
+                     "click 1090 211\ntype 48.85, 2.35\nkey enter\nwait 180\n"
+                     "click 912 249\nwait 180\nclick 997 249\nwait 200\nstate\n"
+                     "click 1165 714\nwait 250\nmenu tool:north\nwait 250\n"
+                     "click 1080 539\nkey a cmd\ntype 33\nkey enter\nkey escape\nwait 250\n"
+                     f"menu save_to:{saved}\nwait 500\nstate\nquit\n")
     result = run([str(BIN), "--root", str(ROOT), "--venv", str(venv), "--new-instance",
-                  "--size", "1000x920", "--script", str(steps), str(model)],
+                  "--size", "1280x800", "--script", str(steps), str(model)],
                  env=dict(os.environ, BUILT_ANSWERS="escape,cmd-d,cmd-d"), home=home, settings=english(tmp_path / "profile"),
                  capture_output=True, text=True, timeout=90)
     log = result.stdout + result.stderr
     states = [json.loads(line.removeprefix("[built] state ")) for line in log.splitlines()
               if line.startswith("[built] state ")]
-    assert result.returncode == 0 and [s["large_sheet"] for s in states[:2]] == ["settings", ""], log
+    assert result.returncode == 0 and [s["large_sheet"] for s in states[:2]] == ["site-placement", ""], log
     assert all(not s["errors"] and not s["blocked_widgets"] for s in states), log
     assert requested.is_file(), log
     loaded = Scene()
     load_into(loaded, saved)
     assert isinstance(loaded.georef, SceneDatum), log
     assert loaded.georef.lat == pytest.approx(48.85, abs=1e-5)
-    assert loaded.georef.lon == pytest.approx(2.35 - 35 * 360 / (256 * 2**12), abs=.0004)
+    assert loaded.georef.lon == pytest.approx(2.35, abs=.0004)
     assert loaded.georef.north == 31
 
 

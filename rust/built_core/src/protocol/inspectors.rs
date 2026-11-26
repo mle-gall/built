@@ -4,9 +4,18 @@ use super::placements::one;
 use super::transforms::empty;
 use super::*;
 #[pyfunction]
-fn set_location<'py>(history: &Obj<'py>, lat: &Obj<'py>, lon: &Obj<'py>) -> Reply<'py> {
+#[pyo3(signature=(history,lat,lon,placement=None))]
+fn set_location<'py>(
+    history: &Obj<'py>,
+    lat: &Obj<'py>,
+    lon: &Obj<'py>,
+    placement: Option<(u32, f64, f64, f64, f64)>,
+) -> Reply<'py> {
     let n = history.py().import("built_core")?;
-    let edit = n.call_method1("LocationEdit", (history.getattr("scene")?, lat, lon))?;
+    let edit = n.call_method1(
+        "LocationEdit",
+        (history.getattr("scene")?, lat, lon, placement),
+    )?;
     execute(history, &n.call_method1("SetLocationCommand", (edit,))?)
 }
 #[pyfunction]
@@ -78,9 +87,9 @@ fn edit_saved_scene<'py>(
 ) -> Reply<'py> {
     let py = history.py();
     let scene = history.getattr("scene")?;
-    let cmd =
-        py.import("built_core")?
-            .call_method("plan_scene_command", (&scene, verb), args)?;
+    let cmd = py
+        .import("built_core")?
+        .call_method("plan_scene_command", (&scene, verb), args)?;
     let out = execute(history, &cmd)?;
     if cmd.is_none() {
         out.set_item("error", py.None())?;

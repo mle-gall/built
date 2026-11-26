@@ -90,6 +90,7 @@ pub const GROUPS: &[(&str, &[Row])] = &[
             Row::System("fullscreen"),
         ],
     ),
+    ("Model", &[Row::Command("site_placement", "Site placement…", None)]),
     ("Draw", &[]),
     (
         "Tools",

@@ -174,80 +174,50 @@ pub(crate) fn append<'p>(
     for (key, src) in sources(&st)? {
         opts.append((key, src.getattr("name")?))?;
     }
+    opts.append(("add-source", tr(py, "Add XYZ source…")?))?;
+    if current(&st)?
+        .getattr("id")?
+        .str()?
+        .to_str()?
+        .starts_with("custom-")
+    {
+        opts.append(("remove-source", tr(py, "Remove source")?))?;
+    }
     let rows = PyList::new(
         py,
-        [
-            row(
-                py,
-                "basemap_source",
-                "choice",
-                &tr(py, "Base map")?,
-                Some(func(py, |_, a| {
-                    Ok(current(&a.get_item(0)?.getattr("st")?)?
-                        .getattr("id")?
-                        .unbind())
-                })?),
-                Some(func(py, |py, a| {
-                    select(&a.get_item(0)?, &a.get_item(1)?.extract::<String>()?)?;
-                    Ok(none(py))
-                })?),
-                &[("options", opts.into_any().unbind())],
-            )?,
-            row(
-                py,
-                "basemap_add",
-                "button",
-                &tr(py, "Add XYZ source…")?,
-                None,
-                None,
-                &[(
-                    "press",
-                    func(py, |py, a| {
-                        add(&a.get_item(0)?)?;
-                        Ok(none(py))
-                    })?,
-                )],
-            )?,
-            row(
-                py,
-                "basemap_remove",
-                "button",
-                &tr(py, "Remove source")?,
-                None,
-                None,
-                &[
-                    (
-                        "enabled",
-                        obj(
-                            py,
-                            current(&st)?
-                                .getattr("id")?
-                                .str()?
-                                .to_str()?
-                                .starts_with("custom-"),
-                        )?,
-                    ),
-                    (
-                        "press",
-                        func(py, |py, a| {
-                            let env = a.get_item(0)?;
-                            let st = env.getattr("st")?;
-                            let id = current(&st)?.getattr("id")?.str()?.to_string();
-                            let mut rows = read(&st)?;
-                            rows.retain(|r| r.id(py).ok() != Some(id.clone()));
-                            save(&st, &rows)?;
-                            select(
-                                &env,
-                                &py.import("built_core.georef.tiles")?
-                                    .getattr("DEFAULT_SOURCE_ID")?
-                                    .extract::<String>()?,
-                            )?;
-                            Ok(none(py))
-                        })?,
-                    ),
-                ],
-            )?,
-        ],
+        [row(
+            py,
+            "basemap_source",
+            "choice",
+            &tr(py, "Base map")?,
+            Some(func(py, |_, a| {
+                Ok(current(&a.get_item(0)?.getattr("st")?)?
+                    .getattr("id")?
+                    .unbind())
+            })?),
+            Some(func(py, |py, a| {
+                let env = a.get_item(0)?;
+                let id = a.get_item(1)?.extract::<String>()?;
+                match id.as_str() {
+                    "add-source" => add(&env)?,
+                    "remove-source" => {
+                        let st = env.getattr("st")?;
+                        let old = current(&st)?.getattr("id")?.str()?.to_string();
+                        let mut rows = read(&st)?;
+                        rows.retain(|r| r.id(py).ok().as_deref() != Some(&old));
+                        save(&st, &rows)?;
+                        let default = py
+                            .import("built_core.georef.tiles")?
+                            .getattr("DEFAULT_SOURCE_ID")?
+                            .extract::<String>()?;
+                        select(&env, &default)?;
+                    }
+                    _ => select(&env, &id)?,
+                }
+                Ok(none(py))
+            })?),
+            &[("options", opts.into_any().unbind())],
+        )?],
     )?;
     groups.append(("basemap", tr(py, "Base map")?, rows))?;
     Ok(())
