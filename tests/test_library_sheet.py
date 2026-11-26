@@ -219,10 +219,10 @@ def test_components_tab(win):
     L.open_library(win, "components")
     sh = frame(win)
     assert sh["tabs"][1]["on"] and sh["search"]["placeholder"] == "Search all components"
-    act(win, "side", "s:bundled")
+    act(win, "search", "source:bundled")
     sh = frame(win)
-    caps = [b["text"] for b in sh["content"]["blocks"] if b["kind"] == "caption"]
-    assert "People (2D)" in caps and "Starters (3D)" in caps
+    assert {r["label"] for r in sh["side"]} >= {"People (2D)", "Starters (3D)"}
+    assert tiles(sh) and all(row["component_source"] == "Bundled" for row in tiles(sh))
     verbs = [v["id"] for b in detail(sh) if b["kind"] == "buttons" for v in b["buttons"]]
     assert verbs[0] == "apply" and next(v for b in detail(sh) if b["kind"] == "buttons"
                                         for v in b["buttons"])["label"] == "Place a copy"
@@ -617,3 +617,162 @@ def test_component_navigation_reuses_native_rows_until_document_edits(native_hos
     cs.before_frame(view, win)
     assert win._chrome_sheet.built._library_rows is not added
     assert "cm:2" not in L._state(view)["items"]
+
+
+def test_checked_definitions_select_replace_and_preserve_kept(win, monkeypatch):
+    from built_core import Matrix4
+    from built_core.group import Group
+    from built_core.mesh import Mesh
+    from built_core.kept_components import make_template
+
+    scene = win.viewport.scene
+    def component(name):
+        mesh = Mesh()
+        mesh.add_face([V(0, 0, 0), V(1, 0, 0), V(0, 1, 0)])
+        group = Group(mesh, name=name)
+        group.xform = Matrix4()
+        group.ifc = {"class": "IfcBeam"}
+        return group
+    a, b, target = [component(name) for name in ("A", "B", "Target")]
+    scene.groups.extend([a, b, target])
+    kept = make_template(component("Retained"))
+    scene.kept_components.append(kept)
+    scene.version += 1
+    L.open_library(win, "components")
+    frame(win)
+    act(win, "search", "class:IfcBeam used")
+    entries = {t["label"]: t["id"] for t in tiles(frame(win))}
+    assert set(entries) == {"A", "B", "Target"}
+    for name in ("A", "B"):
+        act(win, "bulk-check", entries[name])
+        frame(win)
+    act(win, "verb", "bulk-select")
+    assert set(scene.selection) == {a, b}
+    L.open_library(win, "components")
+    frame(win)
+    act(win, "search", "class:IfcBeam used")
+    frame(win)
+    for name in ("A", "B"):
+        act(win, "bulk-check", entries[name])
+        frame(win)
+    act(win, "verb", "bulk-replace")
+    frame(win)
+    act(win, "focus", entries["Target"])
+    frame(win)
+    old_meshes = a.mesh, b.mesh
+    revision = win.viewport.history.revision
+    monkeypatch.setattr(win, "_ask_keep_orphans", lambda *_: False)
+    act(win, "verb", "bulk-apply")
+    assert a.mesh is target.mesh and b.mesh is target.mesh
+    assert win.viewport.history.revision == revision + 1
+    win.viewport.history.undo()
+    assert (a.mesh, b.mesh) == old_meshes
+    frame(win)
+    act(win, "search", "unused")
+    frame(win)
+    act(win, "verb", "bulk-all")
+    frame(win)
+    act(win, "verb", "bulk-purge")
+    review = detail(frame(win))
+    assert any(["Retained", "Kept in file", ""] in block.get("rows", []) for block in review)
+    assert kept in scene.kept_components
+    monkeypatch.setattr("built_render.chrome_dialogs.ask_later", lambda *args, **kw: args[4]("release"))
+    revision = win.viewport.history.revision
+    act(win, "verb", "bulk-release")
+    assert kept not in scene.kept_components
+    assert win.viewport.history.revision == revision + 1
+    win.viewport.history.undo()
+    assert kept in scene.kept_components
+
+
+def test_collection_membership_and_unique_are_undoable(win, monkeypatch):
+    from tests.test_replace_component import _component, _quad
+    from built_core.group import copy_group
+
+    scene = win.viewport.scene
+    first = _component(_quad(), "Beam")
+    second = copy_group(first)
+    scene.groups.extend([first, second])
+    scene.version += 1
+    L.open_library(win, "components", search="source:model")
+    row, = tiles(frame(win))
+    act(win, "bulk-check", row["id"])
+    frame(win)
+    monkeypatch.setattr("built_render.chrome_forms.ask_text",
+                        lambda *args, done, **kw: done("Structure"))
+    act(win, "verb", "bulk-move")
+    assert "Structure" in [side["label"] for side in frame(win)["side"]]
+    win.viewport.history.undo()
+    assert "Structure" not in [side["label"] for side in frame(win)["side"]]
+    monkeypatch.setattr("built_render.chrome_forms.ask_choice",
+                        lambda *args, done: done(next(label for label in args[3] if label.endswith(second.uid))))
+    act(win, "verb", "unique-choose")
+    assert first.mesh is not second.mesh
+    win.viewport.history.undo()
+    assert first.mesh is second.mesh
+
+
+def test_large_component_index_filters_linked_files_without_rescanning(native_host, monkeypatch):
+    from time import perf_counter
+    from built_render import chrome_sheet
+    from tests.shell_isolation import attach_test_renderer
+
+    attach_test_renderer(native_host)
+    win = native_host.window
+    view = native_host.view
+    provider = L.provider("components")
+    rows = [{"key": f"fixture:{i}", "name": f"Component {i}",
+             "source": "linked" if i % 3 == 0 else "model",
+             "file": ("Stairs" if i % 2 == 0 else "Roof") if i % 3 == 0 else None,
+             "classes": ["IfcBeam" if i % 2 == 0 else "IfcWall"],
+             "uses": int(i % 5 != 0), "verbs": []} for i in range(3000)]
+    calls = []
+    monkeypatch.setattr(provider, "items", lambda ctx: calls.append(ctx) or rows)
+    L.open_library(win, "components")
+    chrome_sheet.before_frame(view, win)
+    start = perf_counter()
+    act(win, "search", "class:IfcBeam -source:linked used")
+    chrome_sheet.before_frame(view, win)
+    elapsed = (perf_counter() - start) * 1000
+    sheet = win._chrome_sheet.built
+    assert sheet.wire()["content"]["title"] == "800 definitions · 2200 excluded"
+    assert {r["label"]: r["right"] for r in sheet.side if r.get("right")}["Stairs"] == "400"
+    assert len(calls) == 1
+    index = sheet._library_rows
+    chrome_sheet.before_frame(view, win)
+    assert win._chrome_sheet.built._library_rows is index
+    print(f"3,000-definition host toggle: {elapsed:.2f} ms")
+    import os
+    if os.environ.get("BUILT_PERF_TESTS") == "1":
+        assert elapsed < 30
+
+
+def test_nested_linked_components_use_their_own_file_and_location(win, tmp_path):
+    from built_core import links, Matrix4
+    from built_core.group import Group
+    from built_core.scene import Scene
+    from formats import igz
+    from tests.test_replace_component import _quad
+
+    scene = win.viewport.scene
+    for filename in ("Stairs", "Roof"):
+        src = Scene()
+        part = Group(_quad(), name=f"{filename} beam")
+        part.xform = Matrix4()
+        part.ifc = {"class": "IfcBeam"}
+        src.groups.append(part)
+        path = tmp_path / f"{filename}.built"
+        igz.save_scene(src, path)
+        scene.groups.append(links.make_link(scene, path, host_path=tmp_path / "host.built"))
+    scene.version += 1
+    L.open_library(win, "components", search="source:linked class:IfcBeam")
+    sh = frame(win)
+    assert {r["label"] for r in tiles(sh)} == {"Stairs beam", "Roof beam"}
+    files = [r for r in sh["side"] if r.get("id", "").startswith("toggle:-file:")]
+    assert {r["label"]: r["right"] for r in files} == {"Stairs.built": "1", "Roof.built": "1"}
+    stairs = next(row for row in files if row["label"] == "Stairs.built")
+    act(win, "side", stairs["id"])
+    sh = frame(win)
+    assert [r["label"] for r in tiles(sh)] == ["Roof beam"]
+    assert any("Roof.built" in str(block.get("rows", [])) and "Unfiled" in str(block)
+               for block in detail(sh))
