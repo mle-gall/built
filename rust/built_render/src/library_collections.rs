@@ -15,21 +15,24 @@ use std::{
     },
 };
 
-static JOB: Mutex<(bool, String)> = Mutex::new((false, String::new()));
+#[derive(Clone, Default)]
+pub(crate) struct ImportStatus {
+    pub active: bool,
+    pub detail: String,
+    pub imported: Option<usize>,
+}
+
+static JOB: Mutex<ImportStatus> = Mutex::new(ImportStatus { active: false, detail: String::new(), imported: None });
 pub(crate) static REVISION: AtomicU64 = AtomicU64::new(0);
 
-fn progress(active: bool, msg: String) {
-    *JOB.lock().unwrap() = (active, msg);
+fn progress(state: ImportStatus) {
+    *JOB.lock().unwrap() = state;
     REVISION.fetch_add(1, Ordering::Relaxed);
 }
 
-pub(crate) fn active() -> bool {
-    JOB.lock().unwrap().0
-}
-
-pub(crate) fn status() -> String {
-    JOB.lock().unwrap().1.clone()
-}
+pub(crate) fn snapshot() -> ImportStatus { JOB.lock().unwrap().clone() }
+pub(crate) fn active() -> bool { JOB.lock().unwrap().active }
+pub(crate) fn status() -> String { JOB.lock().unwrap().detail.clone() }
 
 fn root() -> PyResult<PathBuf> {
     let profile = std::env::var_os("BUILT_SETTINGS_DIR").map(PathBuf::from);
@@ -293,7 +296,7 @@ fn import_file(
     Ok((rows, warnings))
 }
 
-fn import_folder(folder: &Path, name: &str) -> PyResult<String> {
+fn import_folder(folder: &Path, name: &str) -> PyResult<ImportStatus> {
     let id = Python::attach(|py| digest(py, &folder.to_string_lossy()))?;
     let source = format!("collection:{id}");
     let dir = root()?.join(id);
@@ -310,10 +313,9 @@ fn import_folder(folder: &Path, name: &str) -> PyResult<String> {
     let mut reports = Vec::new();
     for (i, path) in files.iter().enumerate() {
         let relative = path.strip_prefix(folder).unwrap().to_string_lossy();
-        progress(
-            true,
-            format!("{name} · {} of {} · {relative}", i + 1, files.len()),
-        );
+        progress(ImportStatus {
+            active: true, detail: format!("{name} · {} of {} · {relative}", i + 1, files.len()), imported: None,
+        });
         match Python::attach(|py| import_file(py, path, &snapshot, &source, &relative)) {
             Ok((items, warnings)) => {
                 rows.extend(items);
@@ -325,7 +327,10 @@ fn import_folder(folder: &Path, name: &str) -> PyResult<String> {
     if files.is_empty() {
         reports.push("No .rfa files in this folder".into());
     }
-    let summary = format!("{name} · {} types · {} messages", rows.len(), reports.len());
+    let summary = ImportStatus {
+        active: false, imported: Some(rows.len()),
+        detail: format!("{name} · {} types · {} messages", rows.len(), reports.len()),
+    };
     let manifest = json!({"name":name,"source":source,"items":rows,"reports":reports});
     let pending = snapshot.join("manifest.tmp");
     fs::write(&pending, manifest.to_string())?;
@@ -348,15 +353,15 @@ pub(crate) fn import_collection(folder: PathBuf, name: Option<String>) -> PyResu
             .into_owned()
     });
     let mut job = JOB.lock().unwrap();
-    if job.0 {
+    if job.active {
         return Err(PyRuntimeError::new_err("A collection is already importing"));
     }
-    *job = (true, format!("Reading {name}…"));
+    *job = ImportStatus { active: true, detail: format!("Reading {name}…"), imported: None };
     REVISION.fetch_add(1, Ordering::Relaxed);
     drop(job);
     std::thread::spawn(move || {
         let result = import_folder(&folder, &name);
-        progress(false, result.unwrap_or_else(|e| format!("{name}: {e}")));
+        progress(result.unwrap_or_else(|e| ImportStatus { detail: format!("{name}: {e}"), ..Default::default() }));
     });
     Ok(())
 }

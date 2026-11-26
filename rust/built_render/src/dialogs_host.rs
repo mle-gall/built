@@ -999,8 +999,8 @@ impl Job {
     }
 
     /// Finish once and optionally keep a result action in the capsule.
-    #[pyo3(signature = (*, failed=false, detail=None, action_label=None, action=None))]
-    fn end(slf: &Bound<'_, Self>, failed: bool, detail: Option<Bound<'_, PyAny>>, action_label: Option<Bound<'_, PyAny>>, action: Option<Bound<'_, PyAny>>) -> PyResult<()> {
+    #[pyo3(signature = (*, failed=false, detail=None, action_label=None, action=None, result_title=None))]
+    fn end(slf: &Bound<'_, Self>, failed: bool, detail: Option<Bound<'_, PyAny>>, action_label: Option<Bound<'_, PyAny>>, action: Option<Bound<'_, PyAny>>, result_title: Option<String>) -> PyResult<()> {
         let py = slf.py();
         if slf.borrow().ended {
             return Ok(());
@@ -1017,8 +1017,21 @@ impl Job {
         if exclusive {
             guard_release(&win)?;
         }
-        let result = if cancelled { "Cancelled" } else if failed { "Failed" } else { "Done" };
-        let title = format!("{result} · {}", label.trim_end_matches('…'));
+        let label = label.trim_end_matches('…');
+        let title = if cancelled || failed {
+            format!("{} · {label}", if cancelled { "Cancelled" } else { "Failed" })
+        } else if let Some(title) = result_title {
+            title
+        } else {
+            let (verb, object) = label.split_once(' ').unwrap_or((label, ""));
+            let past = match verb {
+                "Opening" => "Opened", "Saving" => "Saved", "Importing" => "Imported",
+                "Exporting" => "Exported", "Reloading" => "Reloaded", "Loading" => "Loaded",
+                "Rendering" => "Rendered", _ => "Completed",
+            };
+            let object = if past == "Completed" { label } else { object };
+            format!("{past} {object}").trim_end().to_owned()
+        };
         record_with(py, &win, s(py, &title), detail.unwrap_or_else(|| s(py, "")), if failed { "error" } else if cancelled { "info" } else { "success" }, action_label.unwrap_or_else(|| s(py, "")), action.unwrap_or_else(|| py.None().into_bound(py)), true)
     }
 }

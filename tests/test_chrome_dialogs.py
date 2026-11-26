@@ -333,6 +333,16 @@ def test_busy_shows_a_job_only_while_it_runs(win):
     assert cd.jobs(win) == []
 
 
+@pytest.mark.parametrize(("label", "result"), [
+    ("Opening m.igz…", "Opened m.igz"),
+    ("Saving m.built…", "Saved m.built"),
+    ("Importing 3 types…", "Imported 3 types"),
+])
+def test_completed_job_names_its_result(win, label, result):
+    cd.Job(win, label).end()
+    assert cd.history(win)[0].title == result
+
+
 def test_the_background_autosave_shows_as_a_quiet_job(win):
     win._background_autosave = SimpleNamespace(busy=True, job={"doc": win._doc})
     jobs = cd.jobs(win)
