@@ -317,6 +317,11 @@ fn igz_write_prepared_inner<'p>(
             container = true;
         }
     }
+    let embedded = blobs.len()?;
+    if container {
+        let summary = crate::link_scan::encode_summary(&payload)?;
+        blobs.set_item("start-summary.json", pyo3::types::PyBytes::new(py, &summary))?;
+    }
     let doc = nonfinite(
         &api,
         &payload,
@@ -343,7 +348,7 @@ fn igz_write_prepared_inner<'p>(
         api.call_method1("_write_atomic", (path, bytes))?;
     }
     let stats = PyDict::new(py);
-    stats.set_item("embedded", blobs.len()?)?;
+    stats.set_item("embedded", embedded)?;
     stats.set_item("missing", missing)?;
     Ok(stats.into_any())
 }

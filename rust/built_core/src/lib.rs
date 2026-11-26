@@ -255,6 +255,7 @@ fn built_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     appimage::register(m)?;
     m.add_function(wrap_pyfunction!(worker_gc::install_main_thread_collector, m)?)?;
     m.add_function(wrap_pyfunction!(gpu_prefs::ensure_high_performance_gpu, m)?)?;
+    m.add_function(wrap_pyfunction!(link_scan::start_document_summary, m)?)?;
     m.add_function(wrap_pyfunction!(link_scan::scan_document_links, m)?)?;
     extension_manager::register(m)?;
     m.add_class::<scene_video::MkvWriter>()?;
