@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 Built contributors.
+# Copyright (C) 2026 IngeTrazo contributors.
 """#1087: copying supplied topology must not face its empty cycles again."""
 from collections import Counter
 from pathlib import Path

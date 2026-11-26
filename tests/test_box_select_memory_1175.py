@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 Built contributors.
+# Copyright (C) 2026 IngeTrazo contributors.
 """#1175: box selection must not duplicate an import's full point arrays."""
 from types import SimpleNamespace
 import gc

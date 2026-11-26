@@ -11,4 +11,4 @@ def test_develop_an_extension_opens_the_guide(native_host, monkeypatch):
     monkeypatch.setattr("built_core.desktop_open.open_url", opened.append)
     action = native_host.window._registry_actions["menu:develop_plugin"]
     action.trigger()
-    assert opened == ["https://github.com/ingelibre/ingetrazo/blob/main/docs/plugins.md"]
+    assert opened == ["https://github.com/mle-gall/built/blob/main/docs/plugins.md"]
