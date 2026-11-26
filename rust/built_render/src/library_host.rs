@@ -11,6 +11,7 @@
 //! and who uses them, runs the verbs through the protocol, and feeds the
 //! Paint strip and the material inspector. Model edits go through
 //! `built_core.protocol.commands`.
+mod bulk;
 use crate::library_collections as collections;
 use crate::settings_rows::{func, none, obj, opt, s, Res};
 use pyo3::{
@@ -932,10 +933,6 @@ impl MaterialsProvider {
 #[pyclass(module = "built_render.wgpu_library", extends = LibraryProvider, dict)]
 pub struct ComponentsProvider;
 
-fn is_linked(g: &Bound<'_, PyAny>) -> bool {
-    g.py().import("built_core.links").and_then(|l| l.call_method1("is_linked", (g,))).and_then(|v| v.is_truthy()).unwrap_or(false)
-}
-
 /// Only mesh identities are needed to decide whether a row can replace any selected copy.
 fn selected_definitions(scene: &Bound<'_, PyAny>) -> PyResult<std::collections::HashSet<usize>> {
     let mut meshes = std::collections::HashSet::new();
@@ -948,6 +945,43 @@ fn selected_definitions(scene: &Bound<'_, PyAny>) -> PyResult<std::collections::
         }
     }
     Ok(meshes)
+}
+
+const COMPONENT_COLLECTIONS: &str = "library_component_collections";
+
+fn move_to_collection(st:&Bound<'_,PyAny>,ctx:&Bound<'_,PyAny>,picks:&Bound<'_,PySet>)->PyResult<()> {
+    let py=ctx.py();
+    let scene=ctx.getattr("scene")?;
+    let version=scene.getattr("content_version")?.unbind();
+    let model=provider(py,"components")?.call_method1("_model",(ctx,))?;
+    let mut keys=Vec::<String>::new();
+    for key in picks.iter() {
+        let key:String=key.extract()?;
+        if let Some(i)=key.strip_prefix("cm:").and_then(|s|s.parse::<usize>().ok()) {
+            let row=model.get_item(i)?;
+            let kept=row.get_item(3)?;
+            for group in row.get_item(2)?.try_iter()? {keys.push(group?.getattr("uid")?.str()?.to_string());}
+            if !kept.is_none(){keys.push(kept.getattr("uid")?.str()?.to_string());}
+        } else {keys.push(key);}
+    }
+    let win=ctx.getattr("win")?;
+    let vp=ctx.getattr("vp")?.unbind();
+    let scene=scene.unbind();
+    let done=func(py,move |py,a|{
+        let name=a.get_item(0)?.extract::<Option<String>>()?.unwrap_or_default();
+        let scene=scene.bind(py);
+        if !name.trim().is_empty() && vp.bind(py).getattr("scene")?.is(scene) && scene.getattr("content_version")?.eq(version.bind(py))? {
+            let entries=scene.getattr("plugin_data")?.call_method1("get",(COMPONENT_COLLECTIONS,PyDict::new(py)))?.call_method0("copy")?;
+            for key in &keys {entries.set_item(key,name.trim())?;}
+            let cmd=py.import("built_core.history")?.call_method1("SetPluginDataCommand",(COMPONENT_COLLECTIONS,entries))?;
+            vp.bind(py).getattr("history")?.call_method1("execute",(cmd,))?;
+            vp.bind(py).call_method0("notify_scene_changed")?;
+        }
+        Ok(none(py))
+    })?;
+    py.import("built_render.chrome_forms")?.getattr("ask_text")?.call((win,"Move to collection","Collection in this project"),Some(&[("done",done)].into_py_dict(py)?))?;
+    st.set_item("bulk_mode","")?;
+    Ok(())
 }
 
 #[pymethods]
@@ -976,16 +1010,51 @@ impl ComponentsProvider {
         let out = PyList::empty(py);
         let scene = ctx.getattr("scene")?;
         let selected = selected_definitions(&scene)?;
+        let engine = py.import("built_core")?;
+        let registry = py.import("core.bim_registry")?.call_method1("get", (&scene,))?;
+        let structure = py.import("built_core.structure")?;
+        let nodes = structure.call_method1("_nodes", (&registry,))?;
+        let mut node_metadata = std::collections::HashMap::<String,(String,Option<String>)>::new();
         for (i, row) in slf.call_method1("_model", (ctx,))?.try_iter()?.enumerate() {
             let row = row?;
             let (name, groups, kept) = (row.get_item(0)?, row.get_item(2)?, row.get_item(3)?);
             let gs: Vec<Bound<'_, PyAny>> = groups.try_iter()?.collect::<PyResult<_>>()?;
-            let linked = !gs.is_empty() && gs.iter().all(is_linked);
+            let mut paths = std::collections::BTreeSet::new();
+            let mut classes = std::collections::BTreeSet::new();
+            let mut locations = std::collections::BTreeMap::new();
+            for group in gs.iter().chain((!kept.is_none()).then_some(&kept)) {
+                if let Some(class) = group.getattr("ifc").ok().and_then(|v|v.call_method1("get",("class",)).ok()).and_then(|v|v.extract::<String>().ok()) {
+                    if !class.is_empty() {classes.insert(class);}
+                }
+                if group.is(&kept) {continue;}
+                let ancestor = engine.call_method1("link_linked_ancestor",(group,))?;
+                let path:String = if ancestor.is_none() {String::new()} else {
+                    ancestor.getattr("ext")?.get_item("link")?.get_item("path")?.extract()?
+                };
+                let node = structure.call_method1("node_of",(group,))?.extract::<Option<String>>()?.unwrap_or_default();
+                if !node_metadata.contains_key(&node) {
+                    let metadata = if !node.is_empty() && nodes.contains(&node)? {
+                        let name=nodes.get_item(&node)?.get_item("name")?.extract()?;
+                        let cls=structure.call_method1("resolve",(&registry,&node))?.call_method1("get",("class",))?.extract()?;
+                        (name,cls)
+                    } else {("Unfiled".to_owned(),None)};
+                    node_metadata.insert(node.clone(),metadata);
+                }
+                let (name,cls)=&node_metadata[&node];
+                if let Some(cls)=cls {classes.insert(cls.clone());}
+                *locations.entry(format!("{} › {name}",if path.is_empty() {"This model"}else{&path})).or_insert(0usize)+=1;
+                paths.insert(path);
+            }
+            let linked = !paths.is_empty() && !paths.contains("");
+            let files:Vec<_>=paths.into_iter().filter(|s|!s.is_empty()).collect();
+            let file = if linked {files.first().cloned()} else {None};
+            let explicit_class = kept.getattr("ifc").ok().and_then(|v|v.call_method1("get",("class",)).ok()).and_then(|v|v.extract::<String>().ok()).unwrap_or_default();
             let mut v = if gs.is_empty() {
                 vec!["apply", "replace", "rename", "-", "unkeepfile"]
             } else {
                 vec!["apply", "edit", "select", "replace", "-", "rename", if kept.is_none() { "keepfile" } else { "unkeepfile" }, "-", "delete"]
             };
+            if linked { v.retain(|id|matches!(*id,"apply"|"select")); }
             let definition = gs.first().unwrap_or(&kept);
             let mesh = definition.getattr("mesh")?;
             if !selected.iter().any(|&id| id != mesh.as_ptr() as usize) {
@@ -993,6 +1062,11 @@ impl ComponentsProvider {
             }
             out.append(item(py, &[
                 ("key", s(py, &format!("cm:{i}"))),
+                ("file",obj(py,file)?.into_bound(py)),
+                ("files",obj(py,files)?.into_bound(py)),
+                ("explicit_class",s(py,&explicit_class)),
+                ("locations",obj(py,locations)?.into_bound(py)),
+                ("classes",obj(py,classes.into_iter().collect::<Vec<_>>())?.into_bound(py)),
                 ("definition_id", obj(py, mesh.as_ptr() as usize)?.into_bound(py)),
                 ("name", if name.is_truthy()? { name } else { s(py, "Component") }),
                 ("source", s(py, if linked { "linked" } else { "model" })),
@@ -1022,6 +1096,31 @@ impl ComponentsProvider {
                 ("verbs", verbs(py, &["apply"])?),
             ])?)?;
         }
+        for manifest in collections::manifests()? {
+            for original in manifest["items"].as_array().into_iter().flatten() {
+                let mut entry=original.clone();
+                entry["collection"]=manifest["name"].clone();
+                let row=loads(py,&s(py,&entry.to_string()))?;
+                out.append(row)?;
+            }
+        }
+        let assigned=scene.getattr("plugin_data")?.call_method1("get",(COMPONENT_COLLECTIONS,PyDict::new(py)))?;
+        if assigned.is_truthy()? {
+            let rows=slf.call_method1("_model",(ctx,))?;
+            for item in out.iter() {
+                let key:String=item.get_item("key")?.extract()?;
+                let mut label=assigned.call_method1("get",(&key,))?;
+                if let Some(i)=key.strip_prefix("cm:").and_then(|s|s.parse::<usize>().ok()) {
+                    let row=rows.get_item(i)?;
+                    let kept=row.get_item(3)?;
+                    for group in row.get_item(2)?.try_iter()?.chain((!kept.is_none()).then_some(Ok(kept))) {
+                        label=assigned.call_method1("get",(group?.getattr("uid")?.str()?,))?;
+                        if !label.is_none() {break;}
+                    }
+                }
+                if !label.is_none(){item.set_item("collection",label)?;}
+            }
+        }
         Ok(out)
     }
 
@@ -1034,13 +1133,20 @@ impl ComponentsProvider {
 
     fn type_actions<'py>(slf: &Bound<'py, Self>, ctx: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyList>> {
         let py = slf.py();
-        let mut n = 0;
-        for row in slf.call_method1("_model", (ctx,))?.try_iter()? {
-            let row = row?;
-            if !row.get_item(3)?.is_none() && !row.get_item(2)?.is_truthy()? {
-                n += 1;
+        let model=slf.call_method1("_model",(ctx,))?;
+        let st=state(&ctx.getattr("view")?)?;
+        let cached=st.call_method1("get",("kept_count",))?;
+        let n:usize=if !cached.is_none() && cached.get_item(0)?.eq(model.as_ptr() as usize)? && cached.get_item(2)?.eq(ctx.getattr("scene")?.getattr("content_version")?)? {
+            cached.get_item(1)?.extract()?
+        }else{
+            let mut n=0;
+            for row in model.try_iter()? {
+                let row=row?;
+                if !row.get_item(3)?.is_none() && !row.get_item(2)?.is_truthy()? {n+=1;}
             }
-        }
+            st.set_item("kept_count",(model.as_ptr() as usize,n,ctx.getattr("scene")?.getattr("content_version")?))?;
+            n
+        };
         let actions = PyList::empty(py);
         actions.append(("import", crate::model_edit::translated(py, "Components from File…", None)?))?;
         actions.append(("purge", if n != 0 { format!("Stop keeping unplaced components ({n})") } else { "Stop keeping unplaced components (none)".into() }))?;
@@ -1082,6 +1188,9 @@ impl ComponentsProvider {
         let ui = ui(py)?;
         let key: String = item.get_item("key")?.extract()?;
         let win = ctx.getattr("win")?;
+        if key.starts_with("family:") {
+            return FamiliesProvider.run(py,ctx,verb,item,arg);
+        }
         if !key.starts_with("cm:") {
             if verb == "apply" {
                 ui.call_method1("_library_pick", (&win, ctx.getattr("view")?, &key))?;
@@ -1106,6 +1215,14 @@ impl ComponentsProvider {
                 };
                 ui.call_method1("_select", (&win, vec![g]))?;
                 ctx.getattr("vp")?.call_method1("begin_group_edit", (g,))?;
+            }
+            "unique" => {
+                let chosen=gs.iter().find(|g|g.getattr("uid").is_ok_and(|v|v.str().is_ok_and(|s|s.to_string()==arg)));
+                if let Some(g)=chosen {
+                    if py.import("built_core")?.call_method1("link_linked_ancestor",(g,))?.is_none() && !scene.call_method1("entity_locked",(g,))?.is_truthy()? {
+                        crate::context_edits::unique_rows(&win,&PyList::new(py,[g])?,false)?;
+                    }
+                }
             }
             "select" => {
                 render(py)?.call_method1("select_component_instances", (&win, &groups))?;
@@ -1397,6 +1514,7 @@ fn browse(st: &Bound<'_, PyAny>) -> PyResult<String> {
     let d = PyDict::new(py);
     d.set_item("sort", st.call_method1("get", ("sort", "name"))?)?;
     d.set_item("facet", st.call_method1("get", ("facet", "all"))?)?;
+    d.set_item("group", st.call_method1("get",("component_group","none"))?)?;
     d.set_item("filter", st.call_method1("get", ("filter", ""))?)?;
     let scope = st.call_method1("get", ("scope",))?;
     d.set_item("scope", if scope.is_truthy()? { scope } else { s(py, "s:model") })?;
@@ -1658,7 +1776,7 @@ impl LibrarySheet {
                     let id: usize = mesh.extract()?;
                     let verbs = item.get_item("verbs")?;
                     let has = verbs.contains("replace")?;
-                    let allowed = selected.iter().any(|&m| m != id);
+                    let allowed = !item.get_item("source")?.eq("linked")? && selected.iter().any(|&m| m != id);
                     if has != allowed {
                         let mut actions: Vec<String> = verbs.extract()?;
                         actions.retain(|v|v != "replace");
@@ -1726,6 +1844,7 @@ impl LibrarySheet {
         }
         let scene = ctx.getattr("win")?.getattr("viewport")?.getattr("scene")?;
         let browse_d = json(py)?.call_method1("loads", (browse(&st)?,))?;
+        if prov_id=="components" && !st.get_item("scope")?.eq("s:online")? {browse_d.set_item("scope","s:all")?;}
         if has_target {
             target.call_method1("prepare", (&items, &browse_d))?;
             st.set_item("items", by_key(&items)?)?;
@@ -1765,6 +1884,13 @@ impl LibrarySheet {
         let online = out.get_item("online")?.is_truthy()?;
         sheet.call_method1("search", (out.get_item("search")?,))?;
         sheet.getattr("menus")?.call_method1("append", (out.get_item("sort")?,))?;
+        let faceted=prov_id=="components" && !online;
+        if faceted {
+            let group:String=st.call_method1("get",("component_group","none"))?.extract()?;
+            let options=[("none","None"),("class","IFC class"),("source","Source")];
+            let label=options.iter().find(|(id,_)|*id==group).map_or("None",|p|p.1);
+            sheet.call_method1("menu",("group",format!("Group: {label}"),options.to_vec(),group))?;
+        }
         sheet.setattr("side", out.get_item("side")?)?;
         let collections = if prov_id == "families" { collections::manifests()? } else { Vec::new() };
         if !has_target {
@@ -1780,7 +1906,7 @@ impl LibrarySheet {
             let label = py.import("built_core.i18n")?.call_method1("tr", ("Component library",))?;
             sheet.call_method("side_item", ("s:online", label), Some(&[("on", online)].into_py_dict(py)?))?;
         }
-        if online || (prov_id == "components" && searching) {
+        if online {
             if slf.getattr("catalogue")?.is_none() {
                 slf.setattr("catalogue", crate::component_catalogue::session::CatalogueSession::create(ctx)?)?;
             }
@@ -1796,6 +1922,17 @@ impl LibrarySheet {
             if !searching { content_spec.set_item("title", c["name"].as_str().unwrap_or(""))?; }
         }
         let content = sheet.call_method("content", (), Some(content_spec.cast::<PyDict>()?))?;
+        if faceted {
+            bulk::controls(&st,&content,&sheet,&out,&ctx_of(py,&ctx.getattr("win")?,&view)?)?;
+            let mut buttons=Vec::new();
+            for token in out.get_item("tokens")?.extract::<Vec<String>>()? {
+                buttons.push(cs_verb(py,&format!("toggle:{token}"),&format!("{token} ×"),&[])?);
+            }
+            if !buttons.is_empty() {
+                buttons.push(cs_verb(py,"reset-filter","Reset",&[])?);
+                content.call_method1("buttons",(buttons,))?;
+            }
+        }
         if prov_id == "families" {
             let status = collections::status();
             if !status.is_empty() { content.call_method1("caption", (status,))?; }
@@ -1834,7 +1971,7 @@ impl LibrarySheet {
             }
         }
         st.set_item("cursor", out.get_item("cursor")?)?;
-        let detail = sheet.call_method("detail", (), Some(&[("width", 340i32.into_pyobject(py)?.into_any()), ("empty", s(py, "Pick an item to see it here."))].into_py_dict(py)?))?;
+        let detail = sheet.call_method("detail", (), Some(&[("width", (if faceted {260i32} else {340}).into_pyobject(py)?.into_any()), ("empty", s(py, "Pick an item to see it here."))].into_py_dict(py)?))?;
         let cursor = st.call_method1("get", ("cursor",))?;
         if has_target {
             detail.call_method1("fields", (&target, "tree-paint"))?;
@@ -1847,7 +1984,10 @@ impl LibrarySheet {
             detail.setattr("blocks", out.get_item("detail")?)?;
         }
         let e = if cursor.is_truthy()? { st.get_item("items")?.call_method1("get", (&cursor,))? } else { py.None().into_bound(py) };
-        if !e.is_none() && prov_id == "components" {
+        if faceted && st.get_item("checked")?.len()?>0 {
+            detail.setattr("blocks",PyList::empty(py))?;
+            bulk::detail(&st,&detail)?;
+        } else if !e.is_none() && prov_id == "components" {
             slf.call_method1("_component_detail", (&detail, &prov, ctx, &e))?;
         }
         let hint = if matches!(prov_id.as_str(), "components" | "families") { "Drag into the model to place · double-click or ↩ to place · Esc back to the model" } else { "Click to see it · double-click or ↩ uses it · Esc back to the model" };
@@ -1874,9 +2014,13 @@ impl LibrarySheet {
         let catalogue = slf.getattr("catalogue")?;
         if !catalogue.is_none() { catalogue.call_method1("act", ("focus", vec![key]))?; }
         st.set_item("cursor", key)?;
-        let detail = sheet.call_method("detail", (), Some(&[("width", 340)].into_py_dict(py)?))?;
-        detail.setattr("blocks", component_blocks(py, &item)?)?;
-        slf.call_method1("_component_detail", (&detail, provider(py, "components")?, ctx, &item))?;
+        let detail = sheet.call_method("detail", (), Some(&[("width", 260)].into_py_dict(py)?))?;
+        if st.get_item("checked")?.len()?>0 {
+            bulk::detail(&st,&detail)?;
+        } else {
+            detail.setattr("blocks", component_blocks(py, &item)?)?;
+            slf.call_method1("_component_detail", (&detail, provider(py, "components")?, ctx, &item))?;
+        }
         sheet.call_method1("focus", (key,))?;
         let pane = detail.call_method0("wire")?;
         if sheet.is_instance_of::<crate::sheet_runtime::Spec>() {
@@ -1919,8 +2063,11 @@ impl LibrarySheet {
         }
         let mut vs = vec![cs_verb(py, "apply", "Place a copy", &[("key", s(py, "↩")), ("primary", true.into_pyobject(py)?.to_owned().into_any())])?];
         if model {
-            for (id,label) in [("select","Select copies"),("replace","Replace selection with this"),("edit","Open for editing")] {
-                if e.get_item("verbs")?.contains(id)? {vs.push(cs_verb(py,id,label,&[])?);}
+            if e.get_item("verbs")?.contains("edit")? {
+                vs.push(cs_verb(py,"unique-choose","Make unique…",&[])?);
+            }
+            for (id,label) in [("select","Select copies"),("replace","Replace selection with this"),("edit","Open definition")] {
+                if e.get_item("verbs")?.contains(id)? { let label=if id=="select" {format!("Select copies ({})",e.get_item("uses")?)} else {label.into()}; vs.push(cs_verb(py,id,&label,&[])?);}
             }
         }
         d.call_method("buttons", (vs,), Some(&[("align", "fill")].into_py_dict(py)?))?;
@@ -1935,6 +2082,10 @@ impl LibrarySheet {
                 }
             }
             d.call_method("buttons", (more,), Some(&[("align", "left")].into_py_dict(py)?))?;
+            if let Some(locations)=e.cast::<PyDict>()?.get_item("locations")? {
+                d.call_method1("caption",("Copies by location",))?;
+                d.call_method1("kv",(locations.call_method0("items")?,))?;
+            }
         }
         Ok(())
     }
@@ -1984,6 +2135,34 @@ impl LibrarySheet {
         let st = _state(&view)?;
         let arg = args.first().cloned().unwrap_or_default();
         let lctx = ctx_of(py, &win, &view)?;
+        if st.get_item("type")?.eq("components")? && (verb.starts_with("bulk-") || verb=="verb" && arg.starts_with("bulk-")) {
+            return bulk::act(&st,&lctx,if verb=="verb"{&arg}else{verb},&arg);
+        }
+        if verb=="verb" && arg=="unique-choose" {
+            let cursor=st.get_item("cursor")?;
+            let entry=st.get_item("items")?.get_item(&cursor)?;
+            let p=provider(py,"components")?;
+            let row=p.call_method1("_row",(&lctx,&entry))?;
+            let mut choices=Vec::new();
+            for group in row.get_item(2)?.try_iter()? {
+                let group=group?;
+                if py.import("built_core")?.call_method1("link_linked_ancestor",(&group,))?.is_none() && !lctx.getattr("scene")?.call_method1("entity_locked",(&group,))?.is_truthy()? {
+                    let uid=group.getattr("uid")?.str()?.to_string();
+                    choices.push((uid.clone(),format!("{} · {uid}",group.getattr("name")?)));
+                }
+            }
+            let stamp=lctx.getattr("scene")?.getattr("content_version")?.unbind();
+            let (p,entry,lctx)=(p.unbind(),entry.unbind(),lctx.unbind());
+            let done=func(py,move |py,a| {
+                let answer=a.get_item(0)?;
+                if !answer.is_none() && lctx.bind(py).getattr("scene")?.getattr("content_version")?.eq(stamp.bind(py))? {
+                    p.bind(py).call_method1("run",(lctx.bind(py),"unique",entry.bind(py),answer))?;
+                }
+                Ok(none(py))
+            })?;
+            py.import("built_render.chrome_dialogs")?.getattr("ask_later")?.call((&win,"Make unique","Choose one copy",choices,done),None)?;
+            return Ok(());
+        }
         if verb == "family-previews" {
             for key in &args {
                 if let Some(entry) = st.get_item("items")?.cast::<PyDict>()?.get_item(key)? {
@@ -2019,6 +2198,21 @@ impl LibrarySheet {
                 return Ok(());
             }
         }
+        if st.get_item("type")?.eq("components")? {
+            if let Some(token)=arg.strip_prefix("toggle:").filter(|_|matches!(verb,"side"|"verb")) {
+                let query=crate::library_view::facets::toggle(&st.get_item("filter")?.extract::<String>()?,token);
+                st.set_item("scope","s:all")?;
+                st.set_item("filter",&query)?;
+                cs(py)?.getattr("open")?.call((&win,slf),Some(&[("search",query)].into_py_dict(py)?))?;
+                return Ok(());
+            }
+            if verb=="verb" && arg=="reset-filter" {
+                st.set_item("filter","")?;
+                cs(py)?.getattr("open")?.call((&win,slf),Some(&[("search","")].into_py_dict(py)?))?;
+                return Ok(());
+            }
+
+        }
         match verb {
             "search" => st.set_item("filter", &arg)?,
             "tab" => {
@@ -2045,7 +2239,7 @@ impl LibrarySheet {
             }
             "headmenu" if args.len() > 1 => {
                 let opt_ = &args[1];
-                if let Some(facet) = opt_.strip_prefix("facet:") {
+                if arg=="group" && matches!(opt_.as_str(),"none"|"class"|"source") { st.set_item("component_group",opt_)?; } else if let Some(facet) = opt_.strip_prefix("facet:") {
                     st.set_item("facet", if matches!(facet, "all" | "colour" | "image") { facet } else { "all" })?;
                 } else if py.import("builtins")?.getattr("dict")?.call1((sorts(py)?,))?.contains(opt_)? {
                     st.set_item("sort", opt_)?;
@@ -2134,6 +2328,7 @@ impl LibrarySheet {
     }
 
     fn closed(slf: &Bound<'_, Self>, _ctx: &Bound<'_, PyAny>) -> PyResult<()> {
+        _state(&slf.getattr("view")?)?.set_item("bulk_stamp",slf.py().None())?;
         slf.call_method0("close_catalogue")?;
         Ok(())
     }

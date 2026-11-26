@@ -217,7 +217,7 @@ fn replace_selection(win: &Bound<'_, PyAny>, source: &Bound<'_, PyAny>) -> PyRes
     replace_groups(win, &targets, source)
 }
 
-fn replace_groups(
+pub(crate) fn replace_groups(
     win: &Bound<'_, PyAny>,
     targets: &Bound<'_, PyList>,
     source: &Bound<'_, PyAny>,
