@@ -1678,8 +1678,11 @@ impl LibrarySheet {
         spec.set_item("model_uses", match &got { Some(g) => py.import("builtins")?.getattr("dict")?.call1((g.get_item(0)?,))?, None => PyDict::new(py).into_any() })?;
         spec.set_item("unnamed", match &got { Some(g) => g.get_item(1)?.len()?, None => 0 })?;
         let out = loads(py, &render(py)?.call_method1("library_sheet", (dumps(py, spec.as_any())?,))?)?;
-        for path in out.get_item("thumbs")?.try_iter()? {
-            thumb(&view, &path?)?;
+        if prov_id != "families" {
+            for path in out.get_item("thumbs")?.try_iter()? { thumb(&view, &path?)?; }
+        } else if let Some(key) = out.get_item("cursor")?.extract::<Option<String>>()? {
+            let focused = st.get_item("items")?.get_item(key)?;
+            thumb(&view, &focused.get_item("thumb")?)?;
         }
         st.set_item("scope", out.get_item("scope")?)?;
         let searching = out.get_item("searching")?.is_truthy()?;
@@ -1873,6 +1876,14 @@ impl LibrarySheet {
         let st = _state(&view)?;
         let arg = args.first().cloned().unwrap_or_default();
         let lctx = ctx_of(py, &win, &view)?;
+        if verb == "family-previews" {
+            for key in &args {
+                if let Some(entry) = st.get_item("items")?.cast::<PyDict>()?.get_item(key)? {
+                    thumb(&view, &entry.get_item("thumb")?)?;
+                }
+            }
+            return Ok(());
+        }
         if verb == "component-previews" {
             return crate::model_panels::component_preview::upload(&lctx, &args);
         }

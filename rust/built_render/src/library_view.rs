@@ -199,6 +199,9 @@ pub fn filtered<'a>(items: impl IntoIterator<Item = &'a Item>, st: &Browse) -> V
 /// The items of one side row.
 pub fn in_scope<'a>(items: &'a [Item], scope: &str, recent: &[String]) -> Vec<&'a Item> {
     if scope == "s:all" { return items.iter().collect(); }
+    if scope == "s:mine" {
+        return items.iter().filter(|e| e.source == "mine" || e.source.starts_with("collection:")).collect();
+    }
     if scope == "s:recent" {
         let by_key: HashMap<&str, &Item> = items.iter().map(|e| (e.key.as_str(), e)).collect();
         return recent.iter().filter_map(|k| by_key.get(k.as_str()).copied()).collect();
