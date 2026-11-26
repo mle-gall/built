@@ -233,6 +233,7 @@ pub(crate) fn hint_for(
     if let Some((_, hint)) = NAVIGATION.iter().find(|(k, _)| Some(*k) == nav_mode) {
         return tr(py, hint);
     }
+    if truth(tool,"_wall_family",false)? {return tr(py,"Hover a wall · Tab flips side · enter sill;offset · click to place");}
     let key = key.unwrap_or_default();
     let Some((_, phases)) = TOOLS.iter().find(|(k, _)| *k == key) else {
         return match tool.getattr_opt("name")?.filter(|v| !v.is_none()) {
