@@ -22,6 +22,7 @@
 //! - the revision is `scene_revision.rs`.
 
 use pyo3::intern;
+use std::collections::HashMap;
 use pyo3::prelude::*;
 use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyCFunction, PyDict, PyList, PySet, PyString, PyTuple};
@@ -510,6 +511,86 @@ fn entity_locked(entity: &Obj<'_>) -> PyResult<bool> {
         }
     }
     Ok(false)
+}
+
+/// `entity_selectable` for many faces or edges of the active mesh at once
+/// (a window over a big mesh), the mask in `keys` order: what can rule one
+/// out reduces to its Hide (a face's `hidden`, unless Hidden Geometry shows
+/// it), the loose geometry's lock and its tag's state, so the hidden flags
+/// and tags are read from the store (and a face's own attributes), the lock
+/// and each tag's state once. None when the store cannot answer for every
+/// key (another mesh's element): ask one by one then.
+pub(crate) fn selectable_mask<'py>(me: &Obj<'py>, kind: &str, keys: Vec<u128>) -> PyResult<Option<Vec<bool>>> {
+    let py = me.py();
+    let mesh = me.getattr(intern!(py, "mesh"))?;
+    let (Some(store), Some(table)) = (mesh.attr_opt("_store")?, mesh.attr_opt("_attr_table")?) else { return Ok(None) };
+    if !store.hasattr("element_tags")? {
+        return Ok(None);
+    }
+    let n = keys.len();
+    let (tags, names): (Vec<i64>, Vec<String>) = store.call_method1("element_tags", (kind, keys.clone()))?.extract()?;
+    if tags.iter().any(|&t| t == -2) {
+        return Ok(None);
+    }
+    if root(me)?.call_method0(intern!(py, "_loose_locked"))?.is_truthy()? {
+        return Ok(Some(vec![false; n]));
+    }
+    let show_hidden = flag(me, intern!(py, "show_hidden_geometry"))?;
+    // An untagged face or edge of an open group follows the group's tag
+    // (`open_group_layer`): every key here is the active mesh's.
+    let mut group_layer: Option<String> = None;
+    if !me.getattr(intern!(py, "edit_group"))?.is_none() {
+        for group in open_path(me)?.iter().rev() {
+            let layer = opt(group, intern!(py, "layer"))?;
+            if layer.is_truthy()? {
+                group_layer = layer.extract().ok();
+                break;
+            }
+        }
+    }
+    let mut states: HashMap<String, bool> = HashMap::new();
+    let mut tag_ok = |tag: Option<String>| -> PyResult<bool> {
+        let mut name = tag.filter(|t| !t.is_empty()).unwrap_or_else(|| DEFAULT_LAYER.to_owned());
+        if name == DEFAULT_LAYER {
+            if let Some(open) = &group_layer {
+                name = open.clone();
+            }
+        }
+        if let Some(&ok) = states.get(&name) {
+            return Ok(ok);
+        }
+        let ly = scene_layer_by_key(me, PyString::new(py, &name).as_any())?;
+        let ok = ly.is_none() || (cache(py)?.effective_visible.bind(py).call1((me, &ly))?.is_truthy()? && !ly.getattr(intern!(py, "locked"))?.is_truthy()?);
+        states.insert(name, ok);
+        Ok(ok)
+    };
+    let mut mask = Vec::with_capacity(n);
+    if kind == "edge" {
+        for tag in tags {
+            mask.push(tag_ok(usize::try_from(tag).ok().and_then(|i| names.get(i).cloned()))?);
+        }
+        return Ok(Some(mask));
+    }
+    let own = mesh.attr_opt("_attr_own")?.and_then(|o| o.cast_into::<PyDict>().ok()).filter(|o| !o.is_empty());
+    let mut rows: HashMap<i64, (bool, Option<String>)> = HashMap::new();
+    for (key, row) in keys.into_iter().zip(tags) {
+        let mine = match &own {
+            Some(own) => own.get_item(key)?.filter(|d| !d.is_none()),
+            None => None,
+        };
+        let (hidden, tag) = match mine {
+            Some(attrs) => (attrs.call_method1("get", ("hidden",))?.is_truthy()?, attrs.call_method1("get", ("layer",))?.extract().unwrap_or(None)),
+            None => {
+                if !rows.contains_key(&row) {
+                    let attrs = if row < 0 { PyDict::new(py).into_any() } else { table.get_item(row)? };
+                    rows.insert(row, (attrs.call_method1("get", ("hidden",))?.is_truthy()?, attrs.call_method1("get", ("layer",))?.extract().unwrap_or(None)));
+                }
+                rows[&row].clone()
+            }
+        };
+        mask.push(!(hidden && !show_hidden) && tag_ok(tag)?);
+    }
+    Ok(Some(mask))
 }
 
 fn entity_selectable<'py>(me: &Obj<'py>, entity: &Obj<'py>) -> PyResult<bool> {

@@ -82,7 +82,12 @@ fn edit_selection(win: &Bound<'_, PyAny>, verb: &str) -> PyResult<()> {
             if let Ok(dims) = scene.getattr("dimensions") {
                 selection.call_method1("update", (dims,))?;
             }
-            scene.setattr("version", scene.getattr("version")?.extract::<u64>()? + 1)?;
+            // A change of what is shown, as every selection change
+            // (Scene.select): the version moves (issue #38), the content
+            // version does not. A bare `version += 1` told every cache
+            // keyed on the content that the document changed, so the tree
+            // and the boxes were rebuilt for a selection.
+            scene.call_method0("bump_view")?;
             ("Selected everything ({n} entities)", selection.len()?)
         }
         "none" => {

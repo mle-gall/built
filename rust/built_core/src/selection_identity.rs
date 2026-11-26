@@ -118,6 +118,46 @@ impl Materials {
         Ok(())
     }
 
+    /// The materials of the active mesh's selected faces (`keys`), every
+    /// one of them, without a handle each: a face's own attributes
+    /// (`_attr_own`) or its table row, the row's `mat` read once. False
+    /// when the store cannot answer (the caller samples the handles then).
+    fn bulk_faces(&mut self, mesh: &Bound<'_, PyAny>, keys: &Bound<'_, PyAny>, fallback: &Option<String>) -> PyResult<bool> {
+        let py = mesh.py();
+        let (Ok(store), Ok(table)) = (mesh.getattr("_store"), mesh.getattr("_attr_table")) else { return Ok(false) };
+        if !store.hasattr("element_tags")? {
+            return Ok(false);
+        }
+        let keys: Vec<u128> = keys.extract()?;
+        let (rows, _): (Vec<i64>, Vec<String>) = store.call_method1("element_tags", ("face", keys.clone()))?.extract()?;
+        if rows.iter().any(|&r| r == -2) {
+            return Ok(false);
+        }
+        let own = mesh.getattr("_attr_own").ok().and_then(|o| o.cast_into::<PyDict>().ok()).filter(|o| !o.is_empty());
+        let mut by_row: BTreeMap<i64, Option<String>> = BTreeMap::new();
+        let mat = |attrs: &Bound<'_, PyAny>| -> Option<String> { attrs.call_method1("get", ("mat",)).ok()?.extract().ok() };
+        for (key, row) in keys.into_iter().zip(rows) {
+            let mine = match &own {
+                Some(own) => own.get_item(key)?.filter(|d| !d.is_none()),
+                None => None,
+            };
+            let name = match mine {
+                Some(attrs) => mat(&attrs),
+                None => {
+                    if !by_row.contains_key(&row) {
+                        let name = if row < 0 { None } else { mat(&table.get_item(row)?) };
+                        by_row.insert(row, name);
+                    }
+                    by_row[&row].clone()
+                }
+            };
+            *self.counts.entry(name.or_else(|| fallback.clone()).unwrap_or_default()).or_default() += 1;
+            self.faces += 1;
+        }
+        let _ = py;
+        Ok(true)
+    }
+
     fn field(self) -> Field {
         let kinds = self.counts.len();
         let (name, count) = self
@@ -169,8 +209,11 @@ pub(crate) fn selection_identity(
     let mut result: Vec<Field> = vec![];
     let mut materials = Materials::default();
     let mut inside_differs = false;
-    for entry in scene.getattr("selection")?.try_iter()? {
-        let obj = entry?;
+    // One entry's fields, merged into `result` ("Mixed" where they differ);
+    // `own_layer` stands for the entry's own tag when given, `visit` counts
+    // its material. The fallback material is returned for its kin.
+    let one = |obj: Bound<'_, PyAny>, own_layer: Option<Option<String>>, visit: bool, result: &mut Vec<Field>,
+               materials: &mut Materials, inside_differs: &mut bool| -> PyResult<Option<String>> {
         let mut key: Option<String> = member
             .as_ref()
             .and_then(|m| m.get_item(obj.as_ptr() as usize).ok()?.extract().ok());
@@ -243,14 +286,17 @@ pub(crate) fn selection_identity(
         }
         inside.push(filename.into());
         inside.reverse();
-        let layer = attr(&obj, "layer").or_else(|| {
-            obj.getattr("attrs")
-                .ok()?
-                .call_method1("get", ("layer",))
-                .ok()?
-                .extract()
-                .ok()
-        });
+        let layer = match own_layer {
+            Some(layer) => layer,
+            None => attr(&obj, "layer").or_else(|| {
+                obj.getattr("attrs")
+                    .ok()?
+                    .call_method1("get", ("layer",))
+                    .ok()?
+                    .extract()
+                    .ok()
+            }),
+        };
         let tag = scene.call_method1("layer", (layer,))?;
         let mut tag_field = if tag.is_none() {
             field("Tag", "Untagged", "")
@@ -270,8 +316,10 @@ pub(crate) fn selection_identity(
         let linked = source.is_some();
         let file = source.unwrap_or_else(|| filename.into());
         let inside = inside.join(" › ");
-        inside_differs |= inside != file;
-        materials.visit(&obj, fallback)?;
+        *inside_differs |= inside != file;
+        if visit {
+            materials.visit(&obj, fallback.clone())?;
+        }
         let fields = vec![
             field("Kind", kind, REVEAL),
             field(
@@ -300,7 +348,7 @@ pub(crate) fn selection_identity(
             ),
         ];
         if result.is_empty() {
-            result = fields;
+            *result = fields;
         } else {
             for (previous, next) in result.iter_mut().zip(fields) {
                 if *previous != next {
@@ -308,6 +356,56 @@ pub(crate) fn selection_identity(
                     previous.2.clear();
                     previous.3 = None;
                 }
+            }
+        }
+        Ok(fallback)
+    };
+    let selection = scene.getattr("selection")?;
+    let mesh = scene.getattr("mesh")?;
+    let bulk = mesh.getattr("_store").ok().is_some_and(|s| s.hasattr("distinct_tags").unwrap_or(false));
+    match bulk {
+        // A big selection: placements and the rest one by one; the active
+        // mesh's faces and edges once per kind and distinct tag (what else
+        // tells them apart is the same for all: kind, place, file), their
+        // materials sampled as ever. A select-all of a 600k-element mesh
+        // was a second of attribute reads per change.
+        true if selection.hasattr("values_of")? && selection.len()? > crate::model::layers_api::BULK_SELECTION => {
+            for kind in ["placement", "other", "vertex"] {
+                for obj in selection.call_method1("values_of", (kind,))?.try_iter()? {
+                    one(obj?, None, true, &mut result, &mut materials, &mut inside_differs)?;
+                }
+            }
+            for kind in ["face", "edge"] {
+                let values = selection.call_method1("values_of", (kind,))?;
+                if values.len()? == 0 {
+                    continue;
+                }
+                let Some(tags) = crate::model::layers_api::mesh_element_tags(scene, &selection, kind)? else {
+                    for obj in values.try_iter()? {
+                        one(obj?, None, true, &mut result, &mut materials, &mut inside_differs)?;
+                    }
+                    continue;
+                };
+                let first = values.get_item(0)?;
+                let mut fallback = None;
+                // Faces' materials are counted in bulk below, all of them;
+                // edges count none.
+                for tag in tags {
+                    fallback = one(first.clone(), Some(tag), false, &mut result, &mut materials, &mut inside_differs)?;
+                }
+                if kind == "face" && !materials.bulk_faces(&mesh, &selection.call_method1("element_keys", ("face",))?, &fallback)? {
+                    for obj in values.try_iter()? {
+                        if materials.sampled {
+                            break;
+                        }
+                        materials.visit(&obj?, fallback.clone())?;
+                    }
+                }
+            }
+        }
+        _ => {
+            for obj in selection.try_iter()? {
+                one(obj?, None, true, &mut result, &mut materials, &mut inside_differs)?;
             }
         }
     }

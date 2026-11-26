@@ -8,6 +8,12 @@ pub struct Preview {
     triangles: Option<wgpu::Buffer>,
     edges: Option<wgpu::Buffer>,
     counts: [u32; 2],
+    /// The marks of what is under the cursor (a hovered face's dots, a
+    /// hovered edge), apart from the selection's: hovering over a huge
+    /// selection uploads a few vertices, never the selection's again.
+    /// Drawn as instance 1, which a grab's pose never moves.
+    hover: [Option<wgpu::Buffer>; 2],
+    hover_counts: [u32; 2],
     pub textures: Option<crate::preview_texture::TexturedPreview>,
 }
 impl Preview {
@@ -69,6 +75,8 @@ impl Preview {
             triangles: None,
             edges: None,
             counts: [0; 2],
+            hover: [None, None],
+            hover_counts: [0; 2],
             textures: None,
         }
     }
@@ -94,6 +102,7 @@ impl Preview {
     ) -> Result<(), &'static str> {
         Self::validate(triangles, edges)?;
         self.textures = None;
+        self.set_hover(d, &[], &[]);
         self.upload_validated(d, triangles, edges);
         Ok(())
     }
@@ -115,6 +124,11 @@ impl Preview {
         self.edges = Self::buffer(d, data);
         self.counts[1] = (data.len() / 28) as u32;
     }
+    /// The hover marks: 28-byte triangle vertices and edge pairs.
+    pub fn set_hover(&mut self, d: &wgpu::Device, triangles: &[u8], edges: &[u8]) {
+        self.hover = [Self::buffer(d, triangles), Self::buffer(d, edges)];
+        self.hover_counts = [(triangles.len() / 28) as u32, (edges.len() / 28) as u32];
+    }
     pub fn pose_marks(&self, queue: &wgpu::Queue, matrix: [f32; 16], selected: u32) {
         self.set_pose(queue, matrix, selected, false);
     }
@@ -130,7 +144,7 @@ impl Preview {
     }
     pub fn layout(&self) -> wgpu::BindGroupLayout { self.pipelines[0].get_bind_group_layout(0) }
     pub fn active(&self) -> bool {
-        self.counts != [0; 2] || self.textures.as_ref().is_some_and(|t| t.active())
+        self.counts != [0; 2] || self.hover_counts != [0; 2] || self.textures.as_ref().is_some_and(|t| t.active())
     }
     pub fn draw(
         &self,
@@ -172,6 +186,13 @@ impl Preview {
                 p.draw(0..self.counts[k], 0..1);
             }
         }
+        for (k, buffer) in self.hover.iter().enumerate() {
+            if let Some(buffer) = buffer {
+                p.set_pipeline(&self.pipelines[self.samples.index(resolve.is_some()) * 2 + k]);
+                p.set_vertex_buffer(0, buffer.slice(..));
+                p.draw(0..self.hover_counts[k], 1..2);
+            }
+        }
     }
 }
 #[cfg(test)]
@@ -200,6 +221,12 @@ mod tests {
             assert_eq!(preview.pipelines.len(), 4);
             preview.upload(&d, &[], &[]).unwrap();
             assert_eq!(preview.counts, [0, 0]);
+            assert!(!preview.active());
+            preview.set_hover(&d, &[0; 84], &[0; 56]);
+            assert_eq!(preview.hover_counts, [3, 2]);
+            assert!(preview.active());
+            preview.set_hover(&d, &[], &[]);
+            assert!(!preview.active());
         }
     }
 }

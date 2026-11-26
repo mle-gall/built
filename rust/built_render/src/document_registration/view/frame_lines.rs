@@ -62,17 +62,10 @@ fn scaffold_dash(view: &Obj<'_>, height: f64) -> PyResult<f64> {
     let fov: f64 = view.getattr("camera")?.getattr("fov_deg")?.extract()?;
     Ok((0.003 * height / (fov.to_radians() / 2.).tan()).max(3.).min(20.))
 }
+/// The selected groups, sorted out once per change of the selection
+/// (`selection_digest`): the frame asks for them several times.
 fn selected_groups<'py>(view: &Obj<'py>) -> PyResult<Bound<'py, PyList>> {
-    let py = view.py();
-    let group = py.import("built_core.group")?.getattr("Group")?;
-    let groups = empty(py);
-    for entity in view.getattr("scene")?.getattr("selection")?.try_iter()? {
-        let entity = entity?;
-        if entity.is_instance(&group)? {
-            groups.append(entity)?;
-        }
-    }
-    Ok(groups)
+    Ok(super::metal_view_selection::selection_digest(view)?.get_item(1)?.cast_into::<PyList>()?)
 }
 /// The segment's two ends on screen once clipped in front of the camera,
 /// `None` when either is off it.
@@ -261,11 +254,8 @@ fn selected_hidden<'py>(a: &Args<'py>) -> Reply<'py> {
     }
     let version = scene.getattr("version")?.sub(scene.getattr("view_version")?)?;
     let frozen = py.get_type::<pyo3::types::PyFrozenSet>();
-    let ids = empty(py);
-    for group in groups.iter() {
-        ids.append(id(&group))?;
-    }
-    let key = (version, id(&packed), frozen.call1((ids,))?, frozen.call1((&moving,))?, layers.to_tuple()).into_bound_py_any(py)?;
+    let selection = super::metal_view_selection::selection_digest(&view)?.get_item(0)?;
+    let key = (version, id(&packed), selection, frozen.call1((&moving,))?, layers.to_tuple()).into_bound_py_any(py)?;
     let cache = view.getattr("__dict__")?.call_method1("get", ("_hidden_lines",))?;
     if !cache.is_none() && cache.get_item(0)?.eq(&key)? {
         return (key, cache.get_item(1)?).into_bound_py_any(py);
@@ -764,6 +754,14 @@ pub(super) fn selection_box_segments<'py>(a: &Args<'py>) -> Reply<'py> {
         cache.call_method0("clear")?;
         cache.set_item(py.None(), &version)?;
     }
+    // Past the cap, nothing changed since the last frame means no walk over
+    // the groups (thousands of them); a few are walked every frame, so a
+    // group turned into a face-me figure loses its box at once.
+    let many = groups.len() > BOXED_GROUPS;
+    let frame_key = (&version, super::metal_view_selection::selection_digest(&view)?.get_item(0)?, py.get_type::<pyo3::types::PyFrozenSet>().call1((&moving,))?).into_bound_py_any(py)?;
+    if many && cache.call_method1("get", ("frame_key",))?.eq(&frame_key)? {
+        return (cache.get_item("key")?, cache.get_item("segments")?).into_bound_py_any(py);
+    }
     let (shown, ids) = (empty(py), empty(py));
     for group in groups.iter() {
         if !truthy(&group, "billboard")? && !moving.contains(id(&group))? {
@@ -773,7 +771,18 @@ pub(super) fn selection_box_segments<'py>(a: &Args<'py>) -> Reply<'py> {
     }
     let key = (version, py.get_type::<pyo3::types::PyFrozenSet>().call1((ids,))?).into_bound_py_any(py)?;
     if cache.call_method1("get", ("key",))?.eq(&key)? {
+        cache.set_item("frame_key", &frame_key)?;
         return (key, cache.get_item("segments")?).into_bound_py_any(py);
+    }
+    if shown.len() > BOXED_GROUPS {
+        // Past a few hundred, one box around them all (a window over a
+        // district selects thousands): measuring each was seconds, and
+        // a forest of boxes says nothing more than its outline.
+        let segments = aggregate_box(&view, &shown)?;
+        cache.set_item("key", &key)?;
+        cache.set_item("segments", &segments)?;
+        cache.set_item("frame_key", &frame_key)?;
+        return (key, segments).into_bound_py_any(py);
     }
     let measure = interaction(py)?.getattr("DocumentInteraction")?.getattr("_compute_obb")?;
     let corners_of = py.import("built_core.group")?.getattr("oriented_box_corners")?;
@@ -789,7 +798,57 @@ pub(super) fn selection_box_segments<'py>(a: &Args<'py>) -> Reply<'py> {
     let segments = if parts.is_empty() { no_boxes.get_item(1)? } else { np(py)?.call_method1("concatenate", (parts,))? };
     cache.set_item("key", &key)?;
     cache.set_item("segments", &segments)?;
+    cache.set_item("frame_key", &frame_key)?;
     (key, segments).into_bound_py_any(py)
+}
+
+/// Selected groups boxed one by one; past this, one box around them all.
+pub(super) const BOXED_GROUPS: usize = 256;
+
+/// The world box around `groups`' placed rows, as the twelve segments
+/// `(12, 2, 3)` of the model frame: each row's prototype bounds through its
+/// world matrix (stored column by column), in one NumPy pass.
+fn aggregate_box<'py>(view: &Obj<'py>, groups: &Bound<'py, PyList>) -> Reply<'py> {
+    let py = view.py();
+    let numpy = np(py)?;
+    let packed = view.getattr("packed")?;
+    let rows = PySet::empty(py)?;
+    for group in groups.iter() {
+        rows.call_method1("update", (view.call_method1("_rows_for_group", (group,))?,))?;
+    }
+    if rows.is_empty() {
+        return Ok(edit_context(py)?.getattr("_NO_BOXES")?.get_item(1)?);
+    }
+    let rows = numpy.call_method1("fromiter", (rows, numpy.getattr("int64")?))?;
+    let instances = packed.getattr("instances")?.get_item(&rows)?;
+    let codes = instances.get_item("info")?.get_item((PySlice::full(py), 0))?;
+    let bounds: PyReadonlyArray3<'_, f32> = numpy.call_method1("asarray", (packed.getattr("bounds")?.get_item(codes)?, numpy.getattr("float32")?))?.extract()?;
+    let worlds: PyReadonlyArray3<'_, f32> = numpy.call_method1("asarray", (instances.get_item("world")?, numpy.getattr("float32")?))?.extract()?;
+    let (bounds, worlds) = (bounds.as_array(), worlds.as_array());
+    let (mut lo, mut hi) = ([f64::INFINITY; 3], [f64::NEG_INFINITY; 3]);
+    for r in 0..bounds.shape()[0] {
+        for corner in 0..8 {
+            let p: [f64; 3] = std::array::from_fn(|k| bounds[[r, (corner >> k) & 1, k]] as f64);
+            for axis in 0..3 {
+                let v = (0..3).map(|c| worlds[[r, c, axis]] as f64 * p[c]).sum::<f64>() + worlds[[r, 3, axis]] as f64;
+                lo[axis] = lo[axis].min(v);
+                hi[axis] = hi[axis].max(v);
+            }
+        }
+    }
+    let origin = attr(&packed, "origin")?;
+    let shift: [f64; 3] = if origin.is_none() { [0.; 3] } else { std::array::from_fn(|k| origin.get_item(k).and_then(|v| v.extract()).unwrap_or(0.)) };
+    let corner = |bits: usize| -> [f32; 3] { std::array::from_fn(|k| ((if (bits >> k) & 1 == 1 { hi[k] } else { lo[k] }) + shift[k]) as f32) };
+    let mut segments = Vec::with_capacity(12);
+    for a in 0..8usize {
+        for k in 0..3 {
+            if (a >> k) & 1 == 0 {
+                segments.push([corner(a), corner(a | (1 << k))]);
+            }
+        }
+    }
+    let flat: Vec<f32> = segments.iter().flatten().flatten().copied().collect();
+    numpy::PyArray1::from_vec(py, flat).call_method1("reshape", ((12, 2, 3),))
 }
 
 /// `(key, VERTEX array)`: the boxes as native preview line vertices in

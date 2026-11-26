@@ -218,15 +218,24 @@ fn merge_answer(
 
 #[pyfunction]
 pub fn has_tag_actions(scene: &Bound<'_, PyAny>, entities: &Bound<'_, PyAny>) -> PyResult<bool> {
-    Ok(writable(scene)?
-        && entities.len()? > 0
-        && scene
-            .py()
-            .import("built_core.layers")?
-            .call_method1("taggable", (entities,))?
-            .len()?
-            > 0
-        && super::tag_controls::editable_tag_selection(scene)?)
+    Ok(writable(scene)? && entities.len()? > 0 && any_taggable(entities)? && super::tag_controls::editable_tag_selection(scene)?)
+}
+
+/// Whether any of `entities` takes a tag, asked a few at a time: the whole
+/// list's `taggable` was a type test per entity of a select-all.
+fn any_taggable(entities: &Bound<'_, PyAny>) -> PyResult<bool> {
+    let py = entities.py();
+    let taggable = py.import("built_core.layers")?.getattr("taggable")?;
+    let mut chunk = Vec::with_capacity(64);
+    for e in entities.try_iter()? {
+        chunk.push(e?);
+        if chunk.len() == 64 {
+            if taggable.call1((PyList::new(py, chunk.drain(..))?,))?.len()? > 0 {
+                return Ok(true);
+            }
+        }
+    }
+    Ok(!chunk.is_empty() && taggable.call1((PyList::new(py, chunk)?,))?.len()? > 0)
 }
 
 /// Keep the viewport menu to one row. The choice form shows the current tag

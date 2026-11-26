@@ -14,7 +14,11 @@
 //!   content (and when a set is made), so a reader that keeps it notices a
 //!   change even when the scene's selection object is replaced by another;
 //! - `snapshot()`: `(count, placements, faces, edges, vertices, others,
-//!   revision)` in one call, and `placement_uids()` / `element_keys(kind)`.
+//!   revision)` in one call, and `placement_uids()` / `element_keys(kind)`;
+//! - **the entries of each kind** in a dict of their own (identity → entry,
+//!   in selection order), so `values_of(kind)` and `element_keys(kind)`
+//!   are one copy each: a frame or a panel reading a select-all's faces,
+//!   or its placements only, never type-tests 600k handles.
 
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -71,8 +75,14 @@ fn kind_of(item: &Bound<'_, PyAny>) -> PyResult<usize> {
 #[pyclass(module = "built_core", subclass, name = "_ElementSetStorage")]
 pub struct SelectionStore {
     items: Py<PyDict>,
+    /// The entries of each kind (identity → entry), in selection order.
+    kinds: [Py<PyDict>; 5],
     counts: [usize; 5],
     revision: u64,
+}
+
+fn empty_kinds(py: Python<'_>) -> [Py<PyDict>; 5] {
+    std::array::from_fn(|_| PyDict::new(py).unbind())
 }
 
 impl SelectionStore {
@@ -86,14 +96,18 @@ impl SelectionStore {
         match items.get_item(&ident)? {
             Some(old) if old.is(value) => {}
             Some(old) => {
-                self.counts[kind_of(&old)?] -= 1;
+                let was = kind_of(&old)?;
+                self.counts[was] -= 1;
+                self.kinds[was].bind(py).del_item(&ident)?;
                 self.counts[kind] += 1;
                 items.set_item(&ident, value)?;
+                self.kinds[kind].bind(py).set_item(&ident, value)?;
                 self.changed();
             }
             None => {
                 self.counts[kind] += 1;
                 items.set_item(&ident, value)?;
+                self.kinds[kind].bind(py).set_item(&ident, value)?;
                 self.changed();
             }
         }
@@ -102,10 +116,14 @@ impl SelectionStore {
 
     fn recount(&mut self, py: Python<'_>) -> PyResult<()> {
         let mut counts = [0usize; 5];
-        for v in self.items.bind(py).values().iter() {
-            counts[kind_of(&v)?] += 1;
+        let kinds = empty_kinds(py);
+        for (k, v) in self.items.bind(py).iter() {
+            let kind = kind_of(&v)?;
+            counts[kind] += 1;
+            kinds[kind].bind(py).set_item(k, v)?;
         }
         self.counts = counts;
+        self.kinds = kinds;
         Ok(())
     }
 }
@@ -115,7 +133,7 @@ impl SelectionStore {
     #[new]
     #[pyo3(signature = (values=None))]
     fn new(py: Python<'_>, values: Option<&Bound<'_, PyAny>>) -> PyResult<Self> {
-        let mut store = SelectionStore { items: PyDict::new(py).unbind(), counts: [0; 5], revision: 0 };
+        let mut store = SelectionStore { items: PyDict::new(py).unbind(), kinds: empty_kinds(py), counts: [0; 5], revision: 0 };
         if let Some(values) = values {
             for v in values.try_iter()? {
                 store.put(py, &v?)?;
@@ -126,7 +144,11 @@ impl SelectionStore {
     }
 
     fn __traverse__(&self, visit: pyo3::PyVisit<'_>) -> Result<(), pyo3::PyTraverseError> {
-        visit.call(&self.items)
+        visit.call(&self.items)?;
+        for kind in &self.kinds {
+            visit.call(kind)?;
+        }
+        Ok(())
     }
 
     fn __clear__(&mut self, py: Python<'_>) {
@@ -221,8 +243,32 @@ impl SelectionStore {
         let ident = kind_and_identity(value)?.1;
         let items = self.items.bind(py);
         if let Some(old) = items.get_item(&ident)? {
-            self.counts[kind_of(&old)?] -= 1;
+            let was = kind_of(&old)?;
+            self.counts[was] -= 1;
+            self.kinds[was].bind(py).del_item(&ident)?;
             items.del_item(&ident)?;
+            self.changed();
+        }
+        Ok(())
+    }
+
+    /// Drop the entries filed under these identities (`element_identity`:
+    /// a mesh element's key): what a check of a huge selection against the
+    /// mesh's live keys removes, without a handle per entry.
+    fn discard_identities(&mut self, py: Python<'_>, identities: &Bound<'_, PyAny>) -> PyResult<()> {
+        let items = self.items.bind(py);
+        let mut dropped = false;
+        for ident in identities.try_iter()? {
+            let ident = ident?;
+            if let Some(old) = items.get_item(&ident)? {
+                let was = kind_of(&old)?;
+                self.counts[was] -= 1;
+                self.kinds[was].bind(py).del_item(&ident)?;
+                items.del_item(&ident)?;
+                dropped = true;
+            }
+        }
+        if dropped {
             self.changed();
         }
         Ok(())
@@ -232,6 +278,9 @@ impl SelectionStore {
         let items = self.items.bind(py);
         if !items.is_empty() {
             items.clear();
+            for kind in &self.kinds {
+                kind.bind(py).clear();
+            }
             self.counts = [0; 5];
             self.changed();
         }
@@ -269,6 +318,11 @@ impl SelectionStore {
         };
         if !same {
             self.items = theirs.copy()?.unbind();
+            let mut kinds = empty_kinds(py);
+            for (mine, theirs) in kinds.iter_mut().zip(&other.kinds) {
+                *mine = theirs.bind(py).copy()?.unbind();
+            }
+            self.kinds = kinds;
             self.counts = other.counts;
             self.changed();
         }
@@ -293,10 +347,8 @@ impl SelectionStore {
         if self.counts[PLACEMENT] == 0 {
             return Ok(out);
         }
-        for v in self.items.bind(py).values().iter() {
-            if v.is_instance_of::<PyPlacement>() {
-                out.append(v.getattr("uid")?)?;
-            }
+        for v in self.kinds[PLACEMENT].bind(py).values().iter() {
+            out.append(v.getattr("uid")?)?;
         }
         Ok(out)
     }
@@ -310,16 +362,23 @@ impl SelectionStore {
             "vertex" => VERTEX,
             _ => return Err(pyo3::exceptions::PyValueError::new_err("kind: face, edge or vertex")),
         };
-        let out = PyList::empty(py);
-        if self.counts[want] == 0 {
-            return Ok(out);
-        }
-        for (k, v) in self.items.bind(py).iter() {
-            if kind_of(&v)? == want {
-                out.append(k)?;
-            }
-        }
-        Ok(out)
+        Ok(self.kinds[want].bind(py).keys())
+    }
+
+    /// The selected entries of `kind` ("placement", "face", "edge",
+    /// "vertex" or "other"), in selection order: one native pass, nothing
+    /// when the counts say there are none (a huge face selection costs a
+    /// reader of its placements nothing).
+    fn values_of<'py>(&self, py: Python<'py>, kind: &str) -> PyResult<Bound<'py, PyList>> {
+        let want = match kind {
+            "placement" => PLACEMENT,
+            "face" => FACE,
+            "edge" => EDGE,
+            "vertex" => VERTEX,
+            "other" => OTHER,
+            _ => return Err(pyo3::exceptions::PyValueError::new_err("kind: placement, face, edge, vertex or other")),
+        };
+        Ok(self.kinds[want].bind(py).values())
     }
 
     /// The first and the last entry, or None (what a panel keys a cheap

@@ -214,11 +214,23 @@ fn loose(scene: &Bound<'_, PyAny>, depth: usize, query: &str) -> PyResult<Option
     if faces + edges == 0 {
         return Ok(None);
     }
-    let mut selected = 0;
-    for item in scene.getattr("selection")?.try_iter()? {
-        let item = item?;
-        selected += usize::from(item.hasattr("loop")? || item.hasattr("v0")?);
-    }
+    // The selected faces and edges: the selection's own counts (a walk
+    // over a select-all was two attribute probes per entry, per tree sync).
+    let selection = scene.getattr("selection")?;
+    let selected = match selection.getattr_opt("snapshot")? {
+        Some(snapshot) => {
+            let counts = snapshot.call0()?;
+            counts.get_item(2)?.extract::<usize>()? + counts.get_item(3)?.extract::<usize>()?
+        }
+        None => {
+            let mut selected = 0;
+            for item in selection.try_iter()? {
+                let item = item?;
+                selected += usize::from(item.hasattr("loop")? || item.hasattr("v0")?);
+            }
+            selected
+        }
+    };
     let mut r = row(
         "geometry:loose".into(),
         "Loose geometry".into(),

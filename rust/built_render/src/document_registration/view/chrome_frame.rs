@@ -484,6 +484,28 @@ fn sync_tool_status(view: &Obj, win: &Obj) -> PyResult<()> {
 }
 
 /// Mirror the window's state into the chrome (cheap: a few dict reads).
+/// Selections at least this large reach the panels a frame after the view.
+const DEFERRED_PANELS: usize = 50_000;
+
+/// Whether this frame leaves the selection's panels for the next one: once
+/// per change of a huge selection (its revision), with another frame
+/// asked for, so the highlight shows before the panels have read 600k
+/// entries.
+fn panels_wait(view: &Obj<'_>) -> PyResult<bool> {
+    let py = view.py();
+    let selection = attr(&attr(view, "scene")?, "selection")?;
+    if selection.is_none() || selection.len()? < DEFERRED_PANELS {
+        return Ok(false);
+    }
+    let key = (id(&selection), direct(py, sel_key, (&selection,))?).into_bound_py_any(py)?;
+    if key.eq(attr(view, "_panels_selection_key")?)? {
+        return Ok(false);
+    }
+    view.setattr("_panels_selection_key", key)?;
+    view.call_method0("update")?;
+    Ok(true)
+}
+
 fn before_frame<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let view = a.get_item(0)?;
@@ -527,14 +549,22 @@ fn before_frame<'py>(a: &Args<'py>) -> Reply<'py> {
     sync_tool_status(&view, &win)?;
     module.call_method1("_sync_units", (&view, win.getattr("viewport")?.getattr("history")?))?;
     module.call_method1("_cursor_value", (&view, &win))?;
-    module.call_method1("_selection", (&view, &win, &active))?;
+    // A huge selection change shows in the viewport first; the panels that
+    // read the whole selection (the selection bar's verbs, the tree, the
+    // inspector) follow on the next frame.
+    let panels = !panels_wait(&view)?;
+    if panels {
+        module.call_method1("_selection", (&view, &win, &active))?;
+    }
     direct(py, cluster, (&view, &win))?;
     direct(py, super::chrome_actions::form_fields, (&view, &win))?;
     render(py)?.call_method1("bind_deliveries", (&win,))?;
     crate::tasks_host::tasks_before_frame(&view, &win)?;
     render(py)?.getattr("wgpu_library")?.call_method1("before_frame", (&view, &win))?;
-    module.call_method1("_sync_project_rows", (&view, &win))?;
-    render(py)?.call_method1("inspector_sync", (&view, &win))?;
+    if panels {
+        module.call_method1("_sync_project_rows", (&view, &win))?;
+        render(py)?.call_method1("inspector_sync", (&view, &win))?;
+    }
     module.call_method1("_tabs", (&view, &win))?;
     document_tabs(&view, &win)?.call_method1("sync_host_context", (&view, &win))?;
     let options = PyList::empty(py);

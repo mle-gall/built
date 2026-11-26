@@ -1055,6 +1055,148 @@ impl PyMeshStore {
         Ok(store.face_triangles(face, normal, crate::hypot_of(hypot)?))
     }
 
+    /// The selection's face dots in one call (a huge selection must not
+    /// cost a Python call per face): `(corners, rows, counts, missing)`.
+    /// `corners` float32 `(3T, 3)`: every triangle of each live face of
+    /// `keys` (the same triangulation as `Face.triangulate`), less
+    /// `origin`; `rows` the attribute-table row of each face found (-1 for
+    /// none) and `counts` its triangles, in `keys` order; `missing` the keys
+    /// this store has no live face for.
+    fn mark_triangles<'py>(
+        &self,
+        py: Python<'py>,
+        keys: Vec<u128>,
+        hypot: &str,
+        origin: [f64; 3],
+    ) -> PyResult<(Bound<'py, PyArray2<f32>>, Bound<'py, PyArray1<i64>>, Bound<'py, PyArray1<u32>>, Vec<u128>)> {
+        let h = crate::hypot_of(hypot)?;
+        let store = &self.inner;
+        let (corners, rows, counts, missing) = py.detach(|| {
+            let (mut corners, mut rows, mut counts, mut missing) = (Vec::new(), Vec::new(), Vec::new(), Vec::new());
+            for key in keys {
+                let Some(face) = store.slot(Kind::Face, key) else {
+                    missing.push(key);
+                    continue;
+                };
+                let triangles = store.face_triangles(face, None, h);
+                for triangle in &triangles {
+                    for p in triangle {
+                        corners.extend((0..3).map(|i| (p[i] - origin[i]) as f32));
+                    }
+                }
+                rows.push(*store.state.fattr.get(face as usize) as i64 - 1);
+                counts.push(triangles.len() as u32);
+            }
+            (corners, rows, counts, missing)
+        });
+        let n = corners.len() / 3;
+        let corners = Array2::from_shape_vec((n, 3), corners).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        Ok((corners.into_pyarray(py), rows.into_pyarray(py), counts.into_pyarray(py), missing))
+    }
+
+    /// The keys of `kind` ("face", "edge" or "vertex") among `keys` this
+    /// store has no live element for, in order: a huge selection checked
+    /// against the mesh in one call, not by building sets of every element.
+    fn stale_keys(&self, py: Python<'_>, kind: &str, keys: Vec<u128>) -> PyResult<Vec<u128>> {
+        let kind = match kind {
+            "face" => Kind::Face,
+            "edge" => Kind::Edge,
+            "vertex" => Kind::Vertex,
+            _ => return Err(PyValueError::new_err("kind: face, edge or vertex")),
+        };
+        let store = &self.inner;
+        Ok(py.detach(|| keys.into_iter().filter(|&key| store.slot(kind, key).is_none()).collect()))
+    }
+
+    /// What tells the tags of a huge selection of `kind` apart, in one
+    /// call: for "face" the distinct attribute-table rows of `keys` (-1 for
+    /// none; a face's tag is its row's `layer`), for "edge" the distinct
+    /// layer names (None untagged), each in first-met order, plus the keys
+    /// this store has no live element for.
+    fn distinct_tags<'py>(&self, py: Python<'py>, kind: &str, keys: Vec<u128>) -> PyResult<(Bound<'py, PyList>, Vec<u128>)> {
+        let store = &self.inner;
+        let st = &store.state;
+        let out = PyList::empty(py);
+        let mut missing = Vec::new();
+        match kind {
+            "face" => {
+                let mut seen = std::collections::HashSet::new();
+                for key in keys {
+                    match store.slot(Kind::Face, key) {
+                        Some(f) => {
+                            let row = *st.fattr.get(f as usize) as i64 - 1;
+                            if seen.insert(row) {
+                                out.append(row)?;
+                            }
+                        }
+                        None => missing.push(key),
+                    }
+                }
+            }
+            "edge" => {
+                let mut seen = std::collections::HashSet::new();
+                for key in keys {
+                    match store.slot(Kind::Edge, key) {
+                        Some(e) => {
+                            let l = *st.elayer.get(e as usize);
+                            if seen.insert(l) {
+                                out.append(if l == super::keys::NONE { None } else { Some(st.layers[l as usize].clone()) })?;
+                            }
+                        }
+                        None => missing.push(key),
+                    }
+                }
+            }
+            _ => return Err(PyValueError::new_err("kind: face or edge")),
+        }
+        Ok((out, missing))
+    }
+
+    /// Each key's tag reference, in order: for "face" its attribute-table
+    /// row (-1 none), for "edge" its index into `names` (-1 untagged); -2
+    /// for a key this store has no live element for. `names` the store's
+    /// layer names (edges only).
+    fn element_tags(&self, py: Python<'_>, kind: &str, keys: Vec<u128>) -> PyResult<(Vec<i64>, Vec<String>)> {
+        let store = &self.inner;
+        let st = &store.state;
+        match kind {
+            "face" => Ok((py.detach(|| keys.iter().map(|&k| store.slot(Kind::Face, k).map_or(-2, |f| *st.fattr.get(f as usize) as i64 - 1)).collect()), Vec::new())),
+            "edge" => Ok((
+                py.detach(|| keys.iter().map(|&k| store.slot(Kind::Edge, k).map_or(-2, |e| {
+                    let l = *st.elayer.get(e as usize);
+                    if l == super::keys::NONE { -1 } else { l as i64 }
+                })).collect()),
+                st.layers.as_ref().clone(),
+            )),
+            _ => Err(PyValueError::new_err("kind: face or edge")),
+        }
+    }
+
+    /// The selection's edge strokes in one call: `(ends, missing)`, `ends`
+    /// float32 `(2E, 3)` (both ends of each live edge of `keys`, less
+    /// `origin`, in order), `missing` the keys this store has no live edge
+    /// for.
+    fn mark_segments<'py>(&self, py: Python<'py>, keys: Vec<u128>, origin: [f64; 3]) -> PyResult<(Bound<'py, PyArray2<f32>>, Vec<u128>)> {
+        let store = &self.inner;
+        let (ends, missing) = py.detach(|| {
+            let (mut ends, mut missing) = (Vec::with_capacity(keys.len() * 6), Vec::new());
+            for key in keys {
+                let Some(edge) = store.slot(Kind::Edge, key) else {
+                    missing.push(key);
+                    continue;
+                };
+                for v in *store.state.ends.get(edge as usize) {
+                    let p = store.state.vpos.get(v as usize);
+                    ends.extend((0..3).map(|i| (p[i] - origin[i]) as f32));
+                }
+            }
+            (ends, missing)
+        });
+        let n = ends.len() / 3;
+        let ends = Array2::from_shape_vec((n, 3), ends).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        Ok((ends.into_pyarray(py), missing))
+    }
+
     #[pyo3(signature=(key, xform=None))]
     fn curve_centers(&self, py: Python<'_>, key: u128, xform: Option<&Bound<'_, PyAny>>)
         -> PyResult<crate::snap_boundary::Centers> {

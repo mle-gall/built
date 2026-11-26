@@ -9,6 +9,37 @@ fn prune_stale_selection(v: &Obj) -> PyResult<()> {
     let m = host(py)?;
     let edge = m.getattr("Edge")?;
     let face = m.getattr("Face")?;
+    // A large selection checked against the active mesh's live keys in
+    // one store call: building the identity sets of every face and edge
+    // was 600k calls on each scene notification (a select-all, an edit).
+    let store = opt(&scene.getattr("mesh")?, "_store")?;
+    let fast = selection.hasattr("element_keys")? && selection.hasattr("discard_identities")? && store.hasattr("stale_keys")?;
+    let elements = if fast {
+        let counts = selection.call_method0("snapshot")?;
+        counts.get_item(2)?.extract::<usize>()? + counts.get_item(3)?.extract::<usize>()?
+    } else {
+        0
+    };
+    if elements > 64 {
+        let stale = PyList::empty(py);
+        for kind in ["edge", "face"] {
+            let keys = selection.call_method1("element_keys", (kind,))?;
+            if keys.len()? > 0 {
+                stale.call_method1("extend", (store.call_method1("stale_keys", (kind, keys))?,))?;
+            }
+        }
+        if !stale.is_empty() {
+            selection.call_method1("discard_identities", (&stale,))?;
+        }
+        if hover.is_instance(&edge)? || hover.is_instance(&face)? {
+            let kind = if hover.is_instance(&edge)? { "edge" } else { "face" };
+            let gone = store.call_method1("stale_keys", (kind, PyList::new(py, [hover.getattr("key")?])?))?;
+            if gone.len()? > 0 {
+                v.setattr("_hover_entity", py.None())?
+            }
+        }
+        return Ok(());
+    }
     let mut candidates = Vec::new();
     if hover.is_instance(&edge)? || hover.is_instance(&face)? {
         candidates.push((hover, true))
