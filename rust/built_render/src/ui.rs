@@ -252,6 +252,8 @@ pub struct Node {
 }
 
 pub struct Column {
+    tag_index: Option<std::collections::HashMap<String, usize>>,
+    marked_rows: Vec<usize>,
     nodes: Vec<Node>,
     path: Vec<(String, String)>,
     host: (String, Vec<crate::host_context::Tag>),
@@ -452,7 +454,7 @@ impl Ui {
     /// row, eye, lock, expandable, expanded, selected]).
     pub fn set_tree(&mut self, rows: Vec<(Vec<String>, Vec<i64>)>, unfiled: u32) {
         let col = self.column.get_or_insert_with(|| Column {
-            nodes: Vec::new(), path: Vec::new(), host: Default::default(), overview: Default::default(), styles: Default::default(), reveal: None, proposal_available: false, proposal_dismissed: false, sort: Default::default(), ordered: Vec::new(), unfiled: 0, browser_picks: 0, issue_at: None, export_focus: Default::default(), filter: String::new(),
+            tag_index: None, marked_rows: Vec::new(), nodes: Vec::new(), path: Vec::new(), host: Default::default(), overview: Default::default(), styles: Default::default(), reveal: None, proposal_available: false, proposal_dismissed: false, sort: Default::default(), ordered: Vec::new(), unfiled: 0, browser_picks: 0, issue_at: None, export_focus: Default::default(), filter: String::new(),
             filing: None, focus_filter: false, group_rows: Vec::new(), row_menu: None, renaming: None, focus_rename: false, head_menu: None,
             kind_menu: None, kinds: Vec::new(), prompt: None, lens: Lens::Filing, edits: Default::default(), mode: String::new(), issues: false,
             identity: Vec::new(),
@@ -460,6 +462,15 @@ impl Ui {
             inspector: Vec::new(), highlighted: None, focused_row: None,
         });
         col.nodes = tree_rows::reconcile(std::mem::take(&mut col.nodes), rows);
+        // Folded, tags-only documents need only a few row mutations on a viewport pick.
+        col.tag_index = col.nodes.iter().all(|n| matches!(n.key.split_once(':').map(|(kind, _)| kind),
+            Some("preview-tag" | "preview-folder" | "geometry" | "sections" | "section" |
+                 "sheet-page" | "sheet-pages" | "sheet-frame" | "saved-scene" | "saved-scenes")))
+            .then(|| col.nodes.iter().enumerate().filter(|(_, n)| n.row == 6)
+                .map(|(i, n)| (n.key.clone(), i)).collect());
+        col.marked_rows = if col.tag_index.is_some() {
+            col.nodes.iter().enumerate().filter(|(_, n)| n.mark != 0 || n.selected != 0).map(|(i, _)| i).collect()
+        } else { Vec::new() };
         if col.highlighted.as_ref().is_some_and(|k| !k.starts_with("n:") && !k.starts_with("preview-tag:") &&
             !col.nodes.iter().any(|n| &n.key == k && n.selected > 0)) {
             col.highlighted = None;
@@ -467,6 +478,28 @@ impl Ui {
         if col.lens == Lens::Drawing { col.styles.refresh(&col.nodes); }
         col.ordered = col.sort.order(&col.nodes);
         col.unfiled = unfiled;
+    }
+    pub fn mark_tag_paths(&mut self, paths: Vec<Vec<String>>, picked: usize) -> bool {
+        let Some(col) = self.column.as_mut() else { return false };
+        let Some(index) = &col.tag_index else { return false };
+        for i in col.marked_rows.drain(..) {
+            col.nodes[i].selected = 0;
+            col.nodes[i].mark = 0;
+        }
+        for path in paths {
+            let mut mark = 1;
+            for key in path {
+                if let Some(&i) = index.get(&key) {
+                    let row = &mut col.nodes[i];
+                    if row.mark == 0 { col.marked_rows.push(i); }
+                    row.mark = if row.mark == 1 { 1 } else { mark };
+                    row.selected += 1;
+                    mark = 2;
+                }
+            }
+        }
+        col.browser_picks = picked;
+        true
     }
     pub fn set_mode(&mut self, mode: String) {
         if let Some(col) = self.column.as_mut() {
@@ -2056,7 +2089,8 @@ impl Ui {
                                 let ink = if n.dim && !lit { OFF } else { ink };
                                 // The selection is marked once (tree A): lit where it
                                 // is held, a quiet dot on the rows above (after the name).
-                                let marks_w = if file_state.is_some() { 10.0 } else { 0.0 } + if n.mark == 2 { 10.0 } else { 0.0 };
+                                let reveal_dot = n.mark == 2 || (n.mark == 1 && (n.row == 6 || n.expandable && !n.local_placement));
+                                let marks_w = if file_state.is_some() { 10.0 } else { 0.0 } + if reveal_dot { 10.0 } else { 0.0 };
                                 let right = right - marks_w;
                                 if n.active && n.row != 5 {
                                     let icon = Rect::from_center_size(pos2(tx + 6., cy), vec2(12., 12.));
@@ -2098,8 +2132,12 @@ impl Ui {
                                     }
                                     kx += text_width + SPACE_XS;
                                 }
-                                if n.mark == 2 {
-                                    lens::paint_partial(ui.painter(), pos2(kx + 2.0, cy));
+                                let dot = Rect::from_center_size(pos2(kx + 2.0, cy), vec2(14.0, ROW_H));
+                                if reveal_dot {
+                                    lens::paint_partial(ui.painter(), dot.center());
+                                    if ui.rect_contains_pointer(dot) {
+                                        resp.clone().on_hover_text("Reveal selection");
+                                    }
                                     kx += 10.0;
                                 }
                                 let right = right + marks_w;
@@ -2156,7 +2194,9 @@ impl Ui {
                                 if resp.clicked() {
                                     let p = resp.interact_pointer_pos().unwrap_or(rect.center());
                                     if col.lens==Lens::Drawing && n.cells.len()<7 && !n.key.starts_with("preview-folder:") {col.styles.clear_focus();}
-                                    if n.expandable && tri.contains(p) {
+                                    if reveal_dot && dot.contains(p) {
+                                        actions.push("revealselection\u{1f}".into());
+                                    } else if n.expandable && tri.contains(p) {
                                         actions.push(format!("toggle\u{1f}{}", n.key));
                                     } else if drawing_row && on_control(p) {
                                         // Drawing controls own their gesture from the press onward.

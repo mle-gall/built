@@ -261,8 +261,21 @@ fn tree<'py>(a: &Args<'py>) -> Reply<'py> {
             PyTuple::new(py, kind_ids)?.into_any(),
         ],
     )?;
-    if !discover && sig.as_any().eq(attr(&view, "_ui_tree_sig")?)? {
-        return Ok(none(py));
+    if !discover {
+        let old = attr(&view, "_ui_tree_sig")?;
+        if sig.as_any().eq(&old)? { return Ok(none(py)); }
+        // Selection is slot 8. All structural inputs must still match.
+        if !old.is_none() && !filtering && lens.eq(0)? && scene.getattr("edit_group")?.is_none()
+            && sig.get_slice(0, 8).eq(old.get_item(slice(py, 0, 8))?)?
+            && sig.get_slice(9, sig.len()).eq(old.get_item(slice(py, 9, isize::MAX))?)?
+            && attr(&scene, "_browser_picks")?.is_none()
+            && state.call_method1("get", ("_ui_mode", ""))?.eq("")?
+            && view.getattr("renderer")?.hasattr("ui_mark_tag_selection")?
+            && view.getattr("renderer")?.call_method1("ui_mark_tag_selection", (&scene,))?.is(&true.into_bound_py_any(py)?)
+        {
+            view.setattr("_ui_tree_sig", &sig)?;
+            return Ok(none(py));
+        }
     }
     let first = !view.hasattr("_ui_tree")?;
     if !discover {
