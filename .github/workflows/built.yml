@@ -20,7 +20,23 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # A minute on its own, before the long builds: a stale UI string
+  # inventory fails here with the command that refreshes it.
+  inventory:
+    name: UI string inventory
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Compare the inventory with the sources
+        run: python scripts/translation_coverage.py --inventory-only
+
   verify:
+    needs: inventory
     name: ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
@@ -87,8 +103,8 @@ jobs:
         if: runner.os != 'Windows'
         with:
           path: built/rust/built_app/target
-          key: target-${{ runner.os }}-${{ runner.arch }}-${{ steps.crates.outputs.toolchain }}-${{ steps.crates.outputs.reader }}-${{ hashFiles('built/rust/*/Cargo.lock') }}-${{ hashFiles('built/rust/**', '!built/rust/**/target/**', 'built/resources/**', 'built/tests/fixtures/**', 'built/AUTHORS', 'built/scripts/build_native.sh') }}
-          restore-keys: target-${{ runner.os }}-${{ runner.arch }}-${{ steps.crates.outputs.toolchain }}-${{ steps.crates.outputs.reader }}-${{ hashFiles('built/rust/*/Cargo.lock') }}-
+          key: target-v2-${{ runner.os }}-${{ runner.arch }}-${{ steps.crates.outputs.toolchain }}-${{ steps.crates.outputs.reader }}-${{ hashFiles('built/rust/*/Cargo.lock') }}-${{ hashFiles('built/rust/**', '!built/rust/**/target/**', 'built/resources/**', 'built/tests/fixtures/**', 'built/AUTHORS', 'built/scripts/build_native.sh') }}
+          restore-keys: target-v2-${{ runner.os }}-${{ runner.arch }}-${{ steps.crates.outputs.toolchain }}-${{ steps.crates.outputs.reader }}-${{ hashFiles('built/rust/*/Cargo.lock') }}-
 
       # A fresh checkout dates every file now, which would make cargo compile
       # what the cache already holds. The reader's sources are in the key
@@ -202,8 +218,10 @@ jobs:
         run: |
           crates=(built_core built_render python_bindings)
           if [[ "$RUNNER_OS" == macOS ]]; then crates+=(built_rfa); fi
+          # Their own directory: the tests build PyO3 without the extension
+          # settings the wheels use, and sharing one would rebuild both.
           for crate in "${crates[@]}"; do
-            cargo test --release --lib --manifest-path "rust/$crate/Cargo.toml"
+            cargo test --release --lib --target-dir "$CARGO_TARGET_DIR/lib-tests" --manifest-path "rust/$crate/Cargo.toml"
           done
 
       - name: Build and check Built.app

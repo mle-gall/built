@@ -90,13 +90,24 @@ def inventory():
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--write", action="store_true")
+    parser.add_argument("--inventory-only", action="store_true",
+                        help="compare the inventory with the sources and stop (no native modules needed)")
     args = parser.parse_args()
     sources = inventory()
     if args.write:
         INVENTORY.write_text(json.dumps(sources, indent=1, ensure_ascii=False) + "\n", encoding="utf8")
     else:
-        if sources != json.loads(INVENTORY.read_text("utf8")):
-            raise SystemExit("UI source inventory changed. Run scripts/translation_coverage.py --write")
+        recorded = json.loads(INVENTORY.read_text("utf8"))
+        if sources != recorded:
+            added, gone = sorted(set(sources) - set(recorded)), sorted(set(recorded) - set(sources))
+            for sign, strings in (("+", added), ("-", gone)):
+                for text in strings[:20]:
+                    print(f"  {sign} {text}")
+            raise SystemExit(f"UI source inventory changed ({len(added)} new, {len(gone)} gone). "
+                             f"Run: python scripts/translation_coverage.py --write")
+        if args.inventory_only:
+            print(f"UI source inventory up to date ({len(sources)} strings).")
+            raise SystemExit(0)
         from built_core.i18n import language_coverage
         print("Language  Translated / Sources  Coverage")
         for code, (count, total) in language_coverage().items():
