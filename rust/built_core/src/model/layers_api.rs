@@ -26,7 +26,7 @@
 use pyo3::intern;
 use pyo3::prelude::*;
 use pyo3::sync::PyOnceLock;
-use pyo3::types::{PyDict, PyList, PySet, PyString, PyTuple};
+use pyo3::types::{PyDict, PyFrozenSet, PyList, PySet, PyString, PyTuple};
 
 use super::module;
 use super::py_class::{class, method, FastAttr};
@@ -378,6 +378,39 @@ pub(crate) fn mesh_element_tags<'py>(scene: &Obj<'py>, selection: &Obj<'py>, kin
     if !selection.hasattr("element_keys")? {
         return Ok(None);
     }
+    // Asked by the tree, the inspector's identity and its tag row in one
+    // frame: once per selection and document state.
+    let key = match selection_layers_key(scene, selection)? {
+        Some(key) if selection.len()? > BULK_SELECTION => Some((key, kind).into_pyobject(py)?.into_any()),
+        _ => None,
+    };
+    let memo_name = intern!(py, "_element_tags_memo");
+    if let Some(key) = &key {
+        if let Some(memo) = scene.attr_opt(memo_name)?.filter(|m| !m.is_none()) {
+            if let Some(hit) = memo.cast::<PyDict>()?.get_item(kind)? {
+                if hit.get_item(0)?.eq(key)? {
+                    return hit.get_item(1)?.extract();
+                }
+            }
+        }
+    }
+    let found = mesh_element_tags_read(scene, selection, kind)?;
+    if let Some(key) = key {
+        let memo = match scene.attr_opt(memo_name)?.filter(|m| m.is_instance_of::<PyDict>()) {
+            Some(m) => m.cast_into::<PyDict>()?,
+            None => {
+                let d = PyDict::new(py);
+                scene.setattr(memo_name, &d)?;
+                d
+            }
+        };
+        memo.set_item(kind, (key, found.clone()))?;
+    }
+    Ok(found)
+}
+
+fn mesh_element_tags_read<'py>(scene: &Obj<'py>, selection: &Obj<'py>, kind: &str) -> PyResult<Option<Vec<Option<String>>>> {
+    let py = scene.py();
     let mesh = scene.getattr(intern!(py, "mesh"))?;
     let Some(store) = mesh.attr_opt("_store")?.filter(|s| s.hasattr("distinct_tags").unwrap_or(false)) else {
         return Ok(None);
@@ -436,6 +469,52 @@ fn selection_layers<'py>(scene: &Obj<'py>) -> PyResult<Bound<'py, PySet>> {
     let out = PySet::empty(py)?;
     let sel = scene.attr_opt(intern!(py, "selection"))?.unwrap_or_else(|| none(py));
     if !sel.is_none() && sel.hasattr("values_of")? && sel.len()? > BULK_SELECTION {
+        // The selection bar, the tree and the inspector each ask in the
+        // frame after a select-all: read the tags once per selection and
+        // document state.
+        let key = selection_layers_key(scene, &sel)?;
+        if let Some(key) = &key {
+            if let Some(memo) = scene.attr_opt(intern!(py, "_selection_layers_memo"))?.filter(|m| !m.is_none()) {
+                if memo.get_item(0)?.eq(key)? {
+                    return PySet::new(py, memo.get_item(1)?.try_iter()?.collect::<PyResult<Vec<_>>>()?);
+                }
+            }
+        }
+        let out = selection_layers_bulk(scene, &sel)?;
+        if let Some(key) = key {
+            scene.setattr(intern!(py, "_selection_layers_memo"), (key, PyFrozenSet::new(py, out.iter())?))?;
+        }
+        return Ok(out);
+    }
+    for e in taggable(&sel)?.iter() {
+        out.add(layer_of(&e)?)?;
+    }
+    Ok(out)
+}
+
+/// What `selection_layers` of a big selection depends on: the selection
+/// (its revision) and the document (its versions, the loose mesh's
+/// revision), or None when the scene lacks one of them.
+fn selection_layers_key<'py>(scene: &Obj<'py>, sel: &Obj<'py>) -> PyResult<Option<Obj<'py>>> {
+    let py = scene.py();
+    let part = |o: &Obj<'py>, name: &str| -> PyResult<Option<Obj<'py>>> { o.getattr_opt(name) };
+    let (Some(revision), Some(version), Some(content)) =
+        (part(sel, "revision")?, part(scene, "version")?, part(scene, "content_version")?)
+    else {
+        return Ok(None);
+    };
+    let mesh = scene.getattr(intern!(py, "mesh"))?;
+    let Some(mesh_revision) = part(&mesh, "revision")? else {
+        return Ok(None);
+    };
+    let mesh_revision = if mesh_revision.is_callable() { mesh_revision.call0()? } else { mesh_revision };
+    Ok(Some((id(sel), revision, version, content, id(&mesh), mesh_revision).into_pyobject(py)?.into_any()))
+}
+
+fn selection_layers_bulk<'py>(scene: &Obj<'py>, sel: &Obj<'py>) -> PyResult<Bound<'py, PySet>> {
+    let py = scene.py();
+    let out = PySet::empty(py)?;
+    {
         for kind in ["placement", "other"] {
             for e in taggable(&sel.call_method1("values_of", (kind,))?)?.iter() {
                 out.add(layer_of(&e)?)?;
@@ -455,10 +534,6 @@ fn selection_layers<'py>(scene: &Obj<'py>) -> PyResult<Bound<'py, PySet>> {
                 }
             }
         }
-        return Ok(out);
-    }
-    for e in taggable(&sel)?.iter() {
-        out.add(layer_of(&e)?)?;
     }
     Ok(out)
 }

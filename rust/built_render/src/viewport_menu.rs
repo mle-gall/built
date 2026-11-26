@@ -150,6 +150,71 @@ fn filed_path(py: Python<'_>, scene: &Bound<'_, PyAny>, g: &Bound<'_, PyAny>) ->
 /// What the verb table needs to know about the selection `sel`: counts and
 /// flags read from the document, and the header's names and measures. With
 /// `win`, also what the window can do now (Repeat, Hide, Paste…).
+/// A selection split by kind: groups, faces, edges and the rest, and the
+/// selected edges' keys when the selection keeps them.
+pub struct Kinds<'py> {
+    groups: Vec<Bound<'py, PyAny>>,
+    faces: Vec<Bound<'py, PyAny>>,
+    edges: Vec<Bound<'py, PyAny>>,
+    others: Vec<Bound<'py, PyAny>>,
+    edge_keys: Option<Bound<'py, PyAny>>,
+}
+
+/// Past this many entries a selection is read by kind (`values_of`).
+const HUGE_SELECTION: usize = 50_000;
+
+impl<'py> Kinds<'py> {
+    /// One pass, the commonest kinds first.
+    fn of(sel: &[Bound<'py, PyAny>]) -> PyResult<Self> {
+        let py = match sel.first() {
+            Some(e) => e.py(),
+            None => return Ok(Self { groups: vec![], faces: vec![], edges: vec![], others: vec![], edge_keys: None }),
+        };
+        let group_cls = class(py, "built_core.group", "Group")?;
+        let face_cls = class(py, "built_core.mesh", "Face")?;
+        let edge_cls = class(py, "built_core.mesh", "Edge")?;
+        let mut k = Self { groups: vec![], faces: vec![], edges: vec![], others: vec![], edge_keys: None };
+        for e in sel {
+            if e.is_instance(&face_cls).unwrap_or(false) {
+                k.faces.push(e.clone());
+            } else if e.is_instance(&edge_cls).unwrap_or(false) {
+                k.edges.push(e.clone());
+            } else if e.is_instance(&group_cls).unwrap_or(false) {
+                k.groups.push(e.clone());
+            } else {
+                k.others.push(e.clone());
+            }
+        }
+        Ok(k)
+    }
+
+    /// A huge selection by the selection's own lists of each kind (a
+    /// select-all of a big model: no handle type-tested), else None.
+    fn bulk(selection: &Bound<'py, PyAny>) -> PyResult<Option<(Vec<Bound<'py, PyAny>>, Self)>> {
+        if !selection.hasattr("values_of")? || selection.len()? < HUGE_SELECTION {
+            return Ok(None);
+        }
+        let py = selection.py();
+        let group_cls = class(py, "built_core.group", "Group")?;
+        let face_cls = class(py, "built_core.mesh", "Face")?;
+        let edge_cls = class(py, "built_core.mesh", "Edge")?;
+        let of = |kind: &str| -> PyResult<Vec<Bound<'py, PyAny>>> { selection.call_method1("values_of", (kind,))?.try_iter()?.collect() };
+        let mut k = Self { groups: vec![], faces: of("face")?, edges: of("edge")?, others: vec![], edge_keys: None };
+        // Store views of other meshes are faces and edges all the same.
+        if k.faces.iter().take(1).chain(k.edges.iter().take(1)).any(|e| !e.is_instance(&face_cls).unwrap_or(false) && !e.is_instance(&edge_cls).unwrap_or(false)) {
+            return Ok(None);
+        }
+        for e in of("placement")? {
+            if e.is_instance(&group_cls)? { k.groups.push(e) } else { k.others.push(e) }
+        }
+        k.others.extend(of("vertex")?);
+        k.others.extend(of("other")?);
+        k.edge_keys = Some(selection.call_method1("element_keys", ("edge",))?);
+        let all = k.groups.iter().chain(&k.faces).chain(&k.edges).chain(&k.others).cloned().collect();
+        Ok(Some((all, k)))
+    }
+}
+
 pub fn read_facts(
     scene: &Bound<'_, PyAny>,
     sel: &[Bound<'_, PyAny>],
@@ -158,23 +223,32 @@ pub fn read_facts(
     locked_group: Option<&Bound<'_, PyAny>>,
     locked_image: Option<&Bound<'_, PyAny>>,
 ) -> PyResult<Facts> {
+    read_facts_of(scene, sel, Kinds::of(sel)?, win, view, locked_group, locked_image)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn read_facts_of<'py>(
+    scene: &Bound<'py, PyAny>,
+    sel: &[Bound<'py, PyAny>],
+    kinds: Kinds<'py>,
+    win: Option<&Bound<'py, PyAny>>,
+    view: Option<&Bound<'py, PyAny>>,
+    locked_group: Option<&Bound<'py, PyAny>>,
+    locked_image: Option<&Bound<'py, PyAny>>,
+) -> PyResult<Facts> {
     let py = scene.py();
     let links = py.import("built_core.links")?;
     let group_cls = class(py, "built_core.group", "Group")?;
-    let face_cls = class(py, "built_core.mesh", "Face")?;
-    let edge_cls = class(py, "built_core.mesh", "Edge")?;
-    let pick = |cls: &Bound<'_, PyAny>| -> Vec<Bound<'_, PyAny>> {
-        sel.iter().filter(|e| e.is_instance(cls).unwrap_or(false)).cloned().collect()
-    };
-    let (groups, faces, edges) = (pick(&group_cls), pick(&face_cls), pick(&edge_cls));
+    let Kinds { groups, faces, edges, others, edge_keys } = kinds;
     let linked = |g: &Bound<'_, PyAny>| links.call_method1("is_linked", (g,)).and_then(|v| v.is_truthy()).unwrap_or(false);
     fn ancestor<'py>(links: &Bound<'py, PyModule>, g: &Bound<'py, PyAny>) -> Option<Bound<'py, PyAny>> {
         let _ = links;
         crate::host_context::core_module(g.py()).ok()?.call_method1("link_linked_ancestor", (g,)).ok().filter(|v| !v.is_none())
     }
     let all = |f: &dyn Fn(&Bound<'_, PyAny>) -> bool| !sel.is_empty() && sel.iter().all(f);
-    let types: Vec<String> = sel.iter().map(type_name).collect();
-    let all_type = |names: &[&str]| !types.is_empty() && types.iter().all(|t| names.contains(&t.as_str()));
+    // Only what is neither a face, an edge nor a group can be of these.
+    let all_type = |names: &[&str]| !sel.is_empty() && others.len() == sel.len()
+        && others.iter().all(|e| names.contains(&type_name(e).as_str()));
     let linked_part = groups.iter().any(|g| ancestor(&links, g).is_some() && !linked(g));
     let mut f = Facts {
         total: sel.len(),
@@ -231,12 +305,19 @@ pub fn read_facts(
         // Many edges: which are the active mesh's, and whether one is a
         // curve's, from the store in two calls.
         Some(store) if edges.len() > 256 => {
-            let keys = PyList::new(py, edges.iter().map(|e| e.getattr("key")).collect::<PyResult<Vec<_>>>()?)?;
+            let keys = match edge_keys {
+                Some(keys) => keys.cast_into::<PyList>()?,
+                None => PyList::new(py, edges.iter().map(|e| e.getattr("key")).collect::<PyResult<Vec<_>>>()?)?,
+            };
+            // The keys are distinct: count the stale ones, and build the
+            // selected set only when some edge is a curve's.
             let stale: std::collections::HashSet<u128> = store.call_method1("stale_keys", ("edge", &keys))?.extract::<Vec<u128>>()?.into_iter().collect();
-            let mine: std::collections::HashSet<u128> = keys.extract::<Vec<u128>>()?.into_iter().filter(|k| !stale.contains(k)).collect();
-            f.loose_edges = mine.len();
+            f.loose_edges = keys.len() - stale.len();
             let curved: Vec<(i128, u128)> = store.call_method0("curved_edges")?.extract()?;
-            f.curve = curved.iter().any(|(_, key)| mine.contains(key));
+            f.curve = !curved.is_empty() && {
+                let mine: std::collections::HashSet<u128> = keys.extract::<Vec<u128>>()?.into_iter().filter(|k| !stale.contains(k)).collect();
+                curved.iter().any(|(_, key)| mine.contains(key))
+            };
         }
         _ => {
             let mesh_edges = scene.getattr("mesh")?.getattr("edges")?;
@@ -331,7 +412,7 @@ pub fn read_facts(
             f.image_locked = flag(one, "locked");
         }
     }
-    f.path_polygon = sel.iter().any(|e| {
+    f.path_polygon = others.iter().any(|e| {
         type_name(e) == "GeoPath" && opt(e, "points").and_then(|p| p.len().ok()).unwrap_or(0) >= 3
     });
     if sel.is_empty() {
@@ -393,7 +474,11 @@ fn selection_facts<'py>(
 
 /// The kind of the selection `sel` (docs/context-menu.md).
 pub fn kind_of(scene: &Bound<'_, PyAny>, sel: &Bound<'_, PyAny>) -> PyResult<String> {
-    Ok(verbs::kind(&read_facts(scene, &items(sel)?, None, None, None, None)?).to_owned())
+    let f = match Kinds::bulk(sel)? {
+        Some((all, kinds)) => read_facts_of(scene, &all, kinds, None, None, None, None)?,
+        None => read_facts(scene, &items(sel)?, None, None, None, None)?,
+    };
+    Ok(verbs::kind(&f).to_owned())
 }
 
 #[pyfunction]
@@ -863,7 +948,8 @@ struct SelectionVerb {
     view: Option<Py<PyAny>>,
     kind: String,
     vid: String,
-    sel: Vec<Py<PyAny>>,
+    /// Shared by every verb of one row: a select-all is 600k handles.
+    sel: std::sync::Arc<Vec<Py<PyAny>>>,
     facts: Facts,
 }
 
@@ -886,9 +972,21 @@ fn inspector_verbs<'py>(
 ) -> PyResult<Vec<(String, String, String, Py<SelectionVerb>, bool, bool)>> {
     let py = win.py();
     let view = opt(win, "_doc").and_then(|d| opt(&d, "stand_in"));
-    let sel = items(sel)?;
-    let f = read_facts(&win.getattr("viewport")?.getattr("scene")?, &sel, Some(win), view.as_ref(), None, None)?;
+    let scene = win.getattr("viewport")?.getattr("scene")?;
+    let (sel, f) = match Kinds::bulk(sel)? {
+        Some((all, kinds)) => {
+            let f = read_facts_of(&scene, &all, kinds, Some(win), view.as_ref(), None, None)?;
+            // The verbs act on the selection in its own order.
+            (items(sel)?, f)
+        }
+        None => {
+            let sel = items(sel)?;
+            let f = read_facts(&scene, &sel, Some(win), view.as_ref(), None, None)?;
+            (sel, f)
+        }
+    };
     let kind = verbs::kind(&f);
+    let shared = std::sync::Arc::new(sel.iter().map(|e| e.clone().unbind()).collect::<Vec<_>>());
     verbs::inspector(&f)
         .into_iter()
         .map(|(vid, label, key, enabled, more)| {
@@ -897,7 +995,7 @@ fn inspector_verbs<'py>(
                 view: view.as_ref().map(|v| v.clone().unbind()),
                 kind: kind.to_owned(),
                 vid: vid.clone(),
-                sel: sel.iter().map(|e| e.clone().unbind()).collect(),
+                sel: shared.clone(),
                 facts: f.clone(),
             })?;
             Ok((vid, label, key, run, enabled, more))

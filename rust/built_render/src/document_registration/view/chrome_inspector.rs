@@ -7,6 +7,9 @@ use super::*;
 use pyo3::exceptions::{PyException, PyKeyError, PyOSError, PyValueError};
 use pyo3::types::PyCFunction;
 
+/// Past this many entries the inspector reads the selection by kind.
+const HUGE_SELECTION: usize = 50_000;
+
 fn empty<'py>(py: Python<'py>) -> Bound<'py, PyList> {
     PyList::empty(py)
 }
@@ -106,7 +109,12 @@ fn inspector<'py>(a: &Args<'py>) -> Reply<'py> {
     if sig.as_any().eq(attr(&view, "_ui_insp_sig")?)? {
         return Ok(none(py));
     }
-    let sel = list(&scene.getattr("selection")?)?;
+    let selection = scene.getattr("selection")?;
+    let sel = list(&selection)?;
+    // A huge selection (a select-all of a big model) is read by kind: its
+    // placements and other objects one by one, its mesh elements by count.
+    let by_kind = sel.len() >= HUGE_SELECTION && selection.hasattr("values_of")?;
+    let of_kind = |kind: &str| -> PyResult<Bound<'py, PyList>> { Ok(selection.call_method1("values_of", (kind,))?.cast_into()?) };
     module.getattr("_measure")?.call((&view, &win), Some(&fields!(py; "auto" => true)))?;
     let takeoff = own(&scene, "_inspector_takeoff")?;
     view.setattr("_ui_insp_sig", sig)?;
@@ -115,7 +123,7 @@ fn inspector<'py>(a: &Args<'py>) -> Reply<'py> {
     let links = py.import("built_core.links")?;
     let group_type = py.import("built_core.group")?.getattr("Group")?;
     let groups = empty(py);
-    for entity in sel.iter() {
+    for entity in if by_kind { of_kind("placement")? } else { sel.clone() }.iter() {
         if entity.is_instance(&group_type)? {
             groups.append(entity)?;
         }
@@ -262,7 +270,7 @@ fn inspector<'py>(a: &Args<'py>) -> Reply<'py> {
         }
         Ok(facts)
     };
-    let sel_kind = glue.call_method1("selection_kind", (&scene, &sel))?;
+    let sel_kind = glue.call_method1("selection_kind", (&scene, if by_kind { selection.clone() } else { sel.clone().into_any() }))?;
     let offered = |verb: &str| -> PyResult<bool> { glue.call_method1("verbs_offered", (&sel_kind, verb))?.is_truthy() };
     if sel.len() == 1 && !groups.is_empty() {
         let group = groups.get_item(0)?;
@@ -439,7 +447,32 @@ fn inspector<'py>(a: &Args<'py>) -> Reply<'py> {
         rows.append(("Not filed", unfiled.to_string()))?;
     }
     let others = sel.len() - groups.len();
-    if others != 0 {
+    if others != 0 && by_kind {
+        // The counts the walk below gives, faces and edges first.
+        let snapshot = selection.call_method0("snapshot")?;
+        let names = empty(py);
+        for (slot, name) in [(2, "Faces"), (3, "Edges")] {
+            let n: usize = snapshot.get_item(slot)?.extract()?;
+            if n != 0 {
+                names.append((name, n))?;
+            }
+        }
+        let rest = counter.call0()?;
+        for kind in ["placement", "vertex", "other"] {
+            for entity in of_kind(kind)?.iter() {
+                if entity.is_instance(&group_type)? {
+                    continue;
+                }
+                let name = entity.get_type().name()?;
+                rest.set_item(&name, rest.get_item(&name)?.add(1)?)?;
+            }
+        }
+        for entry in rest.call_method0("items")?.try_iter()? {
+            names.append(entry?)?;
+        }
+        let tally = counter.call1((py.import("builtins")?.getattr("dict")?.call1((names,))?,))?;
+        counted(&rows, tally.call_method0("most_common")?)?;
+    } else if others != 0 {
         let mesh = py.import("built_core.mesh")?;
         let (edge, face) = (mesh.getattr("Edge")?, mesh.getattr("Face")?);
         let names = empty(py);
@@ -460,7 +493,7 @@ fn inspector<'py>(a: &Args<'py>) -> Reply<'py> {
     rows.call_method1("extend", (&tag_row,))?;
     let sections = empty(py);
     sections.append((if groups.is_empty() { "Geometry" } else { "By node" }, &rows))?;
-    for entity in sel.iter() {
+    for entity in if by_kind { of_kind("other")? } else { sel.clone() }.iter() {
         if entity.get_type().name()?.to_str()? == "Dimension" {
             sections.append(("Actions", [("form:dimstyle", "Dimension style…")]))?;
             break;

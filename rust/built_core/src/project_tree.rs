@@ -156,9 +156,12 @@ fn loose_visible(mesh: &Bound<'_, PyAny>) -> PyResult<bool> {
         .py()
         .import("built_core")?
         .getattr("is_hidden")?;
+    // By index, stopping at the first visible one: iterating a big store
+    // mesh's elements first turns every key into a Python int.
     for field in ["faces", "edges"] {
-        for entity in mesh.getattr(field)?.try_iter()? {
-            if !hidden.call1((entity?,))?.is_truthy()? {
+        let elements = mesh.getattr(field)?;
+        for i in 0..elements.len()? {
+            if !hidden.call1((elements.get_item(i)?,))?.is_truthy()? {
                 return Ok(true);
             }
         }

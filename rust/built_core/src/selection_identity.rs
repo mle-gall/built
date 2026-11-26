@@ -128,31 +128,38 @@ impl Materials {
         if !store.hasattr("element_tags")? {
             return Ok(false);
         }
+        let (rows, _): (Vec<i64>, Vec<String>) = store.call_method1("element_tags", ("face", keys))?.extract()?;
         let keys: Vec<u128> = keys.extract()?;
-        let (rows, _): (Vec<i64>, Vec<String>) = store.call_method1("element_tags", ("face", keys.clone()))?.extract()?;
         if rows.iter().any(|&r| r == -2) {
             return Ok(false);
         }
         let own = mesh.getattr("_attr_own").ok().and_then(|o| o.cast_into::<PyDict>().ok()).filter(|o| !o.is_empty());
-        let mut by_row: BTreeMap<i64, Option<String>> = BTreeMap::new();
         let mat = |attrs: &Bound<'_, PyAny>| -> Option<String> { attrs.call_method1("get", ("mat",)).ok()?.extract().ok() };
+        // Counted by table row, then named once per row: a select-all of a
+        // big mesh is hundreds of thousands of faces and a handful of rows.
+        // Only the few faces with attributes of their own are looked up.
+        let own_keys: std::collections::HashSet<u128> = match &own {
+            Some(own) => own.keys().iter().filter_map(|k| k.extract::<u128>().ok()).collect(),
+            None => Default::default(),
+        };
+        let mut per_row: BTreeMap<i64, usize> = BTreeMap::new();
+        let mut named: BTreeMap<Option<String>, usize> = BTreeMap::new();
         for (key, row) in keys.into_iter().zip(rows) {
-            let mine = match &own {
-                Some(own) => own.get_item(key)?.filter(|d| !d.is_none()),
-                None => None,
-            };
-            let name = match mine {
-                Some(attrs) => mat(&attrs),
-                None => {
-                    if !by_row.contains_key(&row) {
-                        let name = if row < 0 { None } else { mat(&table.get_item(row)?) };
-                        by_row.insert(row, name);
-                    }
-                    by_row[&row].clone()
-                }
-            };
-            *self.counts.entry(name.or_else(|| fallback.clone()).unwrap_or_default()).or_default() += 1;
             self.faces += 1;
+            if own_keys.contains(&key) {
+                if let Some(attrs) = own.as_ref().map(|own| own.get_item(key)).transpose()?.flatten().filter(|d| !d.is_none()) {
+                    *named.entry(mat(&attrs)).or_default() += 1;
+                    continue;
+                }
+            }
+            *per_row.entry(row).or_default() += 1;
+        }
+        for (row, n) in per_row {
+            let name = if row < 0 { None } else { mat(&table.get_item(row)?) };
+            *named.entry(name).or_default() += n;
+        }
+        for (name, n) in named {
+            *self.counts.entry(name.or_else(|| fallback.clone()).unwrap_or_default()).or_default() += n;
         }
         let _ = py;
         Ok(true)

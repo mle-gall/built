@@ -199,7 +199,11 @@ fn sync_project_rows<'py>(a: &Args<'py>) -> Reply<'py> {
     if view.getattr("renderer")?.call_method1("ui_tick_tag_counts", (win.getattr("viewport")?.getattr("history")?,))?.is_truthy()? {
         view.call_method0("update")?;
     }
-    module.call_method1("_inspector", (&view, &win))?;
+    // A huge selection change: the tree's own frame leaves the inspector's
+    // rows for the next one (chrome_frame::panels_stage).
+    if own(&view, "_panels_stage")?.is_none_or(|stage| stage.extract::<u8>().unwrap_or(3) >= 3) {
+        module.call_method1("_inspector", (&view, &win))?;
+    }
     Ok(none(py))
 }
 
@@ -301,7 +305,7 @@ fn tree<'py>(a: &Args<'py>) -> Reply<'py> {
         }
         ids.into_any()
     } else {
-        render(py)?.call_method1("browser_selection", (&scene,))?
+        render(py)?.call_method1("browser_row_selection", (&scene,))?
     };
     let mode = if discover { "".into_bound_py_any(py)? } else { state.call_method1("get", ("_ui_mode", ""))? };
     let structure = py.import("built_core.structure")?;

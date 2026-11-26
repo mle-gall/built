@@ -484,26 +484,33 @@ fn sync_tool_status(view: &Obj, win: &Obj) -> PyResult<()> {
 }
 
 /// Mirror the window's state into the chrome (cheap: a few dict reads).
-/// Selections at least this large reach the panels a frame after the view.
+/// Selections at least this large reach the panels after the view, one
+/// panel a frame.
 const DEFERRED_PANELS: usize = 50_000;
 
-/// Whether this frame leaves the selection's panels for the next one: once
-/// per change of a huge selection (its revision), with another frame
-/// asked for, so the highlight shows before the panels have read 600k
-/// entries.
-fn panels_wait(view: &Obj<'_>) -> PyResult<bool> {
+/// How far the panels have caught up with a huge selection change: 0 on
+/// the frame of the change (the viewport only), then 1 (the selection
+/// bar), 2 (and the tree's rows), 3 (and the inspector: everything, as for
+/// any other selection). Each step asks for another frame, so the highlight
+/// shows first and no frame reads 600k entries for three panels at once.
+fn panels_stage(view: &Obj<'_>) -> PyResult<u8> {
     let py = view.py();
     let selection = attr(&attr(view, "scene")?, "selection")?;
     if selection.is_none() || selection.len()? < DEFERRED_PANELS {
-        return Ok(false);
+        return Ok(3);
     }
     let key = (id(&selection), direct(py, sel_key, (&selection,))?).into_bound_py_any(py)?;
-    if key.eq(attr(view, "_panels_selection_key")?)? {
-        return Ok(false);
+    let old = attr(view, "_panels_selection_key")?;
+    let stage = if !old.is_none() && old.get_item(0)?.eq(&key)? {
+        old.get_item(1)?.extract::<u8>()?.saturating_add(1).min(3)
+    } else {
+        0
+    };
+    view.setattr("_panels_selection_key", (key, stage))?;
+    if stage < 3 {
+        view.call_method0("update")?;
     }
-    view.setattr("_panels_selection_key", key)?;
-    view.call_method0("update")?;
-    Ok(true)
+    Ok(stage)
 }
 
 fn before_frame<'py>(a: &Args<'py>) -> Reply<'py> {
@@ -552,8 +559,9 @@ fn before_frame<'py>(a: &Args<'py>) -> Reply<'py> {
     // A huge selection change shows in the viewport first; the panels that
     // read the whole selection (the selection bar's verbs, the tree, the
     // inspector) follow on the next frame.
-    let panels = !panels_wait(&view)?;
-    if panels {
+    let stage = panels_stage(&view)?;
+    view.setattr("_panels_stage", stage)?;
+    if stage >= 1 {
         module.call_method1("_selection", (&view, &win, &active))?;
     }
     direct(py, cluster, (&view, &win))?;
@@ -561,8 +569,10 @@ fn before_frame<'py>(a: &Args<'py>) -> Reply<'py> {
     render(py)?.call_method1("bind_deliveries", (&win,))?;
     crate::tasks_host::tasks_before_frame(&view, &win)?;
     render(py)?.getattr("wgpu_library")?.call_method1("before_frame", (&view, &win))?;
-    if panels {
+    if stage >= 2 {
         module.call_method1("_sync_project_rows", (&view, &win))?;
+    }
+    if stage >= 3 {
         render(py)?.call_method1("inspector_sync", (&view, &win))?;
     }
     module.call_method1("_tabs", (&view, &win))?;
@@ -891,7 +901,11 @@ fn selection<'py>(a: &Args<'py>) -> Reply<'py> {
 /// offers this selection, run the same way (viewport_menu.rs).
 pub(super) fn commands<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    render(py)?.call_method1("inspector_verbs", (a.get_item(0)?, py.get_type::<PyList>().call1((a.get_item(1)?,))?))
+    // The selection itself when it keeps its kinds apart: a huge one is
+    // then read by kind (viewport_menu::Kinds::bulk), not handle by handle.
+    let selection = a.get_item(1)?;
+    let sel = if selection.hasattr("values_of")? { selection } else { py.get_type::<PyList>().call1((selection,))? };
+    render(py)?.call_method1("inspector_verbs", (a.get_item(0)?, sel))
 }
 
 /// «Isolated · Show all»: back to exactly what was shown before the first

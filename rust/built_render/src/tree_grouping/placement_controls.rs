@@ -58,6 +58,25 @@ fn remember(
     Ok(())
 }
 
+/// The ids the tree's rows can be: `browser_selection` less the selected
+/// faces, edges and vertices, which no row is. A select-all of a big model
+/// made the tree turn 600k handles into a Python set and back, twice.
+#[pyfunction]
+pub fn browser_row_selection(scene: &Bound<'_, PyAny>) -> PyResult<HashSet<usize>> {
+    let selection = scene.getattr("selection")?;
+    let picks = scene.getattr("__dict__")?.cast::<PyDict>()?.contains("_browser_picks")?;
+    if picks || !selection.hasattr("values_of")? {
+        return browser_selection(scene);
+    }
+    let mut ids = HashSet::new();
+    for kind in ["placement", "other"] {
+        for e in selection.call_method1("values_of", (kind,))?.try_iter()? {
+            ids.insert(e?.as_ptr() as usize);
+        }
+    }
+    Ok(ids)
+}
+
 #[pyfunction]
 pub fn browser_selection(scene: &Bound<'_, PyAny>) -> PyResult<HashSet<usize>> {
     let mut ids = model_ids(scene)?;

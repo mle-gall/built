@@ -1083,9 +1083,10 @@ impl PyMeshStore {
     ) -> PyResult<(Bound<'py, PyArray2<f32>>, Bound<'py, PyArray1<i64>>, Bound<'py, PyArray1<u32>>, Vec<u128>)> {
         let h = crate::hypot_of(hypot)?;
         let store = &self.inner;
-        let (corners, rows, counts, missing) = py.detach(|| {
+        type Marks = (Vec<f32>, Vec<i64>, Vec<u32>, Vec<u128>);
+        let run = |keys: &[u128]| -> Marks {
             let (mut corners, mut rows, mut counts, mut missing) = (Vec::new(), Vec::new(), Vec::new(), Vec::new());
-            for key in keys {
+            for &key in keys {
                 let Some(face) = store.slot(Kind::Face, key) else {
                     missing.push(key);
                     continue;
@@ -1100,6 +1101,23 @@ impl PyMeshStore {
                 counts.push(triangles.len() as u32);
             }
             (corners, rows, counts, missing)
+        };
+        let (corners, rows, counts, missing) = py.detach(|| {
+            if keys.len() < 8192 {
+                return run(&keys);
+            }
+            // A select-all of a big mesh: chunks in parallel, joined in
+            // key order (the same arrays).
+            use rayon::prelude::*;
+            let parts: Vec<Marks> = keys.par_chunks(4096).map(run).collect();
+            let mut all: Marks = Default::default();
+            for (c, r, n, m) in parts {
+                all.0.extend(c);
+                all.1.extend(r);
+                all.2.extend(n);
+                all.3.extend(m);
+            }
+            all
         });
         let n = corners.len() / 3;
         let corners = Array2::from_shape_vec((n, 3), corners).map_err(|e| PyValueError::new_err(e.to_string()))?;
