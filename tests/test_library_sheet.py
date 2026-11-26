@@ -160,6 +160,32 @@ def test_the_editor_applies_edits_and_sliders_when_they_settle(win, monkeypatch)
     assert sc.materials["Beech"].pbr is None
 
 
+def test_the_editor_sets_emission_colour_strength_and_map(win, monkeypatch):
+    L.open_library(win)
+    frame(win)
+    act(win, "verb", "edit")
+    view, sc = win.view, win.viewport.scene
+    look = dict(dict(L.inspector(view, win)[1])["Look"])
+    assert look["Emission"].endswith("#000000") and "Strength" in look
+    before = win.viewport.history.revision
+    L.edit_field(win, view, "emission:Beech", "#ff8000")
+    assert win.viewport.history.revision == before + 1                # one undo step
+    pbr = sc.materials["Beech"].pbr
+    assert pbr["emission"] == pytest.approx([1, 128 / 255, 0], abs=.01) and pbr["emission_strength"] == 1.0
+    L.edit_field(win, view, "emission_strength:Beech", "3,5")
+    assert sc.materials["Beech"].pbr["emission_strength"] == 3.5
+    picked = []
+    monkeypatch.setattr(L, "_pick_image", lambda w, title: picked.append(title) or "/x/glow.png")
+    L.action(win, view, "map:m:Beech:emission_map")
+    assert picked == ["Emission map"] and sc.materials["Beech"].pbr["emission_map"] == {"path": "/x/glow.png"}
+    look = dict(dict(L.inspector(view, win)[1])["Look"])
+    assert look["Emission map"] == "glow.png"
+    win.viewport.history.undo()
+    win.viewport.history.undo()
+    win.viewport.history.undo()
+    assert "emission" not in (sc.materials["Beech"].pbr or {})
+
+
 def test_paint_with_it_closes_the_sheet_and_remembers_it(win, monkeypatch):
     painted = []
     monkeypatch.setattr("views.wgpu_ui._paint_with", lambda w, key: painted.append(key))

@@ -831,6 +831,55 @@ pub mod molecules {
         response
     }
 
+    /// The width `review_row` keeps at the right for these actions.
+    pub fn review_actions_width(ui: &egui::Ui, actions: &[String]) -> f32 {
+        actions
+            .iter()
+            .map(|a| ui.painter().layout_no_wrap(a.clone(), body(), INK_2).size().x + 16.0 + SPACE_XS)
+            .sum()
+    }
+
+    /// A table row whose last columns are quiet action buttons (Apply,
+    /// Ignore…), the cells sharing what is left of the width. `flag` marks
+    /// the row with a warning dot (a conflict). `reserve` is the action
+    /// width every row of the table keeps, so the cells line up with the
+    /// header (drawn with `header` and no actions). Returns the clicked
+    /// action's index.
+    pub fn review_row(ui: &mut egui::Ui, cells: &[String], header: bool, flag: bool,
+                      actions: &[String], reserve: f32) -> Option<usize> {
+        let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), CONTROL_H), Sense::hover());
+        let cells_w = (rect.width() - reserve).max(40.0);
+        let width = cells_w / cells.len().max(1) as f32;
+        let ink = if header { DIM } else { INK };
+        for (index, cell) in cells.iter().enumerate() {
+            let mut left = rect.left() + width * index as f32 + SPACE_XS;
+            if index == 0 && flag {
+                dot(ui.painter(), pos2(left + 3.0, rect.center().y), WARN);
+                left += 12.0;
+            }
+            let text = super::fit(ui, cell, if header { meta() } else { body() }, ink,
+                                  (width - 2. * SPACE_XS - if index == 0 && flag { 12.0 } else { 0.0 }).max(1.), 1);
+            leading(ui.painter(), rect, left, text, ink);
+        }
+        let mut clicked = None;
+        let mut right = rect.right();
+        for (index, label) in actions.iter().enumerate().rev() {
+            let g = ui.painter().layout_no_wrap(label.clone(), body(), INK_2);
+            let w = g.size().x + 16.0;
+            let button = Rect::from_min_max(pos2(right - w, rect.top()), pos2(right, rect.bottom()));
+            right -= w + SPACE_XS;
+            let resp = ui.interact(button, ui.id().with(("review-action", cells.first(), index)), Sense::click());
+            let st = control_state(ui, &resp, false);
+            paint_state(ui, button, st, R_ROW);
+            centered(ui.painter(), button, g, if index == 0 && st != State::Off { ACCENT } else { ink_of(st) });
+            if resp.clicked() {
+                clicked = Some(index);
+            }
+        }
+        ui.painter().hline(rect.x_range(), rect.bottom(), Stroke::new(1_f32, DIVIDER));
+        clicked
+    }
+
     pub fn swatch(ui: &mut egui::Ui, value: &mut Color32) -> egui::Response {
         ui.color_edit_button_srgba(value)
     }

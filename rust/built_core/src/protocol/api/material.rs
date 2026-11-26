@@ -374,9 +374,14 @@ pub(super) fn install(m: &Module<'_>) -> PyResult<()> {
         vec![h.getattr("MeshCommand")?],
         &ns,
     )?;
-    let vals = ("metallic", "roughness", "normal_scale", "ao_strength").into_pyobject(py)?;
-    let maps = ("metallic_map", "roughness_map", "normal_map", "ao_map").into_pyobject(py)?;
-    m.add("PBR_KEYS", vals.as_any().add(&maps)?)?;
+    // Emission: a linear RGB colour (`emission`), a strength and an
+    // optional map. Absent means black and 0: no existing material changes.
+    let vals = ("metallic", "roughness", "normal_scale", "ao_strength", "emission_strength").into_pyobject(py)?;
+    let maps = ("metallic_map", "roughness_map", "normal_map", "ao_map", "emission_map").into_pyobject(py)?;
+    let colours = ("emission",).into_pyobject(py)?;
+    m.add("PBR_KEYS", vals.as_any().add(&maps)?.add(&colours)?)?;
+    m.add("PBR_COLOURS", colours)?;
+    m.add("EMISSION_KEYS", ("emission", "emission_strength", "emission_map"))?;
     m.add("PBR_VALUES", vals)?;
     m.add("PBR_MAPS", maps)?;
     m.add_function(wrap_pyfunction!(colour_hex, m)?)?;

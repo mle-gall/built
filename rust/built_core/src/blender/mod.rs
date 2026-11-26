@@ -11,6 +11,7 @@ use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 mod discovery;
 mod lights;
+mod link;
 type Obj<'p> = Bound<'p, PyAny>;
 const FLAT_ID: &str = "org.blender.Blender";
 const PERMISSION: &str =
@@ -335,5 +336,6 @@ pub(crate) fn install(m: &Bound<PyModule>) -> PyResult<()> {
         m.add_function(f)?;
     }
     discovery::install(m)?;
+    link::install(m)?;
     lights::install(m)
 }

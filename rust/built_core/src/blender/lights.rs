@@ -123,6 +123,11 @@ fn light<'p>(lt: &Obj<'p>) -> PyResult<Option<Bound<'p, PyDict>>> {
     out.set_item("angle", angle.min(179.).max(1.))?;
     out.set_item("on", lt.call_method1("get", ("on", true))?.is_truthy()?)?;
     out.set_item("name", lt.call_method1("get", ("name", ""))?.str()?)?;
+    // The Blender link names lights by id; older lights have none.
+    let id = lt.call_method1("get", ("id",))?;
+    if id.is_truthy()? {
+        out.set_item("id", id.str()?)?;
+    }
     Ok(Some(out))
 }
 #[pyfunction]
