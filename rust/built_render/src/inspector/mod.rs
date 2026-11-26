@@ -106,7 +106,7 @@ impl Panels {
         if s["path"] == true && ui.button("Terrain profile…").clicked() {
             send(out, "terrain.open", Value::Null);
         }
-        self.rule.draw(ui, &self.data["rulePreview"], out);
+        if !self.has_records() { self.rule.draw(ui, &self.data["rulePreview"], out); }
         let p = &s["parts"];
         if p.is_object() {
             kit::disclosure(ui, ("parts", label(&p["uid"])), &format!("Parts · {}", label(&p["name"])), false, |ui| {
@@ -220,9 +220,8 @@ impl Panels {
         }
     }
 
-    pub fn export(&mut self, ui: &mut Ui, out: &mut Vec<String>) {
-        ui.strong(label(&self.data["selection"]["schema"]));
-        self.records.draw(ui, out);
+    pub fn export(&mut self, ui: &mut Ui, out: &mut Vec<String>, measured: &[(String,String)]) {
+        self.records.draw(ui, out, &mut self.popup_layers, measured);
     }
     pub fn has_records(&self) -> bool {
         !self.records.rows.is_empty()

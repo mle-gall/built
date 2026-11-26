@@ -214,12 +214,13 @@ def test_dialog_patch_carries_only_what_changed(native_host):
     assert all(g.ifc["predefined_type"] == "PILASTER" for g in groups)
     fresh = _selection(native_host, "Wall")
     _edit(native_host, "fields", fresh, {})
-    assert fresh[0].ifc["class"] == "IfcWall"
+    assert fresh[0].ifc is None
 
 
 def test_membership_changes_preserve_other_objects_codes_and_undo_once(native_host):
     a, b = groups = _selection(native_host, "A", "B")
     history = native_host.viewport.history
+    _edit(native_host, "fields", groups, {"class": "IfcFurniture"})
     _edit(native_host, "classification", [a], ["discipline", "A", "Architectural", True])
     _edit(native_host, "classification", groups, ["discipline", "S", "Structure", True])
     assert [c["code"] for c in a.ifc["classifications"]] == ["A", "S"]
