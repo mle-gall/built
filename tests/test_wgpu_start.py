@@ -592,10 +592,13 @@ def test_link_preview_follows_moved_sources_and_stops_at_a_cycle(tmp_path):
     ]
 
 def test_saved_summary_does_not_read_document_or_geometry(tmp_path):
-    from built_core import start_document_summary
+    from pathlib import Path
+    from built_core import links, start_document_summary
     import zipfile
     path = tmp_path / "indexed.built"
     scene = Scene()
+    linked = doc(tmp_path, "source.igz", picture=False)
+    scene.groups.append(links.make_link(scene, linked))
     scene.plugin_data["padding"] = "x" * (1024 * 1024)
     igz.save_scene(scene, path)
     with zipfile.ZipFile(path) as archive:
@@ -603,7 +606,11 @@ def test_saved_summary_does_not_read_document_or_geometry(tmp_path):
     with zipfile.ZipFile(path, "w") as archive:
         archive.writestr("start-summary.json", index)
         archive.writestr("document.json", b"unreadable model")
-    assert start_document_summary(path) == {"units": "m", "links": []}
+    summary = start_document_summary(path)
+    assert summary["units"] == "m"
+    row, = summary["links"]
+    assert Path(row["found"]) == linked.resolve()
+    assert row["status"] == "found"
 
 
 def test_switching_templates_discards_unit_edits(win):
