@@ -878,14 +878,15 @@ pub fn before_frame(view: &Bound<'_, PyAny>, win: &Bound<'_, PyAny>) -> PyResult
         let rows = rows.extract::<PyRef<crate::library_host::LibraryRows>>()?;
         let mut spec: crate::ui::large_sheet::Spec = serde_json::from_str(&text)
             .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+        let checked = sheet.getattr_opt("_checked")?;
         for block in &mut spec.content.blocks {
             if let Some(index) = block.id.strip_prefix("library-group:").and_then(|s| s.parse::<usize>().ok()) {
                 block.items = rows.groups[index].clone();
-                block.tone="components".into();
+                if checked.is_some() { block.tone = "components".into(); }
             }
         }
         if let Some(ui) = &mut renderer.cast::<crate::Renderer>()?.borrow_mut().ui {
-            ui.set_component_checks(sheet.getattr("_checked")?.extract()?);
+            ui.set_component_checks(checked.map(|v| v.extract()).transpose()?.unwrap_or_default());
             ui.set_sheet_spec(spec);
         }
         st.borrow_mut().sent = Some(text);

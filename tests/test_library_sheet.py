@@ -54,6 +54,10 @@ def win(native_host, monkeypatch):
 
 def frame(win):
     cs.before_frame(win.view, win)
+    job = getattr(win.viewport.scene, "_library_usage_job", None)
+    if job and L._state(win.view)["type"] == "materials":
+        job[1].result(timeout=5)
+        cs.before_frame(win.view, win)
     return win.view.renderer.sheet()
 
 
@@ -786,3 +790,69 @@ def test_nested_linked_components_use_their_own_file_and_location(win, tmp_path)
     roof = next(r for r in sh["side"] if r["label"] == "Roof.built")
     act(win, "side", roof["id"])
     assert [r["label"] for r in tiles(frame(win))] == ["Roof beam"]
+
+def test_switches_only_request_the_active_provider(win, monkeypatch):
+    calls = []
+    for tab in ("materials", "components", "families"):
+        provider = L.provider(tab)
+        original = provider.items
+
+        def items(ctx, original=original, tab=tab):
+            calls.append(tab)
+            return original(ctx)
+
+        monkeypatch.setattr(provider, "items", items)
+
+    L.open_library(win, "materials")
+    frame(win)
+    assert set(calls) == {"materials"}
+    calls.clear()
+    for tab in ("components", "families", "materials", "components", "families"):
+        act(win, "tab", tab)
+        frame(win)
+    assert calls == ["components", "families"]
+
+
+def test_open_and_edit_with_outstanding_usage_survey(win, monkeypatch):
+    import threading
+    import built_core
+
+    real = built_core.library_usage
+    allow = threading.Event()
+    requested = []
+
+    def held(scene, revision):
+        requested.append(revision)
+        assert allow.wait(5)
+        return real(scene, revision)
+
+    monkeypatch.setattr(built_core, "library_usage", held)
+    scene = win.viewport.scene
+    try:
+        L.open_library(win, "materials")
+        cs.before_frame(win.view, win)
+        assert "Purge unused materials…" in str(win.view.renderer.sheet())
+        scene.materials["Extra"] = Material("Extra")
+        scene.version += 1
+        cs.before_frame(win.view, win)
+    finally:
+        allow.set()
+    assert "Purge unused materials (2)" in str(frame(win))
+    assert requested[-1] == scene.content_version
+
+
+def test_usage_index_distinguishes_front_and_back_paint(win):
+    import built_core
+    from built_core.group import Group
+
+    scene = win.viewport.scene
+    face = scene.mesh.faces[0]
+    face.attrs["back"] = {"mat": "Concrete"}
+    group = Group(name="Retained")
+    group.material = {"mat": "Retained paint"}
+    scene.materials["Retained paint"] = Material("Retained paint")
+    scene.kept_components.append(group)
+    scene.version += 1
+    uses, _, _, _, unused = built_core.library_usage(scene, scene.content_version)
+    assert uses == {"Beech": 1, "Concrete": 1, "Retained paint": 1}
+    assert unused == len(built_core.purge_unused_materials(scene))
