@@ -280,6 +280,8 @@ fn types(m: &Module<'_>, root: &Module<'_>) -> PyResult<()> {
         ("label", "Optional[str]"),
         ("lock_color", "Optional[tuple[float, float, float]]"),
         ("edge", "Optional[Edge]"),
+        // A 'from point' foot: the kind of the point its guide starts at.
+        ("source_kind", "Optional[str]"),
     ] {
         let default = if name == "color" {
             m.getattr("COLOR_NONE")?

@@ -256,4 +256,4 @@ def reference_guide_rows():
 
 
 def test_locked_reference_guide_callbacks():
-    assert digest(reference_guide_rows()) == 'b884c8b739411d3707b1811ddac0a372b2fe4f8bc5154cfffebda56e639f6738'
+    assert digest(reference_guide_rows()) == '5791fa3192401f47707f26a3d970a985dddb731db66d36a4e14a7c845fbe1067'
