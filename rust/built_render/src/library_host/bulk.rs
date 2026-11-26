@@ -111,6 +111,12 @@ pub(super) fn detail(st: &Bound<'_, PyAny>, d: &Bound<'_, PyAny>) -> PyResult<()
                 "text",
                 ("Focus the replacement definition in the table, then confirm.",),
             )?;
+            let eligible = st.call_method1("get", ("replace_eligible", 0))?;
+            let excluded = st.call_method1("get", ("replace_excluded", 0))?;
+            d.call_method1(
+                "text",
+                (format!("{eligible} writable copies · {excluded} excluded"),),
+            )?;
             let key = st.get_item("cursor")?;
             let pick = st.get_item("items")?.call_method1("get", (&key,))?;
             if !pick.is_none() && pick.get_item("source")?.eq("model")? && !picks.contains(key)? {
@@ -189,6 +195,27 @@ pub(super) fn act(
         }
         "bulk-purge" => st.set_item("bulk_mode", "purge")?,
         "bulk-replace" => {
+            let scene = ctx.getattr("scene")?;
+            let rows = provider(py, "components")?.call_method1("_model", (ctx,))?;
+            let mut eligible = 0;
+            let mut excluded = 0;
+            for key in picks.iter() {
+                let key: String = key.extract()?;
+                if let Some(i) = key
+                    .strip_prefix("cm:")
+                    .and_then(|k| k.parse::<usize>().ok())
+                {
+                    for g in rows.get_item(i)?.get_item(2)?.try_iter()? {
+                        if writable(&scene, &g?)? {
+                            eligible += 1;
+                        } else {
+                            excluded += 1;
+                        }
+                    }
+                }
+            }
+            st.set_item("replace_eligible", eligible)?;
+            st.set_item("replace_excluded", excluded)?;
             st.set_item("replacement_origin", st.get_item("filter")?)?;
             st.set_item("bulk_mode", "replace")?;
             set_query(st, ctx, "source:model")?;
@@ -284,7 +311,6 @@ pub(super) fn act(
             let scene = ctx.getattr("scene")?;
             let model = provider(py, "components")?.call_method1("_model", (ctx,))?;
             let groups = PyList::empty(py);
-            let links = py.import("built_core")?;
             for key in picks.iter() {
                 let key: String = key.extract()?;
                 if let Some(i) = key
@@ -293,10 +319,7 @@ pub(super) fn act(
                 {
                     for g in model.get_item(i)?.get_item(2)?.try_iter()? {
                         let g = g?;
-                        if action == "bulk-select"
-                            || (links.call_method1("link_linked_ancestor", (&g,))?.is_none()
-                                && !scene.call_method1("entity_locked", (&g,))?.is_truthy()?)
-                        {
+                        if action == "bulk-select" || writable(&scene, &g)? {
                             groups.append(g)?;
                         }
                     }
@@ -357,4 +380,17 @@ fn restore_query(st: &Bound<'_, PyAny>, ctx: &Bound<'_, PyAny>) -> PyResult<()> 
         set_query(st, ctx, &query)?;
     }
     Ok(())
+}
+
+fn writable(scene: &Bound<'_, PyAny>, group: &Bound<'_, PyAny>) -> PyResult<bool> {
+    Ok(scene
+        .py()
+        .import("built_core")?
+        .call_method1("link_linked_ancestor", (group,))?
+        .is_none()
+        && !scene.call_method1("entity_locked", (group,))?.is_truthy()?
+        && !scene
+            .call_method1("_layer_state", (group,))?
+            .get_item(1)?
+            .is_truthy()?)
 }

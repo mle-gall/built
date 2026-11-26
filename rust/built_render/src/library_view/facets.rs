@@ -26,6 +26,9 @@ pub(crate) fn words(text: &str) -> Vec<String> {
 
 pub(crate) fn toggle(text: &str, token: &str) -> String {
     let mut tokens = words(text);
+    if token.eq_ignore_ascii_case("-source:linked") {
+        tokens.retain(|t| Term::parse(t).field != "file");
+    }
     if tokens.iter().any(|t| t.eq_ignore_ascii_case(token)) {
         tokens.retain(|t| !t.eq_ignore_ascii_case(token));
     } else {
@@ -90,7 +93,11 @@ fn bucket(e: &Item) -> &str {
 pub(super) fn source(e: &Item) -> &str {
     match e.source.as_str() {
         "model" => "This model",
-        "linked" => e.file.as_deref().unwrap_or("Linked files"),
+        "linked" => e
+            .file
+            .as_deref()
+            .and_then(|p| p.rsplit(['/', '\\']).next())
+            .unwrap_or("Linked files"),
         "bundled" => "Bundled",
         _ => "My library",
     }

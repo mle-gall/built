@@ -1023,9 +1023,14 @@ impl ComponentsProvider {
             let mut classes = std::collections::BTreeSet::new();
             let mut locations = std::collections::BTreeMap::new();
             for group in gs.iter().chain((!kept.is_none()).then_some(&kept)) {
-                if let Some(class) = group.getattr("ifc").ok().and_then(|v|v.call_method1("get",("class",)).ok()).and_then(|v|v.extract::<String>().ok()) {
-                    if !class.is_empty() {classes.insert(class);}
-                }
+                let record=group.getattr("ifc")?;
+                let own_class=if record.is_truthy()? {
+                    let value=if record.call_method1("get",("type",))?.is_truthy()? {
+                        py.import("core.record")?.call_method1("apply_type",(&record,&registry))?
+                    }else{record};
+                    value.call_method1("get",("class",))?.extract::<Option<String>>()?
+                }else{None};
+                if let Some(c)=&own_class {classes.insert(c.clone());}
                 if group.is(&kept) {continue;}
                 let ancestor = engine.call_method1("link_linked_ancestor",(group,))?;
                 let path:String = if ancestor.is_none() {String::new()} else {
@@ -1041,7 +1046,7 @@ impl ComponentsProvider {
                     node_metadata.insert(node.clone(),metadata);
                 }
                 let (name,cls)=&node_metadata[&node];
-                if let Some(cls)=cls {classes.insert(cls.clone());}
+                if own_class.is_none() {if let Some(cls)=cls {classes.insert(cls.clone());}}
                 *locations.entry(format!("{} › {name}",if path.is_empty() {"This model"}else{&path})).or_insert(0usize)+=1;
                 paths.insert(path);
             }
@@ -1891,7 +1896,7 @@ impl LibrarySheet {
             let label=options.iter().find(|(id,_)|*id==group).map_or("None",|p|p.1);
             sheet.call_method1("menu",("group",format!("Group: {label}"),options.to_vec(),group))?;
         }
-        sheet.setattr("side", out.get_item("side")?)?;
+        sheet.setattr("side", out.get_item("side")?.call_method0("copy")?)?;
         let collections = if prov_id == "families" { collections::manifests()? } else { Vec::new() };
         if !has_target {
             sheet.call_method1("verb", ("import-collection", "Import collection…"))?;
@@ -1981,7 +1986,7 @@ impl LibrarySheet {
                 detail.call_method("buttons", (vec![apply],), Some(&[("align", "fill")].into_py_dict(py)?))?;
             }
         } else {
-            detail.setattr("blocks", out.get_item("detail")?)?;
+            detail.setattr("blocks", out.get_item("detail")?.call_method0("copy")?)?;
         }
         let e = if cursor.is_truthy()? { st.get_item("items")?.call_method1("get", (&cursor,))? } else { py.None().into_bound(py) };
         if faceted && st.get_item("checked")?.len()?>0 {
@@ -2148,7 +2153,7 @@ impl LibrarySheet {
                 let group=group?;
                 if py.import("built_core")?.call_method1("link_linked_ancestor",(&group,))?.is_none() && !lctx.getattr("scene")?.call_method1("entity_locked",(&group,))?.is_truthy()? {
                     let uid=group.getattr("uid")?.str()?.to_string();
-                    choices.push((uid.clone(),format!("{} · {uid}",group.getattr("name")?)));
+                    choices.push(format!("{} · {uid}",group.getattr("name")?));
                 }
             }
             let stamp=lctx.getattr("scene")?.getattr("content_version")?.unbind();
@@ -2156,11 +2161,13 @@ impl LibrarySheet {
             let done=func(py,move |py,a| {
                 let answer=a.get_item(0)?;
                 if !answer.is_none() && lctx.bind(py).getattr("scene")?.getattr("content_version")?.eq(stamp.bind(py))? {
-                    p.bind(py).call_method1("run",(lctx.bind(py),"unique",entry.bind(py),answer))?;
+                    if let Some((_,uid))=answer.extract::<String>()?.rsplit_once(" · ") {
+                        p.bind(py).call_method1("run",(lctx.bind(py),"unique",entry.bind(py),uid))?;
+                    }
                 }
                 Ok(none(py))
             })?;
-            py.import("built_render.chrome_dialogs")?.getattr("ask_later")?.call((&win,"Make unique","Choose one copy",choices,done),None)?;
+            py.import("built_render.chrome_forms")?.getattr("ask_choice")?.call((&win,"Make unique","Choose one copy",choices),Some(&[("done",done)].into_py_dict(py)?))?;
             return Ok(());
         }
         if verb == "family-previews" {
@@ -2328,7 +2335,9 @@ impl LibrarySheet {
     }
 
     fn closed(slf: &Bound<'_, Self>, _ctx: &Bound<'_, PyAny>) -> PyResult<()> {
-        _state(&slf.getattr("view")?)?.set_item("bulk_stamp",slf.py().None())?;
+        let st=_state(&slf.getattr("view")?)?;
+        st.set_item("bulk_stamp",slf.py().None())?;
+        st.set_item("replacement_origin",slf.py().None())?;
         slf.call_method0("close_catalogue")?;
         Ok(())
     }
