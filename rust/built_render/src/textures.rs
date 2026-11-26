@@ -54,7 +54,7 @@ impl Textures {
             );
         }
         Self {
-            recipes: crate::buffer(d, &[0; 48], wgpu::BufferUsages::STORAGE),
+            recipes: crate::buffer(d, &[0; 64], wgpu::BufferUsages::STORAGE),
             layers,
             materials: crate::buffer(d, &[0;16], wgpu::BufferUsages::STORAGE),
             view: texture.create_view(&wgpu::TextureViewDescriptor {
@@ -92,10 +92,10 @@ impl Textures {
     }
 }
 
-/// Each recipe is three vec4s: six layer indices, two flags and four factors.
+/// Each recipe is four vec4s: seven layer indices, flags, surface factors and radiance.
 pub fn valid_recipes(data: &[u8], layers: u32) -> bool {
-    !data.is_empty() && data.len() % 48 == 0 && data.chunks_exact(48).all(|row| {
-        row[..24].chunks_exact(4).all(|v| u32::from_le_bytes(v.try_into().unwrap()) < layers)
+    !data.is_empty() && data.len() % 64 == 0 && data.chunks_exact(64).all(|row| {
+        row[..28].chunks_exact(4).all(|v| u32::from_le_bytes(v.try_into().unwrap()) < layers)
             && row[32..].chunks_exact(4).all(|v| f32::from_le_bytes(v.try_into().unwrap()).is_finite())
     })
 }
@@ -106,7 +106,7 @@ mod tests {
 
     #[test]
     fn recipe_table_requires_complete_rows_and_resident_layers() {
-        let mut row = [0u8; 48];
+        let mut row = [0u8; 64];
         row[16..20].copy_from_slice(&1u32.to_le_bytes());
         assert!(valid_recipes(&row, 2));
         assert!(!valid_recipes(&row, 1));

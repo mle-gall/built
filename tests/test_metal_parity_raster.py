@@ -842,3 +842,20 @@ def test_rebaking_a_prototype_reuses_its_range(native):
     native.replace_prototype(0,v[6:].view(np.uint8).ravel(),i[:6].view(np.uint8),b.view(np.uint8).ravel(),6)
     assert resident()==first
     assert not np.array_equal(capture(native),before)
+
+
+def test_emission_is_added_in_linear_light_with_a_tiled_map(native, tmp_path):
+    from built_core import Vec3, pack_scene
+    scene = Scene()
+    face = scene.mesh.add_face([Vec3(x, y, 0) for x, y in
+                                ((-.8, -.8), (.8, -.8), (.8, .8), (-.8, .8))])
+    face.attrs['color'] = (0., 0., 0.)
+    native.set_style(dict(sky=False, edges=False, profiles=False))
+    path = tmp_path / 'emission.png'
+    assert filled(2, 2, (255, 0, 255)).save(str(path))
+    face.attrs['pbr'] = {'emission': (.125, .5, 0.), 'emission_strength': 2.,
+                         'emission_map': {'path': str(path)}}
+    pack_scene(scene).upload(native)
+    # Linear red 0.25 displays as sRGB 137. Green is masked by the image.
+    np.testing.assert_allclose(capture(native)[32, 32, :3], [137, 0, 0], atol=2)
+    assert native.pick(32, 32) == 0

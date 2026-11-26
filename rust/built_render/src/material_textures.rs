@@ -48,7 +48,7 @@ fn levels(w: u32, h: u32) -> impl Iterator<Item = (u32, u32)> {
 
 enum Entry {
     Base(PathBuf),
-    Pbr([Option<PathBuf>; 6], bool, [f32; 4]),
+    Pbr([Option<PathBuf>; 7], bool, [f32; 4], [f32; 3], bool),
 }
 
 #[pyfunction]
@@ -68,6 +68,7 @@ pub fn material_texture_array<'py>(
                     maps.extract()?,
                     value.getattr("flip_y")?.extract()?,
                     value.getattr("factors")?.extract()?,
+                    value.getattr("radiance")?.extract()?, value.getattr("surface")?.extract()?,
                 )
             } else {
                 Entry::Base(value.extract()?)
@@ -76,7 +77,7 @@ pub fn material_texture_array<'py>(
         .collect::<PyResult<_>>()?;
     let pbr = entries.iter().any(|e| matches!(e, Entry::Pbr(..)));
     let mut paths = Vec::new();
-    let mut descriptors = vec![[0u32; 12]; if pbr { entries.len() + 1 } else { 0 }];
+    let mut descriptors = vec![[0u32; 16]; if pbr { entries.len() + 1 } else { 0 }];
     let mut ids = HashMap::new();
     for (i, entry) in entries.into_iter().enumerate() {
         if !pbr {
@@ -96,15 +97,15 @@ pub fn material_texture_array<'py>(
         };
         match entry {
             Entry::Base(path) => register(0, path),
-            Entry::Pbr(maps, flip, factors) => {
+            Entry::Pbr(maps, flip, factors, radiance, surface) => {
                 for (channel, path) in maps.into_iter().enumerate() {
                     if let Some(path) = path {
                         register(channel, path);
                     }
                 }
-                row[6] = 1;
-                row[7] = u32::from(flip);
-                row[8..].copy_from_slice(&factors.map(f32::to_bits));
+                row[7] = 1 | (u32::from(flip) << 1) | (u32::from(surface) << 2);
+                row[12..15].copy_from_slice(&radiance.map(f32::to_bits));
+                row[8..12].copy_from_slice(&factors.map(f32::to_bits));
             }
         }
     }
@@ -120,7 +121,7 @@ pub fn material_texture_array<'py>(
         .map(|p| crate::image_assets::decode(py, p).map(|img| img.map(Layer::new)))
         .collect::<PyResult<_>>()?;
     for row in &mut descriptors {
-        for id in &mut row[..6] {
+        for id in &mut row[..7] {
             if *id != 0 && images[*id as usize - 1].is_none() {
                 *id = 0;
             }

@@ -2,7 +2,7 @@ override TEXTURED: bool = true;
 @group(2) @binding(0) var material_images: texture_2d_array<f32>;
 @group(2) @binding(1) var material_sampler: sampler;
 @group(2) @binding(2) var<storage, read> materials: array<vec4u>;
-struct Recipe { images: vec4u, extra: vec4u, factors: vec4f }
+struct Recipe { images: vec4u, extra: vec4u, factors: vec4f, emission: vec4f }
 @group(2) @binding(3) var<storage, read> recipes: array<Recipe>;
 // GL uses display-referred colors; explicitly decode for the sRGB surface.
 struct Style { front: vec4f, back: vec4f, edge: vec4f, background: vec4f, sky: vec4f, ground: vec4f, profiles: vec4f, section_plane: vec4f, fade: vec4f, raster: vec4f, light: vec4f }
@@ -40,7 +40,7 @@ struct Out { @location(10) world: vec3f, @location(11) normal: vec3f, @location(
   let mat = materials[at+1u];
   o.back = unpack4x8unorm(mat.x); o.textures = mat.yz;
   if arrayLength(&recipes) > 1u {
-   o.recipe = select(vec2u(0u), mat.yz, vec2u(recipes[mat.y].extra.z, recipes[mat.z].extra.z) != vec2u(0u));
+   o.recipe = select(vec2u(0u), mat.yz, vec2u(recipes[mat.y].extra.w, recipes[mat.z].extra.w) != vec2u(0u));
    o.textures = vec2u(recipes[mat.y].images.x, recipes[mat.z].images.x);
   }
  }
@@ -62,7 +62,7 @@ fn pbr_light(r: Recipe, base: vec3f, normal: vec3f, world: vec3f, uv: vec2f,
   let t = unit(tangent - n * dot(n, tangent));
   let b = cross(n,t) * sign(dot(cross(n,t), (py*dx.x-px*dy.x)*sign(det)));
   let map = textureSampleGrad(material_images, material_sampler, uv, i32(r.images.y), dx, dy).rgb * 2. - 1.;
-  n = unit(n * map.z + r.factors.z * (t * map.x + b * map.y * select(1., -1., r.extra.w != 0u)));
+  n = unit(n * map.z + r.factors.z * (t * map.x + b * map.y * select(1., -1., (r.extra.w & 2u) != 0u)));
  }
  var orm = vec3f(1.);
  if r.images.z != 0u {
@@ -122,7 +122,18 @@ fn face_pixel(i: Out, facing: bool) -> Pixel {
  if recipe_id != 0u && camera.size.z < 2. && (i.decorated & 40u) == 0u {
   var base = c/max(i.shade,0.001);
   if tex != 0u { base *= base_factor; }
-  c = pbr_light(recipes[recipe_id], base, select(-i.normal,i.normal,facing), i.world, uv, uv_dx, uv_dy, px, py);
+  let recipe = recipes[recipe_id];
+  if (recipe.extra.w & 4u) != 0u {
+   c = pbr_light(recipe, base, select(-i.normal,i.normal,facing), i.world, uv, uv_dx, uv_dy, px, py);
+  }
+  if any(recipe.emission.rgb > vec3f(0.)) {
+   var emission = recipe.emission.rgb;
+   if recipe.extra.z != 0u {
+    emission *= linear(textureSampleGrad(material_images,material_sampler,uv,i32(recipe.extra.z),uv_dx,uv_dy).rgb);
+   }
+   let lit = linear(c) + emission;
+   c = select(12.92*lit,1.055*pow(lit,vec3f(1./2.4))-0.055,lit>vec3f(0.0031308));
+  }
  }
  if camera.size.z == 3. && opacity < 1. { c = vec3f(0.5); }
  // The selected task uses the pin accent (ui/tokens.rs), under selection dots.

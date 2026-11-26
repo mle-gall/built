@@ -45,6 +45,4 @@ Editor: the Library's material detail shows Emission (a colour well),
 Emission strength and an "Emission map…" slot in its Look section, for
 every material.
 
-Rendering: the viewport does not draw emission yet. It is stored,
-edited, exported and linked; the shading term is left for the renderer
-work, which owns the resident pack's per-material data.
+The viewport adds emission colour times strength to the lit surface in linear RGB. An emission map modulates that contribution using the base image mapping.

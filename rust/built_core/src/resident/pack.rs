@@ -446,14 +446,19 @@ pub fn pbr_entry<'py>(py: Python<'py>, base: &Obj<'py>, recipe: &Obj<'py>) -> Re
         let map = recipe.call_method1("get", (key,))?;
         if map.is_truthy()? { map.call_method1("get", ("path",)) } else { Ok(none(py)) }
     };
-    let images = PyTuple::new(py, [base.clone(), path("normal_map")?, path("orm_map")?, path("ao_map")?, path("roughness_map")?, path("metallic_map")?])?;
+    let images = PyTuple::new(py, [base.clone(), path("normal_map")?, path("orm_map")?, path("ao_map")?, path("roughness_map")?, path("metallic_map")?, path("emission_map")?])?;
     let factor = |key: &str, default: f64| -> PyResult<f64> {
         recipe.call_method1("get", (key, default))?.call_method0("__float__")?.extract()
     };
     let factors = (factor("metallic", 0.)?, factor("roughness", 1.)?, factor("normal_scale", 1.)?, factor("ao_strength", 1.)?);
     let normal = recipe.call_method1("get", ("normal_map",))?;
     let flip = normal.is_truthy()? && normal.call_method1("get", ("flip_y",))?.is_truthy()?;
-    py.import("built_core")?.getattr("PbrEntry")?.call1((images, flip, factors))
+    let emission: [f32; 3] = recipe.call_method1("get", ("emission", (0., 0., 0.)))?.extract()?;
+    let strength = factor("emission_strength", 0.)? as f32;
+    let radiance = PyTuple::new(py, emission.map(|v| v * strength))?;
+    // An explicitly empty legacy recipe still selects the default PBR surface.
+    let surface = recipe.len()? == 0 || crate::gltf_write::has_surface(recipe)?;
+    py.import("built_core")?.getattr("PbrEntry")?.call1((images, flip, factors, radiance, surface))
 }
 
 /// The resident scene of `scene`.
@@ -711,7 +716,7 @@ pub fn pack_scene<'py>(
 
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let py = m.py();
-    let entry = py.import("collections")?.call_method1("namedtuple", ("PbrEntry", ("images", "flip_y", "factors")))?;
+    let entry = py.import("collections")?.call_method1("namedtuple", ("PbrEntry", ("images", "flip_y", "factors", "radiance", "surface")))?;
     m.add("PbrEntry", entry)?;
     m.add_class::<PlacementState>()?;
     m.add_function(wrap_pyfunction!(baked_paint, m)?)?;
