@@ -6,7 +6,7 @@ use super::{kit::*, tokens::*};
 use egui::{pos2, vec2, Align2, Color32, Pos2, Rect, Sense, Stroke};
 
 /// The board, in points; the Qt host scales it to fit.
-const BOARD: egui::Vec2 = vec2(1280., 1330.);
+const BOARD: egui::Vec2 = vec2(1280., 1580.);
 /// The surfaces band at the bottom: large sheet, value field, atoms, toasts.
 const BAND_H: f32 = 206.;
 const STATES: [(&str, State); 6] = [
@@ -117,6 +117,9 @@ pub(super) struct Gallery {
     sheet_tab: usize,
     swatch: Color32,
     sheet_name: String,
+    sample_path: String,
+    sample_rgb: [u8; 3],
+    strip: super::tabs::Strip,
 }
 
 impl Default for Gallery {
@@ -139,6 +142,14 @@ impl Default for Gallery {
             sheet_tab: 0,
             swatch: SWATCH_FALLBACK,
             sheet_name: "Oak, oiled".into(),
+            sample_path: "/Applications/Blender.app/Contents/MacOS/Blender".into(),
+            sample_rgb: [96, 146, 180],
+            strip: {
+                let mut strip = super::tabs::Strip::default();
+                strip.tabs = ["Model A", "Model B"].into_iter().enumerate().map(|(i, name)|
+                    (i.to_string(), name.into(), i == 0, false, false, String::new(), String::new())).collect();
+                strip
+            },
         }
     }
 }
@@ -168,11 +179,9 @@ fn sub(ui: &egui::Ui, at: Pos2, name: &str) {
 }
 
 impl Gallery {
-    /// The Qt viewport shares its window with native panes. Fit the entire
-    /// reference board into the remaining space and map input into board points.
+    /// Fit the board width and map pointer input into board points. Height scrolls.
     pub(super) fn fit(raw: &mut egui::RawInput, screen: Rect) -> f32 {
         let zoom = (screen.width() / BOARD.x)
-            .min(screen.height() / BOARD.y)
             .clamp(0.01, 1.);
         if zoom < 1. {
             raw.screen_rect = Some(Rect::from_min_size(screen.min, screen.size() / zoom));
@@ -211,7 +220,46 @@ impl Gallery {
                     let w = board.max.x - x;
                     let y = self.molecules(ui, pos2(x, top), w);
                     self.organisms(ui, pos2(x, y + SPACE_S), w, board.max.y - BAND_H - SPACE_M);
-                    self.surfaces(ui, pos2(o.x, board.max.y - BAND_H), board.max.x - o.x);
+                    self.surfaces(ui, pos2(o.x, board.max.y - BAND_H), board.width());
+                    put(ui, Rect::from_min_size(pos2(o.x, board.max.y + SPACE_M), vec2(board.width(), 240.)), down(), |ui| {
+                        caption(ui, "Plugin controls and viewport chrome");
+                        ui.columns(3, |cols| {
+                            let controls = &mut cols[0];
+                            property_control(controls, "Executable", |ui| { path_field(ui, &mut self.sample_path); });
+                            property_control(controls, "Colour", |ui| { colour_well(ui, &mut self.sample_rgb); });
+                            property_control(controls, "Lens", |ui| { select(ui, "lens_sample", "35 mm", &["24 mm", "35 mm", "50 mm"]); });
+                            property_control(controls, "Render", |ui| progress_bar(ui, 0.6, 4.));
+                            table_row(controls, &["Entity".into(), "Count".into()], false, true);
+                            table_row(controls, &["Face".into(), "24".into()], true, false);
+                            let chrome = &mut cols[1];
+                            chrome.horizontal(|ui| {
+                                ui.set_height(super::TOP_H);
+                                let actions = self.strip.show(ui, ui.available_width());
+                                for action in actions {
+                                    if let Some(index) = action.strip_prefix("ptab:activate:").and_then(|s| s.parse::<usize>().ok()) {
+                                        for (i, tab) in self.strip.tabs.iter_mut().enumerate() { tab.2 = i == index; }
+                                    }
+                                }
+                            });
+                            super::context_menu::segment_row(chrome, "Intersect", &[
+                                ("model".into(),"Model".into(),String::new(),true,-1),
+                                ("selection".into(),"Selection".into(),String::new(),true,-1)]);
+                            glass(Surface::Bar).show(chrome, |ui| {
+                                ui.horizontal(|ui| {
+                                    label(ui, "Move");
+                                    super::item_button(ui, &(String::new(), "Copy  Alt".into(), String::new(), String::new(), 0, true), None);
+                                    ui.label(egui::RichText::new("Click to place").font(body()).color(DIM));
+                                });
+                            });
+                            let form = &mut cols[2];
+                            caption(form, "Make component");
+                            property_control(form, "Name", |ui| { ui.add(field(&mut self.sheet_name)); });
+                            form.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                sheet_button(ui, "Create", "↩", 1);
+                                sheet_button(ui, "Cancel", "esc", 0);
+                            });
+                        });
+                    });
                     if let Some(picker) = &mut self.font_picker {
                         if picker.popup(ctx, ctx.screen_rect().center_top() + vec2(0., SPACE_S)).is_some() { self.font_picker = None; }
                     }
@@ -842,6 +890,13 @@ mod coverage {
         out.sort();
         out.dedup();
         out
+    }
+
+    #[test]
+    fn a_short_window_scrolls_the_full_size_board() {
+        let mut raw = egui::RawInput::default();
+        let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1600., 800.));
+        assert_eq!(super::Gallery::fit(&mut raw, screen), 1.);
     }
 
     #[test]

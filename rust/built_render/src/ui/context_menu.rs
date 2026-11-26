@@ -147,7 +147,7 @@ fn divider(ui: &mut egui::Ui) {
 
 /// A family of verbs on one row: its name, then each verb as a segment
 /// sharing the rest of the width. Returns the verb clicked.
-fn segment_row(ui: &mut egui::Ui, family: &str, segs: &[Seg]) -> Option<String> {
+pub(super) fn segment_row(ui: &mut egui::Ui, family: &str, segs: &[Seg]) -> Option<String> {
     let (row, _) = ui.allocate_exact_size(vec2(ui.available_width(), ROW_H), Sense::hover());
     // A family ("Intersect") names the row and its segments are its
     // options, centred; without one ("Make group | Make component…") each
