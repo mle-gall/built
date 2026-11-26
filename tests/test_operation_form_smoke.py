@@ -323,8 +323,8 @@ def test_native_online_catalogue_places_the_credited_component(tmp_path):
     initial, saved = tmp_path / "empty.built", tmp_path / "placed.built"
     save_scene(Scene(), initial)
     steps = tmp_path / "commands"
-    steps.write_text("wait 600\nkey escape\nmenu library\nwait 450\nclick 174 135\nwait 250\n"
-                     "click 118 335\nwait 600\nstate\nkey enter\nwait 600\nstate\n"
+    steps.write_text("wait 600\nkey escape\nmenu library\nwait 450\nclick 260 135\nwait 250\n"
+                     "click 118 361\nwait 600\nstate\nkey enter\nwait 600\nstate\n"
                      f"click 525 540\nwait 300\nkey escape\nmenu save_to:{saved}\nwait 450\nquit\n")
     home = tmp_path / "home"
     home.mkdir()

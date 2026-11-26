@@ -1723,23 +1723,27 @@ impl LibrarySheet {
         if prov_id == "families" {
             let status = collections::status();
             if !status.is_empty() { content.call_method1("caption", (status,))?; }
-
         }
         for g in out.get_item("groups")?.try_iter()? {
             let g = g?;
             if g.get_item("caption")?.is_truthy()? {
                 content.call_method("caption", (g.get_item("caption")?,), Some(&[("right", g.get_item("right")?)].into_py_dict(py)?))?;
             }
-            content.call_method("rows", (g.get_item("tiles")?,), Some(&[("thumbs", true)].into_py_dict(py)?))?;
+            let items = g.get_item("tiles")?;
+            if has_target {
+                content.call_method("tiles", (items,), Some(&[("size", 96)].into_py_dict(py)?))?;
+            } else {
+                content.call_method("rows", (items,), Some(&[("thumbs", true)].into_py_dict(py)?))?;
+            }
         }
         for collection in &collections {
-                let scope = format!("s:{}",collection["source"].as_str().unwrap_or(""));
-                if st.get_item("scope")?.eq("s:all")? || st.get_item("scope")?.eq(scope)? {
-                    for report in collection["reports"].as_array().into_iter().flatten() {
-                        content.call_method1("text", (report.as_str().unwrap_or(""),))?;
-                    }
+            let scope = format!("s:{}", collection["source"].as_str().unwrap_or(""));
+            if st.get_item("scope")?.eq("s:all")? || st.get_item("scope")?.eq(scope)? {
+                for report in collection["reports"].as_array().into_iter().flatten() {
+                    content.call_method1("text", (report.as_str().unwrap_or(""),))?;
                 }
             }
+        }
         if !has_target && out.get_item("type_actions")?.is_truthy()? {
             let lctx = ctx_of(py, &ctx.getattr("win")?, &view)?;
             let mut acts = Vec::new();
