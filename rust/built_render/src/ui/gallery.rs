@@ -837,8 +837,8 @@ impl Gallery {
             ui.set_width(ui.available_width());
             ui.spacing_mut().item_spacing = vec2(SPACE_XS, 0.);
             ui.horizontal(|ui| {
-                dot(ui.painter(), ui.cursor().min + vec2(3., CONTROL_H / 2.), DONE);
-                ui.add_space(SPACE_M);
+                let (mark, ink) = notice_mark("success");
+                ui.colored_label(ink, mark);
                 ui.label(egui::RichText::new("Drawings exported").font(strong(TYPE_BODY)).color(INK));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     quiet(ui, "Show");
