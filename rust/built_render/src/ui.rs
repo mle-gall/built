@@ -830,7 +830,7 @@ impl Ui {
     /// fields has focus, or Escape while one of its popups is open.
     pub fn claims_key(&self, name: &str, mods: u8) -> bool {
         if self.gallery.is_some() || self.font_picker.is_some() { return true; }
-        if name == "Escape" && (self.menu_hits.len() > 1 || self.ctx_menu.is_some() || self.strip.menus_open() || self.egui_popup_open() || self.panels.data["terrain"].is_object()) { return true; }
+        if name == "Escape" && (self.activity_open || self.menu_hits.len() > 1 || self.ctx_menu.is_some() || self.strip.menus_open() || self.egui_popup_open() || self.panels.data["terrain"].is_object()) { return true; }
         // The large sheet owns every key while it is up (Python keeps the
         // window's ⌘ shortcuts, sheet_runtime.rs).
         if self.lsheet.open { return true; }
@@ -852,6 +852,10 @@ impl Ui {
         // The sheet's keys are answered in Python (Enter, Esc, ⌘D); none
         // reaches what is under it.
         if self.sheet.is_some() { return true; }
+        if name == "Escape" && self.activity_open && !self.cmd_open && self.dialog.is_none() {
+            if pressed { self.activity_open = false; }
+            return true;
+        }
         if name == "Escape" && self.menu_hits.len() > 1 {
             self.events.push(egui::Event::Key { key: egui::Key::Escape, physical_key: None, pressed, repeat: false, modifiers: mods_from(mods) });
             return true;
@@ -1331,7 +1335,7 @@ impl Ui {
     pub fn top_empty(&self, x: f32, y: f32) -> bool {
         let p = pos2(x, y);
         !self.menu_hits.iter().any(|r| r.contains(p)) && !self.dismissible_menu_open() && self.gallery.is_none() && y <= TOP_H && !self.top_groups.iter().any(|r| r.contains(p))
-            && !((!self.lsheet.open || !self.jobs.is_empty()) && self.ctx.memory(|m| m.area_rect(egui::Id::new("jobs"))).is_some_and(|r| (!self.jobs.is_empty() || self.activity_open) && r.contains(p)))
+            && !(self.ctx.memory(|m| m.area_rect(egui::Id::new("jobs"))).is_some_and(|r| (!self.jobs.is_empty() || self.activity_open) && r.contains(p)))
             && !(self.projects.is_none() && x < 86.0)
     }
 
@@ -2777,7 +2781,7 @@ impl Ui {
             self.large_sheet(ctx, screen);
             self.command_palette(ctx, screen);
             self.dialog_popup(ctx, screen);
-            if !sheet_up || !self.jobs.is_empty() { self.jobs_chip(ctx, screen); }
+            self.jobs_chip(ctx, screen);
             self.notices(ctx, screen);
             self.sheet_popup(ctx, screen);
             if let Some(picker) = &mut self.font_picker {
@@ -2803,7 +2807,7 @@ impl Ui {
                      ("head_menu", model && self.column.as_ref().is_some_and(|c| c.head_menu.is_some())),
                      ("prompt", model && self.column.as_ref().is_some_and(|c| c.prompt.is_some())),
                      ("terrain_profile", work && model && self.panels.data["terrain"].is_object()),
-                     ("jobs", !self.jobs.is_empty() || (!sheet_up && self.activity_open)),
+                     ("jobs", !self.jobs.is_empty() || self.activity_open),
                      ("notices", self.history.iter().any(|r| r.5 > 0.)),
                      ("dialog", self.dialog.is_some()),
                      ("tab_menu", self.strip.menu_open()),

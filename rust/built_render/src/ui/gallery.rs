@@ -605,7 +605,7 @@ impl Gallery {
             tag_swatch(ui, sample, None);
             ring(ui);
         });
-        // At most three transient results, the oldest fading.
+        // The three visible results use the same tone marks as the live stack.
         let tx = x + 280.;
         sub(ui, pos2(tx, y), "Toast stack");
         put(ui, Rect::from_min_size(pos2(tx, y + 18.), vec2(w - (tx - at.x), h - 18.)), down(), |ui| {
