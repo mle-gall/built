@@ -402,8 +402,10 @@ fn grown_capacity(current: usize, needed: usize) -> usize {
     current.max(needed.max(1).next_power_of_two())
 }
 
+const TASK_REVIEW_FLAG: u32 = 256;
+
 fn merge_instance_flags(old: u32, incoming: u32) -> u32 {
-    (old & (6 | 64 | 128)) | (incoming & 9)
+    (old & (6 | 64 | 128 | TASK_REVIEW_FLAG)) | (incoming & 9)
 }
 
 fn texture(d: &wgpu::Device, w: u32, h: u32, format: wgpu::TextureFormat) -> wgpu::Texture {
@@ -1472,24 +1474,27 @@ impl Renderer {
 
     /// `hovered_ids`: every row of the placement under the cursor (a
     /// component's nested rows light up together, as one object).
-    #[pyo3(signature = (selected_ids, hovered_ids=Vec::new()))]
+    #[pyo3(signature = (selected_ids, hovered_ids=Vec::new(), review_ids=Vec::new()))]
     fn set_highlight(
         &mut self,
         selected_ids: Vec<usize>,
         hovered_ids: Vec<usize>,
+        review_ids: Vec<usize>,
     ) -> PyResult<()> {
         if let Some(s) = &mut self.scene {
             if selected_ids
                 .iter()
-                .chain(hovered_ids.iter())
+                .chain(hovered_ids.iter()).chain(review_ids.iter())
                 .any(|&i| i >= s.flags.len())
             {
                 return Err(PyValueError::new_err("instance id out of range"));
             }
             let selected: std::collections::HashSet<_> = selected_ids.into_iter().collect();
             let hovered: std::collections::HashSet<_> = hovered_ids.into_iter().collect();
+            let review: std::collections::HashSet<_> = review_ids.into_iter().collect();
             for (i, flag) in s.flags.iter_mut().enumerate() {
-                let next = (*flag & !6)
+                let next = (*flag & !(6 | TASK_REVIEW_FLAG))
+                    | if review.contains(&i) { TASK_REVIEW_FLAG } else { 0 }
                     | if selected.contains(&i) { 2 } else { 0 }
                     | if hovered.contains(&i) { 4 } else { 0 };
                 if next != *flag {
@@ -2924,7 +2929,7 @@ impl Renderer {
     }
     /// Pinned tasks where the model shows them: (guid, x, y, selected,
     /// needs attention) in window points.
-    fn ui_set_task_pins(&mut self, pins: Vec<(String, f32, f32, bool, bool)>) {
+    fn ui_set_task_pins(&mut self, pins: Vec<(String, f32, f32, bool, bool, usize)>) {
         if let Some(ui) = self.ui.as_mut() { ui.set_task_pins(pins); }
     }
 
@@ -3810,6 +3815,7 @@ mod update_tests {
 
     #[test]
     fn row_updates_preserve_selection_and_hover() {
+        assert_eq!(merge_instance_flags(TASK_REVIEW_FLAG, 9), TASK_REVIEW_FLAG | 9);
         assert_eq!(merge_instance_flags(6, 1), 7);
         assert_eq!(merge_instance_flags(7, 0), 6);
         assert_eq!(merge_instance_flags(0, 6), 0);

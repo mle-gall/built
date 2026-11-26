@@ -362,3 +362,15 @@ def test_locked_tag_group_provides_a_reference_without_accepting_selection(view)
     assert view.tools.pick_group(*px) is None
     center = view._world_to_pixel(QVector3D(5, 4, 0))
     assert view.tools.pick_face_any(*center) == (None, None)
+
+
+def test_review_overlay_clears_independently_of_selection_and_hover(view):
+    highlights = []
+    view.renderer.set_highlight = lambda *args: highlights.append(args)
+    view.scene.select([view.scene.groups[0]])
+    view._task_rows = (0,)
+    view.sync_selection()
+    assert highlights[-1] == ([0], [], (0,))
+    view._task_rows = ()
+    view.sync_selection()
+    assert highlights[-1] == ([0], [], ())

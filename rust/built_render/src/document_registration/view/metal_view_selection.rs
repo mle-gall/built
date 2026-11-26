@@ -314,16 +314,11 @@ fn sync_selection<'py>(a: &Args<'py>) -> Reply<'py> {
     let np = py.import("numpy")?;
     let (tools, packed) = (view.getattr("tools")?, view.getattr("packed")?);
     let selected = view.getattr("scene")?.getattr("selection")?;
-    let mut hover = match attr(&view, "hover_rows")? {
+    let hover = match attr(&view, "hover_rows")? {
         rows if rows.is_truthy()? => positional(&rows)?,
         _ => PyTuple::empty(py),
     };
-    // A selected agent task lights the elements it changed (tasks_host.rs).
-    if let Some(rows) = crate::tasks_host::preview_rows(&view)? {
-        let mut lit: Vec<Obj<'_>> = hover.iter().collect();
-        lit.extend(rows.try_iter()?.collect::<PyResult<Vec<_>>>()?);
-        hover = PyTuple::new(py, lit)?;
-    }
+    let review = crate::tasks_host::preview_rows(&view)?.unwrap_or_else(|| PyTuple::empty(py).into_any());
     let faces = PyList::empty(py);
     for entity in selected.try_iter()? {
         let entity = entity?;
@@ -353,7 +348,7 @@ fn sync_selection<'py>(a: &Args<'py>) -> Reply<'py> {
         PyTuple::empty(py)
     };
     let identities = py.get_type::<pyo3::types::PyFrozenSet>().call1((py.import("builtins")?.call_method1("map", (&identity, &selected))?,))?;
-    let signature = (identities, &hover, identity.call1((&hovered,))?, id(&packed), id(&placement), eye, &mode, box_key).into_bound_py_any(py)?;
+    let signature = (identities, &hover, &review, identity.call1((&hovered,))?, id(&packed), id(&placement), eye, &mode, box_key).into_bound_py_any(py)?;
     if signature.eq(view.getattr("_selection_signature")?)? {
         return Ok(none(py));
     }
@@ -373,7 +368,7 @@ fn sync_selection<'py>(a: &Args<'py>) -> Reply<'py> {
             indices.append(row)?;
         }
     }
-    renderer.call_method1("set_highlight", (indices, PyList::new(py, hover.iter())?))?;
+    renderer.call_method1("set_highlight", (indices, PyList::new(py, hover.iter())?, review))?;
     if renderer.hasattr("set_face_marks")? {
         let mut marks = parity.call_method1("face_marks", (&view, &faces))?;
         if !hover_face.is_none() {

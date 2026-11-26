@@ -21,7 +21,7 @@ pub struct TaskPane {
     pub requesting: Option<String>,
     pub reply: String,
     /// (guid, x, y, selected, needs attention) in window points.
-    pub pins: Vec<(String, f32, f32, bool, bool)>,
+    pub pins: Vec<(String, f32, f32, bool, bool, usize)>,
 }
 
 fn text<'a>(v: &'a Value, key: &str) -> &'a str {
@@ -41,7 +41,7 @@ fn changes_text(n: u64) -> String {
 }
 
 impl Ui {
-    pub fn set_task_pins(&mut self, pins: Vec<(String, f32, f32, bool, bool)>) {
+    pub fn set_task_pins(&mut self, pins: Vec<(String, f32, f32, bool, bool, usize)>) {
         self.tasks.pins = pins;
     }
 
@@ -318,12 +318,12 @@ impl Ui {
             .order(egui::Order::Middle)
             .interactable(true)
             .show(ctx, |ui| {
-                for (guid, x, y, selected, attention) in pins {
+                for (guid, x, y, selected, attention, count) in pins {
                     let foot = pos2(x, y);
                     if foot.x > right - 12.0 || foot.y < TOP_H || foot.y > screen.bottom() - BOT_H {
                         continue;
                     }
-                    if kit::task_pin(ui, foot, selected, attention).on_hover_text("Open the task").clicked() {
+                    if kit::task_pin(ui, foot, selected, attention, count, right).on_hover_text("Open the task").clicked() {
                         self.destination = Destination::Tasks;
                         self.actions.push(format!("task:select:{guid}"));
                     }

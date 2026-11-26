@@ -2083,7 +2083,7 @@ pub fn task_row(ui: &mut egui::Ui, title: &str, meta_text: &str, state: &str, to
 
 /// A task's 3D pin where the model shows it: a marker on a short stem,
 /// the accent when its task is selected, amber when it needs the user.
-pub fn task_pin(ui: &mut egui::Ui, foot: Pos2, selected: bool, attention: bool) -> egui::Response {
+pub fn task_pin(ui: &mut egui::Ui, foot: Pos2, selected: bool, attention: bool, changed: usize, right: f32) -> egui::Response {
     let head = Rect::from_center_size(foot - vec2(0.0, 18.0), vec2(22.0, 22.0));
     let resp = ui.interact(head.union(Rect::from_center_size(foot, vec2(4.0, 4.0))), ui.id().with(("task pin", foot.x as i32, foot.y as i32)), Sense::click());
     let edge = if selected { ACCENT } else if attention { WARN } else { INK_2 };
@@ -2092,6 +2092,19 @@ pub fn task_pin(ui: &mut egui::Ui, foot: Pos2, selected: bool, attention: bool) 
     painter.circle_filled(foot, 2.5, edge);
     painter.rect_filled(head, CornerRadius::same(R_ROW), if resp.hovered() { CARD_HOVER } else { WELL });
     painter.rect_stroke(head, CornerRadius::same(R_ROW), Stroke::new(if selected { MARKER_W } else { 1.0 }, edge), egui::StrokeKind::Inside);
+    if selected && changed > 0 {
+        let label = painter.layout_no_wrap(format!("{changed} changed"), meta(), INK);
+        let size = vec2(label.size().x + 2.0 * SPACE_S, head.height());
+        let left = if head.right() + SPACE_XS + size.x <= right {
+            head.right() + SPACE_XS
+        } else {
+            head.left() - SPACE_XS - size.x
+        };
+        let chip = Rect::from_min_size(pos2(left, head.top()), size);
+        painter.rect_filled(chip, CornerRadius::same(R_ROW), WELL);
+        painter.rect_stroke(chip, CornerRadius::same(R_ROW), Stroke::new(1.0_f32, ACCENT), egui::StrokeKind::Inside);
+        centered(painter, chip, label, INK);
+    }
     // A push pin: head, body, needle.
     let c = head.center();
     painter.line_segment([c + vec2(-4.0, -5.0), c + vec2(4.0, -5.0)], Stroke::new(1.4_f32, INK));

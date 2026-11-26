@@ -32,7 +32,7 @@ struct Out { @location(10) world: vec3f, @location(11) normal: vec3f, @location(
  if camera.size.z == 2 || camera.size.z == 3 { o.color = style.front.rgb; }
  if (i.info.w >> 24u) != 0u { o.color = unpack4x8unorm(i.info.w).rgb; }
 
- o.decorated = select(0u,16u,dot(a,cross(b,c)) < 0.) | (i.info.z & 70u) | select(0u,32u,(i.info.z & 8u) != 0u) | select(0u,8u,(i.info.w >> 24u) != 0u);
+ o.decorated = select(0u,16u,dot(a,cross(b,c)) < 0.) | (i.info.z & (70u | 256u)) | select(0u,32u,(i.info.z & 8u) != 0u) | select(0u,8u,(i.info.w >> 24u) != 0u);
  let header = materials[i.info.x];
  if header.z > 0u {
   let at = header.y + (vertex-header.x)*2u;
@@ -125,6 +125,8 @@ fn face_pixel(i: Out, facing: bool) -> Pixel {
   c = pbr_light(recipes[recipe_id], base, select(-i.normal,i.normal,facing), i.world, uv, uv_dx, uv_dy, px, py);
  }
  if camera.size.z == 3. && opacity < 1. { c = vec3f(0.5); }
+ // The selected task uses the pin accent (ui/tokens.rs), under selection dots.
+ if (i.decorated & 256u) != 0u { c = mix(c, unpack4x8unorm(0xffffa56au).rgb * i.shade, 0.62); }
  if (i.decorated & 6u) != 0u && style.raster.y == 0. && all((vec2f(i.position.x, camera.size.y - i.position.y) % vec2f(6.)) < vec2f(2.)) {
   let surface = c / max(i.shade, 0.001);
   let high = max(surface.r,max(surface.g,surface.b));
@@ -148,7 +150,7 @@ fn face_pixel(i: Out, facing: bool) -> Pixel {
 // vertex of every edge quad was most of what the GPU stored for a frame of
 // a large model.
 struct EdgeOut { @builtin(position) position: vec4f, @location(1) @interpolate(flat) id: u32, @location(3) @interpolate(flat) decorated: u32, @location(7) @interpolate(linear) distance: f32, @location(8) section_distance: f32 }
-fn edge_pixel(i: EdgeOut) -> Pixel { if i.section_distance < 0. { discard; } var p: Pixel; var c = style.edge.rgb; if (i.decorated & 2u) != 0u { c = vec3f(0.95,0.45,0.16); } else if (i.decorated & 4u) != 0u { c = vec3f(0.30,0.55,0.95); } if (i.decorated & 64u) != 0u { c = mix(c, style.fade.rgb, style.fade.a); } p.color=vec4f(c,1); p.id=i.id; return p; }
+fn edge_pixel(i: EdgeOut) -> Pixel { if i.section_distance < 0. { discard; } var p: Pixel; var c = style.edge.rgb; if (i.decorated & 2u) != 0u { c = vec3f(0.95,0.45,0.16); } else if (i.decorated & 256u) != 0u { c = unpack4x8unorm(0xffffa56au).rgb; } else if (i.decorated & 4u) != 0u { c = vec3f(0.30,0.55,0.95); } if (i.decorated & 64u) != 0u { c = mix(c, style.fade.rgb, style.fade.a); } p.color=vec4f(c,1); p.id=i.id; return p; }
 
 @fragment fn color_fs(i: Out, @builtin(front_facing) front: bool) -> @location(0) vec4f {
  let p = face_pixel(i,front);

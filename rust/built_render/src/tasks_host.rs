@@ -857,7 +857,7 @@ pub fn tasks_before_frame(view: &Obj<'_>, win: &Obj<'_>) -> PyResult<()> {
         let points = PyList::empty(py);
         for t in all.topics.iter().filter(|t| t.pin.is_some() && (!t.state.settled() || t.guid == chosen)) {
             let p = t.pin.expect("filtered");
-            points.append((t.guid.clone(), p[0], p[1], p[2], t.guid == chosen, t.state.needs_attention()))?;
+            points.append((t.guid.clone(), p[0], p[1], p[2], t.guid == chosen, t.state.needs_attention(), t.changes.len()))?;
         }
         view.setattr("_task_pin_points", points)?;
     }
@@ -870,9 +870,9 @@ pub fn tasks_before_frame(view: &Obj<'_>, win: &Obj<'_>) -> PyResult<()> {
     if let (true, Some(to_pixel)) = (points.is_truthy()?, opt(view, "_world_to_pixel")) {
         let vector = py.import("built_core")?.getattr("Vec3")?;
         for p in points.try_iter()? {
-            let (guid, x, y, z, chosen, attention): (String, f64, f64, f64, bool, bool) = p?.extract()?;
+            let (guid, x, y, z, chosen, attention, count): (String, f64, f64, f64, bool, bool, usize) = p?.extract()?;
             if let Ok((px, py_)) = to_pixel.call1((vector.call1((x, y, z))?,))?.extract::<(f64, f64)>() {
-                pins.append((guid, px as f32, py_ as f32, chosen, attention))?;
+                pins.append((guid, px as f32, py_ as f32, chosen, attention, count))?;
             }
         }
     }
@@ -884,8 +884,7 @@ pub fn tasks_before_frame(view: &Obj<'_>, win: &Obj<'_>) -> PyResult<()> {
     Ok(())
 }
 
-/// The viewport rows lit by the selected task (metal_view_selection.rs
-/// adds them to the hover set).
+/// The viewport rows tinted for the selected task.
 pub fn preview_rows<'py>(view: &Obj<'py>) -> PyResult<Option<Obj<'py>>> {
     Ok(opt(view, "_task_rows").filter(|r| r.is_truthy().unwrap_or(false)))
 }

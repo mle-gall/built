@@ -883,7 +883,7 @@ impl Gallery {
         task_row(ui, "Check sheet callouts", "Built-in assistant · no change", "Working", "dim", false);
         status_chip(ui, "Done", task_tone("ok"));
         let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 34.), egui::Sense::hover());
-        task_pin(ui, r.center_bottom() - vec2(0., 2.), true, false);
+        task_pin(ui, r.center_bottom() - vec2(0., 2.), true, false, 3, r.right());
         code_block(ui, "claude mcp add built -- \"/Applications/Built.app/Contents/MacOS/Built\" --mcp");
     }
 }
