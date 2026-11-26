@@ -143,6 +143,34 @@ impl ViewportToolHost {
                 )?;
                 Value::Null
             }
+            "family_wall" => {
+                let Some(pair) = hit(view, "pick_face_placement", args(arg)?)? else { return Ok(Some(Value::Null)); };
+                let face = pair.get_item(0)?;
+                let placement = pair.get_item(1)?;
+                let owner = placement.getattr_opt("source_occurrence")?.unwrap_or_else(|| placement.clone());
+                let record = owner.getattr_opt("ifc")?.filter(|r| !r.is_none());
+                let wall = record.and_then(|r| r.get_item("class").ok()).and_then(|v| v.extract::<String>().ok());
+                if face.is_none() || !matches!(wall.as_deref(), Some("IfcWall" | "IfcWallStandardCase"))
+                    || owner.getattr_opt("locked")?.is_some_and(|v| v.is_truthy().unwrap_or(true)) {
+                    return Ok(Some(Value::Null));
+                }
+                let matrix = placement.getattr_opt("xform")?.filter(|m| !m.is_none());
+                let (center, normal) = local_plane(&face, matrix.as_ref())?;
+                if normal.z.abs() > 0.001 { return Ok(Some(Value::Null)); }
+                let ray = view.call_method1("_pixel_to_ray", args::<(f64,f64)>(arg)?)?;
+                let origin = xyz(&ray.get_item(0)?)?;
+                let dir = xyz(&ray.get_item(1)?)?;
+                let dot = dir.dot(normal);
+                if dot.abs() < 1e-8 { return Ok(Some(Value::Null)); }
+                let point = origin + dir * (center-origin).dot(normal)/dot;
+                let mut corners = Vec::new();
+                for v in face.getattr("vertices")?.try_iter()? {
+                    let v = v?;
+                    let p = match matrix.as_ref() { Some(m) => m.call_method1("map", (v,))?, None => v };
+                    corners.push(xyz(&p)?.to_array());
+                }
+                json!({"uid":owner.getattr("uid")?.extract::<String>()?, "point":point.to_array(),"normal":normal.to_array(),"corners":corners})
+            }
             "section_normal" | "placement_normal" => {
                 let method = if verb == "placement_normal" && view.hasattr("pick_face_placement")? {
                     "pick_face_placement"

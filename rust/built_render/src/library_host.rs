@@ -1199,6 +1199,35 @@ impl FamiliesProvider {
     #[classattr]
     fn label() -> &'static str { "Families" }
 
+    #[pyo3(signature = (ctx, verb, item, _arg=""))]
+    fn run(&self, py: Python<'_>, ctx: &Bound<'_, PyAny>, verb: &str, item: &Bound<'_, PyAny>, _arg: &str) -> PyResult<()> {
+        if verb != "apply" { return Ok(()); }
+        let file: std::path::PathBuf = item.get_item("file")?.extract()?;
+        let scene = ctx.getattr("scene")?;
+        let cache = scene.getattr("__dict__")?.call_method1("setdefault", ("_library_family_templates", PyDict::new(py)))?;
+        let index: usize = item.get_item("index")?.extract()?;
+        let key = (&file, index);
+        let mut template = cache.call_method1("get", (key,))?;
+        let category: String = item.get_item("family_category")?.extract()?;
+        let class = match category.to_lowercase().as_str() {
+            "door" | "doors" => Some("IfcDoor"), "window" | "windows" => Some("IfcWindow"), _ => None,
+        };
+        if template.is_none() {
+            let payload = json(py)?.call_method1("loads", (std::fs::read_to_string(&file)?,))?;
+            payload.set_item("types", PyList::new(py, [payload.get_item("types")?.get_item(index)?])?)?;
+            template = py.import("built_core")?.call_method1("rfa_library_definitions", (payload,))?.get_item(0)?;
+            template.getattr("ext")?.set_item("library_family_type", item.get_item("key")?)?;
+            if let Some(class) = class {
+                template.getattr("ifc")?.set_item("class", class)?;
+                template.getattr("ext")?.set_item("library_host", "wall")?;
+            }
+            cache.set_item(key, &template)?;
+        }
+        let group = py.import("built_core.kept_components")?.call_method1("place_copy", (template,))?;
+        ctx.getattr("win")?.call_method1("_start_place", (group, class.is_some()))?;
+        Ok(())
+    }
+
     fn items<'py>(&self, py: Python<'py>, _ctx: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
         let rows: Vec<_> = collections::manifests()?.into_iter()
             .flat_map(|mut manifest| manifest["items"].take().as_array().cloned().unwrap_or_default()).collect();
@@ -1636,7 +1665,12 @@ impl LibrarySheet {
         } else {
             slf.call_method0("close_catalogue")?;
         }
-        let content = sheet.call_method("content", (), Some(out.get_item("content")?.cast::<PyDict>()?))?;
+        let content_spec = out.get_item("content")?;
+        if let Some(c) = collections.iter().find(|c| st.get_item("scope").is_ok_and(|v|
+            v.eq(format!("s:{}", c["source"].as_str().unwrap_or(""))).unwrap_or(false))) {
+            if !searching { content_spec.set_item("title", c["name"].as_str().unwrap_or(""))?; }
+        }
+        let content = sheet.call_method("content", (), Some(content_spec.cast::<PyDict>()?))?;
         if prov_id == "families" {
             let status = collections::status();
             if !status.is_empty() { content.call_method1("caption", (status,))?; }

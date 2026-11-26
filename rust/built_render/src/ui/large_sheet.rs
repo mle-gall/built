@@ -793,8 +793,14 @@ impl Draw<'_> {
                 self.st.scroll_to = false;
             }
             if !clip.intersects(r) { continue; }
-            let sense = if it.id.is_empty() { Sense::hover() } else { Sense::click() };
+            let placeable = it.kind == "placeable";
+            let sense = if placeable { Sense::click_and_drag() } else if it.id.is_empty() { Sense::hover() } else { Sense::click() };
             let resp = ui.interact(r, ui.id().with(("lsrow", &it.id, i)), sense);
+            if placeable && resp.drag_stopped() && resp.interact_pointer_pos().is_some_and(|pos| {
+                self.st.rect.is_some_and(|sheet| !sheet.contains(pos))
+            }) {
+                self.out.push(format!("open{SEP}{}", it.id));
+            }
             let st = if focused || (it.on && !self.focusable) { State::On }
                      else if it.id.is_empty() || (it.fixed && self.focusable) { State::Idle }
                      else { state_of(&resp, false, true) };

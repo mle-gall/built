@@ -450,7 +450,7 @@ fn tile(t: &str, e: &Item, current: Option<&str>, thumbs: &mut Vec<String>) -> V
     } else {
         String::new()
     };
-    prune(json!({"id": e.key, "label": shown, "sub": sub, "icon": icon(e, thumbs), "hex": e.hex.clone().unwrap_or_default(),
+    prune(json!({"id": e.key, "kind": if matches!(t, "components" | "families") { "placeable" } else { "" }, "label": shown, "sub": sub, "icon": icon(e, thumbs), "hex": e.hex.clone().unwrap_or_default(),
                  "menu": menu, "on": current.is_some_and(|c| c == e.name), "tip": e.name}))
 }
 
