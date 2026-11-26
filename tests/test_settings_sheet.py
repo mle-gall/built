@@ -162,6 +162,16 @@ def test_search_lists_hits_from_every_section_with_their_names(win):
     assert sheet["search"]["text"] == "" and sheet["search"]["force"]
 
 
+def test_search_finds_english_shadow_label_with_incomplete_saved_language(win):
+    from built_core import i18n
+    preferences().setValue("language", "fr")
+    i18n.set_language(i18n.resolve_language("fr"))
+    win.open_preferences()
+    frame(win)
+    sheet = act(win, "search", "shadow")
+    assert fields(sheet)["soft_shadows"][2] == "Soft sun shadows"
+
+
 def test_search_finds_this_model_rows_and_commands(win):
     win.open_preferences()
     frame(win)
@@ -195,23 +205,23 @@ def test_a_built_setting_applies_at_once(win):
     assert int(gs.value("undo_steps")) == 37
 
 
-def test_a_change_for_the_next_start_says_so(win):
-    from built_core.i18n import available_languages, current_language, set_language
-    running = current_language()
-    others = [c for c in available_languages() if c != running]
-    if not others:
-        pytest.skip("one language only")
+def test_a_change_for_the_next_start_says_so(win, monkeypatch):
+    from built_core import i18n
+    running = i18n.current_language()
+    # Exercise a future qualifying catalogue through the real form and applier.
+    monkeypatch.setattr(i18n, "language_coverage", lambda: {"en": (100, 100), "de": (100, 100)})
+    monkeypatch.setattr(i18n, "resolve_language", lambda code: running if code == "system" else code)
     win.open_preferences()
     sheet = frame(win)
     row = fields(sheet)["language"]
     from built_core.i18n import LANGUAGE_NAMES
-    sheet = act(win, "v", "language", row[7].index(LANGUAGE_NAMES.get(others[0], others[0])))
-    assert preferences().value("language") == others[0]
+    sheet = act(win, "v", "language", row[7].index(LANGUAGE_NAMES["de"]))
+    assert preferences().value("language") == "de"
     notes = [b["text"] for b in sheet["content"]["blocks"] if b["kind"] == "text" and b.get("tone") == "warn"]
     assert notes and "Restart Built" in notes[0] and "Language" in notes[0]
     # Back to the running language: nothing waits for a restart any more.
     sheet = act(win, "v", "language", 0)            # «Same as the system»
-    set_language(running)
+    i18n.set_language(running)
 
 
 def test_restore_defaults_asks_then_restores(win, monkeypatch):

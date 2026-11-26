@@ -236,6 +236,14 @@ impl SettingsSheet {
         }
         let c = sheet.call_method1("content", (tr(py, &title)?, sub))?;
         Self::top(slf, &c)?;
+        if sid == "general" {
+            let lang = py.import("built_core.i18n")?;
+            let saved = envb.getattr("st")?.call_method1("value", ("language",))?;
+            if saved.is_truthy()? && !saved.eq("system")? && !lang.call_method1("resolve_language", (&saved,))?.eq(&saved)? {
+                let name = crate::settings_rows::language_name(&lang.getattr("LANGUAGE_NAMES")?, &saved)?;
+                c.call_method1("text", (trf(py, "Using English because your saved language ({name}) is unavailable.", &[("name", s(py, &name))])?,))?;
+            }
+        }
         if sid == "registry" {
             let scene = envb.getattr("scene")?;
             let mut editor = slf.getattr("registry")?;

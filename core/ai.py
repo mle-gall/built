@@ -71,15 +71,15 @@ def _check_scene_lists(scene) -> None:
     from built_core.group import Group
     from built_core.layers import Layer
     for attr, cls, hint in (
-            ("layers", Layer, "Layer('nombre') (una CAPA/etiqueta)"),
+            ("layers", Layer, "Layer('name') (a layer/tag)"),
             ("groups", Group, "Group(mesh, name=...)"),
             ("compositions", Composicion,
-             "sheet('nombre') (una LÁMINA del compositor)")):
+             "sheet('name') (a layout sheet)")):
         for item in getattr(scene, attr, None) or ():
             if not isinstance(item, cls):
                 raise TypeError(
-                    f"scene.{attr} solo admite {cls.__name__}: se añadió "
-                    f"{type(item).__name__} {item!r:.40}. Usa {hint}.")
+                    f"scene.{attr} requires {cls.__name__} objects. Found "
+                    f"{type(item).__name__} {item!r:.40}. Use {hint}.")
 
 
 def _recipe_helpers(scene) -> dict:
@@ -257,7 +257,7 @@ def _recipe_helpers(scene) -> dict:
 
     def house(width=6.0, depth=4.0, wall_height=3.0, thickness=0.2,
               roof="gable", ridge_height=None, overhang=0.4, ridge="x",
-              doors=(), windows=(), origin=(0.0, 0.0), name="Casa",
+              doors=(), windows=(), origin=(0.0, 0.0), name="House",
               wall_color=(0.90, 0.87, 0.80, 1.0),
               roof_color=(0.55, 0.27, 0.20, 1.0),
               door_color=(0.45, 0.28, 0.15, 1.0),
@@ -302,7 +302,7 @@ def _recipe_helpers(scene) -> dict:
                 seg = math.hypot(b[0] - a[0], b[1] - a[1])
                 peak = (seg / 2.0, rh)
             _wall_mesh(walls_mesh, a, b, H, t, ops[side], 0.0, peak)
-        out = [_finish(walls_mesh, wall_color, f"{name} · Paredes")]
+        out = [_finish(walls_mesh, wall_color, f"{name} · Walls")]
         # A floor slab just inside the walls (a hair short of them, so no
         # two faces share a plane), or the house reads hollow from below.
         floor = Mesh()
@@ -310,7 +310,7 @@ def _recipe_helpers(scene) -> dict:
         _prism_mesh(floor, [QVector3D(x0 + e, y0 + e, 0.0), QVector3D(x1 - e, y0 + e, 0.0),
                             QVector3D(x1 - e, y1 - e, 0.0), QVector3D(x0 + e, y1 - e, 0.0)],
                     (0.0, 0.0, 0.1))
-        out.append(_finish(floor, (0.75, 0.72, 0.66, 1.0), f"{name} · Piso"))
+        out.append(_finish(floor, (0.75, 0.72, 0.66, 1.0), f"{name} · Floor"))
         # Carpentry: a door leaf and a glass pane in every opening.
         carp = Mesh()
         for side, off, sill, w, h, kind in leaves:
@@ -333,7 +333,7 @@ def _recipe_helpers(scene) -> dict:
                 f.attrs["color"] = tuple(glass_color)
                 f.attrs["opacity"] = 0.4
         if carp.faces:
-            out.append(_finish(carp, None, f"{name} · Carpintería"))
+            out.append(_finish(carp, None, f"{name} · Joinery"))
         # Roof.
         roof_mesh = Mesh()
         ov = float(overhang)
@@ -375,7 +375,7 @@ def _recipe_helpers(scene) -> dict:
                        QVector3D(x1 + ov, y0 - ov, ze), QVector3D(x1 + ov, y0 - ov, ze - dz),
                        QVector3D(xc, y0 - ov, H + rh - dz), QVector3D(x0 - ov, y0 - ov, ze - dz)]
                 _prism_mesh(roof_mesh, sec, (0.0, y1 - y0 + 2 * ov, 0.0))
-        out.append(_finish(roof_mesh, roof_color, f"{name} · Techo"))
+        out.append(_finish(roof_mesh, roof_color, f"{name} · Roof"))
         return out
 
     def sheet(name=None, paper="A3", landscape=True):
@@ -384,7 +384,7 @@ def _recipe_helpers(scene) -> dict:
         pick it up on their own."""
         from built_core.composition import Composicion
         comps = scene.compositions
-        c = Composicion(name=name or f"Lámina {len(comps) + 1}",
+        c = Composicion(name=name or f"Sheet {len(comps) + 1}",
                         paper=paper, landscape=landscape)
         c.frames.append(c.default_frame())
         comps.append(c)
@@ -675,7 +675,7 @@ def _session_id() -> str:
 
 
 #: What an empty turn is sent as to Anthropic, which refuses empty text.
-EMPTY_TURN = "(respuesta vacía)"
+EMPTY_TURN = "(empty reply)"
 
 
 def build_request(provider: str, model: str, api_key: str,
@@ -799,10 +799,10 @@ def _urlopen(url: str, headers: dict, payload: bytes | None = None,
             reason = f"HTTP {exc.code}: {detail or exc.reason}"
             if exc.code not in RETRY_STATUSES or attempt >= retries:
                 if attempt:
-                    reason += f" (tras {attempt + 1} intentos)"
+                    reason += f" (after {attempt + 1} attempts)"
                 raise RuntimeError(reason)
         except urllib.error.URLError as exc:
-            reason = f"sin conexión: {exc.reason}"
+            reason = f"Connection failed: {exc.reason}"
             if attempt >= retries:
                 raise RuntimeError(reason)
         wait = RETRY_BACKOFF[min(attempt, len(RETRY_BACKOFF) - 1)]

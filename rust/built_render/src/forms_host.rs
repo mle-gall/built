@@ -73,6 +73,7 @@ pub struct Field {
     label: Py<PyAny>,
     value: Py<PyAny>,
     options: Py<PyAny>,
+    choice_limit: Option<usize>,
     lo: f64,
     hi: f64,
     decimals: i64,
@@ -113,7 +114,7 @@ fn normalized<'py>(py: Python<'py>, options: &Bound<'py, PyAny>) -> PyResult<Bou
 #[pymethods]
 impl Field {
     #[new]
-    #[pyo3(signature = (fid, kind, label=None, value=None, *, options=None, lo=0.0, hi=0.0, decimals=0, suffix=None, tip=None,
+    #[pyo3(signature = (fid, kind, label=None, value=None, *, options=None, choice_limit=None, lo=0.0, hi=0.0, decimals=0, suffix=None, tip=None,
                         enabled=None, visible=None, focus=false, multiline=false, password=false, full=false, commit_on_blur=false,
                         row_label=None, note=None, pick=None, filters=None, fmt=None))]
     #[allow(clippy::too_many_arguments)]
@@ -124,6 +125,7 @@ impl Field {
         label: Option<Py<PyAny>>,
         value: Option<Py<PyAny>>,
         options: Option<Bound<'_, PyAny>>,
+        choice_limit: Option<usize>,
         lo: f64,
         hi: f64,
         decimals: i64,
@@ -154,6 +156,7 @@ impl Field {
             label: label.unwrap_or_else(e),
             value: value.unwrap_or_else(|| py.None()),
             options,
+            choice_limit,
             lo,
             hi,
             decimals,
@@ -465,7 +468,8 @@ impl Form {
                 let Some(i) = py.import("builtins")?.getattr("float")?.call1((raw,)).ok().and_then(|v| v.extract::<f64>().ok()) else { return Ok(()) };
                 let keys: Vec<Bound<'_, PyAny>> = f.call_method0("keys")?.extract()?;
                 let i = i.trunc() as i64;
-                if i < 0 || i as usize >= keys.len() {
+                let limit: Option<usize> = f.getattr("choice_limit")?.extract()?;
+                if i < 0 || i as usize >= keys.len() || limit.is_some_and(|n| i as usize >= n) {
                     return Ok(());
                 }
                 keys[i as usize].clone()
@@ -601,8 +605,10 @@ impl Form {
                             break;
                         }
                     }
+                    let limit: Option<usize> = f.getattr("choice_limit")?.extract()?;
+                    let flags = if limit.is_some() { flags | crate::ui::dialog::LIMIT_CHOICES as i64 } else { flags };
                     let labels = PyList::new(py, f.getattr("options")?.try_iter()?.map(|o| o?.get_item(1)).collect::<PyResult<Vec<_>>>()?)?;
-                    PyTuple::new(py, [id, s(py, &k), label, s(py, ""), obj(py, at as f64)?.into_bound(py), obj(py, 0.0)?.into_bound(py), obj(py, keys.len() as f64)?.into_bound(py), labels.into_any(), obj(py, flags)?.into_bound(py), tip])?
+                    PyTuple::new(py, [id, s(py, &k), label, s(py, ""), obj(py, at as f64)?.into_bound(py), obj(py, 0.0)?.into_bound(py), obj(py, limit.unwrap_or(keys.len()) as f64)?.into_bound(py), labels.into_any(), obj(py, flags)?.into_bound(py), tip])?
                 }
                 "slider" => {
                     let fmt = f.getattr("fmt")?;

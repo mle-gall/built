@@ -21,7 +21,7 @@ def script_font_for(lang, installed, platform=None):
 
 
 def apply_widget_language(app, lang):
-    i18n.set_language(lang)
+    i18n.set_language(i18n.resolve_language(lang))
 
 
 def chrome_font(lang=None, platform=None, font_dirs=None):
