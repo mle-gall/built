@@ -95,7 +95,7 @@ def test_file_extension_and_exact_import_group_beat_fuzzy_label_hits():
     assert _rank("import", "Vider le cache des textures importées…", family)[0] == family
 
 
-def test_french_palette_indexes_source_labels_and_scene_menu(tmp_path):
+def test_incomplete_french_preference_indexes_english_labels_and_scene_menu(tmp_path):
     from built_render import Host
     from built_core import NativeSettings, i18n
     profile = str(tmp_path / "profile")
@@ -103,6 +103,7 @@ def test_french_palette_indexes_source_labels_and_scene_menu(tmp_path):
     original = i18n.current_language()
     host = Host(0, 900, 600, 1., settings=profile)
     try:
+        assert query(host.window, "orient faces")[0][0][:2] == ("Orient Faces", "Edit")
         for term, key in (("sect", "tool:section"), ("organise", "view:organise-scenes"),
                           ("edit style", "view:form-style"), ("shadows and sun", "view:form-shadows")):
             assert cs.search(host.window, term)[0].key == key
@@ -164,11 +165,13 @@ def test_a_plugin_can_hide_its_action_after_the_native_search_opens(win):
     assert query(win, "frobnic")[0]
 
 
-def test_search_finds_translated_names_and_paths_by_either_language(tmp_path):
+def test_search_finds_translated_names_and_paths_by_either_language(tmp_path, monkeypatch):
     from built_render import Host
     from built_core import i18n
     from built_core import NativeSettings
     profile = str(tmp_path / "profile")
+    # Exercise the bilingual index for a future qualifying Spanish catalogue.
+    monkeypatch.setattr(i18n, "resolve_language", lambda choice: "es")
     NativeSettings(profile).setValue("language", "es")
     original = i18n.current_language()
     host = Host(0, 900, 600, 1., settings=profile)
