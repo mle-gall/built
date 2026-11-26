@@ -2227,10 +2227,38 @@ impl Ui {
                         return;
                     }
                     if col.mode.is_empty() && col.lens == Lens::Drawing && (col.styles.active() || (col.inspector_title.is_empty() && selection.is_none())) && col.styles.draw(ui, &mut actions) { return; }
+                    let inspected_tag = (col.lens == Lens::Filing && col.proposal_available && selection.is_none())
+                        .then(|| col.highlighted.as_deref()).flatten()
+                        .filter(|key| key.starts_with("preview-tag:"))
+                        .and_then(|key| col.nodes.iter().find(|n| n.key == key));
+                    if !col.inspector_title.is_empty() && inspected_tag.is_none() {
+                        // Title and selection count on one line, painted (a
+                        // Label would widen the panel to fit a long name).
+                        let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 22.0), Sense::hover());
+                        let mut right = r.max.x - 8.0;
+                        if let Some((summary, _)) = &selection {
+                            let g = ui.painter().layout_no_wrap(summary.clone(), meta(), FAINT);
+                            right -= g.size().x;
+                            ui.painter().galley(pos2(right, r.center().y - g.size().y / 2.0), g, FAINT);
+                            right -= 10.0;
+                        }
+                        let mut job = egui::text::LayoutJob::single_section(col.inspector_title.clone(), egui::TextFormat {
+                            font_id: title(), color: INK, ..Default::default() });
+                        job.wrap.max_width = (right - r.min.x - 8.0).max(40.0);
+                        job.wrap.max_rows = 1;
+                        job.wrap.break_anywhere = true;
+                        let g = ui.painter().layout_job(job);
+                        ui.painter().galley(pos2(r.min.x + 8.0, r.center().y - g.size().y / 2.0), g, INK);
+                        ui.add_space(SPACE_XS);
+                    }
+                    ui.spacing_mut().scroll = egui::style::ScrollStyle {
+                        foreground_color: true,
+                        floating_width: SPACE_XS,
+                        ..egui::style::ScrollStyle::thin()
+                    };
                     egui::ScrollArea::vertical().id_salt("inspector").auto_shrink([false, false]).show(ui, |ui| {
                         ui.spacing_mut().item_spacing = vec2(0.0, SPACE_XS);
                         if col.lens == Lens::Export {
-                            if !col.inspector_title.is_empty() { ui.strong(&col.inspector_title); }
                             kit::identity_card(ui, &col.identity, &mut actions);
                             export::checklist(ui,&self.panels.data["readiness"],col.export_focus.0.as_deref(),&col.export_focus.1,&mut actions);
                             self.panels.assembly_problems(ui, &mut cmds);
@@ -2247,11 +2275,11 @@ impl Ui {
                             }
                             return;
                         }
-                        if col.lens==Lens::Filing && col.proposal_available && selection.is_none() {
-                            if let Some(tag)=col.nodes.iter().find(|n|n.key.starts_with("preview-tag:") && col.highlighted.as_ref()==Some(&n.key)) {
-                                if let Some(at)=kit::tag_inspector(ui,&tag.key,&tag.name,tag.count,&tag.cells,&mut actions){col.kind_menu=Some((tag.key.clone(),at));}
-                                return;
+                        if let Some(tag) = inspected_tag {
+                            if let Some(at) = kit::tag_inspector(ui, &tag.key, &tag.name, tag.count, &tag.cells, &mut actions) {
+                                col.kind_menu = Some((tag.key.clone(), at));
                             }
+                            return;
                         }
                         if col.inspector_title.is_empty() {
                             if col.lens==Lens::Drawing { empty_state(ui,"Select tags to edit their drawing style"); return; }
@@ -2264,25 +2292,6 @@ impl Ui {
                             }
                             if col.overview.links>0 {kit::prop_row(ui,"Linked files",&col.overview.links.to_string());}
                             return;
-                        }
-                        {
-                            // Title and selection count on one line, painted (a
-                            // Label would widen the panel to fit a long name).
-                            let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 22.0), Sense::hover());
-                            let mut right = r.max.x - 8.0;
-                            if let Some((summary, _)) = &selection {
-                                let g = ui.painter().layout_no_wrap(summary.clone(), meta(), FAINT);
-                                right -= g.size().x;
-                                ui.painter().galley(pos2(right, r.center().y - g.size().y / 2.0), g, FAINT);
-                                right -= 10.0;
-                            }
-                            let mut job = egui::text::LayoutJob::single_section(col.inspector_title.clone(), egui::TextFormat {
-                                font_id: title(), color: INK, ..Default::default() });
-                            job.wrap.max_width = (right - r.min.x - 8.0).max(40.0);
-                            job.wrap.max_rows = 1;
-                            job.wrap.break_anywhere = true;
-                            let g = ui.painter().layout_job(job);
-                            ui.painter().galley(pos2(r.min.x + 8.0, r.center().y - g.size().y / 2.0), g, INK);
                         }
                         kit::identity_card(ui, &col.identity, &mut actions);
                         if col.mode.is_empty() {
@@ -2322,7 +2331,7 @@ impl Ui {
                         for (title, rows) in &sections {
                             if title == "Actions" { continue; }
                             if title == "Export details" && native_export { continue; }
-                            if title.starts_with("Export") {
+                            if title.starts_with("Export") || matches!(title.as_str(), "What it needs" | "Solid") {
                                 ui.add_space(SPACE_XS);
                                 kit::disclosure(ui, title, title, false,
                                     |ui| inspector_rows(ui, rows, &mut col.edits, &mut actions));
@@ -3698,4 +3707,23 @@ fn browser_rename_uses_focused_row_selection_and_header_scope() {
         if empty { assert!(ui.take_actions().is_empty()); }
         else { assert_eq!(ui.take_actions(), [action]); }
     }
+}
+
+#[test]
+fn scrolling_inspector_details_keeps_the_title_visible() {
+    let Some(mut ui) = test_chrome() else { return };
+    ui.ctx = test_context();
+    ui.set_tree(Vec::new(), 0);
+    ui.set_inspector("Selected group".into(), vec![("Item".into(),
+        (0..70).map(|i| (format!("Field {i}"), format!("Value {i}"))).collect())]);
+    for _ in 0..3 { tree_frame(&mut ui, vec![]); }
+    let before = tree_frame(&mut ui, vec![]);
+    let at = before["Value 0"];
+    tree_frame(&mut ui, vec![egui::Event::PointerMoved(at), egui::Event::MouseWheel {
+        unit: egui::MouseWheelUnit::Point, delta: vec2(0., -450.), modifiers: Default::default()
+    }]);
+    for _ in 0..6 { tree_frame(&mut ui, vec![]); }
+    let after = tree_frame(&mut ui, vec![]);
+    assert_eq!(before["Selected group"], after["Selected group"]);
+    assert!(!after.contains_key("Value 0"));
 }
