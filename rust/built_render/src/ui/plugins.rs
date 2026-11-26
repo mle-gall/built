@@ -706,6 +706,34 @@ mod tests {
     }
 
     #[test]
+    fn console_actions_share_the_header_and_run_aligns_with_the_prompt() {
+        let ctx = super::super::test_context();
+        let mut panel = descriptor(json!({"kind":"log","id":"log","lines":["output"]}));
+        panel["slot"] = json!("utility");
+        let items = panel["sections"][0]["items"].as_array_mut().unwrap();
+        items.push(json!({"kind":"console","id":"prompt","history":[]}));
+        items.push(json!({"kind":"button","id":"help","label":"Help"}));
+        let mut panels = Panels::default();
+        panels.set(&panel.to_string()).unwrap();
+        let mut positions = HashMap::new();
+        for _ in 0..3 {
+            let raw = egui::RawInput { screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(640., 200.))), ..Default::default() };
+            let frame = ctx.run(raw, |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| panels.draw(ui, "doc1-demo", &mut Vec::new()));
+            });
+            for clipped in frame.shapes {
+                if let egui::Shape::Text(text) = clipped.shape {
+                    positions.insert(text.galley.text().to_owned(), text.pos + text.galley.size() / 2.);
+                }
+            }
+        }
+        assert!((positions["Help"].y - positions["Close"].y).abs() < 4.);
+        assert!((positions[">>>"].y - positions["Run"].y).abs() < BUTTON_H / 2., "{positions:?}");
+        assert!(positions["Run"].x > positions[">>>"].x);
+        assert!(positions["Run"].y - positions["output"].y > 80.);
+    }
+
+    #[test]
     fn table_hit_area_spans_the_last_column_and_returns_the_row_key() {
         let ctx = super::super::test_context();
         let mut rows = Panels::default();
