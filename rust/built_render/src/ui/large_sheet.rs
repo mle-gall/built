@@ -532,8 +532,12 @@ impl Draw<'_> {
                 "picture" => {
                     let w = ui.available_width();
                     let h = if b.size > 0.0 { b.size } else { (w * 0.45).clamp(80.0, 260.0) };
-                    let (r, _) = ui.allocate_exact_size(vec2(w, h), Sense::hover());
-                    picture(ui, r, self.icons.get(&b.icon), &b.hex, 10);
+                    let tex = self.icons.get(&b.icon);
+                    let width = if b.tone == "fit" {
+                        tex.map_or(w, |t| w.min(h * t.aspect_ratio()))
+                    } else { w };
+                    let (r, _) = ui.allocate_exact_size(vec2(width, h), Sense::hover());
+                    picture(ui, r, tex, &b.hex, 10);
                     ui.add_space(SPACE_M);
                 }
                 "svg_preview" => {

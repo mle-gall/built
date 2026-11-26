@@ -3,7 +3,7 @@ use crate::ui::dialog::{Field, DISABLED};
 use pyo3::{exceptions::PyValueError, prelude::*};
 use serde_json::{json, Value};
 
-const PRESETS: [&str; 5] = ["metric", "centimetric", "millimetric", "imperial", "custom"];
+pub(crate) const PRESETS: [&str; 5] = ["metric", "centimetric", "millimetric", "imperial", "custom"];
 const TITLES: [&str; 5] = [
     "Metres",
     "Centimetres",
@@ -319,13 +319,6 @@ impl UnitsDraft {
                 "check",
                 t("Also use for new documents")?,
                 self.for_new.into(),
-                vec![],
-            ));
-            rows.push(field(
-                "ask_again",
-                "check",
-                t("Ask which units to use at startup")?,
-                self.ask_again.into(),
                 vec![],
             ));
         } else {

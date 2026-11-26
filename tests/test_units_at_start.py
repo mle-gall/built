@@ -113,16 +113,11 @@ def test_dont_show_again(win):
     assert chrome_forms.current(win) is None
 
 
-def test_preferences_turn_it_back_on(win):
-    from tests.units_chrome import edit_unit, units_row
-    from built_render.settings_sheet import Env
-    units.set_ask_at_start(False)
-    assert not units_row(win, "ask_start").value(Env(win))
-    edit_unit(win, "ask_start", 1)
-    edit_unit(win, "for_new", 0)
-    assert units.ask_at_start() is True
-    row, _ = choose(win, 0)
-    assert row[4] == 0
+def test_settings_offer_new_document_defaults_without_a_startup_prompt(win):
+    from built_render.settings_sheet import Env, _units
+    fields = {row.id for _, _, rows in _units(Env(win)) for row in rows}
+    assert "u_for_new" in fields
+    assert "u_ask_start" not in fields
 
 
 def test_a_document_already_open_is_not_asked_about(win, tmp_path):

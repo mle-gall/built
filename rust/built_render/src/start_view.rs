@@ -444,7 +444,7 @@ impl<'a> View<'a> {
         if c.thumb.is_empty() {
             blocks.push(block("text", json!({"text":"No saved preview","tone":"faint"})));
         } else {
-            blocks.push(block("picture", json!({"icon":c.thumb, "size":144.0})));
+            blocks.push(block("picture", json!({"icon":c.thumb, "size":180.0, "tone":"fit"})));
         }
         let units = c.units.clone().unwrap_or_else(|| m.text("units"));
         let rows = json!([

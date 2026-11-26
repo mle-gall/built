@@ -1121,7 +1121,7 @@ fn from_template(win: &Bound<'_, PyAny>, tid: &str) -> PyResult<()> {
 }
 
 fn unit_profile(py: Python<'_>, index: usize) -> PyResult<Option<Bound<'_, PyAny>>> {
-    let keys = ["metric", "centimetric", "millimetric", "imperial"];
+    let keys = &crate::units_start::PRESETS[..4];
     keys.get(index).map(|key| py.import("built_core.units")?.getattr("PROFILES")?.get_item(*key)).transpose()
 }
 

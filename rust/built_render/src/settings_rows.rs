@@ -916,10 +916,6 @@ pub fn _units<'py>(env: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyList>> {
             let model = units_draft(&env)?;
             let n: i64 = py.import("builtins")?.getattr("int")?.call1((value,))?.extract()?;
             model.call_method1("receive", (key, n.to_string()))?;
-            if key.eq("ask_again")? {
-                units.call_method1("set_ask_at_start", (model.getattr("ask_again")?,))?;
-                return Ok(none(py));
-            }
             let chosen = py.import("json")?.call_method1("loads", (model.call_method0("settings")?,))?;
             let apply = apply(py)?;
             if key.eq("for_new")? {
@@ -942,7 +938,7 @@ pub fn _units<'py>(env: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyList>> {
         let (key, kind, label, text, value) = (r.get_item(0)?, r.get_item(1)?, r.get_item(2)?, r.get_item(3)?, r.get_item(4)?);
         let (options, flags, tip) = (r.get_item(7)?, r.get_item(8)?.extract::<i64>()?, r.get_item(9)?);
         let key_s: String = key.extract()?;
-        let rid = if key_s == "ask_again" { "u_ask_start".to_owned() } else { format!("u_{key_s}") };
+        let rid = format!("u_{key_s}");
         let val = if kind.eq("text")? { text.unbind() } else { py.import("builtins")?.getattr("int")?.call1((value,))?.unbind() };
         let get = func(py, move |py, _a| Ok(val.clone_ref(py)))?;
         let put = if kind.eq("text")? { none(py) } else { put(key.clone().unbind())? };
@@ -952,7 +948,7 @@ pub fn _units<'py>(env: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyList>> {
             ("enabled", obj(py, flags & disabled == 0)?),
             ("tip", tip.unbind()),
         ])?;
-        if key_s == "for_new" || key_s == "ask_again" { beyond.append(row)? } else { shown.append(row)? }
+        if key_s == "for_new" { beyond.append(row)? } else { shown.append(row)? }
     }
     PyList::new(py, [
         PyTuple::new(py, [s(py, "units"), s(py, &tr(py, "Units of this model")?), shown.into_any()])?,

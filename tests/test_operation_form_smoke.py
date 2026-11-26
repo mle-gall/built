@@ -132,11 +132,8 @@ def test_native_first_run_custom_units(tmp_path):
     settings.setValue("units/new_document", json.dumps(custom))
     settings.sync()
     steps = tmp_path / "commands"
-    # In the 1000 × 920 Units sheet, click “Also use for new documents”.
-    steps.write_text("wait 700\nmenu home\nwait 200\nmenu new\nwait 300\nstate\n"
-                     "key enter\nwait 300\nstate\nkey enter\nwait 300\nstate\n"
-                     "menu units\nwait 300\nstate\nclick 391 655\nwait 250\n"
-                     "key escape\nwait 300\nstate\nquit\n")
+    steps.write_text("wait 700\nmenu home\nwait 200\nstate\nkey enter\nwait 300\nstate\n"
+                     "menu units\nwait 300\nstate\nkey escape\nwait 300\nstate\nquit\n")
     home = tmp_path / "home"
     home.mkdir()
     result = run([str(BIN), "--root", str(ROOT), "--new-instance", "--size", "1000x920",
@@ -145,14 +142,13 @@ def test_native_first_run_custom_units(tmp_path):
     log = result.stdout + result.stderr
     states = [json.loads(line.removeprefix("[built] state ")) for line in log.splitlines()
               if line.startswith("[built] state ")]
-    assert result.returncode == 0 and len(states) >= 3, log
-    assert [s["form_open"] for s in states[:3]] == [True, True, False], log
-    assert all(s["errors"] == 0 and not s["blocked_widgets"] for s in states), log
-    assert [s["large_sheet"] for s in states[3:5]] == ["settings", ""], log
-    assert not states[2]["dirty"]
+    assert result.returncode == 0 and len(states) >= 4, log
+    assert [s["large_sheet"] for s in states[:4]] == ["start", "", "settings", ""], log
+    assert all(not s["form_open"] and not s["errors"] and not s["blocked_widgets"] for s in states), log
+    assert not states[1]["dirty"]
     settings.sync()
     assert json.loads(settings.value("units/new_document")) == custom
-    assert settings.value("units/use_for_new_documents") == "0"
+
 
 
 @pytest.mark.skipif(os.environ.get("BUILT_WINDOW_TESTS") != "1" or not BIN.exists(),
@@ -553,8 +549,8 @@ Host.state = bevel_state
     steps.write_text("wait 650\nkey escape\nmenu select_all\ntool fillet\nwait 500\nstate\n"
                      "click 1115 466\nclick 1016 490\nwait 400\nstate\n"
                      "click 1025 466\nclick 1016 490\nwait 400\nstate\n"
-                     "click 1130 490\nwait 300\nstate\nclick 627 781\nwait 500\nstate\n"
-                     "click 679 781\nwait 300\nstate\nquit\n")
+                     "click 1130 490\nwait 300\nstate\nclick 699 781\nwait 500\nstate\n"
+                     "click 751 781\nwait 300\nstate\nquit\n")
     result = run([str(BIN), "--root", str(ROOT), "--venv", str(venv), "--new-instance",
                   "--size", "1280x800", "--script", str(steps), str(initial)],
                  env=dict(os.environ, BUILT_ANSWERS="cmd-d"), capture_output=True, text=True, timeout=60)

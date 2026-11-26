@@ -10,7 +10,7 @@
   "general": [
     ["look", "Look", [
       {"id": "language", "kind": "choice", "label": "Language", "restart": "Language", "tip": "Takes effect at the next start."},
-      {"id": "hover_picture", "kind": "check", "label": "Show a picture of the project on hover over its tab", "default": true}
+      {"id": "hover_picture", "kind": "check", "label": "Show a picture of the model on hover over its tab", "default": true}
     ]],
     ["files", "Files and undo", [
       {"id": "autosave", "kind": "check", "label": "Auto-save", "default": true},
