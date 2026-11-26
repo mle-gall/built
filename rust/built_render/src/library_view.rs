@@ -8,6 +8,7 @@
 //! browsing state (`Browse`), and draws what comes back onto the sheet; it
 //! keeps the thumbnails, the online catalogue and what
 //! the verbs do.
+pub(crate) mod facets;
 use pyo3::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -51,6 +52,10 @@ pub struct Item {
     pub thumb: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub file: Option<String>,
+    pub classes: Vec<String>,
+    pub collection: String,
+    pub files: Vec<String>,
+    pub explicit_class: String,
     #[serde(deserialize_with = "lenient")]
     pub verbs: Vec<String>,
 }
@@ -65,6 +70,7 @@ impl Item {
 #[serde(default)]
 pub struct Browse {
     pub sort: String,
+    pub group: String,
     pub facet: String,
     pub filter: String,
     pub scope: String,
@@ -456,7 +462,8 @@ fn tile(t: &str, e: &Item, current: Option<&str>, thumbs: &mut Vec<String>, labe
     };
     let host = e.defaults.iter().find(|r| r.0 == "Host").map(|r| &r.1);
     SheetItem {
-        id: e.key.clone(), right: host.cloned().unwrap_or_default(), label: shown, sub,
+        id: e.key.clone(), right: if t=="components" {if matches!(e.source.as_str(),"model"|"linked") {e.uses.to_string()} else {"—".into()}} else {host.cloned().unwrap_or_default()}, label: shown, sub: if t=="components"{facets::class(e).into()}else{sub},
+        component_source: if t=="components" {facets::source(e).into()} else {String::new()},
         kind: if matches!(t, "components" | "families") { "placeable".into() } else { String::new() },
         icon: icon(e, thumbs), hex: e.hex.clone().unwrap_or_default(), menu,
         on: current.is_some_and(|c| c == e.name), tip: e.name.clone(), fold: -1, ..Default::default()
@@ -482,6 +489,7 @@ pub(crate) fn detail(inp: &Input, e: &Item, thumbs: &mut Vec<String>) -> Vec<Val
         return out;
     }
     if inp.kind == "components" {
+        out.push(block("kv", json!({"rows":[["IFC class", facets::class(e), ""],["Source", facets::source(e), ""]]})));
         return out;
     }
     let buttons = |list: Vec<Value>, align: &str| block("buttons", json!({"buttons": list, "align": align}));
@@ -553,8 +561,12 @@ pub(crate) fn sheet_rows(inp: &Input, mut native: Option<&mut RowGroups>) -> Val
         options.push(verb("-", "", "", 0));
         options.extend(FACETS.iter().map(|(i, l)| verb(i, l, "", i64::from(*i == facet))));
     }
+    if t=="components" { options[1]["label"]=json!("Copies"); }
+    let label=if t=="components" && st.sort=="used" {"Copies"}else{label};
     let sort = json!({"id": "sort", "label": format!("Sort: {label}"), "on": st.sort, "options": options});
-    let mut sides = side_rows(&inp.items, st);
+    let faceted = t == "components" && st.scope != "s:online";
+    let index = faceted.then(|| facets::index(&inp.items, st));
+    let mut sides = if faceted {Vec::new()} else {side_rows(&inp.items, st)};
     if t == "families" { sides.retain(|r| matches!(r.0.as_str(), "s:all" | "s:mine")); }
     let mut scope = if st.scope.is_empty() { "s:model".to_owned() } else { st.scope.clone() };
     let online = t == "components" && scope == "s:online";
@@ -573,11 +585,14 @@ pub(crate) fn sheet_rows(inp: &Input, mut native: Option<&mut RowGroups>) -> Val
         }
         item
     }).collect();
-    let browse = Browse { scope: scope.clone(), sort: st.sort.clone(), facet: st.facet.clone(), filter: st.filter.clone(),
+    let browse = Browse { group: st.group.clone(), scope: scope.clone(), sort: st.sort.clone(), facet: st.facet.clone(), filter: st.filter.clone(),
                           fold: st.fold.clone(), recent: st.recent.clone(), cursor: None };
-    let groups = groups_for(&inp.items, &browse);
+    let tokens = index.as_ref().map(|i|i.tokens.clone());
+    let (side,groups) = index.map(|i|(i.side,i.groups)).unwrap_or_else(||(side,groups_for(&inp.items, &browse)));
     let shown: Vec<&Item> = groups.iter().flat_map(|g| g.2.iter().copied()).collect();
-    let content = if search {
+    let content = if faceted {
+        json!({"title":format!("{} definitions · {} excluded",shown.len(),inp.items.len()-shown.len()),"empty":"No matching definitions."})
+    } else if search {
         json!({"title": format!("“{}”", st.filter.trim()), "sub": format!("{} found", shown.len()), "empty": "Nothing matches."})
     } else {
         let n = in_scope(&inp.items, &scope, &st.recent).len();
@@ -594,7 +609,7 @@ pub(crate) fn sheet_rows(inp: &Input, mut native: Option<&mut RowGroups>) -> Val
             Vec::new()
         } else {
             tiles.map(|it| prune(json!({"id": it.id, "right": it.right, "kind": it.kind, "label": it.label,
-                "sub": it.sub, "icon": it.icon, "hex": it.hex, "menu": it.menu, "on": it.on, "tip": it.tip}))).collect()
+                "sub": it.sub, "component_source":it.component_source, "icon": it.icon, "hex": it.hex, "menu": it.menu, "on": it.on, "tip": it.tip}))).collect()
         };
         json!({"caption": cap, "right": sub, "tiles": wire})
     }).collect();
@@ -605,8 +620,8 @@ pub(crate) fn sheet_rows(inp: &Input, mut native: Option<&mut RowGroups>) -> Val
     };
     let blocks = cursor.as_deref().and_then(|k| inp.items.iter().find(|e| e.key == k))
         .map(|e| detail(inp, e, &mut thumbs)).unwrap_or_default();
-    json!({"scope": scope, "online": online, "searching": search, "search": format!("Search all {t}"), "sort": sort,
-           "side": side, "content": content, "groups": groups, "type_actions": !search && scope.starts_with("s:model"),
+    json!({"scope": if faceted {"s:all"} else {&scope}, "tokens":tokens, "matches":faceted.then(||shown.iter().map(|e|&e.key).collect::<Vec<_>>()), "online": online, "searching": search, "search": format!("Search all {t}"), "sort": sort,
+           "side": side, "content": content, "groups": groups, "type_actions": faceted || (!search && scope.starts_with("s:model")),
            "cursor": cursor, "detail": blocks, "thumbs": thumbs})
 }
 
