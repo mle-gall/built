@@ -106,9 +106,10 @@ def test_window_input_answers_from_winit(host):
     assert window_input.modifiers(host.viewport) == Qt.ShiftModifier
 
 
-def test_rail_matches_classic_groups_and_dispatches(host):
+def test_rail_matches_classic_groups_and_dispatches(host, monkeypatch):
+    import json
     from unittest.mock import Mock
-    from built_render import wgpu_library
+    from built_render import chrome_sheet, wgpu_library
     from views import wgpu_ui
 
     host.open(FIXTURE)
@@ -127,7 +128,21 @@ def test_rail_matches_classic_groups_and_dispatches(host):
         view.renderer = None
     for group in expected:
         for key in group:
-            if key not in actions:
+            if key == "north":
+                previous = host.viewport.active_tool
+                with monkeypatch.context() as patch:
+                    patch.setattr(chrome_sheet, "_view", lambda _: view)
+                    view.renderer = Mock()
+                    try:
+                        win._tool_actions[key].trigger()
+                        chrome_sheet.before_frame(view, win)
+                        frame, = view.renderer.ui_set_large_sheet.call_args.args
+                        assert json.loads(frame)["id"] == "site-placement"
+                        assert host.viewport.active_tool is previous
+                        chrome_sheet.action(win, chrome_sheet.SEP.join(("site-placement", "verb", "site_cancel")))
+                    finally:
+                        view.renderer = None
+            elif key not in actions:
                 win._tool_actions[key].trigger()
                 assert host.viewport.active_tool is win._tools[key]
     view._ui_palette_runs["eyedropper"]()
