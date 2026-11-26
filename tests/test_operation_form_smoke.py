@@ -550,9 +550,9 @@ Host.state = bevel_state
 """)
     steps = tmp_path / "steps"
     steps.write_text("wait 650\nkey escape\nmenu select_all\ntool fillet\nwait 500\nstate\n"
-                     "click 1115 466\nclick 1016 490\nwait 400\nstate\n"
-                     "click 1025 466\nclick 1016 490\nwait 400\nstate\n"
-                     "click 1130 490\nwait 300\nstate\nclick 627 781\nwait 500\nstate\n"
+                     "click 1079 466\nclick 980 490\nwait 400\nstate\n"
+                     "click 989 466\nclick 980 490\nwait 400\nstate\n"
+                     "click 1094 490\nwait 300\nstate\nclick 627 781\nwait 500\nstate\n"
                      "click 679 781\nwait 300\nstate\nquit\n")
     result = run([str(BIN), "--root", str(ROOT), "--venv", str(venv), "--new-instance",
                   "--size", "1280x800", "--script", str(steps), str(initial)],
@@ -662,12 +662,12 @@ type 40+2
 key enter cmd
 wait 350
 state
-click 933 591
+click 897 591
 wait 220
 menu fixture-preview
 wait 500
 state
-click 933 591
+click 897 591
 wait 280
 quit
 """)

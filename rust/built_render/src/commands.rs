@@ -675,6 +675,9 @@ pub fn command_description(label: &str, key: &str) -> Option<&'static str> {
         "Save a Copy as Built (.igz)" => "Write a copy of this project in the Built file format.",
         "Terrain profile" => "Inspect ground elevations along a path through the model.",
         _ => match key {
+            "view:sidebar_project" => "Browse the Project tree and inspect the selection.",
+            "view:sidebar_tasks" => "Open agent reviews and questions.",
+            "view:sidebar_deliveries" | "menu:delivery_export" => "Check and run the model’s saved deliveries.",
             "menu:about" => "The version, the authors and the licence of Built.",
             "menu:animation_settings" => "Set the travel and pause times for saved scenes.",
             "menu:animation_video" => "Export a movie of the saved scenes.",
