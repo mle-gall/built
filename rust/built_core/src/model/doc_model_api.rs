@@ -447,19 +447,117 @@ fn stored<'py>(node: &Obj<'py>, key: &Obj<'py>, value: &Obj<'py>) -> PyResult<()
     Ok(())
 }
 
+/// What each suspect was last written back as: `id → (anchor, path,
+/// copy)`. A suspect that something else still holds is never promoted, so
+/// every boundary used to convert and patch it whole again, unchanged (a
+/// project tree's folder table, read once per linked placement, made opening
+/// a model with many links quadratic). It is sent again only when its place
+/// or its value differs from what was sent.
+static SENT: PyOnceLock<Py<PyDict>> = PyOnceLock::new();
+
+/// How many flushes ran (`full`: every suspect, `node`: one node's), and
+/// how many suspects were converted and sent: `_flush_stats()`.
+static STATS: std::sync::Mutex<[u64; 3]> = std::sync::Mutex::new([0; 3]);
+
+fn sent(py: Python<'_>) -> PyResult<&Bound<'_, PyDict>> {
+    Ok(SENT.get_or_try_init(py, || -> PyResult<_> { Ok(PyDict::new(py).unbind()) })?.bind(py))
+}
+
+fn forget<'py>(suspect: &Bound<'py, PyDict>, sid: &Obj<'py>) -> PyResult<()> {
+    suspect.del_item(sid)?;
+    let s = sent(suspect.py())?;
+    if s.contains(sid)? {
+        s.del_item(sid)?;
+    }
+    Ok(())
+}
+
+/// `a` and `b` equal as document values: containers item by item, every
+/// leaf of the same type and `==` (so `1` and `1.0` differ, and a NaN is
+/// never equal: it is sent again, as before).
+fn same_value(a: &Obj<'_>, b: &Obj<'_>) -> PyResult<bool> {
+    if let (Ok(da), Ok(db)) = (a.cast::<PyDict>(), b.cast::<PyDict>()) {
+        if da.len() != db.len() {
+            return Ok(false);
+        }
+        for (k, va) in da.iter() {
+            match db.get_item(&k)? {
+                Some(vb) if same_value(&va, &vb)? => {}
+                _ => return Ok(false),
+            }
+        }
+        return Ok(true);
+    }
+    if let (Ok(la), Ok(lb)) = (a.cast::<PyList>(), b.cast::<PyList>()) {
+        if la.len() != lb.len() {
+            return Ok(false);
+        }
+        for (va, vb) in la.iter().zip(lb.iter()) {
+            if !same_value(&va, &vb)? {
+                return Ok(false);
+            }
+        }
+        return Ok(true);
+    }
+    if let (Ok(ta), Ok(tb)) = (a.cast::<PyTuple>(), b.cast::<PyTuple>()) {
+        if ta.len() != tb.len() {
+            return Ok(false);
+        }
+        for (va, vb) in ta.iter().zip(tb.iter()) {
+            if !same_value(&va, &vb)? {
+                return Ok(false);
+            }
+        }
+        return Ok(true);
+    }
+    if a.is_instance_of::<PyDict>() || a.is_instance_of::<PyList>() || b.is_instance_of::<PyDict>() || b.is_instance_of::<PyList>() {
+        return Ok(false);
+    }
+    Ok(a.get_type().is(&b.get_type()) && a.eq(b)?)
+}
+
 /// Write back the suspect subtrees as they are now (plain containers
 /// stored into tracked ones; see the module notes), and put a tracked copy
 /// in the place of each one nothing else holds any more.
 #[pyfunction]
 pub fn flush(py: Python<'_>) -> PyResult<()> {
+    flush_where(py, None)
+}
+
+/// `flush` for the suspects of one node only: what a read of that node's
+/// attributes needs (`link_of`, `doc_attr_value`).
+pub fn flush_node(py: Python<'_>, node: u64) -> PyResult<()> {
+    flush_where(py, Some(node))
+}
+
+fn anchored_on(anchor: &Bound<'_, Anchor>, node: Option<u64>) -> PyResult<bool> {
+    let Some(node) = node else { return Ok(true) };
+    let py = anchor.py();
+    match anchor.borrow().bind.as_ref() {
+        Some(b) => Ok(b.bind(py).get_item(0)?.extract::<u64>().is_ok_and(|k| k == node)),
+        None => Ok(true), // gone: dropped whoever asks
+    }
+}
+
+fn flush_where(py: Python<'_>, node: Option<u64>) -> PyResult<()> {
     let suspect = st(py)?.suspect.bind(py).clone();
     if suspect.is_empty() {
         return Ok(());
     }
+    if let Ok(mut s) = STATS.lock() {
+        s[if node.is_some() { 1 } else { 0 }] += 1;
+    }
+    let deepcopy = module(py, "copy")?.getattr(intern!(py, "deepcopy"))?;
+    let record = sent(py)?;
+    let mut mine = Vec::new();
     {
-        let mut by_anchor: Vec<(Bound<'_, Anchor>, Bound<'_, PyList>)> = Vec::new();
+        let mut by_anchor: Vec<(Bound<'_, Anchor>, Bound<'_, PyList>, Vec<(Obj<'_>, Obj<'_>, Obj<'_>)>)> = Vec::new();
         for (sid, entry) in suspect.items().iter().map(|i| i.extract::<(Obj<'_>, Obj<'_>)>()).collect::<PyResult<Vec<_>>>()? {
             let anchor = entry.get_item(0)?.cast_into::<Anchor>()?;
+            if !anchored_on(&anchor, node)? {
+                continue;
+            }
+            mine.push(sid.clone());
             let parent = entry.get_item(1)?.call0()?;
             let key = entry.get_item(2)?;
             let value = entry.get_item(3)?;
@@ -469,30 +567,59 @@ pub fn flush(py: Python<'_>) -> PyResult<()> {
                 _ => None,
             };
             let (Some(mut path), Some(place)) = (path, place) else {
-                suspect.del_item(&sid)?;
+                forget(&suspect, &sid)?;
                 continue;
             };
             path.push(place);
-            let edit = PyTuple::new(py, [PyList::new(py, path)?.into_any(), value, pyo3::types::PyBool::new(py, false).to_owned().into_any()])?;
-            match by_anchor.iter().find(|(a, _)| a.is(&anchor)) {
-                Some((_, edits)) => edits.append(edit)?,
-                None => by_anchor.push((anchor, PyList::new(py, [edit])?)),
+            let path = PyList::new(py, path)?.into_any();
+            if let Some(last) = record.get_item(&sid)? {
+                if last.get_item(0)?.is(&anchor) && last.get_item(1)?.eq(&path)? && same_value(&value, &last.get_item(2)?)? {
+                    continue; // as it was sent: the document has it
+                }
+            }
+            let edit = PyTuple::new(py, [path.clone(), value.clone(), pyo3::types::PyBool::new(py, false).to_owned().into_any()])?;
+            match by_anchor.iter_mut().find(|(a, _, _)| a.is(&anchor)) {
+                Some((_, edits, sids)) => {
+                    edits.append(edit)?;
+                    sids.push((sid, path, value));
+                }
+                None => by_anchor.push((anchor, PyList::new(py, [edit])?, vec![(sid, path, value)])),
             }
         }
-        for (anchor, edits) in by_anchor {
+        for (anchor, edits, sids) in by_anchor {
+            if let Ok(mut s) = STATS.lock() {
+                s[2] += sids.len() as u64;
+            }
             send(&anchor, edits)?;
             if !bound(&anchor) {
                 let gone: Vec<Obj<'_>> = suspect.iter().filter(|(_, e)| e.get_item(0).is_ok_and(|a| a.is(&anchor))).map(|(k, _)| k).collect();
                 for sid in gone {
-                    suspect.del_item(sid)?;
+                    forget(&suspect, &sid)?;
                 }
+                continue;
+            }
+            for (sid, path, value) in sids {
+                record.set_item(sid, PyTuple::new(py, [anchor.clone().into_any(), path, deepcopy.call1((value,))?])?)?;
             }
         }
     } // no name holds a suspect
-    for sid in suspect.keys() {
+    for sid in mine {
         promote(&suspect, &sid)?;
     }
     Ok(())
+}
+
+/// `{"full", "node", "sent"}`: flushes of every suspect, of one node's, and
+/// suspects converted and sent, since the last call (which resets them).
+#[pyfunction]
+#[pyo3(name = "_flush_stats")]
+fn flush_stats(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
+    let s = STATS.lock().map(|mut s| std::mem::take(&mut *s)).unwrap_or([0; 3]);
+    let d = PyDict::new(py);
+    d.set_item("full", s[0])?;
+    d.set_item("node", s[1])?;
+    d.set_item("sent", s[2])?;
+    Ok(d)
 }
 
 /// How many references hold `o`.
@@ -528,7 +655,9 @@ fn unshared(value: &Obj<'_>) -> PyResult<bool> {
 fn promote<'py>(suspect: &Bound<'py, PyDict>, sid: &Obj<'py>) -> PyResult<()> {
     let py = suspect.py();
     let Some(entry) = suspect.get_item(sid)? else { return Ok(()) };
-    suspect.del_item(sid)?;
+    // What was sent for it, kept if it stays a suspect.
+    let last = sent(py)?.get_item(sid)?;
+    forget(suspect, sid)?;
     let anchor = entry.get_item(0)?.cast_into::<Anchor>()?;
     let parent_ref = entry.get_item(1)?;
     let key = entry.get_item(2)?;
@@ -541,6 +670,9 @@ fn promote<'py>(suspect: &Bound<'py, PyDict>, sid: &Obj<'py>) -> PyResult<()> {
     if parent.is_none() || refcnt(&value) > 2 || !unshared(&value)? {
         let entry = PyTuple::new(py, [keep.0.into_any(), keep.1, keep.2, value])?;
         suspect.set_item(sid, entry)?;
+        if let Some(last) = last {
+            sent(py)?.set_item(sid, last)?;
+        }
         return Ok(());
     }
     let Some(place) = index(&parent, &value, &key)? else { return Ok(()) };
@@ -1199,6 +1331,7 @@ pub(crate) fn install(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(parent_mode, m)?)?;
     m.add_function(wrap_pyfunction!(plain, m)?)?;
     m.add_function(wrap_pyfunction!(flush, m)?)?;
+    m.add_function(wrap_pyfunction!(flush_stats, m)?)?;
     m.add_function(wrap_pyfunction!(track, m)?)?;
     m.add_function(wrap_pyfunction!(refill, m)?)?;
     m.add_function(wrap_pyfunction!(attribute, m)?)?;
