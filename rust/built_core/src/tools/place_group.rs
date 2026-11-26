@@ -130,6 +130,10 @@ impl Tool for PlaceGroup {
         true
     }
     fn query(&self, k: &str, v: &Json) -> Json {
+        if k == "wall_values" {
+            return self.opening.filter(|_| self.hosted && self.template.is_some())
+                .map(|outline| json!([outline[1], self.sill, self.reveal])).unwrap_or(Json::Null);
+        }
         if k == "basis" {
             json!(basis(json_p3(v)))
         } else {
