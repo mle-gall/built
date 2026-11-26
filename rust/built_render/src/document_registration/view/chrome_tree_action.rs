@@ -1200,12 +1200,14 @@ impl<'a, 'py> Row<'a, 'py> {
                 )?;
                 return Ok(());
             }
+            let node_label = if nodes == 1 { "node" } else { "nodes" };
+            let item_label = if filed == 1 { "item" } else { "items" };
             let replace = if structure.call_method1("_nodes", (&registry,))?.is_truthy()? { " It replaces the current structure." } else { "" };
             self.renderer()?.call_method1(
                 "ui_set_prompt",
                 (
                     "Propose structure from tags",
-                    format!("{nodes} nodes, {filed} items filed, {conflicts} to review.{replace}"),
+                    format!("{nodes} {node_label}, {filed} {item_label} filed, {conflicts} to review.{replace}"),
                     PyList::new(py, [("yes", "Apply"), ("no", "Cancel")])?,
                 ),
             )?;

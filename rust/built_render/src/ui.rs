@@ -2096,7 +2096,9 @@ impl Ui {
                     } else if col.proposal_available && !col.proposal_dismissed {
                         ui.horizontal(|ui| {
                             ui.set_height(CONTROL_H);
-                            if col.overview.tags <= 1 || col.path.len() > 1 {
+                            let overview = &col.overview;
+                            let has_source = overview.tags > 1 || overview.folders > 0 || overview.links > 0;
+                            if !has_source || col.path.len() > 1 {
                                 if kit::quiet(ui, "New node").clicked() { actions.push("new\u{1f}".into()); }
                                 return;
                             }
@@ -4377,4 +4379,22 @@ fn a_divider_separates_the_model_from_its_scenes_and_sheets() {
     let between = |a: &str, b: &str| lines.iter().any(|y| *y > texts[a].y && *y < texts[b].y);
     assert!(between("Section planes", "Saved scenes"));
     assert!(!between("Walls", "Loose geometry") && !between("Loose geometry", "Section planes") && !between("Saved scenes", "Sheets"));
+}
+
+#[test]
+fn the_proposal_shortcut_accepts_empty_named_tags_folders_and_links() {
+    let Some(mut ui) = test_chrome() else { return };
+    ui.ctx = test_context();
+    ui.set_tree(tag_rows(&["Untagged"]), 0);
+    ui.set_proposal_available(true);
+    for (tags, folders, links, offers_proposal) in [
+        (1, 0, 0, false), (2, 0, 0, true), (1, 1, 0, true), (1, 0, 1, true),
+    ] {
+        let overview = &mut ui.column.as_mut().unwrap().overview;
+        (overview.tags, overview.folders, overview.links) = (tags, folders, links);
+        for _ in 0..3 { tree_frame(&mut ui, vec![]); }
+        let frame = tree_frame(&mut ui, vec![]);
+        assert_eq!(frame.contains_key("Propose structure from tags…"), offers_proposal);
+        assert_eq!(frame.contains_key("New node"), !offers_proposal);
+    }
 }
