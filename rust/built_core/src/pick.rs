@@ -79,6 +79,22 @@ impl Projector {
         let w = if ok { cw } else { 1.0 };
         ((c(&self.r0) / w * 0.5 + 0.5) * self.w, (1.0 - (c(&self.r1) / w * 0.5 + 0.5)) * self.h, ok)
     }
+
+    /// Both ends' pixels, with the part of the segment behind the eye cut
+    /// away (`instances::project_segment`): both flags true when some of
+    /// it is in front, so a close-up edge with an end behind the eye is
+    /// still found near the cursor.
+    pub fn segment(&self, a: P, b: P) -> ((f64, f64, bool), (f64, f64, bool)) {
+        let cw = |p: P| p[0] * self.r3[0] + p[1] * self.r3[1] + p[2] * self.r3[2] + self.r3[3];
+        let (wa, wb) = (cw(a), cw(b));
+        let front = wa.max(wb);
+        if wa > 0.0 && wb > 0.0 || !(front > 0.0) {
+            return (self.px(a), self.px(b));
+        }
+        let t = (front * 1e-6 - wa) / (wb - wa);
+        let cut = self.px(std::array::from_fn(|k| a[k] + t * (b[k] - a[k])));
+        if wa > 0.0 { (self.px(a), cut) } else { (cut, self.px(b)) }
+    }
 }
 
 /// `[x0, y0, x1, y1]`, normalised.
@@ -282,7 +298,8 @@ pub fn box_rows(world: &[[f64; 16]], code: &[i64], owner: &[i64], drawn: &[bool]
 }
 
 /// The segments within `radius` pixels of `(x, y)`, nearest first:
-/// `(index, pixels, t along the segment)`; ends behind the eye skip it.
+/// `(index, pixels, t along the segment)`; a segment wholly behind the
+/// eye is skipped (give clipped ends: `Projector::segment`).
 pub(crate) fn nearest_projected(
     segments: impl Iterator<Item=((f64,f64,bool),(f64,f64,bool))>, x:f64, y:f64, radius:f64
 ) -> Vec<(usize, f64, f64)> {

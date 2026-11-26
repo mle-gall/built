@@ -395,16 +395,9 @@ pub(super) fn reference_edge<'p>(
         None,
         Some(&view.getattr("scene")?.getattr("edit_group")?),
     )?;
+    // An edge with an end behind the eye counts too (`nearby_edges` gives
+    // the part in front): close up to a long edge that is the usual case.
     for e in edges.iter() {
-        if view
-            .call_method1("_world_to_pixel", (e.getattr("a")?,))?
-            .is_none()
-            || view
-                .call_method1("_world_to_pixel", (e.getattr("b")?,))?
-                .is_none()
-        {
-            continue;
-        }
         if !occluded(index, view, &foot(view, &e, x, y, 1e-12)?, None)? {
             return Ok(Some(e));
         }

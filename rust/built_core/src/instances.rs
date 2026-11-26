@@ -14,16 +14,16 @@
 
 use rayon::prelude::*;
 
-const LEAF: usize = 8;
+pub(crate) const LEAF: usize = 8;
 
 #[derive(Clone, Copy)]
-struct Node {
-    lo: [f64; 3],
-    hi: [f64; 3],
-    start: u32,
-    end: u32,
-    left: u32,
-    leaf: bool,
+pub(crate) struct Node {
+    pub(crate) lo: [f64; 3],
+    pub(crate) hi: [f64; 3],
+    pub(crate) start: u32,
+    pub(crate) end: u32,
+    pub(crate) left: u32,
+    pub(crate) leaf: bool,
 }
 
 /// One prototype's triangles (v0, e1, e2) with a BVH, and its hard edges.
@@ -49,7 +49,7 @@ const PAR_MIN: usize = 8192;
 /// split it; only where each node lies in the array may change, and every
 /// walk goes by ``left`` and ``left + 1``. (A big model's first query built
 /// its prototypes one after another: 2.4 s of the first Line hover, #1092.)
-fn build_bvh(blo: &[[f64; 3]], bhi: &[[f64; 3]], cen: &[[f64; 3]]) -> (Vec<u32>, Vec<Node>) {
+pub(crate) fn build_bvh(blo: &[[f64; 3]], bhi: &[[f64; 3]], cen: &[[f64; 3]]) -> (Vec<u32>, Vec<Node>) {
     let n = blo.len();
     let mut order: Vec<u32> = (0..n as u32).collect();
     if n == 0 {
@@ -554,6 +554,31 @@ pub fn project(mvp: &[f64; 16], p: [f64; 3], w: f64, h: f64) -> Option<(f64, f64
     Some((sx, sy))
 }
 
+/// The pixels of segment ``a``–``b`` with what lies behind the eye cut
+/// away, or None when none of it is in front. Zoomed in close to a long
+/// edge, one end is often behind the eye: projecting the ends alone lost
+/// the edge for snapping and hover at exactly the zoom it was wanted.
+/// The cut sits a millionth of the front end's depth in front of the eye,
+/// so the kept part covers everything the view can show.
+#[inline]
+pub fn project_segment(mvp: &[f64; 16], a: [f64; 3], b: [f64; 3], w: f64, h: f64)
+    -> Option<((f64, f64), (f64, f64))> {
+    let cw = |p: [f64; 3]| p[0] * mvp[3] + p[1] * mvp[7] + p[2] * mvp[11] + mvp[15];
+    let (wa, wb) = (cw(a), cw(b));
+    if wa > 0.0 && wb > 0.0 {
+        return Some((project(mvp, a, w, h)?, project(mvp, b, w, h)?));
+    }
+    let front = wa.max(wb);
+    if !(front > 0.0) {
+        return None;
+    }
+    let cut = front * 1e-6;
+    let t = (cut - wa) / (wb - wa);
+    let p = std::array::from_fn(|k| a[k] + t * (b[k] - a[k]));
+    let p = project(mvp, p, w, h)?;
+    Some(if wa > 0.0 { (project(mvp, a, w, h)?, p) } else { (p, project(mvp, b, w, h)?) })
+}
+
 /// A box grown well past rounding, or the whole space when not finite.
 pub fn grown(lo: [f64; 3], hi: [f64; 3]) -> ([f64; 3], [f64; 3]) {
     let mut ext = 0.0f64;
@@ -1020,7 +1045,7 @@ impl NearHeap {
 /// more than any point inside their box lies from it. 0 when one is
 /// behind the eye plane or not finite.
 #[allow(clippy::too_many_arguments)]
-fn rect_gap(q: impl Fn(usize) -> [f64; 3], mvp: &[f64; 16], w: f64, h: f64, px: f64,
+pub(crate) fn rect_gap(q: impl Fn(usize) -> [f64; 3], mvp: &[f64; 16], w: f64, h: f64, px: f64,
             py: f64) -> f64 {
     let (mut x0, mut x1, mut y0, mut y1) = (f64::INFINITY, f64::NEG_INFINITY,
                                             f64::INFINITY, f64::NEG_INFINITY);
@@ -1049,7 +1074,7 @@ fn rect_gap(q: impl Fn(usize) -> [f64; 3], mvp: &[f64; 16], w: f64, h: f64, px: 
 }
 
 #[inline]
-fn box_corner(lo: [f64; 3], hi: [f64; 3], i: usize) -> [f64; 3] {
+pub(crate) fn box_corner(lo: [f64; 3], hi: [f64; 3], i: usize) -> [f64; 3] {
     [if i & 1 != 0 { hi[0] } else { lo[0] },
      if i & 2 != 0 { hi[1] } else { lo[1] },
      if i & 4 != 0 { hi[2] } else { lo[2] }]
@@ -1104,7 +1129,7 @@ impl Placement {
 impl Proto {
     /// Offers ``heap`` the hard edges of this prototype, placed by ``m``
     /// and seen through ``mvp``, at the distance ``segment_distances``
-    /// gives them (both ends in front) — but those in BVH branches whose
+    /// gives them (the part in front of the eye) — but those in BVH branches whose
     /// screen box lies farther than what the heap can still take.
     #[allow(clippy::too_many_arguments)]
     pub fn edges_near(&self, m: &[f64; 16], mvp: &[f64; 16], w: f64, h: f64, px: f64,
@@ -1113,7 +1138,7 @@ impl Proto {
             let e = &self.edges[i];
             let a = corner(m, e[0]);
             let b = corner(m, e[1]);
-            let (Some((ax, ay)), Some((bx, by))) = (project(mvp, a, w, h), project(mvp, b, w, h)) else {
+            let Some(((ax, ay), (bx, by))) = project_segment(mvp, a, b, w, h) else {
                 return;
             };
             let d = segment_distance(ax, ay, bx, by, px, py);
