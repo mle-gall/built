@@ -500,16 +500,18 @@ impl SnapFrame {
     }
 }
 /// The points hovered lately (`InferenceEngine._recent_references`: points
-/// or (point, kind) pairs), if handed in, less the start point: as with the
-/// acquired point, the start is no reference for its own line.
+/// or (point, kind) pairs), if handed in, while an operation has a start
+/// point, less that start: as with the acquired point, the start is no
+/// reference for its own line. Before the first click they are no
+/// references at all (the acquired point alone lines up a first point).
 fn recent<'py>(f: &F<'py>) -> PyResult<Obj<'py>> {
     let py = f.py();
-    let Some(all) = f.getattr_opt("recent_points")?.filter(|r| !r.is_none()) else {
-        return Ok(py.None().into_bound(py));
-    };
     let start = f.getattr_opt("start_point")?.filter(|s| !s.is_none());
-    let Some(start) = start.map(|s| xyz(&s)).transpose()? else {
-        return Ok(all);
+    let (Some(all), Some(start)) = (
+        f.getattr_opt("recent_points")?.filter(|r| !r.is_none()),
+        start.map(|s| xyz(&s)).transpose()?,
+    ) else {
+        return Ok(py.None().into_bound(py));
     };
     let kept = PyList::empty(py);
     for r in all.try_iter()? {

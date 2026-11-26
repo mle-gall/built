@@ -199,6 +199,15 @@ def test_a_midpoint_is_picked_up_too(view):
     assert snap.source_kind == "midpoint"
 
 
+def test_before_the_first_click_a_hovered_point_lines_nothing_up(view):
+    """Remembered points serve an operation's line only: before the first
+    click the cursor near a corner's axis line stays where it is."""
+    _scene(view)
+    assert _move(view, CORNER).kind == "endpoint"
+    snap = _move(view, V(3, 0.2, 1.1), dx=2, dy=2)      # on green through it
+    assert snap.kind not in ("from_point", "aligned"), (snap.kind, snap.point)
+
+
 def test_an_arrow_lock_takes_a_midpoint_and_says_from_point(view):
     _scene(view)
     click(view, V(0, 0, 0))
