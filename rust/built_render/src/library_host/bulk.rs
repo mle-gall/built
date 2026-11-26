@@ -90,7 +90,7 @@ pub(super) fn detail(st: &Bound<'_, PyAny>, d: &Bound<'_, PyAny>) -> PyResult<()
                     "In use"
                 } else {
                     retained = true;
-                    "Kept in file"
+                    "Kept when unused"
                 };
                 review.push((item.get_item("name")?.extract::<String>()?, reason));
             }

@@ -715,7 +715,7 @@ def test_checked_definitions_select_replace_and_preserve_kept(win, monkeypatch):
     frame(win)
     act(win, "verb", "bulk-purge")
     review = detail(frame(win))
-    assert any(["Retained", "Kept in file", ""] in block.get("rows", []) for block in review)
+    assert any(["Retained", "Kept when unused", ""] in block.get("rows", []) for block in review)
     assert kept in scene.kept_components
     monkeypatch.setattr("built_render.chrome_dialogs.ask_later", lambda *args, **kw: args[4]("release"))
     revision = win.viewport.history.revision
@@ -892,3 +892,15 @@ def test_usage_index_distinguishes_front_and_back_paint(win):
     uses, _, _, _, unused = built_core.library_usage(scene, scene.content_version)
     assert uses == {"Beech": 1, "Concrete": 1, "Retained paint": 1}
     assert unused == len(built_core.purge_unused_materials(scene))
+
+
+def test_image_stem_labels_preserve_material_identity_and_custom_names(win):
+    scene = win.viewport.scene
+    texture = {"path": "/textures/ae1ad9f06706c193-metal_dark.png"}
+    for name in ("metal_dark", "architect_spec_A"):
+        scene.materials[name] = Material(name, texture=texture)
+    scene.version += 1
+    L.open_library(win, "materials")
+    labels = {item["id"]: item["label"] for item in tiles(frame(win))}
+    assert labels["m:metal_dark"] == "Metal dark"
+    assert labels["m:architect_spec_A"] == "architect_spec_A"

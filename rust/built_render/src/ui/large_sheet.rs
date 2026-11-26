@@ -258,7 +258,7 @@ impl LargeSheet {
         };
         for block in spec.content.blocks.iter_mut().chain(spec.detail.iter_mut().flat_map(|p| &mut p.blocks)) {
             if block.kind == "rows" {
-                block.row_height = if block.tone=="components" {28.} else if block.tone == "thumbs" || block.items.iter().any(|i| !i.icon.is_empty() || !i.hex.is_empty()) { 40. }
+                block.row_height = if block.id == "keyboard" { ROW_H } else if block.tone=="components" {28.} else if block.tone == "thumbs" || block.items.iter().any(|i| !i.icon.is_empty() || !i.hex.is_empty()) { 40. }
                     else if block.items.iter().any(|i| !i.sub.is_empty()) { 36. } else { ROW_H };
             }
         }
@@ -645,7 +645,8 @@ impl Draw<'_> {
                     for (label, value, t) in &b.rows {
                         let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), PROP_H), Sense::hover());
                         let v = fit(ui, value, body(), tone(t), r.width() * 0.62, 1);
-                        leading(ui.painter(), r, r.max.x - v.size().x, v, tone(t));
+                        let value_x = if b.tone == "properties" { r.min.x + (r.width() * 0.38).min(160.) } else { r.max.x - v.size().x };
+                        leading(ui.painter(), r, value_x, v, tone(t));
                         let l = fit(ui, label, meta(), DIM, r.width() * 0.36, 1);
                         leading(ui.painter(), r, r.min.x, l, DIM);
                         if t == "warn" || t == "error" || t == "ok" {
@@ -906,8 +907,9 @@ impl Draw<'_> {
                 right_x -= 12.0;
             }
             let ink = if it.dim { FAINT } else { INK };
+            let keyboard = b.id == "keyboard";
             let table = !it.component_source.is_empty();
-            let lw = if table { (w * 0.46 - (x-r.left())).max(20.) } else { (right_x - x).max(20.0) };
+            let lw = if table { (w * 0.46 - (x-r.left())).max(20.) } else if keyboard { (w * 0.52).min(right_x - x).max(20.) } else { (right_x - x).max(20.0) };
             if table {
                 for (at, width, text) in [(0.47,0.24,&it.sub),(0.72,0.18,&it.component_source)] {
                     let cell = fit(ui,text,meta(),DIM,w*width,1);
@@ -916,7 +918,12 @@ impl Draw<'_> {
             }
             let l = fit(ui, &it.label, body(), ink, lw, 1);
             let lsize = l.size();
-            if table || it.sub.is_empty() {
+            if keyboard {
+                let path_x = x + lw + SPACE_S;
+                let path = fit(ui, &it.sub, meta(), DIM, (right_x - path_x).max(0.), 1);
+                leading(ui.painter(), r, path_x, path, DIM);
+            }
+            if table || keyboard || it.sub.is_empty() {
                 ui.painter().galley(pos2(x, r.center().y - lsize.y / 2.0), l, ink);
             } else {
                 ui.painter().galley(pos2(x, r.center().y - lsize.y + 1.0), l, ink);
@@ -1265,7 +1272,8 @@ impl Ui {
                 .constrain_to(screen)
                 .show(ctx, |ui| {
                     glass(Surface::Raised).inner_margin(Margin::same(4)).show(ui, |ui| {
-                        ui.set_min_width(180.0);
+                        let width = entries.iter().map(|(_, label)| ui.painter().layout_no_wrap(label.clone(), body(), INK).size().x + 32.).fold(96., f32::max);
+                        ui.set_width(width.min(screen.width() - 16.));
                         ui.spacing_mut().item_spacing = vec2(0.0, 0.0);
                         for (id, label) in &entries {
                             if id == "-" {
@@ -1315,7 +1323,8 @@ impl Ui {
                     .constrain_to(screen)
                     .show(ctx, |ui| {
                         glass(Surface::Raised).inner_margin(Margin::same(4)).show(ui, |ui| {
-                            ui.set_min_width(anchor.width().max(160.0));
+                            let width = m.options.iter().map(|o| ui.painter().layout_no_wrap(format!("{} {}", o.label, o.key), body(), INK).size().x + 48.).fold(anchor.width(), f32::max);
+                            ui.set_width(width.min(screen.width() - 16.));
                             ui.spacing_mut().item_spacing = vec2(0.0, 0.0);
                             for o in &m.options {
                                 if o.id == "-" {

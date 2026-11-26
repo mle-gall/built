@@ -431,24 +431,24 @@ pub fn edit_ai_connection(st: &Bound<'_, PyAny>, key: &str, value: &str, detect:
 }
 
 const SECTIONS: &[(&str, &str, &str, &str)] = &[
-    ("general", "General", "mac", "Applies at once."),
+    ("general", "General", "mac", ""),
     (
         "navigation",
         "Navigation",
         "mac",
-        "Applies at once. Shift pans and ⌘ zooms whatever is chosen here.",
+        "Shift pans and ⌘ zooms whatever is chosen here.",
     ),
     (
         "display",
         "Display",
         "mac",
-        "Applies at once, to every open project.",
+        "Applies to all open models.",
     ),
     (
         "ndof",
         "3D mouse",
         "mac",
-        "Applies at once. Editing an axis makes the mapping Custom.",
+        "Editing an axis makes the mapping Custom.",
     ),
     (
         "import",
@@ -460,7 +460,7 @@ const SECTIONS: &[(&str, &str, &str, &str)] = &[
         "keyboard",
         "Keyboard",
         "mac",
-        "Pick a command and change its keys. Changes apply at once.",
+        "Select a command to change its shortcut.",
     ),
     ("ai", "AI", "mac", "The assistant's provider is kept on this Mac; model access applies to the model in front."),
     ("blender", "Blender", "mac", "Used for the next render."),
@@ -566,6 +566,9 @@ impl PreferencesView {
         let mut items = Vec::new();
         let mut detail = Vec::new();
         for (key, name, path, keys, factory) in actions {
+            if key.strip_prefix("menu:recent:").is_some_and(|slot| slot.parse::<usize>().is_ok()) {
+                continue;
+            }
             let id = format!("sc:{key}");
             if self.kb_focus.as_deref() == Some(&id) {
                 detail.push(json!({"kind":"heading","text":name}));
@@ -588,7 +591,7 @@ impl PreferencesView {
                     continue;
                 }
             }
-            items.push(json!({"id":id,"label":name,"sub":path,"right":keys,"menu":menu}));
+            items.push(json!({"id":id,"label":name,"sub":path,"tip":path,"right":keys,"menu":menu}));
         }
         let count = items.len();
         let mut content = Vec::new();

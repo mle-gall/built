@@ -376,7 +376,11 @@ impl SettingsSheet {
         for (sid, label, _scope) in sections(py)? {
             let Some(groups) = hits.get_item(&sid)? else { continue };
             if sid == "keyboard" {
-                Self::keyboard_pane(sheet, &c, keyboard)?;
+                if keyboard.get_item("detail")?.len()? == 0 {
+                    c.getattr("blocks")?.call_method1("extend", (keyboard.get_item("content")?,))?;
+                } else {
+                    Self::keyboard_pane(sheet, &c, keyboard)?;
+                }
                 continue;
             }
             let label = tr(py, &label)?;

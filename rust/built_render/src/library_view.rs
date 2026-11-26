@@ -91,7 +91,7 @@ pub const FACETS: [(&str, &str); 3] = [("facet:all", "Every base"), ("facet:colo
 /// Verb ids and their menu labels (a type relabels "apply").
 pub const VERBS: [(&str, &str); 12] = [("apply", "Use"), ("edit", "Edit in the inspector"), ("duplicate", "Duplicate"),
     ("rename", "Rename"), ("keep", "Add to My library"), ("unkeep", "Remove from My library"),
-    ("select", "Select uses"), ("replace", "Replace selection with this"), ("keepfile", "Keep in file"),
+    ("select", "Select uses"), ("replace", "Replace selection with this"), ("keepfile", "Keep when unused"),
     ("unkeepfile", "Stop keeping in file"), ("delete", "Delete…"), ("-", "")];
 /// A search lists at most this many items per group (the category shows them all).
 
@@ -368,7 +368,7 @@ pub fn linked_split(model: Vec<Item>, per_file: &[(String, Vec<(String, i64)>)],
 
 /// The name of an image as the user gave it (a stored copy is
 /// ``<hash>-<name>``).
-fn file_stem(path: &str) -> String {
+pub(crate) fn file_stem(path: &str) -> String {
     let base = base_name(path);
     if let Some((head, rest)) = base.split_once('-') {
         if head.len() >= 12 && head.chars().all(|c| matches!(c, '0'..='9' | 'a'..='f')) {

@@ -195,3 +195,14 @@ def test_every_language_has_the_column_heading():
         if path.stem != "en":
             data = json.loads(path.read_text(encoding="utf-8"))
             assert data.get("Menu"), path.name
+
+
+def test_keyboard_omits_recent_files_but_indexes_menu_paths(sheet):
+    actions = [
+        ("menu:recent:0", "Bench.built", "File ▸ Open recent", "", ""),
+        ("menu:new", "New model", "File", "", ""),
+    ]
+    sheet.state.query = "file"
+    result = json.loads(sheet.state.keyboard(actions, str))
+    items = next(block["items"] for block in result["content"] if block.get("id") == "keyboard")
+    assert [(item["id"], item["tip"]) for item in items] == [("sc:menu:new", "File")]

@@ -28,11 +28,11 @@ pub fn sheet(data: &Value, copied: bool, t: impl Fn(&str) -> PyResult<String>) -
         {"kind":"text","text":"Built is based on IngeTrazo by Marco Sumari Tellez and IngeTrazo contributors, and distributed under GPL-3.0-or-later."},
         {"kind":"buttons","align":"left","buttons":[{"id":"license","label":t("Licence")?},{"id":"repository","label":"Built on GitHub ↗"},{"id":"copy","label":t(if copied {"Copied"} else {"Copy to clipboard"})?}]},
         {"kind":"caption","text":t("System information")?},
-        {"kind":"kv","rows":data["facts"]},
+        {"kind":"kv","tone":"properties","rows":data["facts"]},
         {"kind":"caption","text":t("With contributions from")?},
         {"kind":"credits","credits":people},
         {"kind":"text","text":t("And thanks to everyone who tries Built and reports what they find.")?},
-        {"kind":"buttons","align":"left","buttons":[{"id":"authors","label":"AUTHORS"}]}
+        {"kind":"buttons","align":"left","buttons":[{"id":"authors","label":t("Authors")?}]}
     ]);
     if data["authors"] == true {
         let rows = blocks.as_array_mut().unwrap();

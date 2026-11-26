@@ -537,7 +537,16 @@ impl MaterialsProvider {
                 let pair = pair?;
                 let (name, mat) = (pair.get_item(0)?, pair.get_item(1)?);
                 let tex = opt(&mat, "texture").filter(|t| t.is_truthy().unwrap_or(false)).map(|t| get(&t, "path")).transpose()?.unwrap_or_else(|| py.None().into_bound(py));
+                let raw: String = name.extract()?;
+                let original = tex.extract::<String>().ok().map(|p| crate::library_view::file_stem(&p));
+                let label = if original.as_deref().and_then(|p| std::path::Path::new(p).file_stem())
+                    .and_then(|stem| stem.to_str()) == Some(raw.as_str()) {
+                    let words = raw.replace(['_', '-'], " ");
+                    let mut chars = words.chars();
+                    chars.next().map(|c| c.to_uppercase().to_string() + chars.as_str()).unwrap_or_default()
+                } else { raw };
                 out.append(item(py, &[
+                    ("label", s(py, &label)),
                     ("key", s(py, &format!("m:{}", name.str()?))),
                     ("name", name.clone()),
                     ("source", s(py, "model")),
@@ -664,7 +673,9 @@ impl MaterialsProvider {
                 acts.append(("name", format!("Name these: {k} unnamed colour{}", if k == 1 { "" } else { "s" })))?;
             }
             let n: usize = usage.get_item(4)?.extract()?;
-            acts.append(("purge", if n == 0 { "Purge unused materials (none)".into() } else { format!("Purge unused materials ({n})") }))?;
+            if n > 0 {
+                acts.append(("purge", format!("Purge unused materials ({n})")))?;
+            }
         }
         Ok(acts)
     }
@@ -1230,7 +1241,9 @@ impl ComponentsProvider {
         };
         let actions = PyList::empty(py);
         actions.append(("import", crate::model_edit::translated(py, "Components from File…", None)?))?;
-        actions.append(("purge", if n != 0 { format!("Stop keeping unplaced components ({n})") } else { "Stop keeping unplaced components (none)".into() }))?;
+        if n > 0 {
+            actions.append(("purge", format!("Stop keeping unplaced components ({n})")))?;
+        }
         Ok(actions)
     }
 
@@ -1371,7 +1384,7 @@ impl ComponentsProvider {
         let (name, faces, groups, kept) = (row.get_item(0)?, row.get_item(1)?, row.get_item(2)?, row.get_item(3)?);
         let faces: i64 = faces.extract()?;
         let grouped = faces.to_string().as_bytes().rchunks(3).rev().map(|c| std::str::from_utf8(c).unwrap_or("")).collect::<Vec<_>>().join(" ");
-        let rows = vec![("Copies".to_owned(), groups.len()?.to_string()), ("Faces".to_owned(), grouped), ("Kept in file".to_owned(), if kept.is_none() { "no" } else { "yes" }.to_owned())];
+        let rows = vec![("Copies".to_owned(), groups.len()?.to_string()), ("Faces".to_owned(), grouped), ("Keep when unused".to_owned(), if kept.is_none() { "no" } else { "yes" }.to_owned())];
         let acts = vec![(format!("lib:apply:{key}"), "Place a copy".to_owned()), (format!("lib:select:{key}"), "Select copies".to_owned()), (format!("lib:edit:{key}"), "Open for editing".to_owned())];
         let sections = PyList::empty(py);
         sections.append(("Component in this model", rows))?;
@@ -1943,7 +1956,7 @@ impl LibrarySheet {
                 let p = p?;
                 let ready = p.getattr("ready")?.is_truthy()?;
                 if !ready { continue; }
-                let count = counts.call_method1("get", (p.getattr("id")?, ""))?;
+                let count = if p.getattr("id")?.eq("materials")? { s(py, "") } else { counts.call_method1("get", (p.getattr("id")?, ""))? };
                 let kw = PyDict::new(py);
                 kw.set_item("on", p.getattr("id")?.eq(&ty)?)?;
                 kw.set_item("enabled", ready)?;
