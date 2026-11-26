@@ -46,6 +46,39 @@ pub fn lock_crossing(p: P, u: P, a: P, b: P, tol: f64) -> Option<P> {
     (norm(sub(hit, along(p, u, (bb * ee - cc * dd) / denom))) <= tol).then_some(hit)
 }
 
+/// No point, one point, or a list of points or of (point, kind) pairs.
+pub(crate) struct Extras(pub(crate) Vec<(P, &'static str)>);
+fn foot_kind(kind: &str) -> &'static str {
+    match kind {
+        "midpoint" => "midpoint",
+        "origin" => "origin",
+        "center" => "center",
+        "intersection" => "intersection",
+        _ => "from_point",
+    }
+}
+impl<'py> FromPyObject<'_, 'py> for Extras {
+    type Error = PyErr;
+    fn extract(o: pyo3::Borrowed<'_, 'py, PyAny>) -> PyResult<Self> {
+        if o.is_none() {
+            return Ok(Self(Vec::new()));
+        }
+        if let Ok(p) = o.extract::<P>() {
+            return Ok(Self(vec![(p, "from_point")]));
+        }
+        let mut out = Vec::new();
+        for item in o.try_iter()? {
+            let item = item?;
+            if let Ok(p) = item.extract::<P>() {
+                out.push((p, "from_point"));
+            } else {
+                let (p, k): (P, String) = item.extract()?;
+                out.push((p, foot_kind(&k)));
+            }
+        }
+        Ok(Self(out))
+    }
+}
 /// flag 0 ordinary, 1 guide, 2 center, 3 component origin, 4 arc midpoint.
 #[pyclass(frozen)]
 pub struct SnapQuery {
@@ -312,6 +345,9 @@ impl SnapQuery {
 
     /// References whose feet, or (under an explicit lock) visible source
     /// vertices, lie within the pixel radius. Keep enumeration order for ties.
+    /// `extra` are remembered references (the acquired point, points hovered
+    /// lately): the cursor may have left them, so their foot may lie behind
+    /// geometry, as may the foot of a source the cursor is on.
     #[pyo3(signature=(start,dir,radius,hovered,extra,hidden))]
     fn reference_foot(
         &self,
@@ -320,12 +356,12 @@ impl SnapQuery {
         dir: P,
         radius: f64,
         hovered: bool,
-        extra: Option<P>,
+        extra: Extras,
         hidden: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<Option<(P, P, &'static str)>> {
         let hits = self.scan(py, || {
             let mut hits = Vec::new();
-            let mut offer = |p, kind| -> PyResult<()> {
+            let mut offer = |p, kind, remembered| -> PyResult<()> {
                 let t = dot(sub(p, start), dir);
                 if !hovered && t <= 1e-6 {
                     return Ok(());
@@ -344,34 +380,37 @@ impl SnapQuery {
                     f64::INFINITY
                 };
                 if dr < d && dr <= radius {
-                    hits.push((dr, foot, p, kind, true));
+                    hits.push((dr, foot, p, kind, true, remembered));
                 }
                 if d <= radius {
-                    hits.push((d, foot, p, kind, false));
+                    hits.push((d, foot, p, kind, false, remembered));
                 }
                 Ok(())
             };
-            if let Some(p) = extra {
-                offer(p, "from_point")?;
+            for (p, kind) in extra.0 {
+                offer(p, kind, true)?;
             }
             for (i, &[a, b]) in self.edges.iter().enumerate() {
                 if self.tags[i] & 8 != 0 {
                     continue;
                 }
-                offer(a, "from_point")?;
-                offer(b, "from_point")?;
-                offer(along(a, sub(b, a), 0.5), "midpoint")?;
+                offer(a, "from_point", false)?;
+                if matches!(self.tags[i] & 7, 2..=4) {
+                    continue; // a centre, origin or arc midpoint: one point
+                }
+                offer(b, "from_point", false)?;
+                offer(along(a, sub(b, a), 0.5), "midpoint", false)?;
             }
-            offer([0.; 3], "origin")?;
+            offer([0.; 3], "origin", false)?;
             hits.sort_by(|a, b| a.0.total_cmp(&b.0));
             Ok::<_, PyErr>(hits)
         })?;
-        for (_, foot, p, kind, source_visible) in hits {
+        for (_, foot, p, kind, source_visible, remembered) in hits {
             if let Some(test) = hidden {
                 if source_visible && test.call1((p,))?.is_truthy()? {
                     continue;
                 }
-                if test.call1((foot,))?.is_truthy()? {
+                if !source_visible && !remembered && test.call1((foot,))?.is_truthy()? {
                     continue;
                 }
             }

@@ -51,6 +51,16 @@ fn context_label(c: &Paint, snap: &Obj, kind: &str) -> PyResult<Option<String>> 
     );
     Ok(Some(label))
 }
+/// The glyph that marks a 'from point' guide's source point.
+pub(crate) fn source_glyph(kind: Option<Obj>) -> &'static str {
+    match kind.and_then(|k| k.extract::<String>().ok()).as_deref() {
+        Some("midpoint" | "arc_midpoint") => "midpoint",
+        Some("intersection") => "intersection",
+        Some("center" | "face_center" | "quadrant") => "center",
+        Some("on_edge") => "reference",
+        _ => "endpoint",
+    }
+}
 #[pyfunction]
 fn draw_snap_indicator(v: &Obj, p: &Obj, snap: &Obj) -> PyResult<()> {
     let kind = snap.getattr("kind")?.extract::<String>()?;
@@ -104,6 +114,13 @@ fn draw_snap_indicator(v: &Obj, p: &Obj, snap: &Obj) -> PyResult<()> {
             .into_iter()
             .map(|(a, b, color)| (a, b, channels(color)))
             .collect();
+        if kind == "from_point" && !primary.is_none() {
+            if let Some(src) = c.project(&primary.get_item(0)?)? {
+                let glyph = source_glyph(snap.getattr_opt("source_kind")?);
+                let none: Vec<(Point, Point, (f64, f64, f64))> = Vec::new();
+                p.call_method1("draw_snap", (glyph, src, channels(rgb), none, None::<String>))?;
+            }
+        }
         p.call_method1("draw_snap", (kind, at, channels(rgb), guides, label))?;
         return Ok(());
     }

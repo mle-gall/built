@@ -5,16 +5,17 @@
 Locked to an axis, a corner lined up onto the line («from point») turned
 the draw line orange and painted its guide in the axis it «most» ran
 along — blue for a guide that was not parallel to blue at all. The line
-keeps the lock's colour now, and the guide is axis-coloured only when it
-really runs along that axis, grey otherwise. Only colours: the points are
-the same as before."""
+keeps the lock's colour now, and the guide takes the colour of the axis it
+really runs along; across the axes it takes the locked line's axis colour
+(it was grey until the 2026-11-26 'from point' pass). Only colours: the
+points are the same as before."""
 from __future__ import annotations
 
 from types import SimpleNamespace
 
 from built_core import Vec3 as QVector3D
 
-from built_core.snap import (AXIS_COLORS, COLOR_EXTENSION, COLOR_REFERENCE,
+from built_core.snap import (AXIS_COLORS, COLOR_REFERENCE,
                        compute_snap)
 
 
@@ -60,17 +61,18 @@ def test_shift_and_reference_locks_carry_theirs():
     assert hit.lock_color == COLOR_REFERENCE
 
 
-def test_a_guide_across_the_axes_is_grey_one_along_an_axis_is_coloured():
+def test_a_guide_along_an_axis_takes_its_colour_one_across_takes_the_lines():
     # Locked along X, a corner straight across in Y: the guide runs green.
     straight = [_edge(V(6, -1), V(9, -1))]
     hit = _snap(V(6.0, -1.0), straight, axis_lock="x")
     assert hit.kind == "from_point"
     assert hit.guide_color == AXIS_COLORS["y"]
-    # Locked along X, a corner off in Y AND Z: the guide runs across both.
+    # Locked along X, a corner off in Y AND Z: the guide runs across both,
+    # so it takes the colour of the line it lines up (red), not grey.
     across = [_edge(V(6, -1, 1), V(9, -1, 1))]
     hit = _snap(V(6.0, -1.0, 1.0), across, axis_lock="x")
     assert hit.kind == "from_point"
-    assert hit.guide_color == COLOR_EXTENSION
+    assert hit.guide_color == AXIS_COLORS["x"]
 
 
 def test_no_lock_no_lock_colour():

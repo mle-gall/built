@@ -198,6 +198,10 @@ impl FrameState {
                 parperp: !mode.eq("off")?,
                 has_outline: !get("face_outline")?.is_none(),
                 has_crossing: !get("face_crossing")?.is_none(),
+                has_recent: start.is_some()
+                    && opts
+                        .get_item("recent_points")?
+                        .is_some_and(|r| r.is_truthy().unwrap_or(false)),
             },
         })
     }

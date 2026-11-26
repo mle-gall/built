@@ -61,6 +61,7 @@ pub(super) fn options<'p>(
         ("acquired_face_normal", "_acquired_face_normal"),
         ("acquired_point", "_acquired_point"),
         ("acquired_points", "_encouraged"),
+        ("recent_points", "_recent_references"),
         ("shift_lock_ref", "_shift_lock_ref"),
     ] {
         d.set_item(k, engine.getattr(field)?)?;

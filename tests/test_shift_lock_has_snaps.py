@@ -58,7 +58,8 @@ def _snap(cand, lock=V(1, 0, 0), scene=None):
 
 
 def test_a_midpoint_is_reachable_while_shift_holds_the_axis():
-    assert _snap(V(6.0, 1.0, 0.0)).kind == "midpoint"
+    r = _snap(V(6.0, 1.0, 0.0))
+    assert r.kind == "from_point" and r.source_kind == "midpoint"
 
 
 def test_so_is_the_crossing_with_another_edge():
@@ -91,5 +92,5 @@ def test_it_reads_the_lock_line_both_ways():
     offer the same points."""
     izquierda = [SimpleNamespace(a=V(-6, -1), b=V(-2, -1), center=False),
                  SimpleNamespace(a=V(-6, -1), b=V(-6, 3), center=False)]
-    assert _snap(V(-6.0, 1.0, 0.0),
-                 scene=SimpleNamespace(edges=izquierda)).kind == "midpoint"
+    r = _snap(V(-6.0, 1.0, 0.0), scene=SimpleNamespace(edges=izquierda))
+    assert r.kind == "from_point" and r.source_kind == "midpoint"

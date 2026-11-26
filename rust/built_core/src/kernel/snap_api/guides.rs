@@ -145,24 +145,38 @@ pub(super) fn _in_plane_with_point_snap<'p>(
     }
     result(m, &foot, "aligned", "COLOR_ENDPOINT", Some(&kw)).map(Some)
 }
-#[pyfunction(pass_module)]
+#[pyfunction(pass_module,signature=(foot,r#ref,kind,color,line=None))]
 pub(super) fn _from_point_result<'p>(
     m: &Module<'p>,
     foot: &Obj<'p>,
     r#ref: &Obj<'p>,
     kind: &str,
     color: &Obj<'p>,
+    line: Option<&Obj<'p>>,
 ) -> PyResult<Obj<'p>> {
     let kw = PyDict::new(m.py());
     kw.set_item("guide", (r#ref, foot))?;
-    if kind == "from_point" {
+    let foot_kind = matches!(kind, "from_point" | "midpoint" | "origin" | "center" | "intersection");
+    if foot_kind {
+        // The dotted guide takes the colour of the axis it runs along, or
+        // else of the axis the line is held on.
+        let along = guides::reference_colour(foot, r#ref, axes(m)?)?;
+        let held = line.map(|d| line_axis(d, axes(m)?)).transpose()?.flatten();
+        if let Some(k) = along.or(held) {
+            kw.set_item("guide_color", axis_color(m, Some(k))?)?;
+        }
         kw.set_item(
-            "guide_color",
-            axis_color(m, guides::reference_colour(foot, r#ref, axes(m)?)?)?,
+            "source_kind",
+            if kind == "from_point" { "endpoint" } else { kind },
         )?;
     }
     m.getattr("SnapResult")?
-        .call((foot, kind, color), Some(&kw))
+        .call((foot, if foot_kind { "from_point" } else { kind }, color), Some(&kw))
+}
+/// The axis a direction runs along, if any.
+fn line_axis(d: &Obj<'_>, axes: [P; 3]) -> PyResult<Option<usize>> {
+    let u = xyz(d)?.normalize_or_zero();
+    Ok((0..3).find(|&k| u.dot(DVec3::from(axes[k])).abs() > 0.999))
 }
 
 #[pyclass]
@@ -197,7 +211,7 @@ impl LineCallbacks {
         }
     }
 }
-#[pyfunction(pass_module,signature=(scene,start_point,draw_dir,cx,cy,world_to_pixel,threshold_px,is_occluded,extra_point=None,axis_deg=10.,hovered_refs=false,line_dir=None,project_onto_line=None,edge_body=true,query=None))]
+#[pyfunction(pass_module,signature=(scene,start_point,draw_dir,cx,cy,world_to_pixel,threshold_px,is_occluded,extra_point=None,axis_deg=10.,hovered_refs=false,line_dir=None,project_onto_line=None,edge_body=true,query=None,extra_points=None))]
 pub(super) fn _from_point_snap<'p>(
     m: &Module<'p>,
     scene: &Obj<'p>,
@@ -215,6 +229,7 @@ pub(super) fn _from_point_snap<'p>(
     project_onto_line: Option<&Obj<'p>>,
     edge_body: bool,
     query: Option<&Obj<'p>>,
+    extra_points: Option<&Obj<'p>>,
 ) -> PyResult<Option<Obj<'p>>> {
     let Some(start) = start_point else {
         return Ok(None);
@@ -242,7 +257,7 @@ pub(super) fn _from_point_snap<'p>(
             coords(&dir)?,
             threshold_px,
             hovered_refs,
-            extra_point.map(coords).transpose()?,
+            references(extra_point, extra_points)?,
             hidden,
         ),
     )?;
@@ -253,8 +268,15 @@ pub(super) fn _from_point_snap<'p>(
             "midpoint" => "COLOR_MIDPOINT",
             _ => "COLOR_ENDPOINT",
         };
-        return _from_point_result(m, &point(py, p)?, &point(py, r)?, kind, &m.getattr(color)?)
-            .map(Some);
+        return _from_point_result(
+            m,
+            &point(py, p)?,
+            &point(py, r)?,
+            kind,
+            &m.getattr(color)?,
+            Some(&dir),
+        )
+        .map(Some);
     }
     if !hovered_refs || !edge_body {
         return Ok(None);
@@ -285,7 +307,42 @@ pub(super) fn _from_point_snap<'p>(
     else {
         return Ok(None);
     };
-    _from_point_result(m, &foot, &r, "from_point", &m.getattr("COLOR_ENDPOINT")?).map(Some)
+    let hit = _from_point_result(
+        m,
+        &foot,
+        &r,
+        "from_point",
+        &m.getattr("COLOR_ENDPOINT")?,
+        Some(&dir),
+    )?;
+    hit.setattr("source_kind", "on_edge")?;
+    Ok(Some(hit))
+}
+/// The acquired point, then the points hovered lately (each a point or a
+/// (point, kind) pair), without repeats.
+fn references(one: Option<&Obj<'_>>, many: Option<&Obj<'_>>) -> PyResult<Vec<(P, String)>> {
+    let mut out: Vec<(P, String)> = Vec::new();
+    let mut add = |p: P, k: String| {
+        if !out.iter().any(|q| DVec3::from(q.0).distance(DVec3::from(p)) <= 1e-9) {
+            out.push((p, k));
+        }
+    };
+    if let Some(p) = one.filter(|p| !p.is_none()) {
+        add(coords(p)?, "from_point".into());
+    }
+    if let Some(ps) = many.filter(|p| !p.is_none()) {
+        for p in ps.try_iter()? {
+            let p = p?;
+            if p.is_none() {
+                continue;
+            }
+            match p.extract::<(Obj<'_>, String)>() {
+                Ok((q, k)) => add(coords(&q)?, k),
+                Err(_) => add(coords(&p)?, "from_point".into()),
+            }
+        }
+    }
+    Ok(out)
 }
 #[pyfunction(pass_module,signature=(cx,cy,scene,world_to_pixel,et,is_occluded,are_occluded=None,candidate_world=None))]
 pub(super) fn _intersection_snap<'p>(
@@ -420,7 +477,7 @@ pub(super) fn _lock_reference_snap<'p>(
     Ok(None)
 }
 
-#[pyfunction(pass_module,signature=(scene,start_point,line_dir,cx,cy,world_to_pixel,threshold_px,is_occluded,acquired_point,chain_first_point=None,project_onto_line=None,hover_edge=None,hover_plane=None,are_occluded=None,query=None))]
+#[pyfunction(pass_module,signature=(scene,start_point,line_dir,cx,cy,world_to_pixel,threshold_px,is_occluded,acquired_point,chain_first_point=None,project_onto_line=None,hover_edge=None,hover_plane=None,are_occluded=None,query=None,recent_points=None))]
 pub(super) fn _lock_line_snaps<'p>(
     m: &Module<'p>,
     scene: &Obj<'p>,
@@ -438,6 +495,7 @@ pub(super) fn _lock_line_snaps<'p>(
     hover_plane: Option<&Obj<'p>>,
     are_occluded: Option<&Obj<'p>>,
     query: Option<&Obj<'p>>,
+    recent_points: Option<&Obj<'p>>,
 ) -> PyResult<Option<Obj<'p>>> {
     let py = m.py();
     if let Some(p) = chain_first_point {
@@ -496,6 +554,7 @@ pub(super) fn _lock_line_snaps<'p>(
         project_onto_line,
         edge.is_none(),
         Some(&q),
+        recent_points,
     )?;
     if hit.is_some() || edge.is_some() {
         return Ok(hit.or(edge));

@@ -41,6 +41,9 @@ pub struct Gesture {
     has_circles: bool,
     has_outline: bool,
     has_crossing: bool,
+    /// Points hovered lately (`recent_points`) are on hand.
+    #[pyo3(default)]
+    has_recent: bool,
 }
 
 impl Gesture {
@@ -303,7 +306,7 @@ pub fn resolve_snap<'py>(
         if g.has_refs {
             offer!("two_points");
         }
-        if g.acquired.is_some() {
+        if g.acquired.is_some() || g.has_recent {
             offer!("encouraged");
         }
     }

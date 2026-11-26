@@ -9,7 +9,7 @@ use crate::{
 use glam::DVec3;
 use pyo3::{
     prelude::*,
-    types::{PyDict, PyTuple},
+    types::{PyDict, PyList, PyTuple},
 };
 
 #[pyclass(dict, module = "built_core.snap_frame")]
@@ -161,6 +161,7 @@ impl SnapFrame {
     ) -> PyResult<Obj<'py>> {
         let kw = PyDict::new(slf.py());
         kw.set_item("extra_point", slf.getattr("acquired_point")?)?;
+        kw.set_item("extra_points", recent(slf)?)?;
         kw.set_item("line_dir", line.map(vector))?;
         kw.set_item("query", slf.getattr("query")?)?;
         let (x, y) = pixel(slf)?;
@@ -319,33 +320,72 @@ impl SnapFrame {
             slf.getattr("is_occluded")?,
         ))
     }
+    /// Line up with the acquired point or a point hovered lately: the
+    /// nearest such alignment to the cursor wins.
     fn encouraged<'py>(slf: &F<'py>) -> PyResult<Obj<'py>> {
+        let py = slf.py();
         let (x, y) = pixel(slf)?;
-        let (refp, w, project, radius, hidden, plane) = (
-            slf.getattr("acquired_point")?,
+        let (w, project, radius, hidden, plane) = (
             slf.getattr("candidate_world")?,
             slf.getattr("world_to_pixel")?,
             slf.getattr("threshold")?,
             slf.getattr("is_occluded")?,
             slf.getattr("on_plane")?,
         );
-        let hit = api(slf, "_first_point_from_point")?.call1((
-            &refp,
-            &w,
-            x,
-            y,
-            &project,
-            &radius,
-            &hidden,
-            &plane,
-            slf.getattr("project_onto_line")?,
-            slf.getattr("free_3d")?,
-        ))?;
-        if hit.is_none() && !plane.is_none() {
-            return api(slf, "_in_plane_with_point_snap")?
-                .call1((refp, w, plane, x, y, project, radius, hidden));
+        // A rectangle's corner lines up in its own plane, over a face or not.
+        let plane = if plane.is_none() && slf.getattr("diagonal_span")?.is_truthy()? {
+            slf.getattr("work_plane_normal")?
+        } else {
+            plane
+        };
+        let mut refs = Vec::new();
+        let acquired = slf.getattr("acquired_point")?;
+        if !acquired.is_none() {
+            refs.push(acquired);
         }
-        Ok(hit)
+        let recent = recent(slf)?;
+        if !recent.is_none() {
+            for r in recent.try_iter()? {
+                let r = r?;
+                // (point, kind) pairs from the engine; bare points from callers.
+                let r = if r.is_instance_of::<PyTuple>() { r.get_item(0)? } else { r };
+                if !refs.iter().any(|q| {
+                    xyz(q).is_ok_and(|q| xyz(&r).is_ok_and(|r| q.distance(r) <= 1e-9))
+                }) {
+                    refs.push(r);
+                }
+            }
+        }
+        let mut best: Option<(f64, Obj<'py>)> = None;
+        for refp in refs {
+            let mut hit = api(slf, "_first_point_from_point")?.call1((
+                &refp,
+                &w,
+                x,
+                y,
+                &project,
+                &radius,
+                &hidden,
+                &plane,
+                slf.getattr("project_onto_line")?,
+                slf.getattr("free_3d")?,
+            ))?;
+            if hit.is_none() && !plane.is_none() {
+                hit = api(slf, "_in_plane_with_point_snap")?
+                    .call1((&refp, &w, &plane, x, y, &project, &radius, &hidden))?;
+            }
+            if hit.is_none() {
+                continue;
+            }
+            let d = project
+                .call1((hit.getattr("point")?,))?
+                .extract::<Option<(f64, f64)>>()?
+                .map_or(f64::INFINITY, |(u, v)| (u - x).hypot(v - y));
+            if best.as_ref().is_none_or(|(b, _)| d < *b) {
+                best = Some((d, hit));
+            }
+        }
+        Ok(best.map_or_else(|| py.None().into_bound(py), |b| b.1))
     }
     fn axis_result<'py>(slf: &F<'py>, point: P, axis: usize, locked: bool) -> PyResult<Obj<'py>> {
         let kw = PyDict::new(slf.py());
@@ -414,7 +454,18 @@ impl SnapFrame {
                 slf.getattr("query")?,
             ],
         )?;
-        let mut result = api(slf, "_lock_line_snaps")?.call1(args)?;
+        let kw = PyDict::new(py);
+        kw.set_item("recent_points", recent(slf)?)?;
+        let mut result = api(slf, "_lock_line_snaps")?.call(args, Some(&kw))?;
+        if result.is_none()
+            || ["intersection_edge", "intersection_face"]
+                .iter()
+                .any(|k| result.getattr("kind").is_ok_and(|v| v.eq(k).unwrap_or(false)))
+        {
+            if let Some(hit) = hovered_foot(slf, start, direction)? {
+                result = hit;
+            }
+        }
         let shift_color = slf.getattr("shift_lock_color")?;
         let color = match axis {
             Some(k) => color(slf, k)?,
@@ -447,6 +498,70 @@ impl SnapFrame {
         }
         Ok(result)
     }
+}
+/// The points hovered lately (`InferenceEngine._recent_references`: points
+/// or (point, kind) pairs), if handed in, while an operation has a start
+/// point, less that start: as with the acquired point, the start is no
+/// reference for its own line. Before the first click they are no
+/// references at all (the acquired point alone lines up a first point).
+fn recent<'py>(f: &F<'py>) -> PyResult<Obj<'py>> {
+    let py = f.py();
+    let start = f.getattr_opt("start_point")?.filter(|s| !s.is_none());
+    let (Some(all), Some(start)) = (
+        f.getattr_opt("recent_points")?.filter(|r| !r.is_none()),
+        start.map(|s| xyz(&s)).transpose()?,
+    ) else {
+        return Ok(py.None().into_bound(py));
+    };
+    let kept = PyList::empty(py);
+    for r in all.try_iter()? {
+        let r = r?;
+        let p = if r.is_instance_of::<PyTuple>() { r.get_item(0)? } else { r.clone() };
+        if xyz(&p)?.distance(start) >= 1e-6 {
+            kept.append(r)?;
+        }
+    }
+    Ok(kept.into_any())
+}
+/// Under a lock, any inference point the cursor is on (a centre, a face
+/// centre, a quadrant, an intersection; endpoints and midpoints come from
+/// `_lock_line_snaps`) gives the locked line the foot of its perpendicular
+/// plane: "from point".
+fn hovered_foot<'py>(f: &F<'py>, start: P, direction: P) -> PyResult<Option<Obj<'py>>> {
+    let u = DVec3::from_array(direction).normalize_or_zero();
+    if u == DVec3::ZERO {
+        return Ok(None);
+    }
+    let s = DVec3::from_array(start);
+    for step in 0..3 {
+        let hit = match step {
+            0 => f.call_method1("point", (false,))?,
+            1 => f.call_method1("intersection", (None::<usize>,))?,
+            _ => f.call_method1("point", (true,))?,
+        };
+        if hit.is_none() || !hit.getattr("guide")?.is_none() {
+            continue;
+        }
+        let p = xyz(&hit.getattr("point")?)?;
+        let foot = s + u * (p - s).dot(u);
+        if foot.distance(p) < 1e-4 {
+            return Ok(Some(hit));
+        }
+        if foot.distance(s) < 1e-6 {
+            continue; // level with the start: no line to draw
+        }
+        let r = api(f, "_from_point_result")?.call1((
+            vector(foot.to_array()),
+            vector(p.to_array()),
+            "from_point",
+            api(f, "COLOR_ENDPOINT")?,
+            vector(direction),
+        ))?;
+        r.setattr("source_kind", hit.getattr("kind")?)?;
+        r.setattr("context", hit.getattr("context")?)?;
+        return Ok(Some(r));
+    }
+    Ok(None)
 }
 pub(super) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let sub = PyModule::new(m.py(), "built_core.snap_frame")?;

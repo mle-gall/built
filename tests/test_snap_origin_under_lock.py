@@ -93,7 +93,8 @@ def test_a_corner_still_is():
 def test_a_midpoint_still_is():
     scene = _square_away_from_the_origin()
     r = _snap(scene, V(4.04, 2.03), START, lock="x")
-    assert r.kind == "midpoint"
+    # The foot of a midpoint: "From point", marked as from a midpoint.
+    assert r.kind == "from_point" and r.source_kind == "midpoint"
     assert r.point.x() == pytest.approx(4.0, abs=1e-6)
 
 
