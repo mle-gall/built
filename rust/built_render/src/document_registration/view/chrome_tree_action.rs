@@ -1102,8 +1102,8 @@ impl<'a, 'py> Row<'a, 'py> {
                 self.changed()?;
                 self.rebuild()?;
             }
-        } else if self.is(&["tagselect", "tagisolate"]) && tag_row {
-            glue.call_method1("tree_tag_action", (win, &ident, self.verb == "tagisolate"))?;
+        } else if self.is(&["tagselect", "tagisolate"]) && (tag_row || self.kind == "preview-folder") {
+            glue.call_method1("tree_tag_action", (win, &ident, self.verb == "tagisolate", self.kind == "preview-folder"))?;
         } else if self.is(&["kind"]) && named.is_some() {
             let node = named.as_deref().unwrap_or("");
             let recipe = self.recipe_of(self.structure_nodes()?.call_method1("get", (node, PyDict::new(py)))?)?;

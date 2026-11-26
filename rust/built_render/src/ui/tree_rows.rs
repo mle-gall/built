@@ -171,6 +171,7 @@ pub(super) fn show_menu(
         Some("preview-tag") => tag_menu,
         Some("preview-folder") => &[
             ("newtag", "New tag in folder"),
+            ("tagselect", "Select items"),
             ("rename", "Rename…"),
             ("eye", "Hide"),
             ("tagisolate", "Isolate"),
