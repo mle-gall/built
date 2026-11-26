@@ -343,6 +343,17 @@ def test_completed_job_names_its_result(win, label, result):
     assert cd.history(win)[0].title == result
 
 
+def test_array_replaces_only_the_move_copy_toast(win):
+    from tools.rust_tool_base import _Host
+
+    tool = _Host(win.viewport, tool=SimpleNamespace())
+    tool.message("Copy placed", {})
+    win.notify("info", "Unrelated")
+    tool.message("{n} copies", {"n": "3"})
+    rows = [(r.title, r.toast) for r in cd.history(win)[:3]]
+    assert rows == [("3 copies", True), ("Unrelated", True), ("Copy placed", False)]
+
+
 def test_the_background_autosave_shows_as_a_quiet_job(win):
     win._background_autosave = SimpleNamespace(busy=True, job={"doc": win._doc})
     jobs = cd.jobs(win)

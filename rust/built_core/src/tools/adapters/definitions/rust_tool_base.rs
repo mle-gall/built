@@ -27,7 +27,14 @@ fn message<'py>(a: &Args<'py>) -> Reply<'py> {
     if matches!(template.extract::<&str>()?, "{n} copies" | "Copy placed") {
         if let Some(window) = view.getattr_opt("window")? {
             if let Some(notify) = window.call0()?.getattr_opt("notify")? {
-                notify.call1(("success", &text))?;
+                let tool = a.get_item(0)?.getattr("tool")?;
+                let row = notify.call1(("success", &text))?;
+                if !tool.is_none() && template.eq("{n} copies")? {
+                    if let Some(previous) = tool.getattr_opt("_copy_notice")?.filter(|p| !p.is_none()) {
+                        previous.setattr("toast", false)?;
+                    }
+                }
+                if !tool.is_none() { tool.setattr("_copy_notice", row)?; }
                 return Ok(none(py));
             }
         }

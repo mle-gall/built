@@ -345,16 +345,17 @@ fn history<'py>(py: Python<'py>, win: &Bound<'py, PyAny>) -> PyResult<Bound<'py,
 #[pyfunction]
 #[pyo3(name = "_record", signature = (win, title, detail, tone, action_label=None, action=None, toast=true, secondary=None))]
 #[allow(clippy::too_many_arguments)]
-fn record(py: Python<'_>, win: &Bound<'_, PyAny>, title: Py<PyAny>, detail: Py<PyAny>, tone: Py<PyAny>, action_label: Option<Py<PyAny>>, action: Option<Py<PyAny>>, toast: bool, secondary: Option<(String, Py<PyAny>)>) -> PyResult<()> {
+fn record(py: Python<'_>, win: &Bound<'_, PyAny>, title: Py<PyAny>, detail: Py<PyAny>, tone: Py<PyAny>, action_label: Option<Py<PyAny>>, action: Option<Py<PyAny>>, toast: bool, secondary: Option<(String, Py<PyAny>)>) -> PyResult<Py<Activity>> {
     let m = cd(py)?;
     let mut row = Activity::new(next_id(), title, detail, tone, monotonic(py)?, action_label.unwrap_or_else(|| s(py, "").unbind()), action.unwrap_or_else(|| py.None()), toast);
     if let Some((label, callback)) = secondary {
         row.second_label = label;
         row.second_action = Some(callback);
     }
-    m.call_method1("history", (win,))?.call_method1("insert", (0, Bound::new(py, row)?))?;
+    let row = Bound::new(py, row)?;
+    m.call_method1("history", (win,))?.call_method1("insert", (0, &row))?;
     m.call_method1("_repaint", (win,))?;
-    Ok(())
+    Ok(row.unbind())
 }
 
 fn record_with(py: Python<'_>, win: &Bound<'_, PyAny>, title: Bound<'_, PyAny>, detail: Bound<'_, PyAny>, tone: &str, action_label: Bound<'_, PyAny>, action: Bound<'_, PyAny>, toast: bool) -> PyResult<()> {
@@ -365,6 +366,10 @@ fn record_with(py: Python<'_>, win: &Bound<'_, PyAny>, title: Bound<'_, PyAny>, 
 }
 
 pub(crate) fn post_notice(win: &Bound<'_, PyAny>, tone: &str, text: &str, actions: Vec<(String, Py<PyAny>)>) -> PyResult<()> {
+    publish_notice(win, tone, text, actions).map(drop)
+}
+
+pub(crate) fn publish_notice(win: &Bound<'_, PyAny>, tone: &str, text: &str, actions: Vec<(String, Py<PyAny>)>) -> PyResult<Py<Activity>> {
     let py = win.py();
     if !matches!(tone, "info" | "success" | "warning" | "error") || actions.len() > 2
         || actions.iter().any(|(label, cb)| label.is_empty() || !cb.bind(py).is_callable()) {
