@@ -149,7 +149,7 @@ pub const GUT: f32 = 8.0;
 // The dock has one width, the user's: dragged on its inner edge between
 // DOCK_MIN_W and DOCK_MAX_SHARE of the window, the same under every column
 // preset of the tree. DOCK_MAX_W only bounds a stored value.
-pub const DESTINATION_STRIP_W: f32 = 36.;
+pub const DESTINATION_STRIP_W: f32 = 26.;
 pub const DOCK_W: f32 = 300.0;
 pub const DOCK_MIN_W: f32 = 280.0;
 pub const DOCK_MAX_SHARE: f32 = 0.45;
