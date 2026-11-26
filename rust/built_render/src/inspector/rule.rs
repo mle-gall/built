@@ -18,8 +18,11 @@ impl Rule {
         if self.original.is_null() {
             return;
         }
-        ui.collapsing(
-            format!("Edit filing rule · {}", label(&self.original["name"])),
+        crate::ui::kit::disclosure(
+            ui,
+            ("filing defaults", label(&self.original["node"])),
+            &format!("Edit filing rule · {}", label(&self.original["name"])),
+            self.original["focused"] == true,
             |ui| {
                 ui.label("Local overrides");
                 ui.add(

@@ -223,3 +223,53 @@ def test_report_sheet_commands_and_parts_inspector(host, monkeypatch):
     provider.act(ctx, "pick", ["1"])
     chrome_sheet.close(win)
     assert sorted(p.name for p in scene.selection) == ["leg A", "leg B"]
+
+
+def test_unclassified_selection_requires_an_explicit_class_and_one_undo(host):
+    from core import record_inspector
+    from built_core.protocol import commands
+
+    scene = host.viewport.scene
+    history = host.viewport.history
+    a, b = Group(), Group()
+    scene.groups.extend([a, b])
+    scene.select([a, b])
+    paths = [scene.occurrence_path(g) for g in (a, b)]
+    before = [g.ifc for g in (a, b)]
+    rev = history.revision
+    with pytest.raises(ValueError, match="Choose an IFC class first"):
+        record_inspector.edit(history, paths, "fields", {"name": "Bench"}, "IFC4")
+    assert history.revision == rev
+    assert [g.ifc for g in (a, b)] == before
+    run(host, "record.fields", [[a.uid, b.uid], {"class": "IfcFurniture"}, "IFC4"])
+    assert [g.ifc["class"] for g in (a, b)] == ["IfcFurniture"] * 2
+    assert history.revision == rev + 1
+    commands.undo(history)
+    assert [g.ifc for g in (a, b)] == before
+
+
+def test_manual_quantity_edit_preserves_siblings_and_undo(host):
+    a, b = Group(), Group()
+    vp = host.viewport
+    for i, group in enumerate((a, b)):
+        group.ifc = {"class": "IfcBeam", "quantities": {"Length": i + 1, "Count": i + 2}}
+    vp.scene.groups.extend([a, b])
+    vp.scene.select([a, b])
+    before = [group.ifc for group in (a, b)]
+    revision = vp.history.revision
+    run(host, "record.quantity", [[a.uid, b.uid], ["Length", 3.5], "IFC4"])
+    assert vp.history.revision == revision + 1
+    for i, group in enumerate((a, b)):
+        assert group.ifc["quantities"]["Length"] == {"value": 3.5, "source": "manual"}
+        assert group.ifc["quantities"]["Count"]["value"] == i + 2
+    assert vp.history.undo()
+    assert [group.ifc for group in (a, b)] == before
+
+
+def test_open_node_defaults_uses_selection_revision(host):
+    group = Group()
+    scene = host.viewport.scene
+    scene.groups.append(group)
+    scene.select([group])
+    run(host, "rule.open", "benches")
+    assert host.view._ui_insp_node == ("benches", scene.selection.revision)

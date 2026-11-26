@@ -386,7 +386,7 @@ fn inspector<'py>(a: &Args<'py>) -> Reply<'py> {
         sections.append((
             "Export details",
             [
-                ("IFC class", either("class", "generic object")?),
+                ("IFC class", either("class", "Not set")?),
                 ("Predefined type", either("predefined_type", "—")?),
                 ("Tag", text_or(attr(&group, "layer")?, "—")?),
             ],

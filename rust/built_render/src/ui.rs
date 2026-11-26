@@ -2457,6 +2457,35 @@ impl Ui {
                         kit::inspector_title(ui, if col.overview.file.is_empty() { "Untitled" } else { &col.overview.file }, "Model");
                         ui.add_space(SPACE_XS);
                     }
+                    if !tag_focus && !col.inspector_title.is_empty() {
+                        let curated: Vec<_> = col.inspector.iter().filter(|(title,_)|title=="Actions").flat_map(|(_,rows)| rows).collect();
+                        ui.horizontal_wrapped(|ui| {
+                            if let Some((_,acts)) = selection {
+                                for (id,label,_,enabled,_) in acts.iter().filter(|a| matches!(a.0.as_str(),"file"|"file_to"|"hide"|"edit"|"linkopen")) {
+                                    if *enabled && kit::quiet(ui,label).clicked() { cmds.push(format!("cmd:{id}")); }
+                                }
+                            }
+                            if selection.is_some() || !curated.is_empty() {
+                                egui::ComboBox::from_id_salt("inspector actions").selected_text("Actions").show_ui(ui, |ui| {
+                                    for (id,label) in &curated {
+                                        if ui.selectable_label(false,label.as_str()).clicked() {
+                                            if let Some(key) = id.strip_prefix("kindmenu:") { col.kind_menu = Some((key.into(),ui.cursor().min)); }
+                                            else { actions.push(format!("insp:{id}")); }
+                                        }
+                                    }
+                                    if let Some((_,acts)) = selection {
+                                        for (id,label,_,enabled,_) in acts {
+                                            if ui.add_enabled(*enabled,egui::Button::new(label.as_str()).frame(false)).clicked() {
+                                                cmds.push(format!("cmd:{id}"));
+                                            }
+                                        }
+                                    }
+                                });
+                            }
+                        });
+                        ui.add_space(SPACE_XS);
+                    }
+                    ui.spacing_mut().scroll.floating = false;
                     egui::ScrollArea::vertical().id_salt("inspector").auto_shrink([false, false]).show(ui, |ui| {
                         ui.spacing_mut().item_spacing = vec2(0.0, SPACE_XS);
                         if tag_focus {
@@ -2511,40 +2540,15 @@ impl Ui {
                         if col.mode.is_empty() {
                             self.panels.inspector(ui, &mut cmds);
                         }
-                        let curated: Vec<_> = col.inspector.iter().filter(|(title,_)|title=="Actions").flat_map(|(_,rows)| rows).collect();
-                        ui.horizontal_wrapped(|ui| {
-                            if let Some((_,acts)) = selection {
-                                for (id,label,_,enabled,_) in acts.iter().filter(|a| matches!(a.0.as_str(),"file"|"file_to"|"hide"|"edit"|"linkopen")) {
-                                    if *enabled && kit::quiet(ui,label).clicked() { cmds.push(format!("cmd:{id}")); }
-                                }
-                            }
-                            if selection.is_some() || !curated.is_empty() {
-                                egui::ComboBox::from_id_salt("inspector actions").selected_text("Actions").show_ui(ui, |ui| {
-                                    for (id,label) in &curated {
-                                        if ui.selectable_label(false,label.as_str()).clicked() {
-                                            if let Some(key) = id.strip_prefix("kindmenu:") { col.kind_menu = Some((key.into(),ui.cursor().min)); }
-                                            else { actions.push(format!("insp:{id}")); }
-                                        }
-                                    }
-                                    if let Some((_,acts)) = selection {
-                                        for (id,label,_,enabled,_) in acts {
-                                            if ui.add_enabled(*enabled,egui::Button::new(label.as_str()).frame(false)).clicked() {
-                                                cmds.push(format!("cmd:{id}"));
-                                            }
-                                        }
-                                    }
-                                });
-                            }
-                        });
-                        ui.add_space(SPACE_XS);
                         let native_export = self.panels.has_records() && col.mode.is_empty();
                         if native_export {
-                            kit::disclosure(ui, "export details", "Export details", false, |ui| self.panels.export(ui, &mut cmds));
+                            let measured = col.inspector.iter().find(|(title,_)|title=="Quantities").map_or(&[][..],|(_,rows)|rows.as_slice());
+                            kit::disclosure(ui, "export details", "Export details", false, |ui| self.panels.export(ui, &mut cmds, measured));
                         }
                         let sections = col.inspector.clone();
                         for (title, rows) in &sections {
                             if title == "Actions" { continue; }
-                            if title == "Export details" && native_export { continue; }
+                            if matches!(title.as_str(),"Quantities" | "Export details") && native_export { continue; }
                             if title.starts_with("Export") || matches!(title.as_str(), "What it needs" | "Solid") {
                                 ui.add_space(SPACE_XS);
                                 kit::disclosure(ui, title, title, false,
