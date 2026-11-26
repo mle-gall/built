@@ -179,3 +179,14 @@ def test_the_tool_cursor_is_chosen_in_preferences(settings_file):
 def test_no_display_server_switch_in_native_settings(settings_file):
     side = Controls(_Win(), "general").wire()["side"]
     assert all(row.get("id") != "engine" for row in side)
+
+
+def test_blender_settings_use_the_render_pipeline_keys(settings_file):
+    ui = Controls(_Win(), "blender")
+    ui.set("render/blender_path", "/fixture/blender")
+    ui.set("render/engine", "cycles")
+    ui.set("render/samples", 48)
+    store = _fresh(settings_file)
+    assert store.value("render/blender_path") == "/fixture/blender"
+    assert store.value("render/engine") == "cycles"
+    assert int(store.value("render/samples")) == 48

@@ -150,11 +150,12 @@ def _png_size(path):
 def test_a_real_render_through_the_users_blender(tmp_path):
     scene = _box_scene()
     job = rb.write_job(scene, _camera(scene), tmp_path, engine="cycles",
-                       quality=0, width=160, height=90)
+                       quality=0, width=160, height=90, sample_override=8, preview=True)
     found = rb.find_blender()
     result = subprocess.run(rb.command(found, job), capture_output=True, text=True,
                             env=rb.clean_env(), timeout=600)
     assert result.returncode == 0, (result.stdout + result.stderr)[-4000:]
+    assert "BUILT preview" in result.stdout and (tmp_path / "render.png.preview.png").is_file()
     assert "BUILT done" in result.stdout
     assert _png_size(tmp_path / "render.png") == (160, 90)
 
@@ -168,10 +169,11 @@ def test_the_panel_knows_where_blender_is(native_host, monkeypatch):
     monkeypatch.setattr(rb, "in_snap", lambda: False)
     panel = create_panel(ExtensionApp(native_host.window, "render_blender"), lambda: None)
     controls = {item["id"]: item for section in panel.sections() for item in section["items"]}
-    assert controls["binary"]["value"] == found.where and controls["render"]["enabled"]
+    assert controls["availability"]["available"] and controls["render"]["enabled"]
+    assert "binary" not in controls and "engine" not in controls
 
     monkeypatch.setattr(rb, "in_snap", lambda: True)
-    panel.event("binary", "commit", found.where)
+    panel.on_open()
     controls = {item["id"]: item for section in panel.sections() for item in section["items"]}
     assert not controls["render"]["enabled"]
     assert "Snap" in controls["activity"]["label"]

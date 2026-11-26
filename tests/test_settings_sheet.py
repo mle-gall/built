@@ -99,7 +99,7 @@ def test_sections_in_two_groups(win):
     side = sheet["side"]
     labels = [(r.get("kind", ""), r["label"]) for r in side]
     assert labels == [("caption", "Built · this Mac"), ("", "General"), ("", "Navigation"),
-                      ("", "Display"), ("", "3D mouse"), ("", "Import"), ("", "Keyboard"), ("", "AI"),
+                      ("", "Display"), ("", "3D mouse"), ("", "Import"), ("", "Keyboard"), ("", "AI"), ("", "Blender"),
                       ("caption", "This model"), ("", "Units"),
                       ("", "Project registry"), ("", "Appearance"), ("", "Dimension style"), ("", "Location & north")]
     assert [r["id"] for r in side if r.get("on")] == ["general"]

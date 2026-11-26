@@ -143,7 +143,7 @@ fn ground_dict<'p>(scene: &Obj<'p>) -> PyResult<Option<Bound<'p, PyDict>>> {
     out.set_item("color", vec![0.42, 0.42, 0.40])?;
     Ok(Some(out))
 }
-#[pyfunction(signature=(scene,camera,work,*,engine="eevee",quality=1,width=1600,height=900,ground=true,keep_blend=false,ambience="day",lights=None,sun_scale=1.0,serve=false))]
+#[pyfunction(signature=(scene,camera,work,*,engine="eevee",quality=1,width=1600,height=900,ground=true,keep_blend=false,ambience="day",lights=None,sun_scale=1.0,serve=false,sample_override=0,preview=false))]
 #[allow(clippy::too_many_arguments)]
 fn write_job<'p>(
     scene: &Obj<'p>,
@@ -159,6 +159,8 @@ fn write_job<'p>(
     lights: Option<&Obj<'p>>,
     sun_scale: f64,
     serve: bool,
+    sample_override: i32,
+    preview: bool,
 ) -> PyResult<Obj<'p>> {
     let samples = SAMPLES
         .iter()
@@ -202,7 +204,8 @@ fn write_job<'p>(
     data.set_item("width", width)?;
     data.set_item("height", height)?;
     data.set_item("engine", engine)?;
-    data.set_item("samples", samples)?;
+    data.set_item("samples", if sample_override > 0 { sample_override.min(4096) } else { samples })?;
+    data.set_item("preview", preview)?;
     data.set_item("camera", camera_dict(camera)?)?;
     data.set_item("ambience", ambience)?;
     data.set_item("exposure", exposure)?;

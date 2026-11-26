@@ -165,7 +165,7 @@ def test_a_real_blender_follows_the_camera_when_it_rests(window, monkeypatch):
     panel.event("height", "commit", 90)
     panel.event("sync", "commit", True)
     assert _run(window, 120, lambda: panel.image is not None), panel.status
-    assert panel.viewer.model.following
+    assert panel.sync_timer.isActive()
     first = panel.image
     worker = panel.camera_session.process
     _run(window, 1.5)
@@ -173,7 +173,7 @@ def test_a_real_blender_follows_the_camera_when_it_rests(window, monkeypatch):
     window.viewport.camera.yaw += 0.7
     assert _run(window, 60, lambda: panel.image not in (first, None)), panel.status
     assert panel.image.is_file() and panel.camera_session.process is worker
-    panel.viewer.model.event("_panel", "closed", None)
+    panel.event("_panel", "closed", None)
     assert not panel.sync_timer.isActive() and worker.poll() is not None
 
 

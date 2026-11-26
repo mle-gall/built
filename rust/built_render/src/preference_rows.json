@@ -7,6 +7,13 @@
       {"id": "ia/ollama_url", "kind": "edit", "label": "Ollama URL"}
     ]]
   ],
+  "blender": [
+    ["renderer", "Renderer", [
+      {"id": "render/blender_path", "kind": "path", "label": "Blender executable", "pick": "open", "default": ""},
+      {"id": "render/engine", "kind": "choice", "label": "Engine", "options": [["eevee", "EEVEE"], ["cycles", "Cycles"]], "default": "eevee"},
+      {"id": "render/samples", "kind": "number", "label": "Samples", "lo": 0, "hi": 4096, "default": 0, "tip": "Zero uses the selected preset."}
+    ]]
+  ],
   "general": [
     ["look", "Look", [
       {"id": "language", "kind": "choice", "label": "Language", "restart": "Language", "tip": "Takes effect at the next start."},
