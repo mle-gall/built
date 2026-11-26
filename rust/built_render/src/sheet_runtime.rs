@@ -860,6 +860,21 @@ pub fn before_frame(view: &Bound<'_, PyAny>, win: &Bound<'_, PyAny>) -> PyResult
     kwargs.set_item("ensure_ascii", false)?;
     kwargs.set_item("separators", (",", ":"))?;
     let text: String = py.import("json")?.getattr("dumps")?.call((wire,), Some(&kwargs))?.extract()?;
+    if let Some(rows) = sheet.getattr_opt("_library_rows")? {
+        let rows = rows.extract::<PyRef<crate::library_host::LibraryRows>>()?;
+        let mut spec: crate::ui::large_sheet::Spec = serde_json::from_str(&text)
+            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+        for block in &mut spec.content.blocks {
+            if let Some(index) = block.id.strip_prefix("library-group:").and_then(|s| s.parse::<usize>().ok()) {
+                block.items = rows.groups[index].clone();
+            }
+        }
+        if let Some(ui) = &mut renderer.cast::<crate::Renderer>()?.borrow_mut().ui {
+            ui.set_sheet_spec(spec);
+        }
+        st.borrow_mut().sent = Some(text);
+        return Ok(());
+    }
     if st.borrow().sent.as_deref() != Some(text.as_str()) {
         if let Err(e) = renderer.call_method1("ui_set_large_sheet", (&text,)) {
             if e.is_instance_of::<pyo3::exceptions::PyValueError>(py) {
@@ -937,6 +952,11 @@ pub fn action(win: &Bound<'_, PyAny>, arg: &str) -> PyResult<()> {
     let view = view_of(win).map(Bound::unbind).unwrap_or_else(|| py.None());
     let ctx = Py::new(py, Ctx { win: win.clone().unbind(), view, replaced: false })?;
     let provider = st.borrow().provider.clone_ref(py);
+    if verb == "focus" && built.hasattr("_library_rows")? && args.first().is_some_and(|k| !k.starts_with("online:")) {
+        provider.bind(py).call_method1("focus_component", (&ctx, &built, &args[0]))?;
+        repaint(win);
+        return Ok(());
+    }
     if let Err(e) = provider.bind(py).call_method1("act", (ctx, verb, args)) {
         if !(e.is_instance_of::<pyo3::exceptions::PyKeyError>(py) || e.is_instance_of::<pyo3::exceptions::PyValueError>(py)) {
             return Err(e);
@@ -946,7 +966,9 @@ pub fn action(win: &Bound<'_, PyAny>, arg: &str) -> PyResult<()> {
             vp.call_method1("flash_status", (text.trim_matches(|c| c == '\'' || c == '"'),))?;
         }
     }
-    st.borrow_mut().dirty = true;
+    if !matches!((sid,verb), ("library" | "tree-material", "component-previews" | "family-previews")) {
+        st.borrow_mut().dirty = true;
+    }
     repaint(win);
     Ok(())
 }

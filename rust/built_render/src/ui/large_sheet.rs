@@ -132,7 +132,9 @@ pub struct Block {
     pub right: String,
     /// "", dim, faint, ok, warn, error, accent.
     pub tone: String,
-    pub items: Vec<Item>,
+    pub items: std::sync::Arc<[Item]>,
+    #[serde(skip)]
+    row_height: f32,
     /// kv rows: (label, value, tone).
     pub rows: Vec<(String, String, String)>,
     pub cells: Vec<Vec<String>>,
@@ -185,6 +187,28 @@ fn minus_one() -> i8 { -1 }
 
 // ---- What the sheet keeps ---------------------------------------------------
 
+#[derive(Clone, Copy)]
+struct ItemGrid {
+    origin: Pos2,
+    columns: usize,
+    stride: egui::Vec2,
+    size: egui::Vec2,
+}
+
+impl ItemGrid {
+    fn rect(self, index: usize) -> Rect {
+        Rect::from_min_size(self.origin + vec2((index % self.columns) as f32 * self.stride.x,
+            (index / self.columns) as f32 * self.stride.y), self.size)
+    }
+
+    fn visible(self, clip: Rect, count: usize) -> std::ops::Range<usize> {
+        let row = |y: f32| ((y - self.origin.y) / self.stride.y).floor().max(0.) as usize;
+        let first = row(clip.top()).saturating_mul(self.columns).min(count);
+        let end = row(clip.bottom()).saturating_add(1).saturating_mul(self.columns).min(count);
+        first..end
+    }
+}
+
 #[derive(Default)]
 pub struct LargeSheet {
     pub spec: Option<Spec>,
@@ -197,6 +221,8 @@ pub struct LargeSheet {
     pub focused: Option<String>,
     /// Focusable items as last laid out (content pane, reading order).
     pub focus_rects: Vec<(String, Rect)>,
+    previews: super::library_previews::Previews,
+    grids: Vec<(usize, ItemGrid)>,
     scroll_to: bool,
     /// An item's menu: (item, entries, where).
     pub menu: Option<(String, Vec<(String, String)>, Pos2)>,
@@ -220,12 +246,18 @@ impl LargeSheet {
 
     /// A new spec from Python; `None` closes. Returns whether it opened now.
     pub fn set(&mut self, spec: Option<Spec>) -> bool {
-        let Some(spec) = spec else {
+        let Some(mut spec) = spec else {
             self.open = false;
             self.menu = None;
             self.head_menu = None;
             return false;
         };
+        for block in spec.content.blocks.iter_mut().chain(spec.detail.iter_mut().flat_map(|p| &mut p.blocks)) {
+            if block.kind == "rows" {
+                block.row_height = if block.tone == "thumbs" || block.items.iter().any(|i| !i.icon.is_empty() || !i.hex.is_empty()) { 40. }
+                    else if block.items.iter().any(|i| !i.sub.is_empty()) { 36. } else { ROW_H };
+            }
+        }
         if !spec.content.blocks.iter().any(|block| block.map.is_some()) {
             self.map = Default::default();
         }
@@ -274,6 +306,7 @@ impl LargeSheet {
             }
         }
         self.forms.retain(|k, _| keep.contains(k));
+        self.grids.clear();
         self.spec = Some(spec);
         self.open = true;
         opening
@@ -312,40 +345,32 @@ impl LargeSheet {
 
     /// Move the focus to the nearest item that way (by last frame's layout).
     pub fn step(&mut self, dir: &str) -> bool {
-        if self.focus_rects.is_empty() { return false; }
-        let cur = self.focused.as_ref().and_then(|s| self.focus_rects.iter().position(|f| &f.0 == s));
-        let Some(i) = cur else {
-            self.focused = Some(self.focus_rects[0].0.clone());
-            self.scroll_to = true;
-            return true;
-        };
-        let here = self.focus_rects[i].1;
-        let c = here.center();
-        let mut best: Option<(f32, usize)> = None;
-        for (j, (_, r)) in self.focus_rects.iter().enumerate() {
-            if j == i { continue; }
-            let d = r.center() - c;
-            let (ok, cost) = match dir {
-                "ArrowRight" => (r.min.x >= here.max.x - 1.0 && d.y.abs() < here.height() / 2.0, d.x + d.y.abs() * 4.0),
-                "ArrowLeft" => (r.max.x <= here.min.x + 1.0 && d.y.abs() < here.height() / 2.0, -d.x + d.y.abs() * 4.0),
-                "ArrowDown" => (r.min.y >= here.max.y - 1.0, d.y + (r.min.x - here.min.x).abs() * 2.0),
-                _ => (r.max.y <= here.min.y + 1.0, -d.y + (r.min.x - here.min.x).abs() * 2.0),
-            };
-            if ok && best.is_none_or(|b| cost < b.0) { best = Some((cost, j)); }
-        }
-        let j = best.map(|b| b.1).or(match dir {
-            "ArrowRight" if i + 1 < self.focus_rects.len() => Some(i + 1),
-            "ArrowLeft" if i > 0 => Some(i - 1),
-            _ => None,
+        let Some(spec) = &self.spec else { return false };
+        let cells = || self.grids.iter().flat_map(|&(block, grid)| {
+            spec.content.blocks[block].items.iter().enumerate()
+                .filter(|(_, it)| !it.fixed && !it.id.is_empty())
+                .map(move |(i, it)| (&it.id, grid.rect(i)))
         });
-        match j {
-            Some(j) => {
-                self.focused = Some(self.focus_rects[j].0.clone());
-                self.scroll_to = true;
-                true
+        let current = cells().position(|(key, _)| Some(key) == self.focused.as_ref());
+        let target = match current {
+            None => cells().next(),
+            Some(i) if dir == "ArrowRight" => cells().nth(i + 1),
+            Some(i) if dir == "ArrowLeft" => i.checked_sub(1).and_then(|j| cells().nth(j)),
+            Some(i) => {
+                let (_, here) = cells().nth(i).unwrap();
+                cells().filter(|(_, r)| if dir == "ArrowDown" { r.min.y >= here.max.y - 1. }
+                    else { r.max.y <= here.min.y + 1. })
+                    .min_by_key(|(_, r)| {
+                        let cost = (r.center().y - here.center().y).abs() + (r.min.x - here.min.x).abs() * 2.;
+                        cost.to_bits()
+                    })
             }
-            None => false,
-        }
+        };
+        if let Some((key, _)) = target {
+            self.focused = Some(key.clone());
+            self.scroll_to = true;
+            true
+        } else { false }
     }
 
     /// Tab: the next (or previous) side entry that is not a heading.
@@ -532,7 +557,10 @@ impl Draw<'_> {
                 "picture" => {
                     let w = ui.available_width();
                     let h = if b.size > 0.0 { b.size } else { (w * 0.45).clamp(80.0, 260.0) };
-                    let tex = self.icons.get(&b.icon);
+                    if b.icon.starts_with("component:") && self.st.previews.needed(&b.icon) && !self.icons.contains_key(&b.icon) {
+                        self.out.push(format!("component-previews{SEP}{}", b.icon));
+                    }
+                    let tex = self.icons.get(&b.icon).or_else(|| self.st.previews.texture(ui.ctx(), &b.icon));
                     let width = if b.tone == "fit" {
                         tex.map_or(w, |t| w.min(h * t.aspect_ratio()))
                     } else { w };
@@ -576,7 +604,7 @@ impl Draw<'_> {
                     let width = ui.available_width();
                     ui.horizontal_wrapped(|ui| {
                         ui.spacing_mut().item_spacing = vec2(SPACE_XS, SPACE_XS);
-                        for tag in &b.items { kit::catalogue_tag(ui, &tag.label, width); }
+                        for tag in b.items.iter() { kit::catalogue_tag(ui, &tag.label, width); }
                     });
                     ui.add_space(SPACE_S);
                 }
@@ -595,8 +623,8 @@ impl Draw<'_> {
                     ui.add_space(SPACE_XS);
                 }
                 "buttons" => self.buttons(ui, b),
-                "tiles" => self.tiles(ui, b),
-                "rows" => self.rows(ui, b),
+                "tiles" => self.tiles(ui, b, i),
+                "rows" => self.rows(ui, b, i),
                 "fields" => {
                     let key = form_key(self.pane, i, b);
                     if let Some(d) = self.st.forms.get_mut(&key) {
@@ -623,7 +651,7 @@ impl Draw<'_> {
         let mut x = r.min.x;
         if !b.hex.is_empty() || !b.icon.is_empty() {
             let sw = Rect::from_min_size(pos2(x, r.center().y - 10.0), vec2(20.0, 20.0));
-            picture(ui, sw, self.icons.get(&b.icon), &b.hex, 4);
+            picture(ui, sw, self.icons.get(&b.icon).or_else(|| self.st.previews.texture(ui.ctx(), &b.icon)), &b.hex, 4);
             x += 28.0;
         }
         let t = fit(ui, &b.text, heading(), INK, r.max.x - x - rw, 1);
@@ -693,7 +721,23 @@ impl Draw<'_> {
         }
     }
 
-    fn tiles(&mut self, ui: &mut egui::Ui, b: &Block) {
+    fn visible_items(&mut self, ui: &egui::Ui, block: &Block, index: usize, grid: ItemGrid) -> std::ops::Range<usize> {
+        if self.focusable {
+            self.st.grids.push((index, grid));
+            if self.st.scroll_to {
+                if let Some(i) = block.items.iter().position(|it| Some(&it.id) == self.st.focused.as_ref()) {
+                    ui.scroll_to_rect(grid.rect(i).expand(4.), None);
+                    self.st.scroll_to = false;
+                }
+            }
+        }
+        let clip = ui.clip_rect();
+        let count = block.items.len();
+        if count == 0 || grid.origin.y > clip.bottom() || grid.rect(count - 1).bottom() < clip.top() { return 0..0; }
+        grid.visible(clip.expand2(vec2(0., grid.stride.y)), count)
+    }
+
+    fn tiles(&mut self, ui: &mut egui::Ui, b: &Block, block_index: usize) {
         let side = if b.size > 0.0 { b.size } else { 96.0 };
         let gap = SPACE_M;
         let w = ui.available_width();
@@ -710,23 +754,23 @@ impl Draw<'_> {
         let (block, _) = ui.allocate_exact_size(vec2(w, h.max(0.0)), Sense::hover());
         ui.painter().rect_filled(block, R_ROW, FIELD);
         let clip = ui.clip_rect();
-        for (i, it) in b.items.iter().enumerate() {
-            let (row, col) = (i / cols, i % cols);
-            let r = Rect::from_min_size(block.min + vec2(col as f32 * (side + gap), row as f32 * (cell.y + gap)), cell);
+        let grid = ItemGrid { origin: block.min, columns: cols, stride: cell + vec2(gap, gap), size: cell };
+        for i in self.visible_items(ui, b, block_index, grid) {
+            let it = &b.items[i];
+            let r = grid.rect(i);
             let focused = self.st.focused.as_deref() == Some(it.id.as_str()) && !it.id.is_empty();
             if self.focusable && !it.fixed && !it.id.is_empty() {
                 self.rects.push((it.id.clone(), r));
             }
-            if focused && self.st.scroll_to {
-                ui.scroll_to_rect(r.expand(8.0), None);
-                self.st.scroll_to = false;
+            if it.icon.starts_with("component:") && !self.icons.contains_key(&it.icon) && self.st.previews.needed(&it.icon) { components.push(it.icon.as_str()); }
+            if !clip.intersects(r) {
+                self.st.previews.prefetch_file(&it.icon);
+                continue;
             }
-            if !clip.intersects(r) { continue; }
             let resp = ui.interact(r, ui.id().with(("lstile", &it.id, i)), Sense::click());
-            if it.icon.starts_with("component:") && !self.icons.contains_key(&it.icon) { components.push(it.icon.as_str()); }
             if report_visible && !it.icon.is_empty() { visible.push(it.icon.clone()); }
             let pic = Rect::from_min_size(r.min, picture_size);
-            picture(ui, pic, self.icons.get(&it.icon), &it.hex, 8);
+            picture(ui, pic, self.icons.get(&it.icon).or_else(|| self.st.previews.texture(ui.ctx(), &it.icon)), &it.hex, 8);
             if resp.hovered() && !focused {
                 ui.painter().rect_stroke(pic, CornerRadius::same(8), Stroke::new(1.0_f32, INK_2), egui::StrokeKind::Outside);
             }
@@ -765,27 +809,29 @@ impl Draw<'_> {
         ui.add_space(SPACE_S);
     }
 
-    fn rows(&mut self, ui: &mut egui::Ui, b: &Block) {
-        let thumbs = b.items.iter().any(|i| !i.icon.is_empty() || !i.hex.is_empty()) || b.tone == "thumbs";
-        let rh = if thumbs { 40.0 } else if b.items.iter().any(|i| !i.sub.is_empty()) { 36.0 } else { ROW_H };
+    fn rows(&mut self, ui: &mut egui::Ui, b: &Block, block_index: usize) {
+        let rh = b.row_height.max(ROW_H);
+        let thumbs = rh == 40.;
         let w = ui.available_width();
         let h = b.items.len() as f32 * rh;
         let (block, _) = ui.allocate_exact_size(vec2(w, h), Sense::hover());
         ui.painter().rect_filled(block, R_ROW, FIELD);
         let clip = ui.clip_rect();
         let mut components = Vec::new();
-        let mut families = Vec::new();
-        for (i, it) in b.items.iter().enumerate() {
-            let r = Rect::from_min_size(block.min + vec2(0.0, i as f32 * rh), vec2(w, rh));
+
+        let grid = ItemGrid { origin: block.min, columns: 1, stride: vec2(w, rh), size: vec2(w, rh) };
+        for i in self.visible_items(ui, b, block_index, grid) {
+            let it = &b.items[i];
+            let r = grid.rect(i);
             let focused = self.st.focused.as_deref() == Some(it.id.as_str()) && !it.id.is_empty();
             if self.focusable && !it.fixed && !it.id.is_empty() {
                 self.rects.push((it.id.clone(), r));
             }
-            if focused && self.st.scroll_to {
-                ui.scroll_to_rect(r.expand(4.0), None);
-                self.st.scroll_to = false;
+            if it.icon.starts_with("component:") && !self.icons.contains_key(&it.icon) && self.st.previews.needed(&it.icon) { components.push(it.icon.as_str()); }
+            if !clip.intersects(r) {
+                self.st.previews.prefetch_file(&it.icon);
+                continue;
             }
-            if !clip.intersects(r) { continue; }
             let placeable = it.kind == "placeable";
             let sense = if placeable { Sense::click_and_drag() } else if it.id.is_empty() { Sense::hover() } else { Sense::click() };
             let resp = ui.interact(r, ui.id().with(("lsrow", &it.id, i)), sense);
@@ -799,11 +845,9 @@ impl Draw<'_> {
                      else { state_of(&resp, false, true) };
             paint_state(ui, r.shrink2(vec2(0.0, 1.0)), st, R_ROW);
             let mut x = r.min.x + 8.0 + it.depth as f32 * 16.0;
-            if it.icon.starts_with("component:") && !self.icons.contains_key(&it.icon) { components.push(it.icon.as_str()); }
-            if it.id.starts_with("family:") && !self.icons.contains_key(&it.icon) { families.push(it.id.as_str()); }
             if thumbs && (b.tone != "start-list" || !it.icon.is_empty()) {
                 let t = Rect::from_min_size(pos2(x, r.center().y - 15.0), vec2(44.0, 30.0));
-                picture(ui, t, self.icons.get(&it.icon), &it.hex, 4);
+                picture(ui, t, self.icons.get(&it.icon).or_else(|| self.st.previews.texture(ui.ctx(), &it.icon)), &it.hex, 4);
                 x += 54.0;
             } else if it.kind == "file" {
                 file_glyph(ui, pos2(x + 5.0, r.center().y), if it.dim { OFF } else { DIM });
@@ -848,9 +892,7 @@ impl Draw<'_> {
             let resp = if it.tip.is_empty() { resp } else { resp.on_hover_text(&it.tip) };
             self.item_input(&resp, it);
         }
-        if !families.is_empty() {
-            self.out.push(std::iter::once("family-previews").chain(families).collect::<Vec<_>>().join(&SEP.to_string()));
-        }
+
         if !components.is_empty() {
             self.out.push(std::iter::once("component-previews").chain(components).collect::<Vec<_>>().join(&SEP.to_string()));
         }
@@ -887,6 +929,26 @@ impl Ui {
             return Ok(());
         }
         let spec: Spec = serde_json::from_str(json).map_err(|e| e.to_string())?;
+        self.set_sheet_spec(spec);
+        Ok(())
+    }
+
+    pub(crate) fn needs_component_preview(&self, key: &str) -> bool {
+        self.lsheet.previews.needed(key)
+    }
+
+    pub(crate) fn request_component_preview(&mut self, key: &str, job: impl FnOnce() -> Option<egui::ColorImage> + Send + 'static) {
+        self.lsheet.previews.request(key, job);
+        self.ctx.request_repaint();
+    }
+
+    pub(crate) fn update_library_detail(&mut self, pane: Pane) {
+        if let Some(detail) = self.lsheet.spec.as_mut().and_then(|s| s.detail.as_mut()) {
+            *detail = pane;
+        }
+    }
+
+    pub(crate) fn set_sheet_spec(&mut self, spec: Spec) {
         if self.lsheet.set(Some(spec)) {
             // One float at a time: the sheet closes the menus under it.
             self.view_open = false;
@@ -898,7 +960,6 @@ impl Ui {
             }
             self.ctx.memory_mut(|m| m.stop_text_input());
         }
-        Ok(())
     }
 
     pub(crate) fn empty_start_shown(&self) -> bool {
@@ -1026,6 +1087,7 @@ impl Ui {
             }
             return;
         }
+        self.lsheet.previews.poll(ctx);
         let Some(spec) = self.lsheet.spec.take() else { return };
         let ease = 1.0 - (1.0 - t) * (1.0 - t);
         let live = self.lsheet.open && !self.lsheet_covered();
@@ -1040,6 +1102,7 @@ impl Ui {
         self.lsheet.rect = Some(sheet);
         let icons = &self.icons;
         let st = &mut self.lsheet;
+        st.grids.clear();
         let mut rects: Vec<(String, Rect)> = Vec::new();
         let area = egui::Area::new(egui::Id::new("lsheet"))
             .fixed_pos(back.min)
@@ -1125,6 +1188,7 @@ impl Ui {
                 }
             });
         let layer = area.response.layer_id;
+        st.previews.poll(ctx);
         st.focus_rects = rects;
         // An item's menu.
         if let Some((item, entries, at)) = st.menu.clone() {
@@ -1377,8 +1441,7 @@ mod tests {
     }
 
     fn laid_out(s: &mut LargeSheet) {
-        s.focus_rects = ["x", "y", "z"].iter().enumerate()
-            .map(|(i, id)| (id.to_string(), Rect::from_min_size(pos2(i as f32 * 110.0, 0.0), vec2(96.0, 130.0)))).collect();
+        s.grids = vec![(0, ItemGrid { origin: Pos2::ZERO, columns: 3, stride: vec2(110., 140.), size: vec2(96.,130.) })];
     }
 
     #[test]
@@ -1514,6 +1577,24 @@ mod tests {
     }
 
     #[test]
+    fn deep_scroll_bounds_layout_and_arrows_reach_unbuilt_items() {
+        for (kind, columns) in [("tiles", 4), ("rows", 1)] {
+            let items = (0..3000).map(|i| Item { id: format!("part-{i}"), ..Default::default() }).collect();
+            let block = Block { kind: kind.into(), items, ..Default::default() };
+            let mut state = LargeSheet::default();
+            let content = Pane { blocks: vec![block], ..Default::default() };
+            state.set(Some(Spec { content, focus: Some("part-2000".into()), ..Default::default() }));
+            let grid = ItemGrid { origin: pos2(0., -20_000.), columns, stride: vec2(100.,40.), size: vec2(96.,38.) };
+            let clip = Rect::from_min_size(Pos2::ZERO, vec2(400.,200.));
+            assert_eq!(grid.visible(clip, 3000), 500*columns..506*columns);
+            state.grids.push((0, grid));
+            assert!(state.step("ArrowDown"));
+            assert_eq!(state.focused, Some(format!("part-{}", 2000+columns)));
+            assert!(state.scroll_to);
+        }
+    }
+
+    #[test]
     fn component_pictures_are_requested_only_inside_the_clip() {
         let ctx = egui::Context::default();
         fonts(&ctx);
@@ -1531,7 +1612,7 @@ mod tests {
                     let area = Rect::from_min_size(pos2(0.,offset),vec2(400.,8000.));
                     ui.allocate_new_ui(egui::UiBuilder::new().max_rect(area), |ui| {
                         ui.set_clip_rect(screen);
-                        Draw { st: state, icons: &icons, out:&mut out, focusable:true, pane:"c", rects:vec![] }.tiles(ui,&block);
+                        Draw { st: state, icons: &icons, out:&mut out, focusable:true, pane:"c", rects:vec![] }.tiles(ui,&block,0);
                     });
                 });
             });

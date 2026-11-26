@@ -263,32 +263,36 @@ mod image_io {
 }
 
 pub fn decode(py: Python<'_>, path: &Path) -> PyResult<Option<RgbaImage>> {
-    let result = py.detach(|| -> image::ImageResult<Option<RgbaImage>> {
+    Ok(py.detach(|| decode_file(path)))
+}
+
+pub(crate) fn decode_file(path: &Path) -> Option<RgbaImage> {
+    let result = (|| -> image::ImageResult<Option<RgbaImage>> {
         if svg_path(path) {
             return Ok(
                 file_svg(path).and_then(|tree| raster_svg(&tree, tree.size().to_int_size(), false))
             );
         }
         Ok(Some(reader(path)?.decode()?.into_rgba8()))
-    });
+    })();
     match result {
-        Ok(img) => Ok(img),
+        Ok(img) => img,
         Err(ImageError::Unsupported(_)) => {
-            if let Some(img) = py.detach(|| bitmap_files::read(path)) {
-                return Ok(Some(img));
+            if let Some(img) = bitmap_files::read(path) {
+                return Some(img);
             }
             #[cfg(target_os = "macos")]
-            return Ok(py.detach(|| {
+            return {
                 pdf_image::Page::open(path)
                     .and_then(|p| p.read())
                     .or_else(|| image_io::read(path))
-            }));
+            };
             #[cfg(any(windows, all(unix, not(target_os = "macos"))))]
-            return Ok(py.detach(|| platform_image::read(path)));
+            return platform_image::read(path);
             #[cfg(not(any(windows, unix)))]
-            return Ok(None);
+            return None;
         }
-        Err(_) => Ok(None),
+        Err(_) => None,
     }
 }
 

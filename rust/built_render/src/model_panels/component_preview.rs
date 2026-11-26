@@ -42,36 +42,43 @@ fn raster(
 }
 
 fn preview(definition: &Bound<'_, PyAny>, size: u32, budget: usize) -> PyResult<Pixmap> {
+    let encoded = embedded_preview(definition)?;
+    if let Some(mut image) = Pixmap::new(size.min(1024), size.min(1024)).filter(|_| size <= 1024) {
+        if decoded_into(&mut image, encoded.as_deref()) { return Ok(image); }
+    }
+    draw_polygons(geometry::polygons(definition, budget)?, size)
+}
+
+fn embedded_preview(definition: &Bound<'_, PyAny>) -> PyResult<Option<Vec<u8>>> {
     let py = definition.py();
-    let mut image = Pixmap::new(size.min(1024), size.min(1024))
-        .filter(|_| size <= 1024)
-        .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("Invalid preview size"))?;
     let encoded = definition
         .getattr_opt("ext")?
         .filter(|v| !v.is_none())
         .and_then(|v| v.get_item("rfa").ok())
         .and_then(|v| v.get_item("preview_png_base64").ok());
-    if let Some(text) = encoded.filter(|s| s.len().is_ok_and(|n| n > 0 && n <= 16 << 20)) {
-        if let Ok(bytes) = py
-            .import("base64")?
-            .call_method1("b64decode", (text,))
-            .and_then(|v| v.extract::<Vec<u8>>())
-        {
-            if let Some(source) = crate::image_io::decode(&bytes) {
-                let pixels = source.thumbnail(size, size).to_rgba8();
-                let (w, h) = pixels.dimensions();
-                let (dx, dy) = ((size - w) / 2, (size - h) / 2);
-                for (x, y, p) in pixels.enumerate_pixels() {
-                    let i = (((y + dy) * size + x + dx) * 4) as usize;
-                    let [r, g, b, a] = p.0;
-                    let [r, g, b] = [r, g, b].map(|v| ((v as u16 * a as u16 + 127) / 255) as u8);
-                    image.data_mut()[i..i + 4].copy_from_slice(&[r, g, b, a]);
-                }
-                return Ok(image);
-            }
-        }
+    Ok(encoded.filter(|s| s.len().is_ok_and(|n| n > 0 && n <= 16 << 20)).and_then(|text|
+        py.import("base64").and_then(|m| m.call_method1("b64decode", (text,))).and_then(|v| v.extract()).ok()))
+}
+
+fn decoded_into(image: &mut Pixmap, encoded: Option<&[u8]>) -> bool {
+    let Some(source) = encoded.and_then(crate::image_io::decode) else { return false };
+    let size = image.width();
+    let pixels = source.thumbnail(size, size).to_rgba8();
+    let (w, h) = pixels.dimensions();
+    let (dx, dy) = ((size - w) / 2, (size - h) / 2);
+    for (x, y, p) in pixels.enumerate_pixels() {
+        let i = (((y + dy) * size + x + dx) * 4) as usize;
+        let [r, g, b, a] = p.0;
+        let [r, g, b] = [r, g, b].map(|v| ((v as u16 * a as u16 + 127) / 255) as u8);
+        image.data_mut()[i..i + 4].copy_from_slice(&[r, g, b, a]);
     }
-    let mut polys = geometry::polygons(definition, budget)?;
+    true
+}
+
+fn draw_polygons(mut polys: Vec<Polygon>, size: u32) -> PyResult<Pixmap> {
+    let mut image = Pixmap::new(size.min(1024), size.min(1024))
+        .filter(|_| size <= 1024)
+        .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("Invalid preview size"))?;
     polys.sort_by(|a, b| a.0.total_cmp(&b.0));
     let mut lo = [f32::INFINITY; 2];
     let mut hi = [f32::NEG_INFINITY; 2];
@@ -163,8 +170,14 @@ pub(crate) fn upload(ctx: &Bound<'_, PyAny>, icons: &[String]) -> PyResult<()> {
     );
     let view = ctx.getattr("view")?;
     let rows = calls::components_in_model(&view, &ctx.getattr("win")?)?;
+    let renderer = view.getattr("renderer")?;
+    let native = renderer.cast::<crate::Renderer>().ok();
+    let start = std::time::Instant::now();
     let mut batch = Vec::new();
     for key in icons {
+        // Snapshot document geometry on its owning thread, yielding between definitions.
+        // Rows still missing their texture request it again on the next frame.
+        if native.is_some() && start.elapsed() >= std::time::Duration::from_millis(2) { break; }
         let Some(i) = key
             .strip_prefix(&prefix)
             .and_then(|n| n.parse::<usize>().ok())
@@ -179,6 +192,21 @@ pub(crate) fn upload(ctx: &Bound<'_, PyAny>, icons: &[String]) -> PyResult<()> {
         } else {
             row.get_item(3)?
         };
+        if let Some(renderer) = native {
+            if !renderer.borrow().ui.as_ref().is_some_and(|ui| ui.needs_component_preview(key)) { continue; }
+            let encoded = embedded_preview(&definition)?;
+            let polygons = geometry::polygons(&definition, 3000)?;
+            if let Some(ui) = &mut renderer.borrow_mut().ui {
+                ui.request_component_preview(key, move || {
+                    let mut image = Pixmap::new(96, 96)?;
+                    if !decoded_into(&mut image, encoded.as_deref()) {
+                        image = draw_polygons(polygons, 96).ok()?;
+                    }
+                    Some(egui::ColorImage::from_rgba_premultiplied([96, 96], image.data()))
+                });
+            }
+            continue;
+        }
         batch.push((key, 96, 96, component_pixels(&definition, 96)?));
     }
     if !batch.is_empty() {
