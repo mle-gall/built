@@ -210,25 +210,31 @@ def test_native_about_copies_diagnostics(tmp_path):
 
 @pytest.mark.skipif(os.environ.get("BUILT_WINDOW_TESTS") != "1" or not BIN.exists(),
                     reason="requires a built window and BUILT_WINDOW_TESTS=1")
-def test_native_section_name_question(tmp_path):
+def test_native_placed_section_plane_is_selected_without_a_prompt(tmp_path):
     from built_core.scene import Scene
-    from formats.igz import save_scene
+    from formats.igz import load_into, save_scene
 
     model = tmp_path / "empty.igz"
+    saved = tmp_path / "section.built"
     save_scene(Scene(), model)
     steps = tmp_path / "commands"
     steps.write_text("wait 650\nkey escape\ntool section\nwait 300\n"
-                     "click 510 435\nwait 350\nstate\nkey enter\nwait 250\nstate\nquit\n")
+                     f"click 510 435\nwait 350\nstate\nmenu save_to:{saved}\nwait 350\nquit\n")
     home = tmp_path / "home"
     home.mkdir()
     result = run([str(BIN), "--root", str(ROOT), "--new-instance", "--size", "1000x720",
-                  "--script", str(steps), str(model)], home=home, settings=tmp_path / "settings",
+                  "--script", str(steps), str(model)], home=home, settings=english(tmp_path / "settings"),
                  capture_output=True, text=True, timeout=90)
     log = result.stdout + result.stderr
     states = [json.loads(line.removeprefix("[built] state ")) for line in log.splitlines()
               if line.startswith("[built] state ")]
-    assert result.returncode == 0 and [s["form_open"] for s in states[:2]] == [True, False], log
-    assert not any(s["errors"] or s["blocked_widgets"] for s in states), log
+    assert result.returncode == 0 and states, log
+    assert states[0]["selection"] == 1 and not states[0]["form_open"], log
+    assert all(not s["errors"] and not s["blocked_widgets"] for s in states), log
+    scene = Scene()
+    load_into(scene, saved)
+    plane, = scene.section_planes
+    assert (plane.name, plane.symbol) == ("Section 1", "A")
 
 
 @pytest.mark.skipif(os.environ.get("BUILT_WINDOW_TESTS") != "1" or not BIN.exists(),
@@ -274,7 +280,9 @@ def test_native_location_coordinates_map_apply_and_cancel(tmp_path):
         "from georef.tile_fetcher import TileFetcher\nfrom pathlib import Path\n"
         f"TileFetcher.request = lambda self, src, x, y, z: Path({str(requested)!r}).touch()\n")
     steps = tmp_path / "commands"
-    steps.write_text("wait 600\nkey escape\nmenu prefs\nwait 350\nclick 116 510\nwait 150\n"
+    # The script can open Settings but cannot address its pages by id. At
+    # 1000x920, Location & north follows Dimension style in the model sidebar.
+    steps.write_text("wait 600\nkey escape\nmenu prefs\nwait 350\nclick 116 535\nwait 150\n"
                      "click 552 328\nwait 200\nclick 550 282\nkey a cmd\ntype 48.85\n"
                      "click 550 311\nkey a cmd\ntype 2.35\nclick 340 351\nwait 450\n"
                      "drag 590 585 625 585 left 7\nwait 250\nstate\nclick 492 747\nwait 250\n"
