@@ -225,7 +225,8 @@ def test_anchor_broad_phase_answers_as_the_python_did():
     assert got["may_hold"] == want["may_hold"]
     assert len(got["scenes"]) == len(want["scenes"])
     for i, (g, w) in enumerate(zip(got["scenes"], want["scenes"])):
-        assert matches(g["entries"], w["entries"]), f"scene {i} entries"
+        for index, (actual, expected) in enumerate(zip(g["entries"], w["entries"], strict=True)):
+            assert matches(actual, expected), (i, index, actual, expected)
         for q, (a, b) in enumerate(zip(g["queries"], w["queries"], strict=True)):
             if sys.platform == "darwin" or q % 2:
                 assert a == b, f"scene {i} query {q}"
