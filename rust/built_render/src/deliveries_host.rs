@@ -1082,6 +1082,9 @@ pub fn enqueue<'py>(win: &Bound<'py, PyAny>, key: &Bound<'py, PyAny>, record: &B
         }
     };
     let job = job(win, &record.get_item("name")?)?;
+    if fmt.eq("package")? && !key.is_none() {
+        job.setattr("id", format!("delivery-{key}-{}", job.getattr("id")?))?;
+    }
     job.call_method1("update", (0, "Queued"))?;
     let advance = Py::new(py, DeliveryStep {
         win: win.clone().unbind(),

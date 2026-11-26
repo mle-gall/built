@@ -46,9 +46,11 @@ pub(super) fn strip(ui: &mut egui::Ui, report: &Value) -> bool {
 }
 
 /// Kept deliveries, checks and completed runs share the active record key.
-pub(super) fn destination(ui: &mut egui::Ui, report: &Value, cmds: &mut Vec<String>, actions: &mut Vec<String>, rule: &mut Option<(String, String)>) -> bool {
+pub(super) fn destination(ui: &mut egui::Ui, report: &Value, jobs: &[super::Job], cmds: &mut Vec<String>, actions: &mut Vec<String>, rule: &mut Option<(String, String)>) -> bool {
     let mut show = false;
     let active = report["active"].as_str().unwrap_or("");
+    let prefix = format!("delivery-{active}-");
+    let running = jobs.iter().find(|job| job.0.starts_with(&prefix));
     let choices = report["choices"].as_array().map(Vec::as_slice).unwrap_or_default();
     kit::inspector_title(ui, "Deliveries", "");
     ui.add_space(super::SPACE_S);
@@ -121,14 +123,24 @@ pub(super) fn destination(ui: &mut egui::Ui, report: &Value, cmds: &mut Vec<Stri
             ui.separator();
             if kit::quiet(ui, "Edit setup…").clicked() { cmds.push(format!("deliver:edit:{active}")); }
             if let Some(outputs) = report["outputs"].as_array().filter(|outputs| !outputs.is_empty()) {
-                kit::caption_plain(ui, "Outputs");
+                if let Some(job) = running {
+                    kit::prop_row(ui, "Outputs", &job.2);
+                    kit::progress_bar(ui, job.3, super::SPACE_XS);
+                } else {
+                    kit::caption_plain(ui, "Outputs");
+                }
                 for output in outputs {
                     let format = output["format"].as_str().unwrap_or("").to_uppercase();
                     let path = output["destination"].as_str().unwrap_or("");
                     let last=report["runs"].as_array().and_then(|runs|runs.last()).and_then(|r|r["outputs"].as_array())
                         .and_then(|rows|rows.iter().find(|row|row["format"]==output["format"]));
                     let result=last.and_then(|row|row["result"].as_str()).filter(|s|*s!="Delivered").unwrap_or(path);
-                    let row = ui.scope(|ui| kit::prop_row(ui, &format, result));
+                    let status = match running {
+                        Some(job) if job.2.strip_prefix("Writing ") == Some(&format) => "Writing…",
+                        Some(_) => path,
+                        None => result,
+                    };
+                    let row = ui.scope(|ui| kit::prop_row(ui, &format, status));
                     row.response.on_hover_text(path);
                 }
             }
