@@ -1,4 +1,5 @@
 """Camera controls recorded from the Python class on 9388c25dd."""
+from tests.platform_golden import matches
 import gzip
 import json
 import random
@@ -54,7 +55,7 @@ def encoded():
 
 
 def test_camera_controls_match_python():
-    assert encoded() == json.loads(gzip.decompress(GOLDEN.read_bytes()))
+    assert matches(encoded(), json.loads(gzip.decompress(GOLDEN.read_bytes())))
 
 
 def test_plugin_subclass_and_overrides_survive_copy():

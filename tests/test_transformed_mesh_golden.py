@@ -106,7 +106,8 @@ def answers(seed):
 
 @pytest.mark.parametrize("seed", range(CASES))
 def test_transformed_and_world_meshes_build_as_the_python_did(seed):
-    assert answers(seed) == _golden()[seed]
+    from tests.platform_golden import matches
+    assert matches(answers(seed), _golden()[seed])
 
 
 _CACHE = []

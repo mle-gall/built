@@ -47,6 +47,7 @@ pub fn register_shell(m: &Bound<'_, PyModule>) -> PyResult<()> {
     crate::start_host::register(m)?;
     // Where this user's data, caches and documents live; their languages.
     for f in [
+        wrap_pyfunction!(crate::antialias::store_and_resolve_probe, m)?,
         wrap_pyfunction!(crate::platform_paths::preferred_languages, m)?,
         wrap_pyfunction!(crate::platform_paths::documents_directory, m)?,
         wrap_pyfunction!(crate::platform_paths::recovery_directory, m)?,

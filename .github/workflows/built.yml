@@ -4,6 +4,13 @@ on:
     branches: [main, 'ci/**']
   pull_request:
   workflow_dispatch:
+    inputs:
+      tests:
+        description: pytest selection to run alone (empty runs the whole workflow)
+        default: ''
+      os:
+        description: runners, as a JSON list
+        default: '["macos-latest"]'
 
 permissions:
   contents: read
@@ -19,7 +26,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, ubuntu-latest, windows-latest]
+        os: ${{ fromJSON(inputs.tests && inputs.os || '["macos-latest", "ubuntu-latest", "windows-latest"]') }}
     defaults:
       run:
         shell: bash
@@ -46,7 +53,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
-          cache: pip
+          cache: ${{ runner.os != 'Windows' && 'pip' || '' }}
           cache-dependency-path: built/requirements.txt
 
       - uses: actions/cache@v4
@@ -56,6 +63,45 @@ jobs:
             ~/.cargo/git
           key: cargo-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('built/rust/*/Cargo.lock') }}
           restore-keys: cargo-${{ runner.os }}-${{ runner.arch }}-
+
+      # The compiled crates, by toolchain, lock files and everything the
+      # crates compile in (their sources, and the resources and fixtures
+      # they include).
+      # An exact match was built from these very sources, so they are marked
+      # older than it and nothing compiles. A match on the lock files alone
+      # keeps the dependencies and compiles Built's own crates again.
+      - name: Key the compiled crates
+        id: crates
+        if: runner.os != 'Windows'
+        run: |
+          echo "toolchain=$(rustc -Vv | shasum -a 256 | cut -c1-16)" >> "$GITHUB_OUTPUT"
+          # The .rfa reader is a path dependency, pinned by its commit and our patch.
+          if [[ -d ../rvt-rs ]]; then
+            echo "reader=$( { git -C ../rvt-rs rev-parse HEAD; shasum -a 256 .github/ci/rfa-family.patch; } | shasum -a 256 | cut -c1-16)" >> "$GITHUB_OUTPUT"
+          else
+            echo "reader=none" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/cache/restore@v4
+        id: target
+        if: runner.os != 'Windows'
+        with:
+          path: built/rust/built_app/target
+          key: target-${{ runner.os }}-${{ runner.arch }}-${{ steps.crates.outputs.toolchain }}-${{ steps.crates.outputs.reader }}-${{ hashFiles('built/rust/*/Cargo.lock') }}-${{ hashFiles('built/rust/**', '!built/rust/**/target/**', 'built/resources/**', 'built/tests/fixtures/**', 'built/AUTHORS', 'built/scripts/build_native.sh') }}
+          restore-keys: target-${{ runner.os }}-${{ runner.arch }}-${{ steps.crates.outputs.toolchain }}-${{ steps.crates.outputs.reader }}-${{ hashFiles('built/rust/*/Cargo.lock') }}-
+
+      # A fresh checkout dates every file now, which would make cargo compile
+      # what the cache already holds. The reader's sources are in the key
+      # whenever anything was restored; Built's own only on an exact match.
+      - name: Mark unchanged sources as built
+        if: runner.os != 'Windows' && steps.target.outputs.cache-matched-key != ''
+        run: |
+          if [[ -d ../rvt-rs ]]; then
+            git -C ../rvt-rs ls-files -z | (cd ../rvt-rs && xargs -0 touch -h -t 200001010000)
+          fi
+          if [[ "${{ steps.target.outputs.cache-hit }}" == true ]]; then
+            git ls-files -z rust resources tests/fixtures AUTHORS | xargs -0 touch -h -t 200001010000
+          fi
 
       - name: Isolate the application profile
         run: |
@@ -96,7 +142,13 @@ jobs:
         if: runner.os != 'Windows'
         run: |
           python -m venv .venv
-          .venv/bin/python -m pip install -r requirements.txt pillow
+          # A new environment each run: its interpreter must not look newer
+          # than crates compiled against the same one in an earlier run.
+          touch -h -t 200001010000 .venv/bin/python* .venv/pyvenv.cfg
+          if [[ "${{ steps.target.outputs.cache-hit }}" == true ]]; then
+            export CARGO_LOG=cargo::core::compiler::fingerprint=info    # say why, if anything compiles
+          fi
+          .venv/bin/python -m pip install -r requirements.txt pillow pymupdf ifctester
           if [[ "$RUNNER_OS" == macOS ]]; then
             test "$(uname -m)" = arm64
             .venv/bin/python -m pip install pyinstaller ifcopenshell
@@ -118,7 +170,10 @@ jobs:
       - name: Run the full macOS suite
         if: runner.os == 'macOS'
         run: |
-          if swift .github/ci/window-session.swift; then
+          swift .github/ci/window-session.swift configure || true
+          if available=$(swift .github/ci/window-session.swift); then
+            echo "::notice::Display offers $available points for scripted windows."
+            export BUILT_CI_WINDOW_SIZE="$available"
             export BUILT_WINDOW_TESTS=1
           else
             code=$?
@@ -130,16 +185,20 @@ jobs:
             esac
             echo "::notice::$BUILT_CI_SKIP_WINDOWS; window tests will be marked skipped."
           fi
-          .venv/bin/python -m pytest -n auto --dist loadfile -q -rs tests
+          .venv/bin/python -m pytest -n auto --dist loadfile -q -rs ${{ inputs.tests || 'tests' }}
 
       - name: Run the Linux non-window tier and check the launcher
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && !inputs.tests
         run: |
           .venv/bin/python -m pytest -n auto --dist loadfile -q -m "not slow and not window" tests
           cargo check --locked --manifest-path rust/built_app/Cargo.toml
 
+      - name: Run the selected tests
+        if: runner.os == 'Linux' && inputs.tests
+        run: .venv/bin/python -m pytest -n auto --dist loadfile -q -rs ${{ inputs.tests }}
+
       - name: Rust library tests
-        if: runner.os != 'Windows'
+        if: runner.os != 'Windows' && !inputs.tests
         run: |
           crates=(built_core built_render python_bindings)
           if [[ "$RUNNER_OS" == macOS ]]; then crates+=(built_rfa); fi
@@ -148,7 +207,15 @@ jobs:
           done
 
       - name: Build and check Built.app
-        if: runner.os == 'macOS'
+        if: runner.os == 'macOS' && !inputs.tests
         run: |
-          packaging/build-macos-native.sh "$RUNNER_TEMP/bundle"
+          BUILT_CARGO_TARGET_DIR="$CARGO_TARGET_DIR" packaging/build-macos-native.sh "$RUNNER_TEMP/bundle"
           .venv/bin/python scripts/isolated_launch.py "$RUNNER_TEMP/bundle/Built.app/Contents/MacOS/built" --check
+
+      # Last, so the test and bundle builds are kept too; also after a failed
+      # test step, which changes nothing in what was compiled.
+      - uses: actions/cache/save@v4
+        if: runner.os != 'Windows' && steps.target.outputs.cache-hit != 'true' && !cancelled() && !inputs.tests
+        with:
+          path: built/rust/built_app/target
+          key: ${{ steps.target.outputs.cache-primary-key }}

@@ -82,6 +82,9 @@ def test_the_degenerate_cases_recover_the_same_way():
 
 
 def test_projected_vertex_identity_and_order():
+    # Fix the input directions as binary64: a libm ulp in a nearly coplanar
+    # point can change the selected diagonal before earcut is even called.
+    from tests.unit_rings import rings
     rng = random.Random(372901)
     digest = hashlib.sha256()
     for k in range(500):
@@ -92,9 +95,7 @@ def test_projected_vertex_identity_and_order():
         def point(x, y):
             return Vec3(600000. + x, 6800000. + y, tilt * x + y)
 
-        outer = [point(r * math.cos(i * math.tau / size),
-                       r * math.sin(i * math.tau / size))
-                 for i, r in enumerate(radii)]
+        outer = [point(r * x, r * y) for r, (x, y) in zip(radii, rings[size])]
         hole = [point(-1, -1), point(-1, 1), point(1, 1), point(1, -1)] if k % 2 else []
         indices = {id(p): i for i, p in enumerate(outer + hole)}
         for tri in T.triangulate(outer, [hole]):

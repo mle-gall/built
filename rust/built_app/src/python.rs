@@ -189,7 +189,15 @@ impl Host {
     /// hover (a pick and a snap) after each one is the lag of a zoom on a
     /// large model.
     pub fn navigating(&self) -> Option<std::time::Instant> {
-        let until = self.navigated.get()? + NAVIGATION_SETTLE;
+        // BUILT_NAVIGATION_SETTLE_MS: a scripted run on a slow machine sets a
+        // pause no stall can outlast, so the hovers it counts do not depend
+        // on how long each scripted step took.
+        static SETTLE: std::sync::OnceLock<std::time::Duration> = std::sync::OnceLock::new();
+        let settle = *SETTLE.get_or_init(|| {
+            std::env::var("BUILT_NAVIGATION_SETTLE_MS").ok().and_then(|ms| ms.parse().ok())
+                .map_or(NAVIGATION_SETTLE, std::time::Duration::from_millis)
+        });
+        let until = self.navigated.get()? + settle;
         if std::time::Instant::now() < until {
             return Some(until);
         }

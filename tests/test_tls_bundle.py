@@ -20,9 +20,9 @@ def _paths(cafile=None, capath=None, openssl_cafile=None, openssl_capath=None):
 
 
 MAC_FRAMEWORK = _paths(
-    openssl_cafile="/Library/Frameworks/Python.framework/Versions/3.12/etc/"
+    openssl_cafile="/missing-bundle-fixture/Python.framework/Versions/3.12/etc/"
                    "openssl/cert.pem",
-    openssl_capath="/Library/Frameworks/Python.framework/Versions/3.12/etc/"
+    openssl_capath="/missing-bundle-fixture/Python.framework/Versions/3.12/etc/"
                    "openssl/certs")
 
 

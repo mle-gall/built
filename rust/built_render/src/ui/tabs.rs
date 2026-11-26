@@ -133,7 +133,7 @@ impl Strip {
             }
             if *front {
                 // The accent line on the bar's bottom edge.
-                ui.painter().hline(rect.x_range().shrink(6.0), rect.center().y + TOP_H / 2. - 1., Stroke::new(2.0_f32, ACCENT));
+                ui.painter().hline(rect.x_range().shrink(6.0), rect.center().y + (TOP_H - MENU_H) / 2. - 1., Stroke::new(2.0_f32, ACCENT));
             }
             if resp.clicked() {
                 out.push(if over_x { format!("ptab:close:{i}") } else { format!("ptab:activate:{i}") });
@@ -468,7 +468,8 @@ mod tests {
             assert_eq!(accents.len(), 1);
             let [left, right] = accents[0];
             assert!(left.x >= active.left() && right.x <= active.right());
-            assert_eq!(left.y, TOP_H - 1.0);
+            // The bottom of the tab bar: the laid-out strip has no menu bar above it.
+            assert_eq!(left.y, TOP_H - MENU_H - 1.0);
             let plus = plus.expect("new tab button");
             assert!((plus.x - (last.right() + 1.0 + PLUS_W / 2.0)).abs() <= 1.0);
             assert!((plus.y - last.center().y).abs() <= 1.0);

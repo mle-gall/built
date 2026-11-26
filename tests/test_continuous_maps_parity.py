@@ -11,6 +11,7 @@ Regenerate only on purpose, against the reference implementation:
 ``python tests/test_continuous_maps_parity.py --write``."""
 from __future__ import annotations
 
+from tests.platform_golden import matches
 import gzip
 import json
 import math
@@ -34,7 +35,12 @@ def _prism(rng):
     for i in range(steps):
         a = sweep * i / n
         rr = r * (1 + (rng.uniform(-0.3, 0.3) if rng.random() < 0.2 else 0))
-        ring.append((rr * math.cos(a), rr * math.sin(a)))
+        if closed:
+            from tests.unit_rings import rings
+            x, y = rings[n][i]
+        else:
+            x, y = math.cos(a), math.sin(a)
+        ring.append((rr * x, rr * y))
     faces = []
     for i in range(n if closed else n):
         (x0, y0), (x1, y1) = ring[i], ring[(i + 1) % steps]
@@ -86,7 +92,7 @@ def test_continuous_maps_answer_as_the_python_did():
     want = json.loads(gzip.decompress(GOLDEN.read_bytes()))
     got = json.loads(json.dumps(answers()))
     assert len(got) == len(want)
-    bad = [i for i, (g, w) in enumerate(zip(got, want)) if g != w]
+    bad = [i for i, (g, w) in enumerate(zip(got, want)) if not matches(g, w)]
     assert not bad, bad[:10]
 
 

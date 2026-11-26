@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 @pytest.mark.skipif(os.environ.get("BUILT_WINDOW_TESTS") != "1", reason="requires a native window")
+@pytest.mark.window_size(1024, 700)
 def test_modelling_session_uses_native_handlers(tmp_path):
     binary = Path(os.environ.get("BUILT_BINARY", ROOT / "rust/built_app/target/release/built"))
     source = ROOT / "tests/fixtures/shell/slab-and-cube.igz"

@@ -248,6 +248,13 @@ def pytest_collection_modifyitems(config, items):
         blender_skip = pytest.mark.skip(reason="no Blender executable on PATH")
     seen = {}
     for item in items:
+        layout = item.get_closest_marker("window_size")
+        available = os.environ.get("BUILT_CI_WINDOW_SIZE")
+        if layout and available:
+            width, height = map(int, available.split("x"))
+            w, h = layout.args
+            if width < w or height < h:
+                item.add_marker(pytest.mark.skip(reason=f"scripted clicks require {w}x{h} points; display has {available}"))
         if blender_skip and item.get_closest_marker("blender"):
             item.add_marker(blender_skip)
         path = getattr(item, "path", None)

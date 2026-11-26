@@ -1,4 +1,6 @@
 """Verify overlay pixels independently of native presentation and GPU access."""
+import sys
+
 import pytest
 from views.wgpu_overlay import Primitive, axes, pixels, rasterize, snap_glyph
 
@@ -28,6 +30,12 @@ PRIMITIVE_DIGESTS = {1: "eb3d8c013fc4eb6f12298a9a", 2: "f482445fab1a60937c3510a4
                      3: "6647da35c4c1a39969647fe4"}
 
 
+# Font rasterization differs in the text and axis labels. Captured from
+# the RGBA artifact of the x86-64 Linux release build.
+LINUX_DIGESTS = {1: "7ade38d35c27eeaedcde9132", 2: "d5336dffddfd1415cfdffb36",
+                 3: "245de47bc64dc6a366fb76d2"}
+
+
 def _primitive_set():
     from built_core import Input as Qt
     return [
@@ -44,17 +52,21 @@ def _primitive_set():
     ]
 
 
-@pytest.mark.parametrize("dpr", [1, 2, 3])
-def test_primitives_are_pinned(dpr):
-    """The loop moved from Python to AnnotationCanvas.draw_primitives. The
-    digests are of the Python loop on the same canvas with the native paint
-    types, before the port."""
-    import hashlib
+def primitive_pixels(dpr):
     from built_render import AnnotationCanvas
     from views.wgpu_overlay import paint_layer, selection_rectangle
     canvas = AnnotationCanvas(200 * dpr, 200 * dpr, 200.)
     items = _primitive_set() + [selection_rectangle((10, 150), (60, 190)),
                                 selection_rectangle((190, 150), (130, 190), zoom=True)]
     paint_layer(canvas, items)
-    rgba = canvas.composite(bytes(200 * dpr * 200 * dpr * 4))
-    assert hashlib.sha256(rgba).hexdigest()[:24] == PRIMITIVE_DIGESTS[dpr]
+    return canvas.composite(bytes(200 * dpr * 200 * dpr * 4))
+
+
+@pytest.mark.parametrize("dpr", [1, 2, 3])
+def test_primitives_are_pinned(dpr):
+    """The loop moved from Python to AnnotationCanvas.draw_primitives. The
+    digests are of the Python loop on the same canvas with the native paint
+    types, before the port."""
+    import hashlib
+    reference = LINUX_DIGESTS if sys.platform == "linux" else PRIMITIVE_DIGESTS
+    assert hashlib.sha256(primitive_pixels(dpr)).hexdigest()[:24] == reference[dpr]

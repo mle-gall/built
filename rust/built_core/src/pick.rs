@@ -41,7 +41,16 @@ pub fn ray_triangle(o: P, d: P, v0: P, e1: P, e2: P) -> Option<f64> {
     let q = cross(s, e1);
     let v = dot(q, d) * inv;
     let t = dot(e2, q) * inv;
-    (u >= -BARY_EPS && u <= 1.0 + BARY_EPS && v >= -BARY_EPS && u + v <= 1.0 + BARY_EPS && t > 1e-6).then_some(t)
+    if t <= 1e-6 { return None; }
+    if u >= 0. && v >= 0. && u + v <= 1. { return Some(t); }
+    // For a parallel ray starting kilometres from a shared edge, the
+    // triple products cancel large terms. Bound that roundoff in the
+    // barycentric coordinates, independently of the depth tie tolerance.
+    let max_abs = |v: P| v.into_iter().map(f64::abs).fold(0.0, f64::max);
+    let error = 16. * f64::EPSILON * max_abs(s) * max_abs(d)
+        * (max_abs(e1) + max_abs(e2)) * inv.abs();
+    let slack = error.clamp(BARY_EPS, 1e-8);
+    (u >= -slack && v >= -slack && u + v <= 1. + slack).then_some(t)
 }
 
 /// A camera's projection to view pixels.

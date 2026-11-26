@@ -15,6 +15,7 @@ Regenerate only on purpose, against the reference implementation:
 ``python tests/test_placement_walks_parity.py --write``."""
 from __future__ import annotations
 
+from tests.platform_golden import matches
 import gzip
 import json
 import random
@@ -112,7 +113,7 @@ def test_the_walks_answer_as_the_generators_did():
     got = json.loads(json.dumps(answers()))
     assert len(got) == len(want)
     for i, (g, w) in enumerate(zip(got, want)):
-        bad = [j for j, (a, b) in enumerate(zip(g, w)) if a != b]
+        bad = [j for j, (a, b) in enumerate(zip(g, w)) if not matches(a, b)]
         assert len(g) == len(w) and not bad, (i, bad[:5])
 
 

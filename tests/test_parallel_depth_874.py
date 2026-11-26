@@ -68,15 +68,24 @@ def test_faces_close_together_do_not_fight_in_parallel(win):
     st = vp.scene.display_style
     st.edges = False
     st.profiles = False
-    counts = {}
-    for proj in ("perspective", "parallel"):
+    def colors(proj):
         vp.camera.set_view("iso")
         vp.camera.set_projection(proj)
         vp.camera.fit_to(V(0, 0, 0), V(1, 1, 0.01))
         px = _rgb(vp.render_raster(400, 300, overlays=False))
-        red = (px[..., 0] > 150) & (px[..., 2] < 100)
-        blue = (px[..., 2] > 150) & (px[..., 0] < 100)
-        counts[proj] = (int(red.sum()), int(blue.sum()))
-        # The blue face covers the middle of the red one: the red is only
-        # its rim, a minority of the two.
-        assert blue.sum() > 1.5 * red.sum(), (proj, counts)
+        return ((px[..., 0] > 150) & (px[..., 2] < 100),
+                (px[..., 2] > 150) & (px[..., 0] < 100))
+
+    stacked = {proj: colors(proj) for proj in ("perspective", "parallel")}
+    m.remove_face(low)
+    vp.scene.version += 1
+    for proj, (red, blue) in stacked.items():
+        _, upper = colors(proj)
+        # Compare the actual projected footprint. The outside rim varies
+        # with framing and rasterization; an interior pixel must stay blue.
+        interior = upper[1:-1, 1:-1].copy()
+        for dy in range(3):
+            for dx in range(3):
+                interior &= upper[dy:dy + interior.shape[0], dx:dx + interior.shape[1]]
+        assert interior.sum() > 1000 and red.sum() > 1000
+        assert blue[1:-1, 1:-1][interior].all(), proj

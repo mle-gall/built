@@ -130,6 +130,7 @@ def test_no_draft_while_a_mouse_button_is_held(window, monkeypatch):
     from tests.test_render_lights import _panel
     panel = _panel(window)
     calls = []
+    monkeypatch.setattr(panel, "found", "fixture-renderer")
     monkeypatch.setattr(panel.camera_session, "_load", lambda key: calls.append(key))
     inputs = window._host.input_state
     inputs.pointer(10, 10, 1, 0)

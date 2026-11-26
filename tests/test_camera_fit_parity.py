@@ -10,6 +10,7 @@ onto the Rust ``Cam``.
 reference implementation: ``python tests/test_camera_fit_parity.py --write``."""
 from __future__ import annotations
 
+from tests.platform_golden import matches
 import gzip
 import json
 import math
@@ -71,7 +72,7 @@ def test_fitting_and_moves_answer_as_the_python_ones_did():
     cases = runs()
     assert len(cases) == len(want)
     wrong = [f"run {i} ({act[0]}) {k}" for i, ((c, act), w) in enumerate(zip(cases, want))
-             for k, v in answer(c, act).items() if v != w[k]]
+             for k, v in answer(c, act).items() if not matches(v, w[k])]
     assert not wrong, f"{len(wrong)} differ: {wrong[:20]}"
 
 

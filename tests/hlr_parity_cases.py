@@ -9,6 +9,10 @@ drawing pass of ``core/hlr.py`` (integ/built 60e017a8) before its loop
 moved to Rust."""
 from __future__ import annotations
 
+from functools import lru_cache
+import gzip
+import json
+from pathlib import Path
 import math
 import random
 
@@ -23,24 +27,22 @@ from built_core.section import SectionPlane
 VIEWS = ("top", "front", "right", "iso")
 
 
+@lru_cache(maxsize=1)
+def _boxes():
+    # Freeze the rotated input corners as well as the drawing. Regenerating
+    # the inputs with host libm perturbs coincident projected edges.
+    path = Path(__file__).parent / "fixtures/hlr_parity/boxes.json.gz"
+    return json.loads(gzip.decompress(path.read_bytes()))
+
+
 def boxes_scene(seed: int) -> Scene:
-    """Overlapping, tilted boxes (tests/test_hlr_native.py's scenes)."""
-    rng = random.Random(seed)
+    data = _boxes()[str(seed)]
     scene = Scene()
-    for _ in range(rng.randint(3, 9)):
-        w, d, h = rng.uniform(0.3, 2), rng.uniform(0.3, 2), rng.uniform(0.2, 3)
-        m = QMatrix4x4()
-        m.translate(rng.uniform(-4, 4), rng.uniform(-4, 4), rng.uniform(0, 2))
-        m.rotate(rng.uniform(0, 360), 0, 0, 1)
-        if rng.random() < 0.3:
-            m.rotate(rng.uniform(-30, 30), 1, 0, 0)
-        p = [m.map(QVector3D(x, y, z)) for z in (0, h) for y in (0, d) for x in (0, w)]
-        for loop in ((0, 2, 3, 1), (4, 5, 7, 6), (0, 1, 5, 4), (1, 3, 7, 5),
-                     (3, 2, 6, 7), (2, 0, 4, 6)):
-            scene.mesh.add_face([p[i] for i in loop])
-    if seed % 3 == 0:
+    for face in data["faces"]:
+        scene.mesh.add_face([QVector3D(*point) for point in face])
+    if "section_z" in data:
         scene.section_planes = [SectionPlane(
-            QVector3D(0, 0, rng.uniform(0.5, 1.5)), QVector3D(0, 0, -1), active=True)]
+            QVector3D(0, 0, data["section_z"]), QVector3D(0, 0, -1), active=True)]
     return scene
 
 
