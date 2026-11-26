@@ -587,6 +587,15 @@ fn draw_snap_indicator<'py>(a: &Args<'py>) -> Reply<'py> {
         }
     }
     let label = if labels.is_truthy()? { direct(py, snap_label, (&snap, scene))? } else { none(py) };
+    // A 'from point' foot also marks the point its guide comes from, in that
+    // point's own glyph, so the reference it is aligned with stays visible.
+    if kind.eq("from_point")? && !guide.is_none() {
+        let source = project.call1((guide.get_item(0)?,))?;
+        if !source.is_none() {
+            let glyph = crate::document_annotations::marks::source_glyph(snap.getattr_opt("source_kind")?);
+            painter.call_method1("draw_snap", (glyph, tuple(source)?, &rgb, empty(py), none(py)))?;
+        }
+    }
     painter.call_method1("draw_snap", (kind, tuple(pixel)?, rgb, segments, label))?;
     Ok(none(py))
 }
