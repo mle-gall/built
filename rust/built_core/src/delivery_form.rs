@@ -9,6 +9,15 @@ use serde_json::{json, Map, Value};
 use std::path::Path;
 
 pub const FORMATS: [&str; 8] = ["ifc", "dxf", "glb", "obj", "dae", "svg", "pdf", "stl"];
+pub const PACKAGE_OUTPUTS: [(&str, &str, &str); 6] = [
+    ("ifc", "Model + IDS report", "model.ifc"),
+    ("pdf", "Sheet set", "sheets.pdf"),
+    ("dxf", "Drawings", "drawings.dxf"),
+    ("bcf", "Task topics", "topics.bcfzip"),
+    ("csv", "Quantity schedule", "schedule.csv"),
+    ("manifest", "File inventory", "manifest.json"),
+];
+
 pub const STL_UNITS: [&str; 5] = ["mm", "cm", "m", "in", "ft"];
 
 /// The scopes a format takes, (id, label); "node" only with a project tree.
@@ -30,8 +39,10 @@ pub fn scopes(fmt: &str, nodes: bool) -> Vec<(&'static str, &'static str)> {
 pub fn visible(fid: &str, fmt: &str, scope: &str) -> bool {
     match fid {
         "node" => scope == "node",
+        "ids" | "sheet_names" | "drawing_names" | "topics" => fmt == "package",
+        id if id.starts_with("include_") => fmt == "package",
         "names" => scope == "sheets" || scope == "scenes",
-        "profile" => fmt == "ifc",
+        "profile" => fmt == "ifc" || fmt == "package",
         "textures" => fmt == "glb",
         "unit" => fmt == "stl",
         _ => true,
@@ -49,7 +60,7 @@ pub fn record(values: &Value, svg: &Value) -> Value {
     let fmt = text(values, "format");
     let scope = text(values, "scope");
     let mut opts = Map::new();
-    if fmt == "ifc" && !text(values, "profile").is_empty() {
+    if matches!(fmt, "ifc" | "package") && !text(values, "profile").is_empty() {
         opts.insert("profile".into(), json!(text(values, "profile")));
     }
     if fmt == "glb" {
@@ -69,6 +80,46 @@ pub fn record(values: &Value, svg: &Value) -> Value {
     }
     let mut r = json!({"name": text(values, "name"), "format": fmt, "scope": scope,
                        "destination": text(values, "destination")});
+    if fmt == "package" {
+        let mut outputs = Vec::new();
+        for (format, _, _) in PACKAGE_OUTPUTS {
+            if values[format!("include_{format}")].as_bool() == Some(false) {
+                continue;
+            }
+            let custom = text(values, &format!("source_{format}"));
+            let source = match format {
+                "pdf" => "sheets",
+                "bcf" => "topics",
+                "manifest" => "files",
+                "dxf" if !text(values, "drawing_names").trim().is_empty() => "scenes",
+                _ if !custom.is_empty() => custom,
+                _ => scope,
+            };
+            let mut options = json!({});
+            if format == "ifc" {
+                for k in ["profile", "ids"] {
+                    if !text(values, k).is_empty() {
+                        options[k] = values[k].clone();
+                    }
+                }
+            }
+            let names = match format {
+                "pdf" => "sheet_names",
+                "dxf" => "drawing_names",
+                "bcf" => "topics",
+                _ => "",
+            };
+            if !text(values, names).trim().is_empty() {
+                options["names"] = json!(text(values, names)
+                    .lines()
+                    .map(str::trim)
+                    .filter(|n| !n.is_empty())
+                    .collect::<Vec<_>>());
+            }
+            outputs.push(json!({"format":format,"scope":source,"options":options}));
+        }
+        r["outputs"] = json!(outputs);
+    }
     if scope == "node" {
         r["node"] = json!(text(values, "node"));
     }
@@ -82,8 +133,14 @@ fn number(v: &Value) -> Option<f64> {
 
 /// Why the record is not a delivery, or None.
 pub fn validate(record: &Value) -> Option<String> {
-    let fmt = record.get("format").and_then(Value::as_str).unwrap_or("");
-    if !FORMATS.contains(&fmt) {
+    let fmt = record.get("format").and_then(Value::as_str).unwrap_or(
+        if record.get("outputs").is_some() {
+            "package"
+        } else {
+            ""
+        },
+    );
+    if fmt != "package" && !FORMATS.contains(&fmt) {
         return Some("Choose an export format".into());
     }
     for field in ["name", "destination"] {
@@ -109,6 +166,47 @@ pub fn validate(record: &Value) -> Option<String> {
         return Some("Choose a project node".into());
     }
     let dest = record.get("destination").and_then(Value::as_str).unwrap_or("");
+    if fmt == "package" {
+        let Some(outputs) = record["outputs"].as_array().filter(|o| !o.is_empty()) else {
+            return Some("Select at least one output".into());
+        };
+        let mut seen = std::collections::HashSet::new();
+        for out in outputs {
+            let format = text(out, "format");
+            if !PACKAGE_OUTPUTS.iter().any(|p| p.0 == format) || !seen.insert(format) {
+                return Some("Choose each supported output once".into());
+            }
+            let source = text(out, "scope");
+            let valid = match format {
+                "pdf" => source == "sheets",
+                "bcf" => source == "topics",
+                "manifest" => source == "files",
+                "dxf" if source == "scenes" => true,
+                _ => matches!(source, "whole" | "visible" | "node" | "selection"),
+            };
+            if source == "node"
+                && out
+                    .get("node")
+                    .or(record.get("node"))
+                    .and_then(Value::as_str)
+                    .is_none_or(str::is_empty)
+            {
+                return Some(format!("Choose a project node for {format}"));
+            }
+            if !valid || !out["options"].is_object() {
+                return Some(format!("Invalid {format} output setup"));
+            }
+            if let Some(names) = out["options"].get("names") {
+                if !names
+                    .as_array()
+                    .is_some_and(|v| v.iter().all(Value::is_string))
+                {
+                    return Some("Expected a list of names".into());
+                }
+            }
+        }
+        return None;
+    }
     let suffix = Path::new(dest).extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
     if suffix != fmt {
         return Some(format!("Choose a destination ending in .{fmt}"));

@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Export records and registry relationships without a native IFC dependency."""
 import datetime
+import json
 import math
 import uuid
 from collections import defaultdict
@@ -43,16 +44,25 @@ def refs(values):
     return '(' + ','.join(map(ref, values)) + ')'
 
 
-def save_ifc(scene, path, project_name='Built project', profile=None, *, project_directory=None):
-    with open(path, 'w', encoding='ascii', buffering=1024 * 1024) as stream:
-        report = _save_ifc(scene, path, project_name, profile, stream)
+def save_ifc(scene, path, project_name='Built project', profile=None, *, project_directory=None, ids_files=None):
     registry = bim_registry.get(scene)
     config = registry.get('export_profiles', {}).get(profile, {}) if profile else {}
-    report.ids = check_ids(path, config.get('ids_files', []), project_directory)
+    files = config.get('ids_files', []) if ids_files is None else ids_files
+    placements = {} if files else None
+    with open(path, 'w', encoding='ascii', buffering=1024 * 1024) as stream:
+        report = _save_ifc(scene, path, project_name, profile, stream, placements)
+    report.ids = check_ids(path, files, project_directory)
+    if placements:
+        for result in report.ids:
+            for rule in result.get('specifications', []):
+                for item in rule.get('placements', []):
+                    if item['guid'] in placements:
+                        item['path'] = placements[item['guid']]
+        Path(path).with_suffix('.ids-report.json').write_text(json.dumps(report.ids, indent=2), encoding='utf-8')
     return report
 
 
-def _save_ifc(scene, path, project_name, profile, stream):
+def _save_ifc(scene, path, project_name, profile, stream, placements):
     registry = bim_registry.get(scene)
     config = registry.get('export_profiles', {}).get(profile, {}) if profile else {}
     if profile and profile not in registry.get('export_profiles', {}):
@@ -259,6 +269,10 @@ def _save_ifc(scene, path, project_name, profile, stream):
         if face_owner is not None and face_owner.uid in repeated:
             address = scene.occurrence_path(face_owner)
         eg = object_guid(scene, obj, address)
+        if placements is not None:
+            placed = group if group is not None else face_owner
+            if placed is not None:
+                placements[eg] = scene.occurrence_path(placed)
         attrs = dict(GlobalId=_s(eg), OwnerHistory=owner,
                      Name=_s(raw.get('name') or (group.name if group is not None else obj['name']) or cls),
                      Description=_s(r.get('description', '')), ObjectType=_s(r.get('object_type', '')),

@@ -10,9 +10,43 @@ use pyo3::{
 use std::collections::HashMap;
 #[pyfunction]
 fn records<'p>(scene: &Obj<'p>) -> PyResult<Obj<'p>> {
-    scene
+    let raw = scene
         .getattr("plugin_data")?
-        .call_method1("get", ("deliveries", PyDict::new(scene.py())))
+        .call_method1("get", ("deliveries", PyDict::new(scene.py())))?;
+    let records = raw.cast::<PyDict>()?.copy()?;
+    for (key, value) in raw.cast::<PyDict>()?.iter() {
+        if !value.contains("outputs")? {
+            let record = value.cast::<PyDict>()?.copy()?;
+            migrate(&record)?;
+            records.set_item(key, record)?;
+        }
+    }
+    Ok(records.into_any())
+}
+
+fn migrate(record: &Bound<'_, PyDict>) -> PyResult<()> {
+    if !record.contains("scope")? {
+        record.set_item("scope", "whole")?;
+    }
+    if !record.contains("options")? {
+        record.set_item("options", PyDict::new(record.py()))?;
+    }
+    if record.get_item("format")?.is_none() && record.contains("outputs")? {
+        record.set_item("format", "package")?;
+    }
+    if !record
+        .get_item("format")?
+        .is_some_and(|v| v.eq("package").unwrap_or(false))
+    {
+        let out = PyDict::new(record.py());
+        for field in ["format", "scope", "options", "node", "destination"] {
+            if let Some(v) = record.get_item(field)? {
+                out.set_item(field, v)?;
+            }
+        }
+        record.set_item("outputs", PyList::new(record.py(), [out])?)?;
+    }
+    Ok(())
 }
 #[pyfunction(name="validate")]
 fn delivery_validate(record: &Obj<'_>) -> PyResult<()> {
@@ -56,6 +90,7 @@ fn create_delivery<'p>(history: &Obj<'p>, delivery: &Obj<'p>) -> PyResult<Obj<'p
     record.set_item("options", PyDict::new(py))?;
     record.call_method1("update", (delivery,))?;
     record.set_item("last_run", py.None())?;
+    migrate(&record)?;
     delivery_validate(record.as_any())?;
     let vals = entries(history)?;
     vals.set_item(&key, record)?;
@@ -69,6 +104,10 @@ fn edit_delivery<'p>(history: &Obj<'p>, key: &Obj<'p>, changes: &Obj<'p>) -> PyR
         .get_type::<PyDict>()
         .call1((vals.get_item(key)?,))?;
     record.call_method1("update", (changes,))?;
+    if changes.contains("outputs")? && !changes.contains("format")? {
+        record.set_item("format", "package")?;
+    }
+    migrate(record.cast::<PyDict>()?)?;
     delivery_validate(&record)?;
     vals.set_item(key, record)?;
     store(history, key, &vals)
@@ -79,8 +118,14 @@ fn delete_delivery<'p>(history: &Obj<'p>, key: &Obj<'p>) -> PyResult<Obj<'p>> {
     vals.del_item(key)?;
     store(history, key, &vals)
 }
-#[pyfunction(name="finish", signature=(history,key,folder="",result="Delivered"))]
-fn delivery_finish<'p>(history: &Obj<'p>, key: &Obj<'p>, folder: &str, result: &str) -> PyResult<Obj<'p>> {
+#[pyfunction(name="finish", signature=(history,key,folder="",result="Delivered",details=None))]
+fn delivery_finish<'p>(
+    history: &Obj<'p>,
+    key: &Obj<'p>,
+    folder: &str,
+    result: &str,
+    details: Option<&Obj<'p>>,
+) -> PyResult<Obj<'p>> {
     let py = history.py();
     let date = py.import("datetime")?;
     let now = date
@@ -97,6 +142,9 @@ fn delivery_finish<'p>(history: &Obj<'p>, key: &Obj<'p>, folder: &str, result: &
     run.set_item("folder", folder)?;
     run.set_item("result", result)?;
     run.set_item("revision", history.getattr("revision")?)?;
+    if let Some(details) = details {
+        run.call_method1("update", (details,))?;
+    }
     runs.call_method1("append", (run,))?;
     changes.set_item("runs", runs)?;
     if result == "Delivered" { changes.set_item("last_run", time)?; }
@@ -128,15 +176,32 @@ fn run_delivery<'p>(
         None => None,
     };
     let (target, _) = write::destination_path(py, &s, &record, directory.as_deref())?;
-    for step in py
-        .import("built_core.deliveries")?
-        .call_method("write_steps", (&s, record), context)?
-        .try_iter()?
-    {
+    let kwargs = match context {
+        Some(c) => c.copy()?,
+        None => PyDict::new(py),
+    };
+    if record.get_item("format")?.eq("package")? {
+        kwargs.set_item("revision", history.getattr("revision")?)?;
+    }
+    let steps = py.import("built_core.deliveries")?.call_method(
+        "write_steps",
+        (&s, record),
+        Some(&kwargs),
+    )?;
+    for step in steps.try_iter()? {
         step?;
     }
+    if let Some(details) = steps.getattr_opt("summary")?.filter(|s| !s.is_none()) {
+        return delivery_finish(
+            history,
+            key,
+            &details.get_item("folder")?.extract::<String>()?,
+            &details.get_item("result")?.extract::<String>()?,
+            Some(&details),
+        );
+    }
     let folder = target.parent().unwrap_or(&target).canonicalize()?;
-    delivery_finish(history, key, &folder.to_string_lossy(), "Delivered")
+    delivery_finish(history, key, &folder.to_string_lossy(), "Delivered", None)
 }
 fn mesh_part<'p>(mesh: &Obj<'p>, keep: Option<&Obj<'p>>) -> PyResult<Obj<'p>> {
     let Some(keep) = keep else {
@@ -375,6 +440,7 @@ pub(super) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let sub=&PyModule::new(py,"built_core.deliveries")?;
     functions!(sub;records,delivery_validate,create_delivery,edit_delivery,delete_delivery,delivery_finish,run_delivery,delivery_scoped);
     write::register(sub)?;
+    sub.add("PACKAGE_OUTPUTS", crate::delivery_form::PACKAGE_OUTPUTS.to_vec())?;
     sub.add("FORMATS",pyo3::types::PyTuple::new(py,crate::delivery_form::delivery_formats())?)?;
     py.import("sys")?.getattr("modules")?.set_item("built_core.deliveries",sub)?;
     m.add("deliveries",sub)

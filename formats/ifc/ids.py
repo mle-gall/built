@@ -24,7 +24,9 @@ def check_ids(path, files, project_directory=None):
                 requirements.validate(model)
                 reports.append({'file': str(source), 'status': 'checked', 'specifications': [
                     {'name': spec.name, 'passed': len(set(spec.applicable_entities) - spec.failed_entities),
-                     'failed': len(spec.failed_entities), 'status': spec.status}
+                     'failed': len(spec.failed_entities), 'status': spec.status,
+                     'placements': [{'guid': getattr(entity, 'GlobalId', ''), 'name': getattr(entity, 'Name', '')}
+                                    for entity in sorted(spec.failed_entities, key=lambda entity: entity.id())]}
                     for spec in requirements.specifications]})
             except Exception as exc:
                 reports.append({'file': str(source), 'status': 'error', 'message': str(exc)})
