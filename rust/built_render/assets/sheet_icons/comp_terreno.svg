@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+  <!-- Ground line: the line with the earth hatch beneath -->
+  <path d="M5 20 H43"/>
+  <path d="M10 26 L6 32 M18 26 L14 32 M26 26 L22 32 M34 26 L30 32 M42 26 L38 32" stroke-width="2.2"/>
+  <path d="M14 34 L11 39 M22 34 L19 39 M30 34 L27 39 M38 34 L35 39" stroke-width="2" stroke-opacity="0.6"/>
+</svg>

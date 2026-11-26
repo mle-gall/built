@@ -3136,7 +3136,7 @@ fn text_button_response(ui: &mut egui::Ui, label: &str, key: &str, enabled: bool
 
 /// A palette tool: 30 × 30 cell, glyph about 18 pt (the icon art carries
 /// its own margin), idle INK_2, hover INK, current white on accent.
-fn tool_button(ui: &mut egui::Ui, tool: &Tool, active: bool) -> bool {
+fn tool_button(ui: &mut egui::Ui, tool: &Tool, active: bool, mark: &str) -> bool {
     let (rect, resp) = ui.allocate_exact_size(vec2(30.0, 30.0), if tool.enabled { Sense::click() } else { Sense::hover() });
     let st = state_of(&resp, active, tool.enabled);
     paint_state(ui, rect, st, R_CONTROL);
@@ -3146,8 +3146,8 @@ fn tool_button(ui: &mut egui::Ui, tool: &Tool, active: bool) -> bool {
             egui::Image::new(tex).tint(tint).paint_at(ui, rect.shrink(3.0));
         }
         None => {
-            let letter: String = tool.label.chars().take(2).collect();
-            ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, letter, meta(), tint);
+            // No art: the rail's unique, language-stable mark (rail::fallback_mark).
+            ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, mark, meta(), tint);
         }
     }
     let tip = if !tool.enabled { format!("{} — Open in classic app", tool.label) } else if tool.key.is_empty() { tool.label.clone() } else { format!("{}    {}", tool.label, tool.key) };

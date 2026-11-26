@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+  <!-- Level mark: the elevation triangle on its line, the value above -->
+  <path d="M6 34 H42"/>
+  <path d="M15 22 H27 L21 33 Z" fill="#fff" fill-opacity="0.45"/>
+  <path d="M27 14 H41" stroke-width="2.4"/>
+  <path d="M21 33 V13" stroke-width="2.2"/>
+</svg>

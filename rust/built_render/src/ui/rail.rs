@@ -49,6 +49,21 @@ pub fn rule_width(cols: usize) -> f32 {
     width(cols) - 2.0 * PAD
 }
 
+/// What a tool without art shows: the shortest start of its id (two
+/// characters at least) that no other tool's id shares, so it is unique on
+/// the rail and does not change with the language (P10).
+pub fn fallback_mark(id: &str, ids: &[&str]) -> String {
+    let chars: Vec<char> = id.chars().collect();
+    let n = (2..chars.len())
+        .find(|&n| {
+            let start: String = chars[..n].iter().collect();
+            !ids.iter().any(|other| *other != id && other.starts_with(&start))
+        })
+        .unwrap_or(chars.len());
+    let mut mark = chars[..n].iter().copied();
+    mark.next().map(|f| f.to_uppercase().chain(mark).collect()).unwrap_or_default()
+}
+
 /// Two columns, then three, then three that scroll.
 pub fn plan(groups: &[usize], room: f32) -> RailPlan {
     for cols in [2, 3] {
@@ -68,6 +83,7 @@ pub(super) fn show(ctx: &egui::Context, id: &str, groups: &[Vec<Tool>], active: 
     let RailPlan { cols, scroll } = plan(&counts, room);
     let outer = width(cols);
     let mut clicked = None;
+    let ids: Vec<&str> = groups.iter().flatten().map(|t| t.id.as_str()).collect();
     let tools = |ui: &mut egui::Ui, clicked: &mut Option<String>| {
         ui.spacing_mut().item_spacing = vec2(GAP, GAP);
         for (gi, group) in groups.iter().enumerate() {
@@ -78,7 +94,8 @@ pub(super) fn show(ctx: &egui::Context, id: &str, groups: &[Vec<Tool>], active: 
             for row in group.chunks(cols) {
                 ui.horizontal(|ui| {
                     for tool in row {
-                        if tool_button(ui, tool, tool.id == active) {
+                        let mark = if tool.icon.is_none() { fallback_mark(&tool.id, &ids) } else { String::new() };
+                        if tool_button(ui, tool, tool.id == active, &mark) {
                             *clicked = Some(tool.id.clone());
                         }
                     }
@@ -120,6 +137,15 @@ mod tests {
 
     fn band(window_h: f32) -> f32 {
         window_h - TOP_H - BOT_H - 2.0 * GUT
+    }
+
+    #[test]
+    fn fallback_marks_are_unique_and_come_from_the_id() {
+        let ids = ["cota", "cota_ang", "cota_base", "leyenda", "etiqueta", "linea", "llamada"];
+        let marks: Vec<String> = ids.iter().map(|id| fallback_mark(id, &ids)).collect();
+        assert_eq!(marks, ["Cota", "Cota_a", "Cota_b", "Le", "Et", "Li", "Ll"]);
+        let unique: std::collections::HashSet<_> = marks.iter().collect();
+        assert_eq!(unique.len(), marks.len());
     }
 
     #[test]
