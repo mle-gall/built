@@ -319,7 +319,9 @@ fn event<'py>(a: &Args<'py>) -> Reply<'py> {
         // Pinch on the sheet; then pinch and smart zoom: a trackpad's, or
         // the touch screen's (#248).
         if py.import("built_render.sheet_workspace")?.call_method1("gesture", (&view, &event))?.is_truthy()?
-            || py.import("built_render")?.getattr("trackpad_nav")?.call_method1("native_gesture", (&view, &event))?.is_truthy()?
+            || camera_frame(&view, "event", None, || {
+                py.import("built_render")?.getattr("trackpad_nav")?.call_method1("native_gesture", (&view, &event))
+            })?.is_truthy()?
         {
             return true.into_bound_py_any(py);
         }
