@@ -63,7 +63,7 @@ impl Ui {
             );
             fit_box(
                 self.cmd_anchor.unwrap_or(work.center()),
-                vec2(560., 310.),
+                vec2(560., (CONTROL_H + 1.) * 9. + 85.),
                 34.,
                 work,
                 screen,
@@ -103,9 +103,19 @@ impl Ui {
                         }
                         ui.add_space(SPACE_S);
                         ui.spacing_mut().item_spacing = vec2(0.0, 1.0);
+                        let rows_height = ((CONTROL_H + 1.) * 9.).min((bounds.height() - 85.).max(CONTROL_H));
                         egui::ScrollArea::vertical()
-                            .max_height((CONTROL_H + 1.0) * 10.0)
+                            .auto_shrink([false, false])
+                            .min_scrolled_height(rows_height)
+                            .max_height(rows_height)
                             .show(ui, |ui| {
+                                if self.cmd_results.is_empty() && !self.cmd_query.is_empty() {
+                                    ui.label(
+                                        egui::RichText::new("No command matches")
+                                            .font(body())
+                                            .color(FAINT),
+                                    );
+                                }
                                 for (i, (label, path, key, enabled)) in
                                     self.cmd_results.iter().enumerate()
                                 {
@@ -165,13 +175,6 @@ impl Ui {
                                 }
                             });
                         self.cmd_scroll = false;
-                        if self.cmd_results.is_empty() && !self.cmd_query.is_empty() {
-                            ui.label(
-                                egui::RichText::new("No command matches")
-                                    .font(body())
-                                    .color(FAINT),
-                            );
-                        }
                     });
             });
         if changed {

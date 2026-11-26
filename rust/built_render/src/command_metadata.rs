@@ -159,8 +159,11 @@ impl Command {
             .map(|p| source.call1((p,))?.extract::<String>())
             .collect::<PyResult<Vec<_>>>()?;
         originals.push(english);
-        let items = (item.call1((translated,))?, item.call1((originals,))?)
-            .into_pyobject(py)?
+        let mut aliases = vec![item.call1((translated,))?, item.call1((originals,))?];
+        if let Some(id) = key.strip_prefix("tool:") {
+            aliases.push(item.call1((vec![id],))?);
+        }
+        let items = PyList::new(py, aliases)?
             .into_any()
             .unbind();
         Ok(Self {
@@ -310,6 +313,18 @@ fn search<'p>(window: &Obj<'p>, query: &str, pool: Option<Vec<Obj<'p>>>) -> PyRe
         .import("built_core")?
         .call_method1("rank_commands", (folded, short, entries))?
         .extract()?;
+    if query.trim().is_empty() && !order.is_empty() {
+        let mut recent_rows = Vec::new();
+        for index in &ranked {
+            let row = &pool[*index];
+            if order.contains(&row.getattr("key")?.extract::<String>()?) {
+                recent_rows.push(row.clone());
+            }
+        }
+        if !recent_rows.is_empty() {
+            return Ok(recent_rows);
+        }
+    }
     Ok(ranked.into_iter().map(|i| pool[i].clone()).collect())
 }
 pub(super) fn register(parent: &Bound<PyModule>) -> PyResult<()> {

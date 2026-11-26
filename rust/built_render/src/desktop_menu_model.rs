@@ -7,7 +7,7 @@ pub const IMPORTS: &[(&str, &str)] = &[
     ("import:dwg", ".dwg…"),
     ("import:rfa", ".rfa family…"),
     ("import:glb", "glTF (.glb, .gltf)…"),
-    ("import:igz", "Built or Built model, as a group…"),
+    ("import:igz", "Built model, as a group…"),
 ];
 
 #[derive(Clone, Copy)]
