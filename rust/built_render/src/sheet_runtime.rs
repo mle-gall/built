@@ -881,9 +881,11 @@ pub fn before_frame(view: &Bound<'_, PyAny>, win: &Bound<'_, PyAny>) -> PyResult
         for block in &mut spec.content.blocks {
             if let Some(index) = block.id.strip_prefix("library-group:").and_then(|s| s.parse::<usize>().ok()) {
                 block.items = rows.groups[index].clone();
+                block.tone="components".into();
             }
         }
         if let Some(ui) = &mut renderer.cast::<crate::Renderer>()?.borrow_mut().ui {
+            ui.set_component_checks(sheet.getattr("_checked")?.extract()?);
             ui.set_sheet_spec(spec);
         }
         st.borrow_mut().sent = Some(text);

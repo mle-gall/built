@@ -155,6 +155,7 @@ pub struct Block {
 #[derive(Deserialize, Default, Clone, Debug, PartialEq)]
 #[serde(default)]
 pub struct Item {
+    pub component_source: String,
     pub id: String,
     pub label: String,
     pub sub: String,
@@ -212,12 +213,15 @@ impl ItemGrid {
 #[derive(Default)]
 pub struct LargeSheet {
     pub spec: Option<Spec>,
+    pub(crate) component_checks: std::collections::HashSet<String>,
     /// Shown (false while it animates out).
     pub open: bool,
     pub search: String,
     visible_previews: Vec<String>,
     map: super::site_map::MapState,
     search_reported: String,
+    class_search: String,
+    collapsed_facets: std::collections::HashSet<String>,
     pub focused: Option<String>,
     /// Focusable items as last laid out (content pane, reading order).
     pub focus_rects: Vec<(String, Rect)>,
@@ -254,7 +258,7 @@ impl LargeSheet {
         };
         for block in spec.content.blocks.iter_mut().chain(spec.detail.iter_mut().flat_map(|p| &mut p.blocks)) {
             if block.kind == "rows" {
-                block.row_height = if block.tone == "thumbs" || block.items.iter().any(|i| !i.icon.is_empty() || !i.hex.is_empty()) { 40. }
+                block.row_height = if block.tone=="components" {28.} else if block.tone == "thumbs" || block.items.iter().any(|i| !i.icon.is_empty() || !i.hex.is_empty()) { 40. }
                     else if block.items.iter().any(|i| !i.sub.is_empty()) { 36. } else { ROW_H };
             }
         }
@@ -521,7 +525,12 @@ struct Draw<'a> {
 
 impl Draw<'_> {
     fn blocks(&mut self, ui: &mut egui::Ui, blocks: &[Block]) {
-        for (i, b) in blocks.iter().enumerate() {
+        self.blocks_from(ui,blocks,0);
+    }
+
+    fn blocks_from(&mut self,ui:&mut egui::Ui,blocks:&[Block],offset:usize){
+        for (index, b) in blocks.iter().enumerate() {
+            let i=offset+index;
             match b.kind.as_str() {
                 "caption" => {
                     ui.add_space(if i == 0 { SPACE_XS } else { SPACE_M });
@@ -816,7 +825,7 @@ impl Draw<'_> {
 
     fn rows(&mut self, ui: &mut egui::Ui, b: &Block, block_index: usize) {
         let rh = b.row_height.max(ROW_H);
-        let thumbs = rh == 40.;
+        let thumbs = rh == 40. || b.tone=="components";
         let w = ui.available_width();
         let h = b.items.len() as f32 * rh;
         let (block, _) = ui.allocate_exact_size(vec2(w, h), Sense::hover());
@@ -850,10 +859,21 @@ impl Draw<'_> {
                      else { state_of(&resp, false, true) };
             paint_state(ui, r.shrink2(vec2(0.0, 1.0)), st, R_ROW);
             let mut x = r.min.x + 8.0 + it.depth as f32 * 16.0;
+            if !it.component_source.is_empty() {
+                let check=Rect::from_min_size(pos2(x,r.top()),vec2(20.,rh));
+                let hit=ui.interact(check,ui.id().with(("tick",&it.id)),Sense::click());
+                let selected=self.st.component_checks.contains(&it.id);
+                ui.painter().text(check.center(),egui::Align2::CENTER_CENTER,if selected {"☑"}else{"☐"},body(),if selected {ACCENT}else{DIM});
+                if hit.clicked() {
+                    self.out.push(format!("{}{SEP}{}",if ui.input(|i|i.modifiers.shift) {"bulk-range"}else{"bulk-check"},it.id));
+                }
+                x+=22.;
+            }
             if thumbs && (b.tone != "start-list" || !it.icon.is_empty()) {
-                let t = Rect::from_min_size(pos2(x, r.center().y - 15.0), vec2(44.0, 30.0));
+                let size=if b.tone=="components" {vec2(28.,20.)} else {vec2(44.,30.)};
+                let t = Rect::from_min_size(pos2(x, r.center().y-size.y/2.),size);
                 picture(ui, t, self.icons.get(&it.icon).or_else(|| self.st.previews.texture(ui.ctx(), &it.icon)), &it.hex, 4);
-                x += 54.0;
+                x += size.x+8.;
             } else if it.kind == "file" {
                 file_glyph(ui, pos2(x + 5.0, r.center().y), if it.dim { OFF } else { DIM });
                 x += 18.0;
@@ -867,10 +887,17 @@ impl Draw<'_> {
                 right_x -= 12.0;
             }
             let ink = if it.dim { FAINT } else { INK };
-            let lw = (right_x - x).max(20.0);
+            let table = !it.component_source.is_empty();
+            let lw = if table { (w * 0.46 - (x-r.left())).max(20.) } else { (right_x - x).max(20.0) };
+            if table {
+                for (at, width, text) in [(0.47,0.24,&it.sub),(0.72,0.18,&it.component_source)] {
+                    let cell = fit(ui,text,meta(),DIM,w*width,1);
+                    ui.painter().galley(pos2(r.left()+w*at,r.center().y-cell.size().y/2.),cell,DIM);
+                }
+            }
             let l = fit(ui, &it.label, body(), ink, lw, 1);
             let lsize = l.size();
-            if it.sub.is_empty() {
+            if table || it.sub.is_empty() {
                 ui.painter().galley(pos2(x, r.center().y - lsize.y / 2.0), l, ink);
             } else {
                 ui.painter().galley(pos2(x, r.center().y - lsize.y + 1.0), l, ink);
@@ -952,6 +979,8 @@ impl Ui {
             *detail = pane;
         }
     }
+
+    pub(crate) fn set_component_checks(&mut self, checked: std::collections::HashSet<String>) { self.lsheet.component_checks=checked; }
 
     pub(crate) fn set_sheet_spec(&mut self, spec: Spec) {
         if self.lsheet.set(Some(spec)) {
@@ -1133,7 +1162,7 @@ impl Ui {
                     Self::lsheet_footer(ui, f, rect, &mut out);
                 }
                 if let Some(side) = frame.side {
-                    Self::lsheet_side(ui, &spec.side, side, &mut out);
+                    Self::lsheet_side(ui, &spec.side, side, st, &mut out);
                 }
                 // Content.
                 {
@@ -1160,6 +1189,15 @@ impl Ui {
                             d.blocks(ui,&spec.content.blocks);
                             return;
                         }
+                        let component_table=spec.tabs.iter().any(|t|t.id=="components" && t.on) && spec.side.iter().any(|s|s.kind=="facet");
+                        let sticky=if component_table {spec.content.blocks.iter().take_while(|b|b.kind=="buttons" && b.buttons.iter().any(|v|v.id=="bulk-all" || v.id=="reset-filter")).count()}else{0};
+                        d.blocks(ui,&spec.content.blocks[..sticky]);
+                        if component_table {
+                            let (r,_)=ui.allocate_exact_size(vec2(inner.width(),ROW_H),Sense::hover());
+                            for (frac,label) in [(0.0,"Definition"),(0.47,"IFC class"),(0.72,"Source"),(0.91,"Copies")] {
+                                ui.painter().text(pos2(r.left()+r.width()*frac,r.center().y),egui::Align2::LEFT_CENTER,label,meta(),FAINT);
+                            }
+                        }
                         content_scroll(&spec.id)
                             .show(ui, |ui| {
                                 ui.set_width(ui.available_width());
@@ -1168,7 +1206,7 @@ impl Ui {
                                     ui.add_space(SPACE_XL);
                                     ui.add(egui::Label::new(egui::RichText::new(&spec.content.empty).font(body()).color(FAINT)).wrap());
                                 }
-                                d.blocks(ui, &spec.content.blocks);
+                                d.blocks_from(ui, &spec.content.blocks[sticky..],sticky);
                             });
                     });
                     rects = std::mem::take(&mut d.rects);
@@ -1230,7 +1268,28 @@ impl Ui {
         // A header menu.
         if let Some((mid, anchor)) = st.head_menu.clone() {
             let mut close = false;
-            if let Some(m) = spec.menus.iter().find(|m| m.id == mid) {
+            if mid=="classes" {
+                let popup=egui::Area::new(egui::Id::new("lsheet_head_menu")).fixed_pos(anchor.right_top()).constrain_to(screen).order(egui::Order::Tooltip).show(ctx,|ui|{
+                    glass(Surface::Raised).inner_margin(Margin::same(8)).show(ui,|ui|{
+                        ui.set_width(220.);
+                        ui.add(kit::search(&mut st.class_search,"Find IFC class"));
+                        let query=st.class_search.to_lowercase();
+                        let tokens=crate::library_view::facets::words(&st.search);
+                        egui::ScrollArea::vertical().max_height(280.).show(ui,|ui|{
+                            if let Some(side)=spec.side.iter().find(|it|it.id=="classes"){
+                                for (token,label) in &side.menu {
+                                    if !label.to_lowercase().contains(&query){continue;}
+                                    let on=tokens.iter().any(|v|v.eq_ignore_ascii_case(token));
+                                    if menu_row(ui,&(token.clone(),label.clone(),String::new(),"check".into(),i8::from(on),true)){
+                                        out.push(format!("side{SEP}toggle:{token}"));
+                                    }
+                                }
+                            }
+                        });
+                    });
+                });
+                close=ctx.input(|i|i.pointer.any_pressed() && i.pointer.interact_pos().is_some_and(|p|!popup.response.rect.contains(p) && !anchor.contains(p)));
+            } else if let Some(m) = spec.menus.iter().find(|m| m.id == mid) {
                 let r = egui::Area::new(egui::Id::new("lsheet_head_menu"))
                     .fixed_pos(anchor.left_bottom() + vec2(0.0, 4.0))
                     .order(egui::Order::Tooltip)
@@ -1329,7 +1388,13 @@ impl Ui {
                 }
                 if let Some(s) = spec.search.as_ref().filter(|_| spec.id != "start") {
                     let sw = (inner.width() * 0.30).clamp(200.0, 320.0);
-                    Self::lsheet_search(ui, st, s, sw);
+                    let width = if spec.menus.iter().any(|m| m.id == "group") {
+                        let menus: f32 = spec.menus.iter().filter(|m| !m.left).map(|m| {
+                            ui.painter().layout_no_wrap(m.label.clone(), body(), INK).size().x + 36.0 + SPACE_S
+                        }).sum();
+                        sw.min((ui.available_width() - menus - SPACE_M).max(80.0))
+                    } else { sw };
+                    Self::lsheet_search(ui, st, s, width);
                 }
                 if spec.search.is_some() { ui.add_space(SPACE_XS); }
                 for m in spec.menus.iter().rev().filter(|m| !m.left) {
@@ -1390,19 +1455,27 @@ impl Ui {
         });
     }
 
-    fn lsheet_side(ui: &mut egui::Ui, side: &[Item], side_r: Rect, out: &mut Vec<String>) {
+    fn lsheet_side(ui: &mut egui::Ui, side: &[Item], side_r: Rect, st: &mut LargeSheet, out: &mut Vec<String>) {
         let inner = side_r.shrink2(vec2(SPACE_S, SPACE_M));
         ui.scope_builder(egui::UiBuilder::new().max_rect(inner).layout(egui::Layout::top_down(egui::Align::Min)), |ui| {
             egui::ScrollArea::vertical().id_salt("lsheet_side").auto_shrink([false, false]).show(ui, |ui| {
                 ui.spacing_mut().item_spacing = vec2(0.0, 1.0);
+                let facets=side.first().is_some_and(|it|it.label=="Source" && it.kind=="caption");
+                let mut hidden=false;
                 for (i, it) in side.iter().enumerate() {
                     if it.kind == "caption" {
                         ui.add_space(if i == 0 { SPACE_XS } else { SPACE_M });
-                        ui.horizontal(|ui| { ui.add_space(SPACE_S); caption_plain(ui, &it.label); });
+                        if facets {
+                            hidden=st.collapsed_facets.contains(&it.label);
+                            if quiet(ui,&format!("{} {}",if hidden {"▸"}else{"▾"},it.label)).clicked() {
+                                if hidden {st.collapsed_facets.remove(&it.label);} else {st.collapsed_facets.insert(it.label.clone());}
+                            }
+                        }else{ui.horizontal(|ui| { ui.add_space(SPACE_S); caption_plain(ui, &it.label); });}
                         ui.add_space(SPACE_XS);
                         continue;
                     }
-                    let (r, resp) = list_row(ui, ROW_H, it.on);
+                    if hidden && it.id!="s:online" {continue;}
+                    let (r, resp) = list_row(ui, ROW_H, it.on && !it.kind.ends_with("facet"));
                     let mut x = r.min.x + 8.0 + it.depth as f32 * 14.0;
                     let chev = Rect::from_min_size(pos2(x - 2.0, r.min.y), vec2(14.0, r.height()));
                     if it.fold >= 0 {
@@ -1417,6 +1490,10 @@ impl Ui {
                         ui.painter().rect_filled(sw, CornerRadius::same(3), parse_hex(&it.hex).unwrap_or(SWATCH_FALLBACK));
                         x += 18.0;
                     }
+                    if it.kind.ends_with("facet") {
+                        ui.painter().text(pos2(x,r.center().y),egui::Align2::LEFT_CENTER,if it.kind=="partial-facet" {"⊟"} else if it.on {"☑"}else{"☐"},body(),if it.on {ACCENT}else{DIM});
+                        x+=18.;
+                    }
                     let count_w = if it.right.is_empty() { 0.0 } else { 30.0 };
                     let ink = if it.on { BRIGHT } else if it.dim { FAINT } else { INK };
                     let g = fit(ui, &it.label, if it.on { strong(TYPE_BODY) } else { body() }, ink, r.max.x - x - 8.0 - count_w, 1);
@@ -1427,6 +1504,11 @@ impl Ui {
                     if !it.dot.is_empty() { paint_dot(ui, pos2(r.max.x - 8.0 - count_w - 2.0, r.center().y), &it.dot); }
                     let resp = if it.tip.is_empty() { resp } else { resp.on_hover_text(&it.tip) };
                     if resp.clicked() && !it.id.is_empty() {
+                        if it.id=="classes" {
+                            st.class_search.clear();
+                            st.head_menu=Some(("classes".into(),r));
+                            continue;
+                        }
                         let on_chev = it.fold >= 0 && resp.interact_pointer_pos().is_some_and(|p| p.x < chev.max.x + 2.0);
                         out.push(format!("{}{SEP}{}", if on_chev { "fold" } else { "side" }, it.id));
                     }
