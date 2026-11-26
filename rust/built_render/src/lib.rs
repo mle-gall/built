@@ -2871,8 +2871,12 @@ impl Renderer {
     fn ui_set_jobs(&mut self, jobs: Vec<ui::Job>) {
         if let Some(ui) = self.ui.as_mut() { ui.set_jobs(jobs); }
     }
-    fn ui_set_activity(&mut self, history: Vec<ui::ActivityRow>, banner: String) {
-        if let Some(ui) = self.ui.as_mut() { ui.set_activity(history, banner); }
+    fn ui_open_activity(&mut self) {
+        if let Some(ui) = self.ui.as_mut() { ui.open_activity(); }
+    }
+    #[pyo3(signature=(history, banner, secondary=None))]
+    fn ui_set_activity(&mut self, history: Vec<ui::ActivityRow>, banner: String, secondary: Option<std::collections::HashMap<String,String>>) {
+        if let Some(ui) = self.ui.as_mut() { ui.set_activity(history, banner, secondary.unwrap_or_default()); }
     }
     fn ui_rename_browser_row(&mut self, id: &str) -> bool {
         self.ui.as_mut().is_some_and(|ui| ui.rename_browser_row(id))

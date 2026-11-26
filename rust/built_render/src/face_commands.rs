@@ -275,7 +275,7 @@ fn ask_simplify_mesh(win: &Bound<'_, PyAny>) -> PyResult<()> {
         } else {
             "There is no mesh to simplify"
         };
-        vp.call_method1("flash_status", (translated(py, message, None)?,))?;
+        win.call_method1("notify", ("warning", translated(py, message, None)?))?;
         return Ok(());
     }
     let kw = PyDict::new(py);

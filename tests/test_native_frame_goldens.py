@@ -89,7 +89,8 @@ def middle_hash(path: Path) -> str:
 
 
 def script():
-    steps = ["wait-open", "wait 1200", "menu view:zoom_extents", "wait 700", "capture rest"]
+    # Opening publishes a four-second success notice over the viewport.
+    steps = ["wait-open", "wait 4500", "menu view:zoom_extents", "wait 700", "capture rest"]
     for n, (x, y) in enumerate(((900, 300), (400, 600), (700, 430))):
         steps += [f"notch {x} {y} 1"] * 6 + ["wait 700", f"capture zoom{n}a"]
         steps += [f"notch {x} {y} -1"] * 9 + ["wait 700", f"capture zoom{n}b"]

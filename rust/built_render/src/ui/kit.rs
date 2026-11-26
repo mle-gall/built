@@ -1127,6 +1127,14 @@ pub mod organisms {
             rows(ui)
         })
     }
+    pub fn notice_mark(tone: &str) -> (&'static str, Color32) {
+        match tone {
+            "warning" => ("!", WARN),
+            "error" => ("×", ERROR),
+            "success" => ("✓", OK),
+            _ => ("i", ACCENT),
+        }
+    }
     pub fn toast(ui: &mut egui::Ui, opacity: f32, content: impl FnOnce(&mut egui::Ui)) {
         ui.scope(|ui| {
             ui.set_opacity(opacity);

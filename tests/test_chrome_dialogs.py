@@ -451,3 +451,67 @@ def test_failed_job_and_export_folder_are_retained(win, tmp_path, monkeypatch):
     assert row.action_label == "Open folder"
     row.action()
     assert opened == [tmp_path.resolve()]
+
+
+@pytest.mark.parametrize("tone,lifetime", [
+    ("info", 4), ("success", 4), ("warning", 6), ("error", None),
+])
+def test_notification_lifetime_and_hover(win, monkeypatch, tone, lifetime):
+    from views import wgpu_ui
+    clock = [100.]
+    monkeypatch.setattr(cd.time, "monotonic", lambda: clock[0])
+    win.notify(tone, "Result")
+    row = cd.history(win)[0]
+    assert row.tone == tone and row.opacity(clock[0]) == 1
+    clock[0] += 2
+    wgpu_ui._run(win, ["pause-toast:" + row.id])
+    clock[0] += 70
+    assert row in cd.history(win) and row.opacity(clock[0]) == 1
+    wgpu_ui._run(win, ["resume-toast:" + row.id])
+    if lifetime:
+        assert row.opacity(clock[0] + lifetime - 2) == 0
+        assert row.opacity(clock[0] + lifetime - 2.5) > 0
+    else:
+        assert row.opacity(clock[0] + 1000) == 1
+    wgpu_ui._run(win, ["dismiss:" + row.id])
+    assert row.opacity(clock[0]) == 0
+
+
+def test_refusal_preserves_gesture_hint(win, monkeypatch):
+    from unittest.mock import MagicMock
+    from views import wgpu_ui
+    renderer = MagicMock()
+    monkeypatch.setattr(win.view, "renderer", renderer)
+    wgpu_ui.attach(win.view)
+    win._activate_tool("line")
+    bar = win.statusBar()
+    hint = bar._tool_hint
+    win.run_command("verb:simplify_mesh")
+    row = cd.history(win)[0]
+    assert (row.tone, row.title) == ("warning", "There is no mesh to simplify")
+    win.viewport.flash_status("Select a group first")
+    wgpu_ui.before_frame(win.view)
+    name, gesture, *_ = renderer.ui_set_status.call_args.args
+    assert hint == f"{name} — {gesture}" and name == "Line"
+
+
+def test_missing_file_recovery_actions(win, tmp_path, monkeypatch):
+    from built_core import recent
+    from built_render.shell_files import ShellFileDialog
+    from views import wgpu_ui
+
+    path = tmp_path / "missing.built"
+    recent.remember(path)
+    picked = []
+    monkeypatch.setattr(ShellFileDialog, "getOpenFileName",
+                        lambda *args: (picked.append(True) or "", ""))
+    assert not win.open_path(path)
+    row = cd.history(win)[0]
+    assert not picked
+    assert (row.tone, row.title) == ("error", "Couldn't open missing.built — file not found")
+    assert (row.action_label, row.second_label) == ("Locate…", "Remove from recents")
+    wgpu_ui._run(win, ["activity:" + row.id])
+    assert picked == [True] and not row.toast
+    assert not win.open_path(path)
+    wgpu_ui._run(win, ["activity2:" + cd.history(win)[0].id])
+    assert str(path) not in {entry["path"] for entry in recent.entries()}

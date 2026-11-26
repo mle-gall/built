@@ -37,7 +37,9 @@ def test_they_live_in_camera_scenes(win):
 def test_add_update_and_delete_reach_history(win):
     assert win.run_command("scene_add")
     added, = win.viewport.scene.saved_views
-    assert "added" in win.statusBar().currentMessage()
+    from built_render import chrome_dialogs
+    notice = chrome_dialogs.history(win)[0]
+    assert notice.tone == "success" and added.name in notice.title
     win.viewport.camera.distance *= 2
     win.run_command("scene_update")
     assert added.distance == pytest.approx(win.viewport.camera.distance)

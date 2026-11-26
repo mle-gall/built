@@ -102,6 +102,7 @@ const COMMANDS: &[Command] = &[
     command("section_fill", "Section Fill", "", &[], "Sections", Flag("_set_style_field", "section_fill")),
     command("organise-scenes", "Organise scenes", "", &[], "Scenes", Chrome).on(RegistryOnly),
     command("form-style", "Edit style…", "", &[], "Settings", Chrome),
+    command("recent-activity", "Recent activity", "", &[], "Activity", Chrome),
     command("form-shadows", "Shadows and sun…", "", &[], "Settings", Chrome),
 ];
 
@@ -255,6 +256,11 @@ pub fn run_view_command(win: &Bound<'_, PyAny>, id: &str, on: bool) -> PyResult<
         Shadows => win.call_method1("_on_toggle_shadows", (on,))?,
         Flag(method, field) => win.call_method1(method, (field, on))?,
         Method(method) => win.call_method0(method)?,
+        Chrome if id == "recent-activity" => {
+            let view = win.getattr("_doc")?.getattr("stand_in")?;
+            view.getattr("renderer")?.call_method0("ui_open_activity")?;
+            view.call_method0("update")?
+        }
         Chrome => {
             let view = win.getattr("_doc")?.getattr("stand_in")?;
             calls::run_action(win, id, &view)?
@@ -682,6 +688,7 @@ pub fn command_description(label: &str, key: &str) -> Option<&'static str> {
             "view:axes" => "Show or hide the model’s drawing axes. Inference along the axes stays active.",
             "view:back_edges" => "Draw the edges hidden behind faces as dashed lines.",
             "view:organise-scenes" => "Manage folders and file saved scenes.",
+            "view:recent-activity" => "Show recent notices and job results.",
             "view:camera" => "Edit the projection, lens and position of the camera.",
             "view:form-shadows" => "Set the sun position and shadow appearance.",
             "view:form-style" => "Edit the current model display style.",

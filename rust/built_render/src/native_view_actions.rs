@@ -195,7 +195,7 @@ pub(crate) fn tool_hint(win: &Bound<'_, PyAny>) -> PyResult<()> {
             bar.call_method0("clearMessage")?;
         }
         bar.setattr("_tool_hint", &text)?;
-        bar.call_method1("showMessage", (text,))?;
+        bar.setattr("_base", text)?;
     }
     Ok(())
 }
