@@ -570,3 +570,50 @@ def test_invalid_hosted_preview_stays_red_and_click_warns(occupied):
     assert tool.wireframe_color[0] > tool.wireframe_color[1] * 3
     assert not machine.event(dict(event, type="click"), host)["committed"]
     assert notices == [("warning", "Opening overlaps another opening or the wall edge.")]
+
+
+def test_component_navigation_reuses_native_rows_until_document_edits(native_host):
+    from tests.shell_isolation import attach_test_renderer
+    from built_core import Matrix4
+    from built_core.group import Group
+    from built_core.mesh import Mesh
+
+    attach_test_renderer(native_host)
+    win, view = native_host.window, native_host.view
+    scene = win.viewport.scene
+
+    def add(name):
+        mesh = Mesh()
+        mesh.add_face([V(0, 0, 0), V(1, 0, 0), V(0, 1, 0)])
+        group = Group(mesh, name=name)
+        group.xform = Matrix4()
+        scene.groups.append(group)
+        scene.version += 1
+        return group
+
+    add("Alpha")
+    add("Beta")
+    L.open_library(win, "components")
+    cs.before_frame(view, win)
+    built = win._chrome_sheet.built
+    rows = built._library_rows
+    act(win, "focus", "cm:1")
+    cs.before_frame(view, win)
+    assert win._chrome_sheet.built is built
+    assert L._state(view)["cursor"] == "cm:1"
+    assert any(b.get("text") == "Beta" for b in built.wire()["detail"]["blocks"])
+    cs.close(win)
+    cs.before_frame(view, win)
+    L.open_library(win, "components")
+    cs.before_frame(view, win)
+    assert win._chrome_sheet.built._library_rows is rows
+
+    third = add("Gamma")
+    cs.before_frame(view, win)
+    added = win._chrome_sheet.built._library_rows
+    assert added is not rows and L._state(view)["items"]["cm:2"]["name"] == "Gamma"
+    scene.groups.remove(third)
+    scene.version += 1
+    cs.before_frame(view, win)
+    assert win._chrome_sheet.built._library_rows is not added
+    assert "cm:2" not in L._state(view)["items"]
