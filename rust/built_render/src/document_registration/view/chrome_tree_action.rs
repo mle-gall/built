@@ -513,6 +513,16 @@ impl<'a, 'py> Row<'a, 'py> {
                 viewport.call_method0("end_one_group_edit")?;
                 self.rebuild()?;
             }
+        } else if self.is(&["secname"]) && self.kind == "section" {
+            let plane = self.section_plane()?;
+            if !plane.is_none() {
+                win.getattr("prompt_section_name")?.call((plane,), Some(&fields!(py; "automatic" => false)))?;
+            }
+        } else if self.is(&["rename"]) && self.kind == "preview-folder" {
+            let draft = serde_json::json!({"folder":ident, "name":extra});
+            core_module.call_method1("edit_tag_folder", (viewport.getattr("history")?, "rename", draft.to_string()))?;
+            self.changed()?;
+            self.rebuild()?;
         } else if self.is(&["sectioncut"]) && self.kind == "section" {
             self.core("edit_section_plane", fields!(py; "uid" => &ident, "field" => "cut"))?;
             self.changed()?;
@@ -562,7 +572,7 @@ impl<'a, 'py> Row<'a, 'py> {
             let target = if self.kind == "section" { self.section_plane()? } else { self.item()? };
             glue.call_method1("tree_delete_rows", (viewport, target))?;
             self.rebuild()?;
-        } else if self.is(&["isolaterows", "pickrow", "roweye", "rowlock", "toggleitem", "group", "component", "explode", "unique", "instances"]) {
+        } else if self.is(&["isolaterows", "pickrow", "roweye", "rowlock", "toggleitem", "group", "merge", "component", "explode", "unique", "instances"]) {
             glue.call_method1("tree_group_action", (win, self.target()?, &self.verb))?;
         } else if self.is(&["hosteye"]) {
             let [host, mount] = unpack::<2>(&py.import("views.wgpu_tabs")?.call_method1("source_context", (win,))?)?;
@@ -607,14 +617,28 @@ impl<'a, 'py> Row<'a, 'py> {
             };
             glue.getattr("shell_project")?.call_method1("tree_action", (win, what, &ident))?;
         } else if self.kind == "project-files" && self.is(&["item", "open"]) {
-        } else if self.is(&["open"]) && self.kind_is(&["sheet-page", "sheet-frame", "saved-scene"]) {
+        } else if self.is(&["open", "renamesheet", "deletesheet", "rename", "deletescene"]) && self.kind_is(&["sheet-page", "sheet-frame", "saved-scene"]) {
             let target = view.getattr("_ui_sheet_catalog")?.call_method1("target", (&scene, &rk))?;
             if !target.is_none() {
                 let [family, index] = unpack::<2>(&target)?;
                 if family.eq("sheet")? {
-                    win.call_method1("_show_sheet", (index,))?;
+                    win.call_method1("_show_sheet", (&index,))?;
+                    if self.verb == "renamesheet" {
+                        self.renderer()?.call_method1("ui_rename_sheet", (index,))?;
+                    } else if self.verb == "deletesheet" {
+                        py.import("built_render.sheet_workspace")?.call_method1("action", (win, format!("del{SEP}{index}")))?;
+                    }
                 } else {
-                    win.getattr("tray")?.getattr("scenes")?.call_method1("finish_view", (scene.getattr("saved_views")?.get_item(index)?,))?;
+                    let saved = scene.getattr("saved_views")?.get_item(index)?;
+                    let panel = win.getattr("tray")?.getattr("scenes")?;
+                    match self.verb.as_str() {
+                        "rename" => { panel.call_method1("rename_view", (&saved, &extra))?; }
+                        "deletescene" => {
+                            view.setattr("_ui_pending", ("scene_delete", PyList::new(py, [&saved])?))?;
+                            super::chrome_actions::prompt(view, format!("Delete “{}”?", saved.getattr("name")?), "", "Delete")?;
+                        }
+                        _ => { panel.call_method1("finish_view", (saved,))?; }
+                    }
                 }
             }
         } else if self.is(&["linkselection"]) {
@@ -1078,8 +1102,8 @@ impl<'a, 'py> Row<'a, 'py> {
                 self.changed()?;
                 self.rebuild()?;
             }
-        } else if self.is(&["tagselect", "tagisolate"]) && tag_row {
-            glue.call_method1("tree_tag_action", (win, &ident, self.verb == "tagisolate"))?;
+        } else if self.is(&["tagselect", "tagisolate"]) && (tag_row || self.kind == "preview-folder") {
+            glue.call_method1("tree_tag_action", (win, &ident, self.verb == "tagisolate", self.kind == "preview-folder"))?;
         } else if self.is(&["kind"]) && named.is_some() {
             let node = named.as_deref().unwrap_or("");
             let recipe = self.recipe_of(self.structure_nodes()?.call_method1("get", (node, PyDict::new(py)))?)?;

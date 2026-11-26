@@ -82,36 +82,7 @@ impl Ui {
                 glass(Surface::Raised).inner_margin(Margin::same(6)).show(ui, |ui| {
                     ui.set_width(width);
                     ui.spacing_mut().item_spacing = vec2(0.0, 1.0);
-                    // The header: what was hit, and where it is filed.
-                    ui.add_space(SPACE_XS);
-                    let title = ui.painter().layout_no_wrap(menu.title.clone(), strong(TYPE_BODY), INK);
-                    let mut job = egui::text::LayoutJob::single_section(menu.subtitle.clone(), egui::TextFormat {
-                        font_id: meta(), color: FAINT, ..Default::default() });
-                    job.wrap = egui::text::TextWrapping { max_width: width - 24.0, max_rows: 1, break_anywhere: true,
-                                                          overflow_character: Some('…') };
-                    let sub = ui.painter().layout_job(job);
-                    let h = title.size().y + if menu.subtitle.is_empty() { 0.0 } else { sub.size().y + 2.0 } + 8.0;
-                    let (r, _) = ui.allocate_exact_size(vec2(width, h), Sense::hover());
-                    ui.painter().galley(pos2(r.min.x + 12.0, r.min.y + 3.0), title.clone(), INK);
-                    if !menu.subtitle.is_empty() {
-                        ui.painter().galley(pos2(r.min.x + 12.0, r.min.y + 5.0 + title.size().y), sub, FAINT);
-                    }
-                    divider(ui);
-                    for (i, (family, segs)) in menu.rows.iter().enumerate() {
-                        if family == "-" { divider(ui); continue; }
-                        if family.is_empty() && segs.len() == 1 {
-                            let Some((id, label, key, enabled, checked)) = segs.first() else { continue };
-                            let lane = if *checked >= 0 { "check" } else { "" };
-                            let item = (id.clone(), label.clone(), key.clone(), lane.to_owned(), *checked, *enabled);
-                            if menu_row(ui, &item) && *enabled { clicked = Some(id.clone()); }
-                        } else if let Some(id) = segment_row(ui, family, segs) {
-                            clicked = Some(id);
-                        }
-                        // Repeat stands apart from the verbs under it.
-                        if i == 0 && menu.rows.len() > 1 && segs.first().is_some_and(|s| s.0 == "repeat") {
-                            divider(ui);
-                        }
-                    }
+                    clicked = menu_contents(ui, width, &menu.title, &menu.subtitle, &menu.rows, &[]);
                 });
             });
         if let Some(id) = clicked {
@@ -127,6 +98,46 @@ impl Ui {
             }
         }
     }
+}
+
+pub(super) fn menu_contents(ui: &mut egui::Ui, width: f32, heading: &str, subtitle: &str,
+    rows: &[Row], reasons: &[(String, String, String)]) -> Option<String> {
+    let mut clicked = None;
+    // The header: what was hit, and where it is filed.
+    ui.add_space(SPACE_XS);
+    let title = ui.painter().layout_no_wrap(heading.to_owned(), strong(TYPE_BODY), INK);
+    let mut job = egui::text::LayoutJob::single_section(subtitle.to_owned(), egui::TextFormat {
+        font_id: meta(), color: FAINT, ..Default::default() });
+    job.wrap = egui::text::TextWrapping { max_width: width - 24.0, max_rows: 1, break_anywhere: true,
+                                          overflow_character: Some('…') };
+    let sub = ui.painter().layout_job(job);
+    let h = title.size().y + if subtitle.is_empty() { 0.0 } else { sub.size().y + 2.0 } + 8.0;
+    let (r, _) = ui.allocate_exact_size(vec2(width, h), Sense::hover());
+    ui.painter().galley(pos2(r.min.x + 12.0, r.min.y + 3.0), title.clone(), INK);
+    if !subtitle.is_empty() {
+        ui.painter().galley(pos2(r.min.x + 12.0, r.min.y + 5.0 + title.size().y), sub, FAINT);
+    }
+    divider(ui);
+    for (i, (family, segs)) in rows.iter().enumerate() {
+        if family == "-" { divider(ui); continue; }
+        if family.is_empty() && segs.len() == 1 {
+            let Some((id, label, key, enabled, checked)) = segs.first() else { continue };
+            let lane = if *checked >= 0 { "check" } else { "" };
+            let item = (id.clone(), label.clone(), key.clone(), lane.to_owned(), *checked, *enabled);
+            let response = menu_row_resp(ui, &item).0;
+            if response.clicked() && *enabled { clicked = Some(id.clone()); }
+            if let Some((_, _, why)) = reasons.iter().find(|(verb, _, why)| verb == id && !why.is_empty()) {
+                response.on_hover_text(why);
+            }
+        } else if let Some(id) = segment_row(ui, family, segs) {
+            clicked = Some(id);
+        }
+        // Repeat stands apart from the verbs under it.
+        if i == 0 && rows.len() > 1 && segs.first().is_some_and(|s| s.0 == "repeat") {
+            divider(ui);
+        }
+    }
+    clicked
 }
 
 fn divider(ui: &mut egui::Ui) {

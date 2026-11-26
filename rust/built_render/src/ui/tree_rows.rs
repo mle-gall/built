@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! Reconcile the rows supplied by the document with the visible Browser nodes.
-use super::{kit, Node};
+use super::*;
 use std::collections::HashMap;
 
 type WireRow = (Vec<String>, Vec<i64>);
@@ -81,6 +81,262 @@ pub(super) fn reconcile(mut previous: Vec<Node>, rows: Vec<WireRow>) -> Vec<Node
             node
         })
         .collect()
+}
+
+pub(super) fn show_menu(
+    col: &mut Column,
+    ctx: &egui::Context,
+    height: f32,
+    actions: &mut Vec<String>,
+) {
+    let Some((key, row, at)) = col.row_menu.clone() else {
+        return;
+    };
+    let node_menu: &[(&str, &str)] = &[
+        ("active", "Draw into this node"),
+        ("filehere", "File selection here"),
+        ("node", "Select its items"),
+        ("isolate", "Isolate"),
+        ("hidemembers", "Hide its items"),
+        ("-", ""),
+        ("rename", "Rename…"),
+        ("newchild", "New child node"),
+        ("kind", "Kind  ›"),
+        ("-", ""),
+        ("delete", "Delete node"),
+    ];
+    let item_menu: &[(&str, &str)] = &[
+        ("item", "Select"),
+        ("open", "Open for editing"),
+        ("rename", "Rename…"),
+        ("-", ""),
+        ("hideitem", "Hide"),
+        ("lockitem", "Lock / unlock"),
+        ("zoom", "Zoom to"),
+        ("groupplan", "Plan of this group…"),
+        ("-", ""),
+        ("fileto", "File to…"),
+    ];
+    let comp_menu: &[(&str, &str)] = &[
+        ("cplace", "Place a copy"),
+        ("cselect", "Select instances"),
+        ("creplace", "Replace selection with this"),
+        ("-", ""),
+        ("ckeep", "Keep in file"),
+        ("crename", "Rename…"),
+    ];
+    // A linked file's rows are read-only here: no filing, kind or rename.
+    let link_menu: &[(&str, &str)] = &[
+        ("node", "Select"),
+        ("contents", "Select contents"),
+        ("isolate", "Isolate"),
+        ("zoom", "Zoom to"),
+        ("-", ""),
+        ("eye", "Show / hide"),
+        ("lock", "Lock / unlock"),
+        ("-", ""),
+        ("linkopen", "Edit source"),
+        ("linkfinder", "Show in Finder"),
+        ("linkreload", "Reload"),
+        ("linkrelink", "Locate…"),
+        ("linkunlink", "Unlink"),
+    ];
+    let section_menu: &[(&str, &str)] = &[
+        ("secname", "Name and symbol…"),
+        ("cutview", "View of the cut…"),
+        ("sectioncut", "Active cut"),
+        ("eye", "Show / hide"),
+        ("deleterows", "Delete"),
+    ];
+    let tag_menu: &[(&str, &str)] = &[
+        ("newtag", "New tag"),
+        ("rename", "Rename…"),
+        ("tagactive", "Make active"),
+        ("tagassign", "Move selection here"),
+        ("tagselect", "Select items"),
+        ("eye", "Hide"),
+        ("movefolder", "Move to folder…"),
+        ("tagisolate", "Isolate"),
+        ("mergetag", "Merge into…"),
+        ("scenetaghide", "Hide in all saved scenes"),
+        ("scenetagshow", "Show in all saved scenes"),
+        ("deletetag", "Delete"),
+        ("purgetags", "Purge unused tags…"),
+    ];
+    let Some(n) = col.nodes.iter().find(|n| n.key == key && n.row == row) else {
+        col.row_menu = None;
+        return;
+    };
+    let menu: &[(&str, &str)] = match key.split_once(':').map(|(kind, _)| kind) {
+        Some("preview-tag") => tag_menu,
+        Some("preview-folder") => &[
+            ("newtag", "New tag in folder"),
+            ("tagselect", "Select items"),
+            ("rename", "Rename…"),
+            ("eye", "Hide"),
+            ("tagisolate", "Isolate"),
+            ("movefolder", "Move to folder…"),
+            ("deletefolder", "Remove folder"),
+        ],
+        Some("section") => section_menu,
+        Some("project-file") if n.icon == "file:missing" => &[("linkrelink", "Locate…")],
+        Some("project-file") => &[("open", "Open"), ("edit", "Edit source")],
+        Some("exportitem") => &[("item", "Select"), ("zoom", "Zoom to")],
+        Some("d") => &[
+            ("contents", "Select instances"),
+            ("hideitem", "Hide"),
+            ("zoom", "Zoom to"),
+            ("fileto", "File to…"),
+        ],
+        Some("sheet-page") => &[
+            ("item", "Inspect"),
+            ("open", "Open sheet"),
+            ("renamesheet", "Rename…"),
+            ("deletesheet", "Delete…"),
+        ],
+        Some("sheet-frame") => &[("item", "Inspect"), ("open", "Open sheet")],
+        Some("saved-scene") => &[
+            ("item", "Inspect"),
+            ("open", "Show scene"),
+            ("rename", "Rename…"),
+            ("deletescene", "Delete"),
+        ],
+        Some("sections") => &[("toggle", "Expand"), ("eye", "Hide")],
+        Some("geometry") => &[("item", "Select items"), ("eye", "Hide"), ("lock", "Lock")],
+        Some("m") => &[("loose", "Show more")],
+        Some("n") if key.starts_with("n:link") => link_menu,
+        Some("n") if key == "n:" => &[
+            ("node", "Select items"),
+            ("isolate", "Isolate"),
+            ("hidemembers", "Hide"),
+        ],
+        Some("n") => node_menu,
+        Some("cm") => comp_menu,
+        Some("i" | "c") if !n.local_placement => &[("item", "Select"), ("zoom", "Zoom to")],
+        _ if n.local_placement || matches!(row, 1..=3) => item_menu,
+        _ if n.expandable => &[("toggle", "Expand")],
+        _ => &[("item", "Inspect")],
+    };
+    let mut entries = Vec::new();
+    if col.choosing_folder {
+        entries.push(("destination:".into(), "Root".into(), true));
+        for (folder, path) in &col.styles.catalog.folders {
+            if col.styles.catalog.can_move_to(&key, folder) {
+                entries.push((format!("destination:{folder}"), path.clone(), true));
+            }
+        }
+    } else {
+        let editable_file = n.icon.starts_with("file:") && !n.badge.starts_with("via ");
+        for &(id, label) in menu {
+            if key == "preview-tag:Layer 0"
+                && matches!(
+                    id,
+                    "rename" | "deletetag" | "mergetag" | "tagisolate" | "movefolder"
+                )
+            {
+                continue;
+            }
+            if n.icon == "file:missing"
+                && matches!(
+                    id,
+                    "contents" | "isolate" | "zoom" | "linkopen" | "linkfinder" | "linkreload"
+                )
+            {
+                continue;
+            }
+            if key.starts_with("n:link")
+                && !editable_file
+                && matches!(id, "linkreload" | "linkrelink" | "linkunlink")
+            {
+                continue;
+            }
+            if id == "groupplan" && !n.local_placement {
+                continue;
+            }
+            if id == "hideitem" {
+                entries.extend(
+                    col.group_rows
+                        .iter()
+                        .map(|(id, label, why)| (id.clone(), label.clone(), why.is_empty())),
+                );
+            }
+            let label = match id {
+                "rename" if n.local_placement && n.selected > 0 && col.browser_picks > 1 => {
+                    "Rename selected…"
+                }
+                "eye" if n.eye == 0 => "Show",
+                "lock" | "lockitem" if n.lock == 1 => "Unlock",
+                "lockitem" => "Lock",
+                "toggle" if n.expanded => "Collapse",
+                _ => label,
+            };
+            let enabled = id != "deletesheet"
+                || col
+                    .nodes
+                    .iter()
+                    .any(|n| n.key == "sheet-pages:all" && n.count > 1);
+            entries.push((id.into(), label.into(), enabled));
+        }
+    }
+    let rows = crate::verbs::tree_menu_rows(entries);
+    let heading = if col.choosing_folder {
+        "Move to folder…"
+    } else {
+        &n.name
+    };
+    let response = egui::Area::new(egui::Id::new("row_menu"))
+        .fixed_pos(at + vec2(SPACE_XS, SPACE_XS))
+        .order(egui::Order::Tooltip)
+        .show(ctx, |ui| {
+            glass(Surface::Raised)
+                .inner_margin(Margin::same(6))
+                .show(ui, |ui| {
+                    ui.set_width(220.);
+                    ui.spacing_mut().item_spacing = vec2(0., 1.);
+                    egui::ScrollArea::vertical()
+                        .max_height(height - SPACE_M)
+                        .show(ui, |ui| {
+                            context_menu::menu_contents(
+                                ui,
+                                ui.available_width(),
+                                heading,
+                                "",
+                                &rows,
+                                &col.group_rows,
+                            )
+                        })
+                        .inner
+                })
+                .inner
+        });
+    if let Some(id) = response.inner {
+        match id.as_str() {
+            "rename" if n.local_placement && n.selected > 0 && col.browser_picks > 1 => {
+                actions.push(col.rename_request(true))
+            }
+            "rename" => {
+                col.renaming = Some((key.clone(), n.name.clone()));
+                col.focus_rename = true;
+            }
+            "movefolder" => col.choosing_folder = true,
+            "deletefolder" => {
+                let draft = serde_json::json!({"folder":key.trim_start_matches("preview-folder:")});
+                actions.push(format!("tagfolder\x1fdelete\x1f{draft}"));
+            }
+            "tagisolate" => actions.push(col.styles.isolate_action(n)),
+            "lockitem" if n.local_placement => actions.push(format!("rowlock\x1f{key}")),
+            "kind" => col.kind_menu = Some((key.clone(), at)),
+            _ if id.starts_with("destination:") => {
+                if let Some(payload) = drawing::DrawingDrag::begin(&col.styles, n) {
+                    actions.push(payload.action(&id["destination:".len()..]));
+                }
+            }
+            _ => actions.push(format!("{id}\x1f{key}")),
+        }
+        if id != "movefolder" {
+            col.row_menu = None;
+        }
+    }
 }
 
 #[cfg(test)]

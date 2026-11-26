@@ -5,25 +5,26 @@ use pyo3::{prelude::*, types::PyList};
 use std::collections::HashSet;
 
 /// A tag describes top-level placements regardless of which filing node owns them.
-#[pyfunction]
-pub fn tree_tag_action(win: &Bound<'_, PyAny>, tag: &str, isolate: bool) -> PyResult<()> {
+#[pyfunction(signature = (win, tag, isolate, folder=false))]
+pub fn tree_tag_action(win: &Bound<'_, PyAny>, tag: &str, isolate: bool, folder: bool) -> PyResult<()> {
     let vp = win.getattr("viewport")?;
     let scene = vp.getattr("scene")?;
-    if scene.call_method1("layer_by_key", (tag,))?.is_none() {
+    if !folder && scene.call_method1("layer_by_key", (tag,))?.is_none() {
         return Ok(());
     }
-    if !isolate {
-        win.py()
-            .import("built_render.tree_navigation")?
-            .call_method1("open_to", (&vp, PyList::empty(win.py())))?;
-        let entities = win
-            .py()
-            .import("built_core")?
-            .call_method1("on_layers", (&scene, [tag]))?;
-        calls::select(win, &entities)?;
-        return Ok(());
+    if isolate {
+        let kind = if folder { "preview-folder" } else { "preview-tag" };
+        return super::tag_visibility::isolate_tags(&vp, vec![format!("{kind}:{tag}")]);
     }
-    super::tag_visibility::isolate_tags(&vp, vec![format!("preview-tag:{tag}")])
+    let py = win.py();
+    let tags = if folder {
+        py.import("built_core.layers")?.call_method1("layers_in_folder", (&scene, tag))?
+    } else {
+        PyList::new(py, [tag])?.into_any()
+    };
+    py.import("built_render.tree_navigation")?.call_method1("open_to", (&vp, PyList::empty(py)))?;
+    let entities = py.import("built_core")?.call_method1("on_layers", (&scene, tags))?;
+    calls::select(win, &entities).map(drop)
 }
 
 /// Delete the addressed occurrence or section, including the other picked rows
