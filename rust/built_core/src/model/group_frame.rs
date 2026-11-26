@@ -147,7 +147,16 @@ pub fn frame_axis(points: &[P2]) -> Option<P2> {
     for i in 0..hull.len() {
         let (a, b) = (hull[i], hull[(i + 1) % hull.len()]);
         let d = [b[0] - a[0], b[1] - a[1]];
-        let length = d[0].hypot(d[1]);
+        // Round the larger square first and fuse the smaller one. A
+        // platform hypot can round either way, choosing a different axis
+        // among tied caliper rectangles even for identical hull points.
+        let large = d[0].abs().max(d[1].abs());
+        let small = d[0].abs().min(d[1].abs());
+        let length = if large > 1e150 || large < 1e-150 {
+            large.hypot(small)
+        } else {
+            small.mul_add(small, large * large).sqrt()
+        };
         if length < 1e-12 {
             continue;
         }

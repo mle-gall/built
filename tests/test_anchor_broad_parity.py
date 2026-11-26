@@ -107,6 +107,47 @@ def _uid_of(g):
     return _UIDS.setdefault(id(g), len(_UIDS))
 
 
+def reference_candidates(entries, point, tolerance):
+    """Evaluate the broad-phase contract on this host's actual inverses.
+
+    Among other things this checks the threshold of 32 affine instances:
+    a rounded homogeneous coefficient can change whether an inverse is
+    exactly affine. Final resolved anchors are pinned on every platform.
+    """
+    from collections import Counter
+    import numpy as np
+    from built_core.mesh import DeferredMesh
+
+    affine = [inv is not None and inv.isAffine() for _, _, inv in entries]
+    counts = Counter(id(placed.mesh) for (_, placed, _), eligible in zip(entries, affine) if eligible)
+    boxes = {}
+    query = np.array([*point.toTuple(), 1.])
+    for entry, eligible in zip(entries, affine):
+        _, placed, inverse = entry
+        mesh = placed.mesh
+        if eligible and counts[id(mesh)] >= 32:
+            if id(mesh) not in boxes:
+                if type(mesh) is DeferredMesh:
+                    source = vars(mesh).get("_deferred_source")
+                    if not source:
+                        yield entry
+                        continue
+                    positions = source["pos"]
+                else:
+                    positions = mesh._store.positions()
+                boxes[id(mesh)] = ((np.min(positions, axis=0), np.max(positions, axis=0))
+                                   if len(positions) else None)
+            box = boxes[id(mesh)]
+            if box is None:
+                continue
+            matrix = np.asarray(inverse.data()).reshape(4, 4).T[:3]
+            local = matrix @ query
+            slack = 4 * tolerance + 8 * np.finfo(np.float32).eps * (abs(matrix) @ abs(query))
+            if np.any(local < box[0] - slack) or np.any(local > box[1] + slack):
+                continue
+        yield entry
+
+
 def answers():
     from built_core import Vec3 as V
     import numpy as np
@@ -166,6 +207,9 @@ def answers():
                 protos[1].add_edge(V(7, 7, 7), V(8, 7, 7))   # a prototype grows
             tol = 1e-4 if i % 4 else 1e-2
             got = [_entry(scene, e) for e in ap.candidates(p, tol)]
+            if sys.platform != "darwin":
+                reference = [_entry(scene, e) for e in reference_candidates(ap.entries, p, tol)]
+                assert got == reference, (seed, i)
             rec["queries"].append(got)
             anchor = D.resolve_vertex_anchor(scene, p, tol)
             rec["queries"].append(None if anchor is None else
@@ -183,7 +227,8 @@ def test_anchor_broad_phase_answers_as_the_python_did():
     for i, (g, w) in enumerate(zip(got["scenes"], want["scenes"])):
         assert matches(g["entries"], w["entries"]), f"scene {i} entries"
         for q, (a, b) in enumerate(zip(g["queries"], w["queries"], strict=True)):
-            assert matches(a, b), f"scene {i} query {q}"
+            if sys.platform == "darwin" or q % 2:
+                assert a == b, f"scene {i} query {q}"
 
 
 if __name__ == "__main__" and "--write" in sys.argv:
