@@ -114,11 +114,17 @@ def test_the_foot_of_a_box_darkens_and_the_open_floor_does_not(
         box_on_floor, monkeypatch):
     vp = box_on_floor
     off = _render(vp, monkeypatch, "0")
+    # A GPU that does not draw the same frame twice cannot say whether
+    # ambient occlusion leaves anything behind; one that does, must.
+    deterministic = np.array_equal(_render(vp, monkeypatch, "0"), off)
     on = _render(vp, monkeypatch, "1")
     darker = off - on
     assert (darker > 8).mean() > 0.002          # the corner band shows
     assert (on > off + 1).mean() < 0.001        # it never lightens
     assert (np.abs(darker) < 1).mean() > 0.6    # most of the picture is as it was
+    if not deterministic:
+        pytest.skip("this GPU does not draw the same frame twice, so the frame after "
+                    "ambient occlusion is turned off again cannot be compared")
     # Off again: the very same picture as before it was ever on.
     assert np.array_equal(_render(vp, monkeypatch, "0"), off)
 

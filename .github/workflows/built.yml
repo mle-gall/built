@@ -73,19 +73,35 @@ jobs:
       - name: Key the compiled crates
         id: crates
         if: runner.os != 'Windows'
-        run: echo "toolchain=$(rustc -Vv | shasum -a 256 | cut -c1-16)" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "toolchain=$(rustc -Vv | shasum -a 256 | cut -c1-16)" >> "$GITHUB_OUTPUT"
+          # The .rfa reader is a path dependency, pinned by its commit and our patch.
+          if [[ -d ../rvt-rs ]]; then
+            echo "reader=$( { git -C ../rvt-rs rev-parse HEAD; shasum -a 256 .github/ci/rfa-family.patch; } | shasum -a 256 | cut -c1-16)" >> "$GITHUB_OUTPUT"
+          else
+            echo "reader=none" >> "$GITHUB_OUTPUT"
+          fi
 
       - uses: actions/cache/restore@v4
         id: target
         if: runner.os != 'Windows'
         with:
           path: built/rust/built_app/target
-          key: target-${{ runner.os }}-${{ runner.arch }}-${{ steps.crates.outputs.toolchain }}-${{ hashFiles('built/rust/*/Cargo.lock') }}-${{ hashFiles('built/rust/**', '!built/rust/**/target/**', 'built/resources/**', 'built/tests/fixtures/**', 'built/AUTHORS', 'built/scripts/build_native.sh') }}
-          restore-keys: target-${{ runner.os }}-${{ runner.arch }}-${{ steps.crates.outputs.toolchain }}-${{ hashFiles('built/rust/*/Cargo.lock') }}-
+          key: target-${{ runner.os }}-${{ runner.arch }}-${{ steps.crates.outputs.toolchain }}-${{ steps.crates.outputs.reader }}-${{ hashFiles('built/rust/*/Cargo.lock') }}-${{ hashFiles('built/rust/**', '!built/rust/**/target/**', 'built/resources/**', 'built/tests/fixtures/**', 'built/AUTHORS', 'built/scripts/build_native.sh') }}
+          restore-keys: target-${{ runner.os }}-${{ runner.arch }}-${{ steps.crates.outputs.toolchain }}-${{ steps.crates.outputs.reader }}-${{ hashFiles('built/rust/*/Cargo.lock') }}-
 
+      # A fresh checkout dates every file now, which would make cargo compile
+      # what the cache already holds. The reader's sources are in the key
+      # whenever anything was restored; Built's own only on an exact match.
       - name: Mark unchanged sources as built
-        if: runner.os != 'Windows' && steps.target.outputs.cache-hit == 'true'
-        run: git ls-files -z rust resources tests/fixtures AUTHORS | xargs -0 touch -t 200001010000
+        if: runner.os != 'Windows' && steps.target.outputs.cache-matched-key != ''
+        run: |
+          if [[ -d ../rvt-rs ]]; then
+            git -C ../rvt-rs ls-files -z | (cd ../rvt-rs && xargs -0 touch -h -t 200001010000)
+          fi
+          if [[ "${{ steps.target.outputs.cache-hit }}" == true ]]; then
+            git ls-files -z rust resources tests/fixtures AUTHORS | xargs -0 touch -h -t 200001010000
+          fi
 
       - name: Isolate the application profile
         run: |
