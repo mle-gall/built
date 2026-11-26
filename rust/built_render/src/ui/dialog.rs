@@ -392,10 +392,9 @@ pub(super) fn fields(ui: &mut egui::Ui, d: &mut Dialog, out: &mut Vec<String>) {
                 });
             }
             "check" => {
-                let item = (id.clone(), label.clone(), String::new(), "check".to_owned(), if value > 0.5 { 1 } else { 0 }, enabled);
                 let resp_clicked = ui.horizontal(|ui| {
                     if !full && !text.is_empty() { label_cell(ui, text, tip, label_w, 24.0, enabled); }
-                    let response = super::kit::menu_row_resp(ui, &item).0;
+                    let response = super::kit::switch_row(ui, label, value > 0.5, enabled);
                     if !tip.is_empty() {
                         response.clone().on_hover_text(tip);
                     }

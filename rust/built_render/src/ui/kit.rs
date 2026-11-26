@@ -146,6 +146,14 @@ pub mod atoms {
             ACCENT,
         );
     }
+    /// A lit control (an armed tool, a bar toggle that is on): an accent
+    /// tint under a 1-pt accent edge, so the state reads at a glance on a
+    /// rail or bar. The control's glyph goes BRIGHT on top.
+    pub fn paint_lit(ui: &egui::Ui, rect: Rect, radius: u8) {
+        let r = CornerRadius::same(radius);
+        ui.painter().rect_filled(rect, r, LIT);
+        ui.painter().rect_stroke(rect, r, Stroke::new(1.0_f32, ACCENT_LINE), egui::StrokeKind::Inside);
+    }
     /// A disclosure chevron: right when closed, down when open.
     pub fn chevron(painter: &egui::Painter, center: Pos2, open: bool, color: Color32) {
         let pts = if open {
@@ -685,7 +693,6 @@ pub mod molecules {
         }
         let st = control_state(ui, &resp, false);
         let on = *value || (st == State::On);
-        let off = st == State::Off;
         let label_ink = match st {
             State::Off => OFF,
             State::Idle => INK_2,
@@ -696,6 +703,14 @@ pub mod molecules {
             pos2(rect.max.x - track_w - 4.0, rect.center().y - 7.0),
             vec2(track_w, 14.0),
         );
+        paint_switch(ui, track, on, st);
+        resp
+    }
+    /// The switch's track and knob in a state. Off still shows its track
+    /// (TRACK under an edge) and the knob at the leading end, so the off
+    /// value reads as a control, not as text.
+    fn paint_switch(ui: &egui::Ui, track: Rect, on: bool, st: State) {
+        let off = st == State::Off;
         let fill = match (on, off) {
             (true, false) if st == State::Press => PRIMARY_PRESS,
             (true, false) if st == State::Hover => PRIMARY_HOVER,
@@ -704,6 +719,9 @@ pub mod molecules {
             _ => TRACK,
         };
         ui.painter().rect_filled(track, CornerRadius::same(7), fill);
+        if !on {
+            ui.painter().rect_stroke(track, CornerRadius::same(7), Stroke::new(1.0_f32, HOVER_EDGE), egui::StrokeKind::Inside);
+        }
         let knob_x = if on { track.max.x - 7.0 } else { track.min.x + 7.0 };
         let knob = match (on, off) {
             (_, true) => OFF,
@@ -714,6 +732,32 @@ pub mod molecules {
         if st == State::Focus {
             paint_focus(ui, track, 7);
         }
+    }
+    /// The one Boolean row of a form (settings, operation forms, prompts):
+    /// the kit switch at the leading edge, then its label, wrapping. The
+    /// caller owns the value and flips it on a click. Off shows the empty
+    /// track, so an unchecked option never reads as plain text (M14, P9).
+    pub fn switch_row(ui: &mut egui::Ui, label: &str, on: bool, enabled: bool) -> egui::Response {
+        const TRACK_W: f32 = 26.0;
+        let width = ui.available_width();
+        let text_x = SPACE_S + TRACK_W + SPACE_S;
+        let ink = if enabled { INK } else { OFF };
+        let mut job = egui::text::LayoutJob::single_section(label.to_owned(), egui::TextFormat {
+            font_id: body(), color: ink, ..Default::default() });
+        job.wrap.max_width = (width - text_x - SPACE_S).max(40.0);
+        let g = ui.painter().layout_job(job);
+        let sense = if enabled { Sense::click() } else { Sense::hover() };
+        let (rect, resp) = ui.allocate_exact_size(vec2(width, (g.size().y + 8.0).max(ROW_H)), sense);
+        let st = if enabled { control_state(ui, &resp, false) } else { State::Off };
+        let st = if st == State::On { State::Idle } else { st };
+        if matches!(st, State::Hover | State::Press) {
+            paint_state(ui, rect, st, R_ROW);
+        }
+        let on = on || specimen_state(ui) == Some(State::On);
+        let track = Rect::from_min_size(pos2(rect.min.x + SPACE_S, rect.center().y - 7.0), vec2(TRACK_W, 14.0));
+        paint_switch(ui, track, on, st);
+        let label_ink = if st == State::Off { OFF } else { INK };
+        leading(ui.painter(), rect, rect.min.x + text_x, g, label_ink);
         resp
     }
     pub fn choice(ui: &mut egui::Ui, id: impl std::hash::Hash, value: &mut usize, labels: &[&str]) {
@@ -2059,5 +2103,49 @@ mod tag_swatch_tests {
                 if *points == [rect.left_top(), rect.right_bottom()] && stroke.color == ERROR));
             assert_eq!(slash, colour.is_none());
         }
+    }
+}
+
+#[cfg(test)]
+mod switch_row_tests {
+    use super::*;
+
+    /// The fills a switch row paints, and whether a click flipped it.
+    fn row(on: bool, enabled: bool, click: bool) -> (Vec<Color32>, bool) {
+        let ctx = egui::Context::default();
+        let mut clicked = false;
+        let mut fills = Vec::new();
+        let at = pos2(20., 20.);
+        let events = |pressed| vec![egui::Event::PointerMoved(at), egui::Event::PointerButton {
+            pos: at, button: egui::PointerButton::Primary, pressed, modifiers: Default::default() }];
+        for step in 0..3 {
+            let raw = egui::RawInput { events: if click && step > 0 { events(step == 1) } else { vec![] }, ..Default::default() };
+            let frame = ctx.run(raw, |ctx| {
+                egui::CentralPanel::default().frame(egui::Frame::NONE).show(ctx, |ui| {
+                    clicked |= switch_row(ui, "Show at startup", on, enabled).clicked();
+                });
+            });
+            fills = frame.shapes.iter().filter_map(|s| match &s.shape {
+                egui::Shape::Rect(r) => Some(r.fill),
+                egui::Shape::Circle(c) => Some(c.fill),
+                _ => None,
+            }).collect();
+        }
+        (fills, clicked)
+    }
+
+    #[test]
+    fn off_shows_an_empty_track_and_on_fills_it() {
+        let (off, _) = row(false, true, false);
+        assert!(off.contains(&TRACK), "the off value draws its track: {off:?}");
+        assert!(!off.contains(&ACCENT));
+        let (on, _) = row(true, true, false);
+        assert!(on.contains(&ACCENT) && on.contains(&BRIGHT), "{on:?}");
+    }
+
+    #[test]
+    fn the_whole_row_is_the_hit_target_unless_disabled() {
+        assert!(row(false, true, true).1);
+        assert!(!row(false, false, true).1);
     }
 }

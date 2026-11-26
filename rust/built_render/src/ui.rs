@@ -1640,8 +1640,9 @@ impl Ui {
                                 });
                             }
                             "check" => {
-                                let item = (id.clone(), label.clone(), text.clone(), "check".to_owned(), if f.4 > 0.5 { 1 } else { 0 }, true);
-                                if menu_row(ui, &item) {
+                                let r = switch_row(ui, &label, f.4 > 0.5, true);
+                                let r = if text.is_empty() { r } else { r.on_hover_text(&text) };
+                                if r.clicked() {
                                     f.4 = if f.4 > 0.5 { 0.0 } else { 1.0 };
                                     out.push(format!("form:{id}:{}", f.4 as i32));
                                 }
@@ -2932,7 +2933,7 @@ fn item_response(ui: &mut egui::Ui, item: &Item, icon: Option<&egui::TextureHand
     let sense = if *enabled { Sense::click() } else { Sense::hover() };
     let (rect, resp) = ui.allocate_exact_size(vec2(width, 28.0), sense);
     let st = state_of(&resp, *checked == 1, *enabled);
-    paint_state(ui, rect, st, R_CONTROL);
+    if st == State::On { paint_lit(ui, rect, R_CONTROL) } else { paint_state(ui, rect, st, R_CONTROL) }
     let ink = ink_of(st);
     match icon {
         Some(tex) => { egui::Image::new(tex).tint(ink).paint_at(ui, rect.shrink(4.0)); }
@@ -3139,7 +3140,7 @@ fn text_button_response(ui: &mut egui::Ui, label: &str, key: &str, enabled: bool
 fn tool_button(ui: &mut egui::Ui, tool: &Tool, active: bool, mark: &str) -> bool {
     let (rect, resp) = ui.allocate_exact_size(vec2(30.0, 30.0), if tool.enabled { Sense::click() } else { Sense::hover() });
     let st = state_of(&resp, active, tool.enabled);
-    paint_state(ui, rect, st, R_CONTROL);
+    if st == State::On { paint_lit(ui, rect, R_CONTROL) } else { paint_state(ui, rect, st, R_CONTROL) }
     let tint = ink_of(st);
     match &tool.icon {
         Some(tex) => {
