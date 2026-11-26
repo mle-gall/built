@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+  <!-- Radius dimension: a circle, its centre and the radius line -->
+  <circle cx="21" cy="27" r="14"/>
+  <path d="M21 27 L41 7" stroke-width="2.4"/>
+  <path d="M31 17 L31 24 M31 17 L24 17" stroke-width="2.2"/>
+  <circle cx="21" cy="27" r="3" fill="#fff" stroke="none"/>
+</svg>

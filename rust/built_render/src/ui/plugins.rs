@@ -250,32 +250,38 @@ impl Panels {
             self.draw(ui, &id, actions)
         }
     }
+    /// The utility pane (Python console, Model Info…) in `bay`: the free
+    /// band between the rail and the dock, its bottom on the bottom bar's
+    /// gutter. The caller leaves the 8-pt gutters; the pane takes the dock's
+    /// glass, radius and margin (P3: it used to sit over the rail).
     pub(super) fn utility(
         &mut self,
         ctx: &egui::Context,
-        screen: Rect,
-        dock: f32,
+        bay: Rect,
         actions: &mut Vec<String>,
     ) {
         let Some(id) = self.utility.clone() else {
             return;
         };
         egui::Area::new("plugin_utility".into())
-            .anchor(egui::Align2::LEFT_BOTTOM, vec2(58., -44.))
+            .constrain(false)
+            .pivot(egui::Align2::LEFT_BOTTOM)
+            .fixed_pos(bay.left_bottom())
             .order(egui::Order::Foreground)
             .show(ctx, |ui| {
                 glass(Surface::Panel)
                     .inner_margin(Margin::same(10))
                     .show(ui, |ui| {
-                        ui.set_width((screen.width() - dock - 96.).max(120.));
-                        let width = ui.available_width();
+                        let width = (bay.width() - 20.).max(120.);
+                        ui.set_width(width);
                         egui::Resize::default()
                             .id_salt("utility_height")
                             .resizable([false, true])
                             .default_width(width)
+                            .min_width(width)
                             .max_width(width)
                             .default_height(165.)
-                            .max_height(screen.height() * 0.65)
+                            .max_height((bay.height() * 0.65).max(120.))
                             .show(ui, |ui| self.draw(ui, &id, actions));
                     });
             });
@@ -286,7 +292,7 @@ impl Panels {
         };
         ui.spacing_mut().item_spacing = vec2(SPACE_S, 5.);
         ui.horizontal(|ui| {
-            ui.label(egui::RichText::new(&p.title).font(heading()));
+            ui.label(egui::RichText::new(&p.title).font(title()).color(INK));
             if p.slot == Slot::Utility {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if ui.small_button("Close").clicked() {
@@ -570,6 +576,28 @@ mod tests {
         json!({"api":1,"plugin":"demo","panel":"options","instance":"doc1-demo","document":"doc1",
             "revision":7,"slot":"dock","title":"Demo",
             "sections":[{"id":"options","title":"","items":[item]}]})
+    }
+
+    #[test]
+    fn the_utility_pane_fills_its_bay_and_never_reaches_the_rail() {
+        let mut model = descriptor(json!({"kind":"field","id":"size","type":"number","value":1,"min":0,"max":10,"unit":"m"}));
+        model["slot"] = json!("utility");
+        let mut panels = Panels::default();
+        panels.set(&model.to_string()).unwrap();
+        panels.open("doc1-demo");
+        for (w, h) in [(1600.0, 1000.0), (1280.0, 800.0)] {
+            // Rail 72 wide at x 8; dock 300 wide with an 8 gutter.
+            let bay = Rect::from_min_max(pos2(8. + 72. + 8., 56.), pos2(w - 8. - 300. - 8., h - 36. - 8.));
+            let ctx = super::super::test_context();
+            for _ in 0..3 {
+                let raw = egui::RawInput { screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(w, h))), ..Default::default() };
+                let _ = ctx.run(raw, |ctx| panels.utility(ctx, bay, &mut Vec::new()));
+            }
+            let r = ctx.memory(|m| m.area_rect(egui::Id::new("plugin_utility"))).unwrap();
+            assert!((r.min.x - bay.min.x).abs() < 0.5, "{w}: starts at {}", r.min.x);
+            assert!((r.max.x - bay.max.x).abs() < 1.0, "{w}: ends at {}", r.max.x);
+            assert!((r.max.y - bay.max.y).abs() < 0.5, "{w}: bottom {}", r.max.y);
+        }
     }
 
     #[test]

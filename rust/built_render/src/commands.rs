@@ -79,16 +79,17 @@ const COMMANDS: &[Command] = &[
     command("hidden_geometry", "Hidden geometry", "hidden_geometry", &[], "toggle", Flag("_set_hidden_view", "show_hidden_geometry")).on(DisplayBar),
     command("shadows", "Shadows", "shadows", &[], "toggle", Shadows),
     command("section_cuts", "Section cuts", "section_cut", &[], "toggle", Flag("_set_scene_visibility", "show_section_cuts")).on(DisplayBar),
-    command("view_iso", "Isometric", "view_iso", &["Ctrl+4"], "Views", View("iso")),
+    // Views in shortcut order (UX pass 1, M05).
     command("view_top", "Top", "view_top", &["Ctrl+1"], "Views", View("top")),
     command("view_front", "Front", "view_front", &["Ctrl+2"], "Views", View("front")),
     command("view_right", "Right", "view_right", &["Ctrl+3"], "Views", View("right")),
-    command("view_left", "Left", "view_left", &["Ctrl+6"], "Views", View("left")),
+    command("view_iso", "Isometric", "view_iso", &["Ctrl+4"], "Views", View("iso")),
     command("view_back", "Back", "view_back", &["Ctrl+5"], "Views", View("back")),
+    command("view_left", "Left", "view_left", &["Ctrl+6"], "Views", View("left")),
     command("view_bottom", "Bottom", "view_bottom", &["Ctrl+7"], "Views", View("bottom")),
     command("camera", "Camera inspector…", "", &[], "Views", Chrome),
-    command("projection_parallel", "Parallel Projection", "proj_parallel", &[], "Projection", Projection("parallel")),
     command("projection_perspective", "Perspective", "proj_perspective", &[], "Projection", Projection("perspective")),
+    command("projection_parallel", "Parallel Projection", "proj_parallel", &[], "Projection", Projection("parallel")),
     command("projection_two_point", "Two-Point Perspective", "proj_two_point", &[], "Projection", Projection("two_point")),
     command("style_default", "Default", "", &[], "Style", Style),
     command("style_architectural", "Architectural", "", &[], "Style", Style),
@@ -173,11 +174,14 @@ pub fn command_chrome(
         } else {
             shortcut.to_owned()
         };
+        // The View menu names its projection choices: labelled check rows,
+        // not three bare icons (M05). The bar and registry keep the art.
+        let icon = if cluster_group.is_none() && matches!(c.target, Projection(_)) { "" } else { c.icon };
         let item = (
             c.id.to_owned(),
             label,
             tip,
-            c.icon.to_owned(),
+            icon.to_owned(),
             checked,
             enabled && allowed,
         );
@@ -279,6 +283,18 @@ mod tests {
                 assert_eq!(view_shortcut(key), Some(c.id));
             }
         }
+    }
+    #[test]
+    fn view_menu_orders_views_by_shortcut_and_labels_projections() {
+        let (_, menu) = command_chrome(Default::default(), Default::default(), Default::default());
+        let group = |name: &str| menu.iter().find(|(t, _)| t == name).map(|(_, rows)| rows.clone()).unwrap();
+        let keys: Vec<String> = group("Views").iter().filter(|r| !r.2.is_empty()).map(|r| r.2.clone()).collect();
+        assert_eq!(keys, (1..=7).map(|n| format!("Ctrl+{n}")).collect::<Vec<_>>());
+        let projection = group("Projection");
+        assert_eq!(projection.iter().map(|r| r.0.as_str()).collect::<Vec<_>>(),
+                   ["projection_perspective", "projection_parallel", "projection_two_point"]);
+        // Rows with a label and a check, not icon-only buttons.
+        assert!(projection.iter().all(|r| r.3.is_empty() && !r.1.is_empty() && r.4 >= 0));
     }
     #[test]
     fn chrome_shows_each_command_once_and_keeps_the_xray_shortcut() {

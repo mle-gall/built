@@ -1606,8 +1606,13 @@ impl Ui {
                                   if self.review { 1 } else { 0 }, true);
                     if menu_row(ui, &review) { toggle_review = true; }
                     ui.add_space(SPACE_XS);
-                    egui::ScrollArea::vertical().id_salt("view command groups")
-                        .max_height((self.screen.bottom() - a.bottom() - 90.).max(ROW_H * 3.))
+                    // Down to the bottom bar (M05). The area remembers last
+                    // frame's size, so give the scroll its room explicitly or
+                    // it stays at the first frame's default height.
+                    let room = view_menu_room(self.screen, ui.cursor().top());
+                    let at = Rect::from_min_size(ui.cursor().min, vec2(ui.available_width(), room));
+                    ui.scope_builder(egui::UiBuilder::new().max_rect(at), |ui| egui::ScrollArea::vertical().id_salt("view command groups")
+                        .max_height(room)
                         .show(ui, |ui| {
                             for (si, (title, items)) in self.view_menu.iter().enumerate() {
                                 if si > 0 { ui.add_space(SPACE_XS); }
@@ -1628,7 +1633,7 @@ impl Ui {
                                     }
                                 }
                             }
-                        });
+                        }));
                 });
             });
         if close { self.view_open = false; }
@@ -1675,8 +1680,9 @@ impl Ui {
                                 });
                             }
                             "check" => {
-                                let item = (id.clone(), label.clone(), text.clone(), "check".to_owned(), if f.4 > 0.5 { 1 } else { 0 }, true);
-                                if menu_row(ui, &item) {
+                                let r = switch_row(ui, &label, f.4 > 0.5, true);
+                                let r = if text.is_empty() { r } else { r.on_hover_text(&text) };
+                                if r.clicked() {
                                     f.4 = if f.4 > 0.5 { 0.0 } else { 1.0 };
                                     out.push(format!("form:{id}:{}", f.4 as i32));
                                 }
@@ -1760,6 +1766,15 @@ impl Ui {
             ctx.memory(|m| m.area_rect(egui::Id::new("bottom"))).map_or(screen.max.y - BOT_H, |r| r.min.y)
         };
         (top + GUT, bottom - GUT)
+    }
+
+    /// Where a plugin's utility pane may sit: right of the rail and left of
+    /// the dock, each with a gutter, from the band's top to its bottom.
+    fn utility_bay(&self, ctx: &egui::Context, screen: Rect) -> Rect {
+        let (top, bottom) = self.band(ctx, screen);
+        let left = if self.groups.is_empty() { GUT } else { GUT + self.rail_w + GUT };
+        let right = self.free_right(ctx, screen) - GUT;
+        Rect::from_min_max(pos2(left, top), pos2(right.max(left + 120.), bottom))
     }
 
     /// The right edge of the free viewport (left of the column).
@@ -2763,7 +2778,8 @@ impl Ui {
                     self.bottom_bar(ctx, screen, retract);
                 }
                 if !self.review && !sheet_up {
-                    self.plugins.utility(ctx, screen, self.dock_w, &mut self.actions);
+                    let bay = self.utility_bay(ctx, screen);
+                    self.plugins.utility(ctx, bay, &mut self.actions);
                     self.paint_strip(ctx, screen);
                     if self.panels.data["terrain"].is_object() {
                         let bounds = Rect::from_min_max(pos2(12.,0.),pos2(self.free_right(ctx,screen)-8.,screen.bottom()-BOT_H-4.));
@@ -2904,7 +2920,7 @@ fn item_response(ui: &mut egui::Ui, item: &Item, icon: Option<&egui::TextureHand
     let sense = if *enabled { Sense::click() } else { Sense::hover() };
     let (rect, resp) = ui.allocate_exact_size(vec2(width, 28.0), sense);
     let st = state_of(&resp, *checked == 1, *enabled);
-    paint_state(ui, rect, st, R_CONTROL);
+    if st == State::On { paint_lit(ui, rect, R_CONTROL) } else { paint_state(ui, rect, st, R_CONTROL) }
     let ink = ink_of(st);
     match icon {
         Some(tex) => { egui::Image::new(tex).tint(ink).paint_at(ui, rect.shrink(4.0)); }
@@ -3067,6 +3083,12 @@ fn inspector_rows(ui: &mut egui::Ui, rows: &[(String, String)], edits: &mut std:
     }
 }
 
+/// The View menu's scrolling height from `top` (its groups' first row)
+/// down to the bottom bar, less a gutter and the menu's own margin.
+fn view_menu_room(screen: Rect, top: f32) -> f32 {
+    (screen.bottom() - BOT_H - GUT - 6.0 - top).max(ROW_H * 3.)
+}
+
 /// A bar button that opens a menu: label and ▾; returns its rect when clicked.
 fn menu_button(ui: &mut egui::Ui, label: &str, open: bool) -> Option<Rect> {
     let g = ui.painter().layout_no_wrap(label.to_owned(), body(), INK);
@@ -3102,18 +3124,18 @@ fn text_button_response(ui: &mut egui::Ui, label: &str, key: &str, enabled: bool
 
 /// A palette tool: 30 × 30 cell, glyph about 18 pt (the icon art carries
 /// its own margin), idle INK_2, hover INK, current white on accent.
-fn tool_button(ui: &mut egui::Ui, tool: &Tool, active: bool) -> bool {
+fn tool_button(ui: &mut egui::Ui, tool: &Tool, active: bool, mark: &str) -> bool {
     let (rect, resp) = ui.allocate_exact_size(vec2(30.0, 30.0), if tool.enabled { Sense::click() } else { Sense::hover() });
     let st = state_of(&resp, active, tool.enabled);
-    paint_state(ui, rect, st, R_CONTROL);
+    if st == State::On { paint_lit(ui, rect, R_CONTROL) } else { paint_state(ui, rect, st, R_CONTROL) }
     let tint = ink_of(st);
     match &tool.icon {
         Some(tex) => {
             egui::Image::new(tex).tint(tint).paint_at(ui, rect.shrink(3.0));
         }
         None => {
-            let letter: String = tool.label.chars().take(2).collect();
-            ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, letter, meta(), tint);
+            // No art: the rail's unique, language-stable mark (rail::fallback_mark).
+            ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, mark, meta(), tint);
         }
     }
     let tip = if !tool.enabled { format!("{} — Open in classic app", tool.label) } else if tool.key.is_empty() { tool.label.clone() } else { format!("{}    {}", tool.label, tool.key) };
@@ -3150,6 +3172,29 @@ fn scene_chooser_owns_modified_arrows_and_moves_within_one_folder() {
     assert!(ui.take_actions().is_empty());
     assert!(ui.key("ArrowUp", true, 1));
     assert_eq!(ui.take_actions(), ["tab:scene:up"]);
+}
+
+#[test]
+fn the_view_menu_reaches_down_to_the_bottom_bar() {
+    let Some(mut ui) = test_chrome() else { return };
+    ui.ctx = test_context();
+    let (cluster, menu) = crate::commands::command_chrome(Default::default(), Default::default(), Default::default());
+    ui.set_cluster(cluster, menu);
+    for (w, h) in [(1600., 1000.), (1280., 800.)] {
+        let screen = Rect::from_min_size(Pos2::ZERO, vec2(w, h));
+        ui.screen = screen;
+        ui.view_open = true;
+        ui.view_anchor = Rect::from_min_size(pos2(w - 80., 6.), vec2(70., 28.));
+        let ctx = ui.ctx.clone();
+        for _ in 0..3 {
+            let raw = egui::RawInput { screen_rect: Some(screen), ..Default::default() };
+            let _ = ctx.run(raw, |c| ui.view_popup(c));
+        }
+        let r = ctx.memory(|m| m.area_rect(egui::Id::new("view_menu"))).unwrap();
+        // Every row fits at 1000 high; either way the menu stops at the bottom bar.
+        assert!(r.max.y <= h - BOT_H - GUT + 0.5, "{h}: ends at {}", r.max.y);
+        assert!(r.height() > 450., "{h}: only {} high", r.height());
+    }
 }
 
 #[test]

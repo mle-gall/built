@@ -13,7 +13,7 @@ The public Rust module `ui::tokens` owns colour values. Its palette declaration 
 | Text | `INK` #EEF1F4, `INK_2` #C9CFD6, `DIM` #A2A9B1, `FAINT` #858C94, `OFF` #5C636A, `ON_PRIMARY` graphite on the primary accent, `BRIGHT` white on dark surfaces |
 | Boundary | `EDGE` / `DIVIDER` white at 8%, `HOVER_EDGE` white at 18%, `FOCUS_RING` #6AA5FF |
 | Controls | `CONTROL` white at 7% (rest fill of buttons and chips), `TRACK` white at 11% (progress, switch), `THUMB` white at 16% (segmented thumb) |
-| Interaction | `HOVER` white at 7%, `PRESS` white at 12%, `ACTIVE` accent at 14% (selection wash), `ACCENT_LINE` accent at 55%, `ACCENT` #6AA5FF, `PRIMARY_HOVER`, `PRIMARY_PRESS` |
+| Interaction | `HOVER` white at 7%, `PRESS` white at 12%, `ACTIVE` accent at 14% (selection wash), `LIT` accent at 28% (an armed tool or a bar toggle that is on, under an `ACCENT_LINE` edge), `ACCENT_LINE` accent at 55%, `ACCENT` #6AA5FF, `PRIMARY_HOVER`, `PRIMARY_PRESS` |
 | Feedback | `OK` green, `WARN` amber, `ERROR` red, `INFO` secondary ink, `WARN_FILL` and its hover and press. Pair status colours with a label, icon or tooltip. |
 | Link dots | `FOUND` green, `CHANGED` amber, `MISSING` red, `PACKED` dim |
 | Agent | `WORKING` secondary ink, `WAITING` dim, `QUESTION` amber, `DONE` green, `FAILED` red |
@@ -42,7 +42,7 @@ From lowest to highest, each level is lighter and casts more:
 | Style | `install_style` | Call it once per egui context. It gives egui's own fields, numbers and choices the kit's state looks. |
 | Atoms | `label`, `dot`, eye and lock icons, `chevron`, `centered` / `leading` text placement, `paint_focus`, `paint_selected_row` | Align text, identify status and expose per-row visibility or locking. Place every control label through `centered` or `leading` so baselines match. |
 | Molecules: buttons | Primary, secondary and destructive `sheet_button`, `quiet`, `icon_button`, `chip_button` and `amber_button` | Use one primary commit action in a question. Give destructive commands the error ink. Use quiet buttons for subordinate actions and label icon buttons for discovery. |
-| Molecules: switches | `segmented`, `underline_tabs`, `choice`, `toggle` | Use `segmented` to switch a mode or place: an inset track with a raised neutral thumb. Use `underline_tabs` to navigate the sections of one panel: text with an accent underline and no box. Use `choice` to pick one of many values and `toggle` (a switch) for a Boolean. |
+| Molecules: switches | `segmented`, `underline_tabs`, `choice`, `toggle` | Use `segmented` to switch a mode or place: an inset track with a raised neutral thumb. Use `underline_tabs` to navigate the sections of one panel: text with an accent underline and no box. Use `choice` to pick one of many values and `toggle` (a switch) for a Boolean. In a form (settings, operation forms, prompts) a Boolean is a `switch_row`: the same switch at the row's leading edge, then its label; the off value shows the empty track, never bare text. |
 | Molecules: fields | `field`, `search`, `number` with unit, `swatch` | Edit a name, a measurement, a local filter or a document colour. Preserve identity across frames and keep IME text in the focused editor. |
 | Molecules: formatted prose | `kit::prose` | Render formatted release-note paragraphs with heading, emphasis, code and actionable link spans. |
 | Bevel cross-section | `CurveEditor` | Show the sampled outline and its control points. Double-click adds a point or changes its kind. Use the numeric fields for precise placement. The inspector and gallery use the same editor. |
@@ -65,7 +65,7 @@ The About sheet uses `credits_roll` for contributor names, linked profiles and t
 | Rest | Buttons and chips are a `CONTROL` wash with no outline. Fields are a `FIELD` well with no outline. Rows and quiet buttons have no fill. |
 | Hover | Adds `HOVER`. Fields gain a `HOVER_EDGE` hairline. Text goes from `INK_2` or `DIM` to `INK`. |
 | Pressed | Adds `PRESS`. The primary button uses `PRIMARY_PRESS`. |
-| Selected | Adds the `ACTIVE` wash. Rows add the 2-pt accent marker. The segmented control raises its thumb, the tabs underline the current tab, the switch fills its track and menus show a check. A control is never filled with full accent. |
+| Selected | Adds the `ACTIVE` wash. An armed tool and a bar toggle that is on are lit instead (`paint_lit`: `LIT` under a 1-pt `ACCENT_LINE` edge, glyph `BRIGHT`). Rows add the 2-pt accent marker. The segmented control raises its thumb, the tabs underline the current tab, the switch fills its track and menus show a check. A control is never filled with full accent. |
 | Focus | Shows the 1-pt `FOCUS_RING` outside the control and nothing else. Focus marks where keys go and stays visibly separate from selection. |
 | Disabled | Uses `OFF` ink and drops the wash. A disabled primary button loses its accent. |
 

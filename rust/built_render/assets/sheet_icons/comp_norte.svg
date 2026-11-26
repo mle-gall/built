@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+  <!-- North arrow: a half-filled arrow under an N -->
+  <path d="M19 12 V3 L29 12 V3" stroke-width="2.6"/>
+  <path d="M24 16 L34 42 L24 35 L14 42 Z"/>
+  <path d="M24 16 L24 35 L14 42 Z" fill="#fff" stroke="none"/>
+</svg>

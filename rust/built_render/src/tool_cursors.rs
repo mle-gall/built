@@ -117,16 +117,92 @@ pub fn tool_cursor_art<'py>(
     pixels(key, side).map(|(art, hot)| (PyBytes::new(py, art.as_raw()), hot))
 }
 
+/// Rail art drawn as SVG on the same 48-unit grid, 3-unit round strokes and
+/// 45 % fills as the atlas (the Sheets tools that had none, P10).
+const RAIL_SVG: &[(&str, &str)] = &[
+    ("comp_vista", include_str!("../assets/sheet_icons/comp_vista.svg")),
+    ("comp_etiqueta", include_str!("../assets/sheet_icons/comp_etiqueta.svg")),
+    ("comp_nivel", include_str!("../assets/sheet_icons/comp_nivel.svg")),
+    ("comp_llamada", include_str!("../assets/sheet_icons/comp_llamada.svg")),
+    ("image", include_str!("../assets/sheet_icons/image.svg")),
+    ("comp_cajetin", include_str!("../assets/sheet_icons/comp_cajetin.svg")),
+    ("comp_escala", include_str!("../assets/sheet_icons/comp_escala.svg")),
+    ("comp_norte", include_str!("../assets/sheet_icons/comp_norte.svg")),
+    ("comp_leyenda", include_str!("../assets/sheet_icons/comp_leyenda.svg")),
+    ("comp_perfil", include_str!("../assets/sheet_icons/comp_perfil.svg")),
+    ("comp_flecha", include_str!("../assets/sheet_icons/comp_flecha.svg")),
+    ("comp_terreno", include_str!("../assets/sheet_icons/comp_terreno.svg")),
+    ("dimension_chain", include_str!("../assets/sheet_icons/dimension_chain.svg")),
+    ("dimension_baseline", include_str!("../assets/sheet_icons/dimension_baseline.svg")),
+    ("dimension_angular", include_str!("../assets/sheet_icons/dimension_angular.svg")),
+    ("dimension_radius", include_str!("../assets/sheet_icons/dimension_radius.svg")),
+];
+
+const RAIL_PX: u32 = 48;
+
+fn svg_pixels(svg: &str) -> Option<RgbaImage> {
+    use resvg::{tiny_skia, usvg};
+    let tree = usvg::Tree::from_str(svg, &usvg::Options::default()).ok()?;
+    let mut map = tiny_skia::Pixmap::new(RAIL_PX, RAIL_PX)?;
+    let scale = RAIL_PX as f32 / tree.size().width();
+    resvg::render(&tree, tiny_skia::Transform::from_scale(scale, scale), &mut map.as_mut());
+    // White with the art's coverage as alpha, like the atlas, so egui can tint it.
+    let rgba = map.data().chunks_exact(4).flat_map(|p| [255, 255, 255, p[3]]).collect();
+    RgbaImage::from_raw(RAIL_PX, RAIL_PX, rgba)
+}
+
+/// A rail icon as 48-px white-alpha pixels: the atlas, then the SVG art.
+pub fn rail_pixels(key: &str) -> Option<RgbaImage> {
+    static ATLAS: OnceLock<RgbaImage> = OnceLock::new();
+    if let Some(index) = include_str!("../assets/rail_icons.txt").lines().position(|name| name == key) {
+        let atlas = ATLAS.get_or_init(|| image::load_from_memory(include_bytes!("../assets/rail_icons.png"))
+            .expect("invalid embedded rail artwork").into_rgba8());
+        let i = index as u32;
+        return Some(imageops::crop_imm(atlas, i % 8 * RAIL_PX, i / 8 * RAIL_PX, RAIL_PX, RAIL_PX).to_image());
+    }
+    RAIL_SVG.iter().find(|(name, _)| *name == key).and_then(|(_, svg)| svg_pixels(svg))
+}
+
 /// 48-pixel white-alpha masters for the native rail and view-command cluster.
 #[pyfunction]
 pub fn rail_icon<'py>(py: Python<'py>, key: &str) -> (u32, u32, Bound<'py, PyBytes>) {
-    static ATLAS: OnceLock<RgbaImage> = OnceLock::new();
-    let Some(index) = include_str!("../assets/rail_icons.txt").lines().position(|name| name == key) else {
-        return (0, 0, PyBytes::new(py, &[]));
-    };
-    let atlas = ATLAS.get_or_init(|| image::load_from_memory(include_bytes!("../assets/rail_icons.png"))
-        .expect("invalid embedded rail artwork").into_rgba8());
-    let i = index as u32;
-    let image = imageops::crop_imm(atlas, i % 8 * 48, i / 8 * 48, 48, 48).to_image();
-    (48, 48, PyBytes::new(py, image.as_raw()))
+    match rail_pixels(key) {
+        Some(image) => (RAIL_PX, RAIL_PX, PyBytes::new(py, image.as_raw())),
+        None => (0, 0, PyBytes::new(py, &[])),
+    }
+}
+
+#[cfg(test)]
+mod rail_art_tests {
+    use super::*;
+
+    #[test]
+    fn every_svg_icon_draws_inside_its_cell() {
+        for (key, _) in RAIL_SVG {
+            let image = rail_pixels(key).unwrap_or_else(|| panic!("{key} does not render"));
+            let ink = image.pixels().filter(|p| p[3] > 128).count();
+            assert!(ink > 120, "{key}: only {ink} inked pixels");
+            // The art keeps the atlas's margin: nothing on the outer pixel ring.
+            for (x, y, p) in image.enumerate_pixels() {
+                if x == 0 || y == 0 || x == RAIL_PX - 1 || y == RAIL_PX - 1 {
+                    assert!(p[3] < 40, "{key} touches the cell edge at {x},{y}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn every_sheets_rail_tool_has_art() {
+        for (key, label, icon) in crate::sheet_workspace::RAIL.iter().flat_map(|g| g.iter()) {
+            assert!(rail_pixels(icon).is_some(), "{key} ({label}) has no icon {icon}");
+        }
+    }
+
+    #[test]
+    fn svg_art_does_not_shadow_the_atlas() {
+        let atlas: Vec<&str> = include_str!("../assets/rail_icons.txt").lines().collect();
+        for (key, _) in RAIL_SVG {
+            assert!(!atlas.contains(key), "{key} is in both");
+        }
+    }
 }

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+  <!-- Label: a text tag with a leader to the point it names -->
+  <rect x="20" y="8" width="21" height="16" rx="3" fill="#fff" fill-opacity="0.45"/>
+  <path d="M25 14 H36 M25 19 H32" stroke-width="2.2"/>
+  <path d="M20 22 L11 36"/>
+  <circle cx="10" cy="38" r="3" fill="#fff" stroke="none"/>
+</svg>
