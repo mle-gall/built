@@ -34,6 +34,10 @@ pub(crate) fn toggle(text: &str, token: &str) -> String {
     } else {
         tokens.push(token.to_owned());
     }
+    join_words(tokens)
+}
+
+fn join_words(tokens: Vec<String>) -> String {
     tokens
         .into_iter()
         .map(|t| {
@@ -45,6 +49,29 @@ pub(crate) fn toggle(text: &str, token: &str) -> String {
         })
         .collect::<Vec<_>>()
         .join(" ")
+}
+
+/// Enable one file under an excluded parent while preserving the other sources.
+pub(crate) fn include_file(query: &str, path: &str, files: &[String]) -> String {
+    let mut tokens = words(query);
+    tokens.retain(|token| {
+        let term = Term::parse(token);
+        term.field != "file" && !(term.field == "source" && term.value == "linked")
+    });
+    if tokens
+        .iter()
+        .map(|t| Term::parse(t))
+        .any(|t| t.field == "source" && !t.negative)
+    {
+        tokens.push("source:linked".into());
+    }
+    tokens.extend(
+        files
+            .iter()
+            .filter(|f| f.as_str() != path)
+            .map(|f| format!("-file:{f}")),
+    );
+    join_words(tokens)
 }
 
 fn classes(e: &Item) -> impl Iterator<Item = &str> {
@@ -156,7 +183,7 @@ pub(super) fn index<'a>(items: &'a [Item], st: &Browse) -> Index<'a> {
     let terms: Vec<_> = tokens.iter().map(|t| Term::parse(t)).collect();
     let mut counts = BTreeMap::<(&str, &str), usize>::new();
     let mut found = Vec::new();
-    let mut link_files = BTreeSet::new();
+    let mut link_files: BTreeSet<&str> = st.link_errors.keys().map(String::as_str).collect();
     let mut all_classes = BTreeSet::new();
     let mut collections = BTreeSet::new();
     for e in items {
@@ -282,9 +309,17 @@ pub(super) fn index<'a>(items: &'a [Item], st: &Browse) -> Index<'a> {
                     if basenames[&short] == 1 { &short } else { f },
                     1,
                 );
-                child["tip"] = json!(f);
+                child["path"] = json!(f);
+                if let Some(error) = st.link_errors.get(*f) {
+                    child["right"] = json!("?");
+                    child["tip"] = json!(format!("Unavailable · {f}\n{error}"));
+                    child["dim"] = json!(true);
+                } else {
+                    child["tip"] = json!(f);
+                }
                 if !parent {
                     child["on"] = json!(false);
+                    child["id"] = json!(format!("include-file:{f}"));
                 }
                 if child["on"] == true {
                     visible += 1;

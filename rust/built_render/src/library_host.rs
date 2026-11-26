@@ -1849,7 +1849,12 @@ impl LibrarySheet {
         }
         let scene = ctx.getattr("win")?.getattr("viewport")?.getattr("scene")?;
         let browse_d = json(py)?.call_method1("loads", (browse(&st)?,))?;
-        if prov_id=="components" && !st.get_item("scope")?.eq("s:online")? {browse_d.set_item("scope","s:all")?;}
+        if prov_id == "components" && !st.get_item("scope")?.eq("s:online")? {
+            browse_d.set_item("scope", "s:all")?;
+            if let Some(errors) = scene.getattr_opt("link_errors")?.filter(|e| !e.is_none()) {
+                browse_d.set_item("link_errors", errors)?;
+            }
+        }
         if has_target {
             target.call_method1("prepare", (&items, &browse_d))?;
             st.set_item("items", by_key(&items)?)?;
@@ -1891,6 +1896,7 @@ impl LibrarySheet {
         sheet.getattr("menus")?.call_method1("append", (out.get_item("sort")?,))?;
         let faceted=prov_id=="components" && !online;
         if faceted {
+            st.set_item("component_facets", out.get_item("side")?)?;
             let group:String=st.call_method1("get",("component_group","none"))?.extract()?;
             let options=[("none","None"),("class","IFC class"),("source","Source")];
             let label=options.iter().find(|(id,_)|*id==group).map_or("None",|p|p.1);
@@ -2206,8 +2212,20 @@ impl LibrarySheet {
             }
         }
         if st.get_item("type")?.eq("components")? {
-            if let Some(token)=arg.strip_prefix("toggle:").filter(|_|matches!(verb,"side"|"verb")) {
-                let query=crate::library_view::facets::toggle(&st.get_item("filter")?.extract::<String>()?,token);
+            let filter: String = st.get_item("filter")?.extract()?;
+            let next_query = if let Some(path) = arg.strip_prefix("include-file:").filter(|_| verb == "side") {
+                let mut files = Vec::new();
+                for facet in st.get_item("component_facets")?.try_iter()? {
+                    if let Some(file) = facet?.cast::<PyDict>()?.get_item("path")? {
+                        files.push(file.extract()?);
+                    }
+                }
+                Some(crate::library_view::facets::include_file(&filter, path, &files))
+            } else {
+                arg.strip_prefix("toggle:").filter(|_| matches!(verb, "side" | "verb"))
+                    .map(|token| crate::library_view::facets::toggle(&filter, token))
+            };
+            if let Some(query) = next_query {
                 st.set_item("scope","s:all")?;
                 st.set_item("filter",&query)?;
                 cs(py)?.getattr("open")?.call((&win,slf),Some(&[("search",query)].into_py_dict(py)?))?;

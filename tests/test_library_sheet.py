@@ -764,15 +764,24 @@ def test_nested_linked_components_use_their_own_file_and_location(win, tmp_path)
         path = tmp_path / f"{filename}.built"
         igz.save_scene(src, path)
         scene.groups.append(links.make_link(scene, path, host_path=tmp_path / "host.built"))
+    unavailable = str(tmp_path / "Unavailable.built")
+    scene.link_errors = {unavailable: "Source file could not be loaded"}
     scene.version += 1
     L.open_library(win, "components", search="source:linked class:IfcBeam")
     sh = frame(win)
     assert {r["label"] for r in tiles(sh)} == {"Stairs beam", "Roof beam"}
     files = [r for r in sh["side"] if r.get("id", "").startswith("toggle:-file:")]
-    assert {r["label"]: r["right"] for r in files} == {"Stairs.built": "1", "Roof.built": "1"}
+    assert {r["label"]: r["right"] for r in files} == {"Stairs.built": "1", "Roof.built": "1", "Unavailable.built": "?"}
+    assert "Unavailable" in next(r["tip"] for r in files if r["right"] == "?")
     stairs = next(row for row in files if row["label"] == "Stairs.built")
     act(win, "side", stairs["id"])
     sh = frame(win)
     assert [r["label"] for r in tiles(sh)] == ["Roof beam"]
     assert any("Roof.built" in str(block.get("rows", [])) and "Unfiled" in str(block)
                for block in detail(sh))
+    act(win, "search", "class:IfcBeam -source:linked")
+    sh = frame(win)
+    assert tiles(sh) == []
+    roof = next(r for r in sh["side"] if r["label"] == "Roof.built")
+    act(win, "side", roof["id"])
+    assert [r["label"] for r in tiles(frame(win))] == ["Roof beam"]

@@ -69,6 +69,7 @@ impl Item {
 #[derive(Deserialize, Default, Debug)]
 #[serde(default)]
 pub struct Browse {
+    pub link_errors: HashMap<String, String>,
     pub sort: String,
     pub group: String,
     pub facet: String,
@@ -585,7 +586,7 @@ pub(crate) fn sheet_rows(inp: &Input, mut native: Option<&mut RowGroups>) -> Val
         }
         item
     }).collect();
-    let browse = Browse { group: st.group.clone(), scope: scope.clone(), sort: st.sort.clone(), facet: st.facet.clone(), filter: st.filter.clone(),
+    let browse = Browse { link_errors: Default::default(), group: st.group.clone(), scope: scope.clone(), sort: st.sort.clone(), facet: st.facet.clone(), filter: st.filter.clone(),
                           fold: st.fold.clone(), recent: st.recent.clone(), cursor: None };
     let tokens = index.as_ref().map(|i|i.tokens.clone());
     let (side,groups) = index.map(|i|(i.side,i.groups)).unwrap_or_else(||(side,groups_for(&inp.items, &browse)));
