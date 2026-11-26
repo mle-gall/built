@@ -250,7 +250,7 @@ def test_sheet_search_lists_and_runs_only_the_current_workspaces_commands(win, m
 
 def test_search_and_the_tool_share_descriptions_and_model_commands_can_repeat(win):
     rows, detail = query(win, "line")
-    assert rows[0][:2] == ("Line", "Tools") and rows[0][2] == "L"
+    assert rows[0][:2] == ("Line", "Draw") and rows[0][2] == "L"
     assert detail[0][0] == win._tools["line"].description
     wgpu_ui.command_action(win.view, win, "cmdrun", "0")
     assert win.viewport.active_tool is win._tools["line"]

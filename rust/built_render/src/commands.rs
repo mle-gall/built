@@ -113,6 +113,13 @@ const COMMANDS: &[Command] = &[
 ];
 
 impl Command {
+    /// The display style a Style command picks, by its name in
+    /// `built_core.style`. The X-ray style's command is called "X-ray
+    /// Style" so that it does not share a name with the X-ray toggle.
+    fn style_name(&self) -> &'static str {
+        if self.id == "style_xray" { "X-ray" } else { self.label }
+    }
+
     fn state(
         &self,
         active: &str,
@@ -124,7 +131,7 @@ impl Command {
         let checked = match self.target {
             Nav | Tool => active == self.id,
             Projection(mode) => mode == projection,
-            Style => self.label == style,
+            Style => self.style_name() == style,
             Flag(_, field) => flags.contains(field),
             Xray | Shadows => flags.contains(self.id),
             _ => return (-1, self.id != "zoom_selection" || selection),
@@ -268,7 +275,7 @@ pub fn run_view_command(win: &Bound<'_, PyAny>, id: &str, on: bool) -> PyResult<
             let preset = win
                 .py()
                 .import("built_core.style")?
-                .call_method1("style_by_name", (c.label,))?;
+                .call_method1("style_by_name", (c.style_name(),))?;
             win.call_method1("_apply_display_style", (preset,))?
         }
         Xray => win.call_method0("_toggle_xray")?,
@@ -402,6 +409,15 @@ mod tests {
         let zoom = bar[0].iter().find(|i| i.0 == "zoom").unwrap();
         assert_eq!(zoom.2, "Zoom    Z");
         assert_eq!(bar[1][1].2, "Walk");
+    }
+
+    #[test]
+    fn style_commands_pick_their_style_by_its_name() {
+        // The style is looked up by name: renaming a command must not lose it.
+        let names: Vec<_> = COMMANDS.iter().filter(|c| matches!(c.target, Style)).map(Command::style_name).collect();
+        assert_eq!(names, ["Default", "Architectural", "Shaded", "Hidden line", "Monochrome", "Wireframe", "X-ray"]);
+        let xray = COMMANDS.iter().find(|c| c.id == "style_xray").unwrap();
+        assert_eq!(xray.state("", "", "X-ray", &HashSet::new(), false).0, 1);
     }
 
     #[test]

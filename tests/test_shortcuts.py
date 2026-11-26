@@ -157,8 +157,8 @@ def test_ctrl_numero_pone_la_vista_estandar(ventana, monkeypatch):
 def test_menu_y_barra_comparten_la_accion_de_cada_vista(ventana):
     from built_render import command_registry
     for i, name in enumerate(("top", "front", "right", "iso", "back", "left", "bottom"), 1):
-        menu_id = f"view:{name}" if i <= 4 else f"view_{name}"
-        menu = [(menu_id, "Camera", name.title(), f"Ctrl+{i}")]
+        menu_id = f"view_{name}"
+        menu = [(menu_id, "View ▸ Standard Views", name.title(), f"Ctrl+{i}")]
         rows = command_registry([], menu)
         assert [row[0] for row in rows if row[5] == menu_id] == [f"view:view_{name}"]
         assert ventana._view_bindings[f"view_{name}"][0] == shortcut_text(f"Ctrl+{i}")[1]
