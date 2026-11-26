@@ -398,6 +398,12 @@ fn tree<'py>(a: &Args<'py>) -> Reply<'py> {
         let key = if chosen.is_truthy()? { chosen } else { "".into_bound_py_any(py)? };
         // The checks annotate the rows (the Readiness column); they never change them.
         let readiness = core.call_method1("export_readiness", (&scene, &tree, &records, key, cache.get_item(1)?))?;
+        let readiness = if let Some(review) = own(&view,"_delivery_review")?.filter(|v|!v.is_none()) {
+            let json=py.import("json")?;
+            let report=json.call_method1("loads",(readiness,))?;
+            report.set_item("review",review)?;
+            json.call_method1("dumps",(report,))?
+        } else {readiness};
         renderer.call_method1("ui_panel_set", ("readiness", readiness))?;
     }
     let rows = core.call_method1("mark_filing_selection", (rows,))?;

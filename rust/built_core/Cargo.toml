@@ -11,6 +11,9 @@ name = "built_core"
 crate-type = ["cdylib"]
 
 [dependencies]
+sha2 = "0.10"
+tempfile = "3"
+
 proj4rs = "=0.1.5"
 
 weezl = "0.1"

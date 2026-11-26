@@ -32,9 +32,23 @@ pub(crate) fn export_readiness(
         .as_ref()
         .and_then(|v| v.get_item("scope").ok()?.extract().ok())
         .unwrap_or_else(|| "whole".into());
-    let format: Option<String> = delivery
+    let mut format: Option<String> = delivery
         .as_ref()
         .and_then(|r| r.get_item("format").ok()?.extract().ok());
+    let package = format.as_deref() == Some("package");
+    let mut package_outputs = Vec::<Value>::new();
+    if package {
+        let raw = delivery.as_ref().unwrap().get_item("outputs")?;
+        let encoded: String = scene
+            .py()
+            .import("json")?
+            .call_method1("dumps", (raw,))?
+            .extract()?;
+        package_outputs = serde_json::from_str(&encoded).unwrap_or_default();
+        if package_outputs.iter().any(|v| v["format"] == "ifc") {
+            format = Some("ifc".into());
+        }
+    }
     let by_node = tree.getattr("nodes")?;
     let membership = tree.getattr("member")?;
     let mut eligible = HashMap::new();
@@ -78,12 +92,18 @@ pub(crate) fn export_readiness(
             .import("core.bim_registry")?
             .call_method1("get", (scene,))?
             .call_method1("get", ("export_profiles", PyDict::new(scene.py())))?;
-        let profile = delivery
+        let mut profile = delivery
             .as_ref()
             .and_then(|d| d.get_item("options").ok())
             .and_then(|options| options.call_method1("get", ("profile",)).ok())
             .and_then(|key| key.extract::<String>().ok())
             .unwrap_or_default();
+        if let Some(output) = package_outputs.iter().find(|v| v["format"] == "ifc") {
+            profile = output["options"]["profile"]
+                .as_str()
+                .unwrap_or("")
+                .to_owned();
+        }
         if !profile.is_empty() && !profiles.contains(&profile)? {
             notes.push(format!("Missing export profile: {profile}"));
         }
@@ -272,10 +292,18 @@ pub(crate) fn export_readiness(
         .collect();
     let mut outputs = Vec::new();
     let runs = if let Some(record) = delivery.as_ref() {
-        outputs.push(json!({
+        if package {
+            for output in package_outputs {
+                let filename = crate::delivery_form::PACKAGE_OUTPUTS
+                    .iter()
+                    .find(|v| v.0 == output["format"])
+                    .map_or("", |v| v.2);
+                outputs.push(json!({"format":output["format"],"scope":output["scope"],"destination":filename}));
+            }
+        } else {outputs.push(json!({
             "format": format.as_deref().unwrap_or(""),
             "destination": record.call_method1("get", ("destination", ""))?.str()?.to_str()?,
-        }));
+        }));}
         let raw = record.call_method1("get", ("runs", pyo3::types::PyList::empty(scene.py())))?;
         let encoded: String = scene.py().import("json")?.call_method1("dumps", (raw,))?.extract()?;
         let mut runs: Vec<Value> = serde_json::from_str(&encoded).unwrap_or_default();
@@ -287,6 +315,6 @@ pub(crate) fn export_readiness(
         Value::Array(runs)
     } else { Value::Null };
     let report = json!({"choices":deliveries,"active":active,"scope":scope,"ready":total-blocked,"total":total,
-        "outputs":outputs,"runs":runs,"rows":rows,"items":items,"checks":checks,"notes":notes});
+        "package":package,"outputs":outputs,"runs":runs,"rows":rows,"items":items,"checks":checks,"notes":notes});
     Ok(report.to_string())
 }

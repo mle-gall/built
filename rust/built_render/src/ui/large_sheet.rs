@@ -532,6 +532,25 @@ impl Draw<'_> {
         for (index, b) in blocks.iter().enumerate() {
             let i=offset+index;
             match b.kind.as_str() {
+                "delivery-outputs" => {
+                    let column_width = (ui.available_width() - 100.) * 0.45;
+                    egui::Grid::new(ui.id().with("output options"))
+                        .striped(true)
+                        .min_col_width(column_width)
+                        .show(ui, |ui| {
+                            for item in b.items.iter() {
+                                let mut enabled = item.on;
+                                if kit::toggle(ui, &mut enabled, &item.label).clicked() {
+                                    self.out.push(format!("delivery-toggle{SEP}{}", item.id));
+                                }
+                                kit::caption_plain(ui, &item.sub);
+                                if kit::quiet(ui, "Options…").clicked() {
+                                    self.out.push(format!("delivery-options{SEP}{}", item.id));
+                                }
+                                ui.end_row();
+                            }
+                        });
+                }
                 "caption" => {
                     ui.add_space(if i == 0 { SPACE_XS } else { SPACE_M });
                     ui.horizontal(|ui| {
@@ -1446,6 +1465,10 @@ impl Ui {
             if let Some(action) = &f.action {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if button(ui, action, None) { out.push(format!("verb{SEP}{}", action.id)); }
+                    if !f.hint.is_empty() {
+                        ui.add_space(SPACE_M);
+                        ui.label(egui::RichText::new(&f.hint).font(meta()).color(FAINT));
+                    }
                 });
             } else if !f.hint.is_empty() {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {

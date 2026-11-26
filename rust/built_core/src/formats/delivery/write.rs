@@ -338,6 +338,8 @@ struct DeliverySteps {
     geometry: Py<PyAny>,
     stage: Option<Stage>,
     closed: bool,
+    #[pyo3(get)]
+    summary: Option<Py<PyAny>>,
 }
 impl DeliverySteps {
     fn start(&self, py: Python<'_>) -> PyResult<Stage> {
@@ -425,6 +427,12 @@ impl DeliverySteps {
         match fmt.as_str() {
             "ifc" => {
                 kw.set_item("profile", opt(&opts, "profile")?)?;
+                if let Some(ids) = opt(&opts, "ids")?
+                    .extract::<Option<String>>()?
+                    .filter(|v| !v.is_empty())
+                {
+                    kw.set_item("ids_files", [ids])?;
+                }
                 kw.set_item(
                     "project_directory",
                     st.project.as_deref().map(|p| path_obj(py, p)).transpose()?,
@@ -466,6 +474,26 @@ impl DeliverySteps {
             self.write(py, st, st.next - 1)?
         }
         if st.next == st.views.len() {
+            let report_path = st
+                .root
+                .join(st.target.file_name().unwrap())
+                .with_extension("ids-report.json");
+            if self.record.bind(py).get_item("format")?.eq("ifc")? && report_path.is_file() {
+                let ids: serde_json::Value = serde_json::from_slice(&fs::read(report_path)?)
+                    .map_err(|e| PyValueError::new_err(e.to_string()))?;
+                let status = super::package::checked_status(&ids);
+                let ok = status == "Passed" || status == "No IDS selected";
+                let summary = serde_json::json!({
+                    "ids":ids, "ids_result":status, "result":if ok {"Delivered"} else {"Needs review"},
+                    "folder":st.target.parent().unwrap().canonicalize()?,
+                    "outputs":[{"format":"ifc","result":if ok {"Delivered"} else {&status}}]
+                });
+                self.summary = Some(
+                    py.import("json")?
+                        .call_method1("loads", (summary.to_string(),))?
+                        .unbind(),
+                );
+            }
             st.publish()?;
             return Ok(None);
         }
@@ -503,7 +531,7 @@ impl DeliverySteps {
         result
     }
 }
-#[pyfunction(signature=(scene,record,*,camera=None,pdf_writer=None,svg_picture=None,screen_mm=None,project_directory=None,view_geometry=None))]
+#[pyfunction(name="_write_single", signature=(scene,record,*,camera=None,pdf_writer=None,svg_picture=None,screen_mm=None,project_directory=None,view_geometry=None))]
 fn write_steps(
     py: Python<'_>,
     scene: Py<PyAny>,
@@ -527,9 +555,11 @@ fn write_steps(
         project: project_directory,
         stage: None,
         closed: false,
+        summary: None,
     }
 }
 pub(super) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     functions!(m;preview_svg,write_steps);
+    super::package::register(m)?;
     Ok(())
 }

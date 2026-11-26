@@ -168,6 +168,139 @@ impl ExportSheet {
             content.call_method1("text", (note,))?;
         }
         content.call_method1("fields", (form, "delivery"))?;
+        if !is_svg && form.call_method1("value", ("format",))?.eq("package")? {
+            let records = py.import("built_core.deliveries")?.call_method1(
+                "records",
+                (ctx.getattr("win")?.getattr("viewport")?.getattr("scene")?,),
+            )?;
+            let selected = form.getattr_opt("_delivery_key")?;
+            sheet.call_method1("side_caption", ("Kept deliveries",))?;
+            for (key, record) in records.cast::<PyDict>()?.iter() {
+                let kw = PyDict::new(py);
+                kw.set_item(
+                    "on",
+                    selected
+                        .as_ref()
+                        .is_some_and(|k| k.eq(&key).unwrap_or(false)),
+                )?;
+                sheet.call_method("side_item", (&key, record.get_item("name")?), Some(&kw))?;
+            }
+            sheet.call_method1("side_item", ("new", "New delivery…"))?;
+            let values = form.call_method0("values")?;
+            let get = |k: &str| -> PyResult<String> { values.get_item(k)?.extract() };
+            let date = py
+                .import("datetime")?
+                .getattr("date")?
+                .call_method0("today")?
+                .str()?
+                .to_string();
+            let name: String = get("name")?
+                .chars()
+                .map(|c| {
+                    if c.is_alphanumeric() || " -_".contains(c) {
+                        c
+                    } else {
+                        '_'
+                    }
+                })
+                .collect();
+            let folder = std::path::PathBuf::from(get("destination")?)
+                .join(format!("{date}_{}", name.trim()));
+            content.call_method1("kv", ([("Folder preview", folder.to_string_lossy())],))?;
+            content.call_method1("caption", ("Outputs",))?;
+            let items = pyo3::types::PyList::empty(py);
+            let mut count = 0;
+            let selection = get("output_options")?;
+            let mut info = String::new();
+            for (id, title, file) in crate::deliveries_host::package_outputs(py)? {
+                let item = PyDict::new(py);
+                item.set_item("id", &id)?;
+                item.set_item("label", format!("{} · {title}", id.to_uppercase()))?;
+                let source = match id.as_str() {
+                    "pdf" => {
+                        if get("sheet_names")?.trim().is_empty() {
+                            "All sheets".into()
+                        } else {
+                            get("sheet_names")?.replace('\n', ", ")
+                        }
+                    }
+                    "bcf" => {
+                        if get("topics")?.trim().is_empty() {
+                            "All topics".into()
+                        } else {
+                            "Selected topics".into()
+                        }
+                    }
+                    "manifest" => "JSON + text · SHA-256".into(),
+                    "dxf" if !get("drawing_names")?.trim().is_empty() => "Selected scenes".into(),
+                    _ => {
+                        let scope = get(&format!("source_{id}"))?;
+                        let scope = if scope.is_empty() {
+                            get("scope")?
+                        } else {
+                            scope
+                        };
+                        match scope.as_str() {
+                            "whole" => "Whole model".into(),
+                            "node" => "Project node".into(),
+                            _ => scope,
+                        }
+                    }
+                };
+                item.set_item("sub", source)?;
+                let enabled = values.get_item(format!("include_{id}"))?.is_truthy()?;
+                item.set_item("on", enabled)?;
+                count += usize::from(enabled);
+                items.append(item)?;
+                if id == selection {
+                    info = format!("{title} · {file}");
+                }
+            }
+            let block = PyDict::new(py);
+            block.set_item("kind", "delivery-outputs")?;
+            block.set_item("items", items)?;
+            content
+                .getattr("blocks")?
+                .call_method1("append", (block,))?;
+            if !info.is_empty() {
+                content.call_method1("text", (info,))?;
+            }
+            let setup = crate::deliveries_host::unpack(py, svg.as_any(), &values)?;
+            let error = py
+                .import("built_core.deliveries")?
+                .call_method1("validate", (&setup,))
+                .err();
+            let scene = ctx.getattr("win")?.getattr("viewport")?.getattr("scene")?;
+            let sheets = scene.getattr("compositions")?;
+            let missing_pdf = values.get_item("include_pdf")?.is_truthy()? && sheets.len()? == 0;
+            let unsaved = folder.is_relative()
+                && !ctx
+                    .getattr("win")?
+                    .getattr_opt("_current_path")?
+                    .is_some_and(|v| v.is_truthy().unwrap_or(false))
+                && !scene
+                    .getattr_opt("_project_host_path")?
+                    .is_some_and(|v| v.is_truthy().unwrap_or(false));
+            let hint = if unsaved {
+                "Choose an absolute destination for this unsaved model".into()
+            } else if missing_pdf {
+                "PDF needs a sheet · Other outputs can run".into()
+            } else if let Some(e) = error {
+                e.value(py).str()?.to_string()
+            } else {
+                format!("{count} outputs selected · Ready to run")
+            };
+            if selection == "review" {
+                let detail = sheet.call_method1("detail", (330., "Review checks"))?;
+                detail.call_method1("text", (&hint,))?;
+                if let Some(run) = form.getattr_opt("_delivery_run")? {
+                    crate::deliveries_host::review_content(&detail, &run)?;
+                } else {
+                    detail.call_method1("text", ("IDS checks run on the exported IFC model.",))?;
+                }
+            }
+            sheet.call_method1("footer", ([("setup-review", "Review")], hint))?;
+        }
         if is_svg {
             content.call_method1("fields", (svg, "svg"))?;
         }
@@ -237,6 +370,13 @@ impl ExportSheet {
             .extract::<Vec<(String, String, String, u8)>>()?
         {
             let verb = PyDict::new(py);
+            if id == "run" && form.call_method1("value", ("format",))?.eq("package")? {
+                verb.set_item("id", &id)?;
+                verb.set_item("label", "Run handover package")?;
+                verb.set_item("role", 1)?;
+                sheet.call_method1("footer_action", (verb,))?;
+                continue;
+            }
             verb.set_item("id", id)?;
             verb.set_item("label", label)?;
             verb.set_item("key", key)?;
@@ -253,6 +393,30 @@ impl ExportSheet {
         verb: &str,
         args: Vec<String>,
     ) -> PyResult<()> {
+        let form = self.form.bind(py);
+        if verb == "side" {
+            if let Some(id) = args.first() {
+                let key = if id == "new" { None } else { Some(id.clone()) };
+                crate::deliveries_host::export_form(&ctx.getattr("win")?, key, false, "package")?;
+            }
+            return Ok(());
+        }
+        if verb == "delivery-toggle" || verb == "delivery-options" {
+            if let Some(id) = args.first() {
+                if verb == "delivery-options" {
+                    form.call_method1("set", ("output_options", id))?;
+                } else {
+                    let field = format!("include_{id}");
+                    let value = form.call_method1("value", (&field,))?.is_truthy()?;
+                    form.call_method1("set", (field, !value))?;
+                }
+            }
+            return Ok(());
+        }
+        if verb == "verb" && args.first().is_some_and(|v| v == "setup-review") {
+            form.call_method1("set", ("output_options", "review"))?;
+            return Ok(());
+        }
         if verb == "svg_frame" && args.len() == 3 {
             if let [Ok(x), Ok(y), Ok(zoom)] =
                 [args[0].parse::<f64>(), args[1].parse(), args[2].parse()]

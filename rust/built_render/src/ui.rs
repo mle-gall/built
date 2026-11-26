@@ -2014,7 +2014,7 @@ impl Ui {
                             return;
                         }
                         Destination::Deliveries => {
-                            if export::destination(ui, report, &mut cmds, &mut actions, &mut self.fix_rule) {
+                            if export::destination(ui, report, &self.jobs, &mut cmds, &mut actions, &mut self.fix_rule) {
                                 self.fix_rows = true;
                                 self.destination = Destination::Project;
                                 actions.push("fixrows\u{1f}1".into());
