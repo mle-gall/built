@@ -128,15 +128,8 @@ impl Tool for FollowMe {
                 *self = Self::default();
                 let selected = host.call("sweep_selection", Json::Null);
                 self.preset = serde_json::from_value(selected.clone()).ok();
-                if self.preset.is_none() {
-                    host.call(
-                        "sweep_message",
-                        json!(if selected.is_null() {
-                            "intro"
-                        } else {
-                            "invalid"
-                        }),
-                    );
+                if self.preset.is_none() && !selected.is_null() {
+                    host.call("sweep_message", json!("invalid"));
                 }
             }
             ToolEvent::Cancel | ToolEvent::Deactivate => {

@@ -33,19 +33,21 @@ fn label(v: &Value) -> &str {
     v.as_str().unwrap_or("")
 }
 
-fn choice(
+fn bevel_choice<const N: usize>(
     ui: &mut Ui,
-    key: &str,
+    action: &str,
     current: &str,
-    choices: &[&str],
+    options: [(&'static str, &'static str); N],
     out: &mut Vec<String>,
     layers: &mut Vec<egui::Id>,
-) {
-    let (selected, popup) = kit::select(ui, key, current, choices);
+) -> Option<&'static str> {
+    let display = options.iter().find(|(key, _)| *key == current).map_or("—", |(_, name)| *name);
+    let names = options.map(|(_, name)| name);
+    let (selected, popup) = kit::select(ui, action, display, &names);
     layers.extend(popup);
-    if let Some(i) = selected {
-        send(out, key, json!(choices[i]));
-    }
+    let key = options[selected?].0;
+    send(out, action, json!(key));
+    Some(key)
 }
 
 fn number(
@@ -249,13 +251,20 @@ impl Panels {
         } else {
             bevel::shape_name(b)
         };
-        let shapes = ["round", "chamfer", "profile value", "steps", "supports", "cornice", "crown", "drawn"];
+        let shapes = [
+            ("round", "Round"), ("chamfer", "Chamfer"), ("profile value", "Profile value"),
+            ("steps", "Steps"), ("supports", "Supports"), ("cornice", "Cornice"),
+            ("crown", "Crown"), ("drawn", "Drawn"),
+        ];
         ui.columns(6, |cols| {
             kit::caption_plain(&mut cols[0], "Affect");
-            choice(&mut cols[0], "bevel.affect", label(&b["affect"]), &["edges", "vertices"], out, &mut self.popup_layers);
+            bevel_choice(&mut cols[0], "bevel.affect", label(&b["affect"]),
+                         [("edges", "Edges"), ("vertices", "Vertices")], out, &mut self.popup_layers);
             kit::caption_plain(&mut cols[1], "Measure");
             cols[1].add_enabled_ui(b["affect"] == "edges", |ui| {
-                choice(ui, "bevel.measure", label(&b["measure"]), &["radius", "offset", "width", "depth"], out, &mut self.popup_layers);
+                bevel_choice(ui, "bevel.measure", label(&b["measure"]),
+                             [("radius", "Radius"), ("offset", "Offset"), ("width", "Width"), ("depth", "Depth")],
+                             out, &mut self.popup_layers);
             });
             let ui = &mut cols[2];
             kit::caption_plain(ui, "Size");
@@ -268,11 +277,8 @@ impl Panels {
                 ui.data_mut(|d| d.remove::<String>(id));
             }
             kit::caption_plain(&mut cols[3], "Profile");
-            let (picked, popup) = kit::select(&mut cols[3], "bevel.shape", shape, &shapes);
-            self.popup_layers.extend(popup);
-            if let Some(i) = picked {
-                self.numeric_profile = shapes[i] == "profile value";
-                send(out, "bevel.shape", json!(shapes[i]));
+            if let Some(key) = bevel_choice(&mut cols[3], "bevel.shape", shape, shapes, out, &mut self.popup_layers) {
+                self.numeric_profile = key == "profile value";
             }
             kit::caption_plain(&mut cols[4], "Segments");
             let mut segments = b["segments"].as_f64().unwrap_or(3.);
@@ -281,7 +287,8 @@ impl Panels {
             }
             kit::caption_plain(&mut cols[5], "Corners");
             cols[5].add_enabled_ui(b["affect"] == "edges", |ui| {
-                choice(ui, "bevel.corners", label(&b["corners"]), &["round", "cut"], out, &mut self.popup_layers);
+                bevel_choice(ui, "bevel.corners", label(&b["corners"]),
+                             [("round", "Follow profile"), ("cut", "Flat cut")], out, &mut self.popup_layers);
             });
         });
         self.bevel_inspector(ui, out);

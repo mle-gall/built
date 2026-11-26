@@ -50,35 +50,19 @@ fn host_activate<'py>(a: &Args<'py>) -> Reply<'py> {
     t.setattr("_keep_mode", false)?;
     let scene = vp.getattr("scene")?;
     let selection = scene.getattr("selection")?;
-    match selection.len()? {
-        1 => {
-            let item = selection
-                .try_iter()?
-                .next()
-                .transpose()?
-                .ok_or_else(|| pyo3::exceptions::PyStopIteration::new_err(()))?;
-            if item.is_instance(&module(py)?.getattr("MeshFace")?)?
-                && scene.getattr("mesh")?.getattr("faces")?.contains(&item)?
-            {
-                t.setattr("hovered_face", &item)?;
-                t.setattr("_hover_group", py.None())?;
-                t.setattr("_selected_arm", true)?;
-                vp.call_method1("set_hover", (item,))?;
-            }
-        }
-        0 => {}
-        _ => {
-            let n = t.call_method1("_selected_faces", (scene,))?.len()?;
-            if n > 1 {
-                let kw = PyDict::new(py);
-                kw.set_item("n", n)?;
-                let label = module(py)?.call_method(
-                    "tr",
-                    ("{n} faces selected — push or pull one of them to move them all",),
-                    Some(&kw),
-                )?;
-                vp.call_method1("flash_status", (label, 5000))?;
-            }
+    if selection.len()? == 1 {
+        let item = selection
+            .try_iter()?
+            .next()
+            .transpose()?
+            .ok_or_else(|| pyo3::exceptions::PyStopIteration::new_err(()))?;
+        if item.is_instance(&module(py)?.getattr("MeshFace")?)?
+            && scene.getattr("mesh")?.getattr("faces")?.contains(&item)?
+        {
+            t.setattr("hovered_face", &item)?;
+            t.setattr("_hover_group", py.None())?;
+            t.setattr("_selected_arm", true)?;
+            vp.call_method1("set_hover", (item,))?;
         }
     }
     Ok(none(py))

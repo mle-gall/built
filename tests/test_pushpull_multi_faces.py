@@ -183,7 +183,7 @@ def test_face_outside_the_selection_pushes_alone():
                for f in scene.faces)
 
 
-def test_activation_says_how_it_works():
+def test_multi_face_activation_leaves_instructions_to_the_tool_hint():
     scene = _two_boxes()
     scene.select(_faces_at_z(scene, 3.0))
     vp = _StubViewport(scene)
@@ -191,7 +191,7 @@ def test_activation_says_how_it_works():
     tool.on_activate(vp)
 
     assert tool.hovered_face is None           # no single-face arm
-    assert vp.last_status and "2" in vp.last_status
+    assert vp.last_status is None
 
 
 def test_preview_sweeps_every_face():

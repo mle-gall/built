@@ -223,7 +223,7 @@ def test_manual_drag_previews_live_and_a_click_finishes():
     e2 = m.add_edge(V(0, 4, 0), V(4, 4, 0))
     t = FollowMeTool()
     t.on_activate(vp)
-    assert t._path is None and vp.messages          # the hint for the drag
+    assert t._path is None and not vp.messages
     vp._pick = profile
     t.on_hover(_ctx(vp))
     t.on_click(_ctx(vp))                            # click the profile
