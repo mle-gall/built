@@ -404,6 +404,20 @@ impl Ui {
                 }
             }
         }
+        let database = crate::image_assets::fonts();
+        use resvg::usvg::fontdb::{Family, Query};
+        let mono = database.query(&Query {
+            families: &[Family::Name("Menlo"), Family::Name("Consolas"), Family::Name("DejaVu Sans Mono"), Family::Monospace],
+            ..Default::default()
+        });
+        if let Some(face) = mono.and_then(|id| database.with_face_data(id, |bytes, index| {
+            let mut face = egui::FontData::from_owned(bytes.to_vec());
+            face.index = index;
+            face
+        })) {
+            fonts.font_data.insert("transcript".into(), Arc::new(face));
+            fonts.families.entry(egui::FontFamily::Monospace).or_default().insert(0, "transcript".into());
+        }
         let base = fonts.families.get(&egui::FontFamily::Proportional).cloned().unwrap_or_default();
         fonts.font_data.insert("ui".into(), Arc::new(egui::FontData::from_owned(regular)));
         fonts.families.entry(egui::FontFamily::Proportional).or_default().insert(0, "ui".into());

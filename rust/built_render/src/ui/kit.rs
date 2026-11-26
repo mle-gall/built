@@ -677,6 +677,58 @@ pub mod molecules {
         }
         painter.rect_stroke(rect, corners, Stroke::new(1_f32, EDGE), egui::StrokeKind::Inside);
     }
+    /// Opaque document and plugin colours use the same editable RGB well.
+    pub fn colour_well(ui: &mut egui::Ui, rgb: &mut [u8; 3]) -> egui::Response {
+        ui.color_edit_button_srgb(rgb)
+    }
+
+    /// Keep both ends visible in a narrow path field. Editing always uses
+    /// the complete string, including its original UTF-8 boundaries.
+    pub fn path_field(ui: &mut egui::Ui, path: &mut String) -> egui::Response {
+        let id = ui.make_persistent_id("path_text");
+        let focused = ui.memory(|m| m.has_focus(id));
+        let mut edit = field(path).id(id).desired_width(ui.available_width());
+        if !focused { edit = edit.text_color(CLEAR); }
+        let response = ui.add(edit);
+        if !focused {
+            let bounds = response.rect.shrink2(vec2(4., 0.));
+            let paint = ui.painter().with_clip_rect(bounds);
+            let chars: Vec<_> = path.chars().collect();
+            let layout = |count: usize| {
+                let text = if count >= chars.len() { path.clone() } else {
+                    format!("{}…{}", chars[..count / 2].iter().collect::<String>(),
+                            chars[chars.len() - count.div_ceil(2)..].iter().collect::<String>())
+                };
+                paint.layout_no_wrap(text, body(), INK)
+            };
+            let mut lo = 0;
+            let mut hi = chars.len();
+            while lo < hi {
+                let mid = (lo + hi).div_ceil(2);
+                if layout(mid).size().x <= bounds.width() { lo = mid; } else { hi = mid - 1; }
+            }
+            leading(&paint, bounds, bounds.left(), layout(lo), INK);
+        }
+        response.on_hover_text(path.as_str())
+    }
+
+    /// Equal column widths keep the selectable row and its headings aligned.
+    pub fn table_row(ui: &mut egui::Ui, cells: &[String], selected: bool, header: bool) -> egui::Response {
+        let (rect, response) = if header {
+            ui.allocate_exact_size(vec2(ui.available_width(), CONTROL_H), Sense::hover())
+        } else { list_row(ui, CONTROL_H, selected) };
+        let width = rect.width() / cells.len().max(1) as f32;
+        for (index, cell) in cells.iter().enumerate() {
+            let left = rect.left() + width * index as f32 + SPACE_XS;
+            let ink = if header { DIM } else { INK };
+            let text = super::fit(ui, cell, if header { meta() } else { body() }, ink,
+                                  (width - 2. * SPACE_XS).max(1.), 1);
+            leading(ui.painter(), rect, left, text, ink);
+        }
+        ui.painter().hline(rect.x_range(), rect.bottom(), Stroke::new(1_f32, DIVIDER));
+        response
+    }
+
     pub fn swatch(ui: &mut egui::Ui, value: &mut Color32) -> egui::Response {
         ui.color_edit_button_srgba(value)
     }
@@ -760,13 +812,27 @@ pub mod molecules {
         leading(ui.painter(), rect, rect.min.x + text_x, g, label_ink);
         resp
     }
+    /// A select with a caller-supplied display value (including custom presets).
+    pub fn select(ui: &mut egui::Ui, id: impl std::hash::Hash, current: &str, names: &[&str])
+        -> (Option<usize>, Option<egui::Id>) {
+        let mut selected = None;
+        let popup = egui::ComboBox::from_id_salt(id).selected_text(current)
+            .width(ui.available_width().min(160.)).show_ui(ui, |ui| {
+                for (index, &name) in names.iter().enumerate() {
+                    if ui.selectable_label(current == name, name).clicked() { selected = Some(index); }
+                }
+                ui.layer_id().id
+            });
+        (selected, popup.inner)
+    }
+
     pub fn choice(ui: &mut egui::Ui, id: impl std::hash::Hash, value: &mut usize, labels: &[&str]) {
         if labels.is_empty() {
             ui.add_enabled(false, egui::Button::new("—"));
             return;
         }
         *value = (*value).min(labels.len() - 1);
-        egui::ComboBox::from_id_salt(id).show_index(ui, value, labels.len(), |i| labels[i]);
+        if let (Some(index), _) = select(ui, id, labels[*value], labels) { *value = index; }
     }
     /// Keep a drag's value local until release so the edit makes one undo step.
     pub fn percent_slider(ui: &mut egui::Ui, id: egui::Id, committed: f64, max: f64) -> Option<f64> {
