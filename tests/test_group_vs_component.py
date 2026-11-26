@@ -89,6 +89,15 @@ def test_the_panel_says_group_for_a_group_of_groups(native_host):
     assert kind() == "Component"
 
 
+def test_mesh_views_show_their_geometry_kinds():
+    from built_core import selection_identity
+    scene = Scene()
+    face = scene.mesh.add_face([V(0, 0, 0), V(1, 0, 0), V(1, 1, 0)])
+    for entity, label in ((face, "Face"), (next(iter(face.edges)), "Edge")):
+        scene.select([entity])
+        assert dict((k, v) for k, v, _, _ in selection_identity(scene, {}, "", {}))["Kind"] == label
+
+
 def test_the_flag_survives_the_igz_and_old_files_read_as_groups(tmp_path):
     from formats import igz
     scene, hist, a, b = _two_groups()

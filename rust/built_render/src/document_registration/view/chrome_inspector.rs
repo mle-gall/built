@@ -399,7 +399,7 @@ fn inspector<'py>(a: &Args<'py>) -> Reply<'py> {
                 ("Tag", text_or(attr(&group, "layer")?, "—")?),
             ],
         ))?;
-        show(&view, if name.is_empty() { "Group" } else { name.as_str() }, sections)?;
+        show(&view, identity.get_item(0)?.get_item(1)?, sections)?;
         renderer.call_method1("ui_set_identity", (identity,))?;
         return Ok(none(py));
     }
@@ -468,7 +468,12 @@ fn inspector<'py>(a: &Args<'py>) -> Reply<'py> {
     if !groups.is_empty() {
         sections.append(("Export details", empty(py)))?;
     }
-    show(&view, format!("{} selected", sel.len()), sections)?;
+    let title = if sel.len() == 1 {
+        text(&identity.get_item(0)?.get_item(1)?)?
+    } else {
+        format!("{} selected", sel.len())
+    };
+    show(&view, title, sections)?;
     renderer.call_method1("ui_set_identity", (identity,))?;
     Ok(none(py))
 }
