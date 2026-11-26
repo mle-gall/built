@@ -2520,6 +2520,8 @@ fn before_frame(view: &Bound<'_, PyAny>, win: &Bound<'_, PyAny>) -> PyResult<()>
             job.call_method("end", (), Some(&kw))?;
         }
     }
+    // The modal sheet covers the Paint strip. Its hidden swatches need no refresh.
+    if crate::sheet_runtime::shown(win)? { return Ok(()); }
     let items = if ui(py)?.call_method1("_active_tool_id", (win,))?.eq("paint")? { palette_items(view, win)? } else { PyList::empty(py) };
     if !opt(view, "_ui_palette").is_some_and(|p| p.eq(&items).unwrap_or(false)) {
         view.setattr("_ui_palette", &items)?;
@@ -2676,7 +2678,8 @@ fn palette_items<'py>(view: &Bound<'py, PyAny>, win: &Bound<'py, PyAny>) -> PyRe
         Some(m) => m.call_method0("items")?.try_iter()?.map(|p| { let p = p?; Ok((p.get_item(0)?, p.get_item(1)?)) }).collect::<PyResult<_>>()?,
         None => Vec::new(),
     };
-    let uses = material_uses(&scene, Some(win.getattr("viewport")?.getattr("history")?))?;
+    let usage = sheet_usage(&scene)?;
+    let uses = if usage.is_none() { PyDict::new(py).into_any() } else { usage.get_item(0)? };
     let names: Vec<Bound<'_, PyAny>> = mats.iter().map(|(n, _)| n.clone()).collect();
     let counts: Vec<i64> = mats.iter().map(|(n, _)| uses.call_method1("get", (n, 0)).and_then(|v| v.extract())).collect::<PyResult<_>>()?;
     let order: Vec<usize> = render(py)?.call_method1("library_by_use", (names, counts))?.extract()?;
