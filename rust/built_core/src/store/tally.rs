@@ -106,6 +106,37 @@ pub fn store_layer_tally(mesh: &Obj<'_>, tally: &Obj<'_>) -> PyResult<bool> {
     Ok(true)
 }
 
+/// Nonempty paint rows with their multiplicities, without allocating face wrappers.
+pub(crate) fn paint_rows<'py>(mesh: &Obj<'py>) -> PyResult<Option<Vec<(Obj<'py>, usize)>>> {
+    let Some((store, table, own)) = parts(mesh)? else { return Ok(None) };
+    let cell = store.cast::<PyMeshStore>()?;
+    let st = cell.borrow();
+    let mut overrides = HashSet::new();
+    let mut out = Vec::new();
+    for (key, attrs) in own.iter() {
+        if let Some(slot) = st.inner.slot(Kind::Face, key.extract()?) {
+            overrides.insert(slot);
+            out.push((attrs, 1));
+        }
+    }
+    let slots = st.inner.state.slots[Kind::Face as usize].clone();
+    let column = st.inner.state.fattr.clone();
+    drop(st);
+    let table = table.to_tuple();
+    let rows = mesh.py().detach(move || {
+        let mut counts = BTreeMap::new();
+        for slot in slots.live_slots().filter(|slot| !overrides.contains(slot)) {
+            let row = *column.get(slot as usize);
+            if row > 0 { *counts.entry(row - 1).or_insert(0usize) += 1; }
+        }
+        counts
+    });
+    for (row, count) in rows {
+        out.push((table.get_item(row as usize)?, count));
+    }
+    Ok(Some(out))
+}
+
 /// The registry material names the mesh's faces wear (`attrs["mat"]`),
 /// empties left out; None when `mesh` is not store-backed.
 #[pyfunction]

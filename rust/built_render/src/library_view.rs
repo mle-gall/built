@@ -430,6 +430,7 @@ pub struct Input {
     pub model_uses: HashMap<String, i64>,
     /// How many unnamed colours the model has.
     pub unnamed: usize,
+    pub usage_pending: bool,
 }
 
 type SheetItem = crate::ui::large_sheet::Item;
@@ -503,6 +504,10 @@ pub(crate) fn detail(inp: &Input, e: &Item, thumbs: &mut Vec<String>) -> Vec<Val
                                   verb("name", &format!("Name these ({})", inp.unnamed), "", 0)], "fill"));
         }
         "m" => {
+            if inp.usage_pending {
+                out.push(buttons(vec![verb("apply", "Paint with it", "↩", PRIMARY)], "fill"));
+                return out;
+            }
             out.push(block("kv", json!({"rows": [["Used by", objects(e.uses), ""]]})));
             out.push(buttons(vec![verb("apply", "Paint with it", "↩", PRIMARY), verb("edit", "Edit in inspector", "", 0),
                                   verb("select", "Select uses", "", 0)], "fill"));
@@ -519,7 +524,7 @@ pub(crate) fn detail(inp: &Input, e: &Item, thumbs: &mut Vec<String>) -> Vec<Val
                 rows.push(json!(["Category", e.category, ""]));
             }
             let used = inp.model_uses.get(&e.name).copied().unwrap_or(0);
-            rows.push(json!(["In this model", if used != 0 { format!("used by {used}") } else { "not used".into() }, ""]));
+            if !inp.usage_pending { rows.push(json!(["In this model", if used != 0 { format!("used by {used}") } else { "not used".into() }, ""])); }
             out.push(block("kv", json!({"rows": rows})));
             let mut verbs = vec![verb("apply", "Paint with it", "↩", PRIMARY)];
             if e.source == "mine" {

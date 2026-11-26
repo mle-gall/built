@@ -221,6 +221,57 @@ fn survey<'py>(scene: &Bound<'py, PyAny>, history: Option<Bound<'py, PyAny>>) ->
     py.import("built_core")?.call_method1("material_survey", (scene, history))
 }
 
+fn material_revision<'py>(scene: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    scene.py().import("built_core")?.call_method1("library_material_revision", (scene,))
+}
+
+/// Return the completed revision's survey, or None while its worker runs.
+fn sheet_usage<'py>(scene: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    let py = scene.py();
+    let version = material_revision(scene)?;
+    if scene.getattr_opt("_library_usage_failure")?.is_some_and(|v| v.eq(&version).unwrap_or(false)) {
+        return Ok(py.None().into_bound(py));
+    }
+    let job = scene.getattr_opt("_library_usage_job")?;
+    if let Some(job) = job {
+        let future = job.get_item(1)?;
+        if job.get_item(0)?.eq(&version)? {
+            return if future.call_method0("done")?.is_truthy()? {
+                match future.call_method0("result") {
+                    Ok(result) => Ok(result),
+                    Err(error) => {
+                        error.print(py);
+                        scene.setattr("_library_usage_failure", version)?;
+                        Ok(py.None().into_bound(py))
+                    }
+                }
+            } else { Ok(py.None().into_bound(py)) };
+        }
+        future.call_method0("cancel")?;
+    }
+    let module = lib(py)?;
+    let executor = match module.getattr_opt("_usage_executor")? {
+        Some(pool) => pool,
+        None => {
+            let pool = py.import("concurrent.futures")?.getattr("ThreadPoolExecutor")?.call1((1,))?;
+            module.setattr("_usage_executor", &pool)?;
+            pool
+        }
+    };
+    let future = executor.call_method1("submit", (py.import("built_core")?.getattr("library_usage")?, scene, version.get_item(0)?))?;
+    scene.setattr("_library_usage_job", (version, future))?;
+    Ok(py.None().into_bound(py))
+}
+
+fn provider_survey<'py>(ctx: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    let py = ctx.py();
+    match ctx.getattr_opt("usage")? {
+        Some(v) if v.is_none() => Ok((PyDict::new(py), PyDict::new(py), PyList::empty(py)).into_pyobject(py)?.into_any()),
+        Some(v) => Ok(v),
+        None => survey(&ctx.getattr("scene")?, ctx_history(ctx)),
+    }
+}
+
 /// The open document's history, when the context has a viewport.
 fn ctx_history<'py>(ctx: &Bound<'py, PyAny>) -> Option<Bound<'py, PyAny>> {
     opt(ctx, "vp").and_then(|vp| opt(&vp, "history"))
@@ -472,8 +523,13 @@ impl MaterialsProvider {
 
     fn _model_items<'py>(&self, py: Python<'py>, ctx: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyList>> {
         let scene = ctx.getattr("scene")?;
-        let got = survey(&scene, ctx_history(ctx))?;
+        let got = provider_survey(ctx)?;
         let (uses, colours, worn) = (got.get_item(0)?, got.get_item(1)?, got.get_item(2)?);
+        // Linked-only swatches become editable only after their source is known.
+        let pending = ctx.getattr_opt("usage")?.is_some_and(|u| u.is_none());
+        let actions = if pending { verbs(py, &["apply"])? } else {
+            verbs(py, &["apply", "edit", "select", "-", "duplicate", "rename", "keep", "-", "delete"])?
+        };
         let out = PyList::empty(py);
         if let Some(mats) = opt(&scene, "materials").filter(|m| m.is_truthy().unwrap_or(false)) {
             for pair in mats.call_method0("items")?.try_iter()? {
@@ -489,7 +545,7 @@ impl MaterialsProvider {
                     ("uses", uses.call_method1("get", (&name, 0))?),
                     ("hex", s(py, &_hex(&mat.getattr("color")?)?)),
                     ("thumb", tex),
-                    ("verbs", verbs(py, &["apply", "edit", "select", "-", "duplicate", "rename", "keep", "-", "delete"])?),
+                    ("verbs", actions.clone()),
                 ])?)?;
             }
         }
@@ -517,7 +573,7 @@ impl MaterialsProvider {
 
     fn _mine_items<'py>(&self, py: Python<'py>, ctx: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyList>> {
         let out = PyList::empty(py);
-        let uses = material_uses(&ctx.getattr("scene")?, None)?;
+        let uses = provider_survey(ctx)?.get_item(0)?;
         for (i, e) in mine(py)?.try_iter()?.enumerate() {
             let e = e?;
             if !e.is_instance_of::<PyDict>() {
@@ -552,7 +608,11 @@ impl MaterialsProvider {
     /// materials only linked parts wear move out of «In this model».
     fn _linked_items<'py>(&self, py: Python<'py>, ctx: &Bound<'py, PyAny>, model: &Bound<'py, PyAny>) -> PyResult<(Bound<'py, PyAny>, Bound<'py, PyAny>)> {
         let scene = ctx.getattr("scene")?;
-        let per_file = linked_material_uses(&scene)?;
+        let per_file = match ctx.getattr_opt("usage")? {
+            Some(v) if v.is_none() => return Ok((model.clone(), PyList::empty(py).into_any())),
+            Some(v) => v.get_item(3)?,
+            None => linked_material_uses(&scene)?,
+        };
         if !per_file.is_truthy()? {
             return Ok((model.clone(), PyList::empty(py).into_any()));
         }
@@ -562,7 +622,7 @@ impl MaterialsProvider {
             let counts = py.import("builtins")?.getattr("list")?.call1((pair.get_item(1)?.call_method0("items")?,))?;
             files.append((pair.get_item(0)?, counts))?;
         }
-        let uses = py.import("builtins")?.getattr("dict")?.call1((material_uses(&scene, None)?,))?;
+        let uses = py.import("builtins")?.getattr("dict")?.call1((provider_survey(ctx)?.get_item(0)?,))?;
         let got = render(py)?.call_method1("library_linked", (dumps(py, model)?, dumps(py, files.as_any())?, dumps(py, &uses)?))?;
         Ok((loads(py, &got.get_item(0)?)?, loads(py, &got.get_item(1)?)?))
     }
@@ -593,14 +653,18 @@ impl MaterialsProvider {
     }
 
     fn type_actions<'py>(&self, py: Python<'py>, ctx: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyList>> {
-        let scene = ctx.getattr("scene")?;
-        let n = py.import("built_core")?.call_method1("purge_unused_materials", (&scene,))?.len()?;
+        let usage = sheet_usage(&ctx.getattr("scene")?)?;
         let acts = PyList::empty(py);
-        let k = survey(&scene, ctx_history(ctx))?.get_item(1)?.len()?;
-        if k != 0 {
-            acts.append(("name", format!("Name these: {k} unnamed colour{}", if k != 1 { "s" } else { "" })))?;
+        if usage.is_none() {
+            acts.append(("purge", "Purge unused materials…"))?;
+        } else {
+            let k = usage.get_item(1)?.len()?;
+            if k != 0 {
+                acts.append(("name", format!("Name these: {k} unnamed colour{}", if k == 1 { "" } else { "s" })))?;
+            }
+            let n: usize = usage.get_item(4)?.extract()?;
+            acts.append(("purge", if n == 0 { "Purge unused materials (none)".into() } else { format!("Purge unused materials ({n})") }))?;
         }
-        acts.append(("purge", if n != 0 { format!("Purge unused materials ({n})") } else { "Purge unused materials (none)".into() }))?;
         Ok(acts)
     }
 
@@ -1308,6 +1372,9 @@ impl ComponentsProvider {
 #[pyclass(module = "built_render.wgpu_library", extends = LibraryProvider, dict)]
 pub struct FamiliesProvider;
 
+#[pyclass]
+struct FamilyCollections(Vec<serde_json::Value>);
+
 #[pymethods]
 impl FamiliesProvider {
     #[new]
@@ -1350,9 +1417,15 @@ impl FamiliesProvider {
         Ok(())
     }
 
-    fn items<'py>(&self, py: Python<'py>, _ctx: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-        let rows: Vec<_> = collections::manifests()?.into_iter()
-            .flat_map(|mut manifest| manifest["items"].take().as_array().cloned().unwrap_or_default()).collect();
+    fn items<'py>(&self, py: Python<'py>, ctx: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+        let mut manifests = collections::manifests()?;
+        let mut rows = Vec::new();
+        for manifest in &mut manifests {
+            if let serde_json::Value::Array(items) = manifest["items"].take() {
+                rows.extend(items);
+            }
+        }
+        ctx.getattr("view")?.setattr("_library_collections", Bound::new(py, FamilyCollections(manifests))?)?;
         json(py)?.call_method1("loads", (serde_json::Value::Array(rows).to_string(),))
     }
 }
@@ -1746,6 +1819,14 @@ impl LibrarySheet {
         let scene = ctx.getattr("win")?.getattr("viewport")?.getattr("scene")?;
         let st = _state(self.view.bind(py))?;
         let recent: Vec<Bound<'_, PyAny>> = st.get_item("recent")?.try_iter()?.take(12).collect::<PyResult<_>>()?;
+        let material_tab = st.get_item("type")?.eq("materials")?;
+        let usage_ready = material_tab && !sheet_usage(&scene)?.is_none();
+        if material_tab && !usage_ready && !scene.getattr_opt("_library_usage_failure")?
+            .is_some_and(|v| material_revision(&scene).and_then(|r| v.eq(r)).unwrap_or(false)) {
+            if let Some(host) = ctx.getattr("win")?.getattr_opt("_host")? {
+                host.call_method1("wake_after", (32,))?;
+            }
+        }
         PyTuple::new(py, [
             obj(py, scene.as_ptr() as usize)?.into_bound(py),
             scene.getattr("content_version")?,
@@ -1753,6 +1834,8 @@ impl LibrarySheet {
             st.get_item("mine_rev")?,
             obj(py, collections::REVISION.load(std::sync::atomic::Ordering::Relaxed))?.into_bound(py),
             if st.get_item("type")?.eq("components")? { scene.getattr("version")? } else { py.None().into_bound(py) },
+            if material_tab { material_revision(&scene)? } else { py.None().into_bound(py) },
+            obj(py, usage_ready)?.into_bound(py),
             PyTuple::new(py, recent)?.into_any(),
         ])
     }
@@ -1762,8 +1845,15 @@ impl LibrarySheet {
         let st = _state(view)?;
         let lctx = ctx_of(py, &ctx.getattr("win")?, view)?;
         let scene = lctx.getattr("scene")?;
-        let components = st.get_item("type")?.eq("components")?;
-        let generation = (scene.as_ptr() as usize, scene.getattr("content_version")?, st.get_item("mine_rev")?, collections::REVISION.load(std::sync::atomic::Ordering::Relaxed));
+        let tab: String = st.get_item("type")?.extract()?;
+        let components = tab == "components";
+        let usage = if tab == "materials" { sheet_usage(&scene)? } else { py.None().into_bound(py) };
+        lctx.setattr("usage", &usage)?;
+        let cache_key = format!("provider_{tab}");
+
+        let revision_key = (scene.as_ptr() as usize, scene.getattr("content_version")?, st.get_item("mine_rev")?,
+            collections::REVISION.load(std::sync::atomic::Ordering::Relaxed)).into_pyobject(py)?;
+        let generation = (&revision_key, !usage.is_none(), if tab == "materials" { material_revision(&scene)? } else { py.None().into_bound(py) });
         let revision = scene.getattr("version")?;
         // A selection edit only changes which component rows offer Replace.
         if components {
@@ -1795,27 +1885,28 @@ impl LibrarySheet {
                 return Ok((items,counts));
             }
         }
-        let counts = PyDict::new(py);
-        let mut active = PyList::empty(py).into_any();
-        for p in lib(py)?.getattr("PROVIDERS")?.try_iter()? {
-            let p = p?;
-            if !p.getattr("ready")?.is_truthy()? {
-                continue;
-            }
-            let items = p.call_method1("items", (&lctx,))?;
-            let mut n = 0;
-            for e in items.try_iter()? {
-                let src = e?.get_item("source")?;
-                if src.eq("model")? || src.eq("linked")? || p.getattr("id")?.eq("families")? {
-                    n += 1;
-                }
-            }
-            counts.set_item(p.getattr("id")?, n)?;
-            if p.getattr("id")?.eq(st.get_item("type")?)? {
-                active = items;
-            }
+        let cached = st.call_method1("get", (&cache_key,))?;
+        if !components && !cached.is_none() && cached.get_item(0)?.eq(&generation)? {
+            st.set_item("items", cached.get_item(3)?)?;
+            return Ok((cached.get_item(1)?, cached.get_item(2)?.cast_into::<PyDict>()?));
         }
+        let active = provider(py, &tab)?.call_method1("items", (&lctx,))?;
+        let mut n = 0;
+        for entry in active.try_iter()? {
+            let src = entry?.get_item("source")?;
+            if tab == "families" || src.eq("model")? || src.eq("linked")? { n += 1; }
+        }
+        let badges = st.call_method1("get", ("tab_counts",))?;
+        let counts = if !badges.is_none() && badges.get_item(0)?.eq(&revision_key)? {
+            badges.get_item(1)?.cast_into::<PyDict>()?
+        } else {
+            let counts = PyDict::new(py);
+            st.set_item("tab_counts", (&revision_key, &counts))?;
+            counts
+        };
+        counts.set_item(&tab, n)?;
         let indexed = by_key(&active)?;
+        if !components { st.set_item(cache_key, (&generation, &active, &counts, &indexed))?; }
         if components { st.set_item("component_selection_rows", (generation, revision, &active, &counts, &indexed))?; }
         st.set_item("items", indexed)?;
         Ok((active, counts))
@@ -1828,7 +1919,7 @@ impl LibrarySheet {
         let st = _state(&view)?;
         let prov = provider(py, &st.get_item("type")?.str()?.to_string())?;
         let prov_id: String = prov.getattr("id")?.extract()?;
-        let (items, counts) = me._items(py, ctx)?;
+        let (mut items, counts) = me._items(py, ctx)?;
         let target = me.paint_target.bind(py).clone();
         drop(me);
         let has_target = !target.is_none();
@@ -1861,6 +1952,7 @@ impl LibrarySheet {
             }
         }
         if has_target {
+            items = PyList::new(py, items.try_iter()?.map(|e| e?.cast_into::<PyDict>()?.copy()).collect::<PyResult<Vec<_>>>()?)?.into_any();
             target.call_method1("prepare", (&items, &browse_d))?;
             st.set_item("items", by_key(&items)?)?;
         }
@@ -1871,10 +1963,10 @@ impl LibrarySheet {
         spec.set_item("items", &items)?;
         spec.set_item("st", &browse_d)?;
         spec.set_item("current", if materials { current } else { py.None().into_bound(py) })?;
-        let history = ctx.getattr("win")?.getattr("viewport")?.getattr("history")?;
-        let got = if materials { Some(survey(&scene, Some(history))?) } else { None };
-        spec.set_item("model_uses", match &got { Some(g) => py.import("builtins")?.getattr("dict")?.call1((g.get_item(0)?,))?, None => PyDict::new(py).into_any() })?;
-        spec.set_item("unnamed", match &got { Some(g) => g.get_item(1)?.len()?, None => 0 })?;
+        let usage = if materials { sheet_usage(&scene)? } else { py.None().into_bound(py) };
+        spec.set_item("usage_pending", materials && usage.is_none())?;
+        spec.set_item("model_uses", if usage.is_none() { PyDict::new(py).into_any() } else { usage.get_item(0)? })?;
+        spec.set_item("unnamed", if usage.is_none() { 0 } else { usage.get_item(1)?.len()? })?;
         let native = view.getattr("renderer")?.is_instance_of::<crate::Renderer>();
         let native_components = native && prov_id == "components" && !has_target && !st.get_item("scope")?.eq("s:online")?;
         let mut native_rows = None;
@@ -1882,6 +1974,24 @@ impl LibrarySheet {
             let (parts, rows) = component_parts(&st, &items, browse_d.cast::<PyDict>()?)?;
             native_rows = Some(rows);
             parts
+        } else if native && !has_target {
+            let key = format!("{}_presentation", prov_id);
+            let cached = st.call_method1("get", (&key,))?;
+            let selector = (&browse_d, spec.get_item("current")?, spec.get_item("usage_pending")?);
+            if !cached.is_none() && cached.get_item(0)?.is(&items) && cached.get_item(1)?.eq(&selector)? {
+                native_rows = Some(cached.get_item(3)?);
+                cached.get_item(2)?
+            } else {
+                let input = serde_json::from_str(&dumps(py, spec.as_any())?)
+                    .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+                let mut groups = Vec::new();
+                let parts = crate::library_view::sheet_rows(&input, Some(&mut groups));
+                let parts = loads(py, &s(py, &parts.to_string()))?;
+                let rows = Bound::new(py, LibraryRows { groups })?.into_any();
+                st.set_item(key, (&items, selector, &parts, &rows))?;
+                native_rows = Some(rows);
+                parts
+            }
         } else {
             loads(py, &render(py)?.call_method1("library_sheet", (dumps(py, spec.as_any())?,))?)?
         };
@@ -1908,12 +2018,14 @@ impl LibrarySheet {
             sheet.call_method1("menu",("group",format!("Group: {label}"),options.to_vec(),group))?;
         }
         sheet.setattr("side", out.get_item("side")?.call_method0("copy")?)?;
-        let collections = if prov_id == "families" { collections::manifests()? } else { Vec::new() };
+        let manifests = if prov_id == "families" { view.getattr_opt("_library_collections")? } else { None };
+        let manifests = manifests.as_ref().map(|v| v.extract::<PyRef<FamilyCollections>>()).transpose()?;
+        let collections = manifests.as_ref().map_or(&[][..], |m| m.0.as_slice());
         if !has_target {
             sheet.call_method1("verb", ("import-collection", "Import collection…"))?;
         }
         if prov_id == "families" {
-            for collection in &collections {
+            for collection in collections {
                 let scope = format!("s:{}", collection["source"].as_str().unwrap_or(""));
                 sheet.call_method("side_item", (&scope, collection["name"].as_str().unwrap_or("")), Some(&[("on", st.get_item("scope")?.eq(&scope)?)].into_py_dict(py)?))?;
             }
@@ -1963,11 +2075,11 @@ impl LibrarySheet {
                 content.call_method("tiles", (items,), Some(&[("size", 96)].into_py_dict(py)?))?;
             } else {
                 let kwargs = [("thumbs", true)].into_py_dict(py)?;
-                if native_components { kwargs.set_item("id", format!("library-group:{index}"))?; }
+                if native_rows.is_some() { kwargs.set_item("id", format!("library-group:{index}"))?; }
                 content.call_method("rows", (items,), Some(&kwargs))?;
             }
         }
-        for collection in &collections {
+        for collection in collections {
             let scope = format!("s:{}", collection["source"].as_str().unwrap_or(""));
             if st.get_item("scope")?.eq("s:all")? || st.get_item("scope")?.eq(scope)? {
                 for report in collection["reports"].as_array().into_iter().flatten() {
@@ -2408,7 +2520,10 @@ fn before_frame(view: &Bound<'_, PyAny>, win: &Bound<'_, PyAny>) -> PyResult<()>
             job.call_method("end", (), Some(&kw))?;
         }
     }
-    let items = if ui(py)?.call_method1("_active_tool_id", (win,))?.eq("paint")? { palette_items(view, win)? } else { PyList::empty(py) };
+    // The modal sheet covers the Paint strip. Its hidden swatches need no refresh.
+    let paint_visible = !crate::sheet_runtime::shown(win)?
+        && ui(py)?.call_method1("_active_tool_id", (win,))?.eq("paint")?;
+    let items = if paint_visible { palette_items(view, win)? } else { PyList::empty(py) };
     if !opt(view, "_ui_palette").is_some_and(|p| p.eq(&items).unwrap_or(false)) {
         view.setattr("_ui_palette", &items)?;
         view.getattr("renderer")?.call_method1("ui_set_palette", (&items,))?;
@@ -2564,7 +2679,8 @@ fn palette_items<'py>(view: &Bound<'py, PyAny>, win: &Bound<'py, PyAny>) -> PyRe
         Some(m) => m.call_method0("items")?.try_iter()?.map(|p| { let p = p?; Ok((p.get_item(0)?, p.get_item(1)?)) }).collect::<PyResult<_>>()?,
         None => Vec::new(),
     };
-    let uses = material_uses(&scene, Some(win.getattr("viewport")?.getattr("history")?))?;
+    let usage = sheet_usage(&scene)?;
+    let uses = if usage.is_none() { PyDict::new(py).into_any() } else { usage.get_item(0)? };
     let names: Vec<Bound<'_, PyAny>> = mats.iter().map(|(n, _)| n.clone()).collect();
     let counts: Vec<i64> = mats.iter().map(|(n, _)| uses.call_method1("get", (n, 0)).and_then(|v| v.extract())).collect::<PyResult<_>>()?;
     let order: Vec<usize> = render(py)?.call_method1("library_by_use", (names, counts))?.extract()?;
