@@ -33,6 +33,7 @@ def model(native_host, monkeypatch):
     scene.layers.append(layer)
     child.layer = layer.name
     bridge = _Bridge(win.viewport)
+    scene._agent_access = True   # Settings › AI › Allow agents to edit this model
     yield win, bridge, parent, child, layer
     bridge.stop()
 

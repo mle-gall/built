@@ -409,6 +409,7 @@ def bridge(monkeypatch, native_window):
     scene = win.viewport.scene
     scene.mesh.add_face([V(0, 0, 0), V(1, 0, 0), V(1, 1, 0), V(0, 1, 0)])
     b = _Bridge(win.viewport)
+    scene._agent_access = True
     yield win, b
     b.stop()
 

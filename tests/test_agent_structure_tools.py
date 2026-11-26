@@ -69,6 +69,7 @@ def test_bridge_and_mcp_share_catalog(native_window, monkeypatch):
     from plugins.ai_bridge import _Bridge
     win = native_window
     bridge = _Bridge(win.viewport)
+    win.viewport.scene._agent_access = True
     client = _client(monkeypatch)
     monkeypatch.setattr(client, '_bridge', lambda tool, args: dict(ok=True, result=call(bridge, tool, **args)))
     tools = client.handle(dict(id=1, method='tools/list'))['result']['tools']

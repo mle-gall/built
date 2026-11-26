@@ -454,7 +454,7 @@ pub fn task_edit_end(win: &Obj<'_>, guid: &str, marker: &Obj<'_>) -> PyResult<us
 /// Undo a task's steps as one new step. `own`: the steps are the last in
 /// the history, so their own inverses run; otherwise their recorded
 /// transactions do, which touch nothing else.
-#[pyclass(module = "built_render")]
+#[pyclass(module = "built_render", dict)]
 pub struct TaskRevert {
     steps: Py<PyList>,
     own: bool,
@@ -829,12 +829,11 @@ pub fn task_action(win: &Obj<'_>, arg: &str) -> PyResult<()> {
 #[pyfunction]
 pub fn tasks_before_frame(view: &Obj<'_>, win: &Obj<'_>) -> PyResult<()> {
     let py = view.py();
-    let renderer = view.getattr("renderer")?;
-    if renderer.is_none() || !renderer.hasattr("ui_panel_set")? {
-        return Ok(());
-    }
     let scene = scene_of(win)?;
     repair(&scene)?;
+    let Some(renderer) = opt(view, "renderer").filter(|r| r.hasattr("ui_panel_set").unwrap_or(false)) else {
+        return Ok(());
+    };
     let sig = (scene.as_ptr() as usize, serial(&scene), access(&scene), clients(win)?, scene.getattr("selection")?.len()?).into_pyobject(py)?.into_any();
     let state = view.getattr("__dict__")?;
     let fresh = sig.ne(state.call_method1("get", ("_ui_tasks_sig",))?)?;
@@ -860,7 +859,7 @@ pub fn tasks_before_frame(view: &Obj<'_>, win: &Obj<'_>) -> PyResult<()> {
         let pins = PyList::empty(py);
         let to_pixel = opt(view, "_world_to_pixel");
         if let Some(to_pixel) = to_pixel {
-            let vector = py.import("built_core")?.getattr("Vector3")?;
+            let vector = py.import("built_core")?.getattr("Vec3")?;
             for t in all.topics.iter().filter(|t| t.pin.is_some() && (!t.state.settled() || t.guid == chosen)) {
                 let p = t.pin.expect("filtered");
                 let at = to_pixel.call1((vector.call1((p[0], p[1], p[2]))?,))?;

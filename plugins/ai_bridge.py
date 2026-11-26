@@ -293,10 +293,10 @@ class _Bridge(InspectionTools, RecordTools, FacetTools, StructureTools,
                 raise ValueError('Choose this file in Worksession before editing it')
             from core.agent_tools import TASK_TOOLS, json_value
             self._key = job.get("key", 0)
-            task = (self._task_for_edit() if entry["mutates"] and tool not in TASK_TOOLS
-                    and tool not in ("undo", "redo") else None)
+            # The steps an agent's call adds belong to its task (Tasks).
+            attribute = entry["mutates"] and tool not in TASK_TOOLS and tool not in ("undo", "redo")
             import built_render
-            marker = built_render.task_edit_begin(win) if task else None
+            marker = built_render.task_edit_begin(win) if attribute else None
             try:
                 if entry["mutates"] and tool not in self.registry:
                     from core.ai import run_callable_transactional
@@ -304,10 +304,8 @@ class _Bridge(InspectionTools, RecordTools, FacetTools, StructureTools,
                 else:
                     result = json_value(entry["fn"](**args))
             finally:
-                if task:
-                    built_render.task_edit_end(win, task, marker)
-            if task and isinstance(result, dict):
-                result.setdefault("task", task)
+                if attribute:
+                    self._attribute(win, marker)
             cancel_new_dialogs()
             if refused and isinstance(result, dict):
                 result["dialogs_cancelled"] = refused
@@ -332,6 +330,15 @@ class _Bridge(InspectionTools, RecordTools, FacetTools, StructureTools,
     def _client_name(self):
         with self._clients_lock:
             return self._clients.get(getattr(self, "_key", 0)) or tr("MCP client")
+
+    def _attribute(self, win, marker):
+        """Give the steps pushed since `marker` to this connection's task,
+        opening one if it has none: every external edit is reviewable."""
+        undo = self._viewport.history.undo_stack
+        if not undo or undo[-1] is marker[0] or getattr(undo[-1], "_task", None):
+            return
+        import built_render
+        built_render.task_edit_end(win, self._task_for_edit(), marker)
 
     def _task_for_edit(self):
         """The task this connection's edit belongs to: the one it opened,

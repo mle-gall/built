@@ -109,16 +109,21 @@ def test_active_file_tabs_and_reopen(win, tmp_path):
 def test_agent_tools_and_read_only_rejection(win, tmp_path):
     from plugins.ai_bridge import _Bridge
     bridge = _Bridge(win.viewport)
+    win.viewport.scene._agent_access = True
     def call(tool, **args):
         job = {'req': {'tool': tool, 'args': args}, 'done': threading.Event()}
         bridge._run_on_main(job)
         return job['reply']
     path = make_project(tmp_path)
     assert call('open_project', path=str(path))['ok']
+    # Access is per model: each of the project's files is allowed.
+    for vp in win.all_viewports():
+        vp.scene._agent_access = True
     assert call('query_worksession')['result']['active_file'].endswith('a.igz')
     win.activate_document(win.documents()[1])
     assert not call('run_python', code='scene.clear()')['ok']
-    assert call('set_active_file', path=str(tmp_path / 'b.igz'))['ok']
+    reply = call('set_active_file', path=str(tmp_path / 'b.igz'))
+    assert reply['ok'], reply
     assert call('query_recent')['result']['projects']
 
 
