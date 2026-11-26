@@ -270,7 +270,6 @@ pub struct Column {
     unfiled: u32,
     browser_picks: usize,
     issue_at: Option<usize>,
-    export_focus: (Option<String>, std::collections::HashSet<String>),
     filter: String,
     /// "File to…": the next row clicked (or Enter) receives the selection.
     filing: Option<String>,
@@ -486,7 +485,7 @@ impl Ui {
     /// row, eye, lock, expandable, expanded, selected]).
     pub fn set_tree(&mut self, rows: Vec<(Vec<String>, Vec<i64>)>, unfiled: u32) {
         let col = self.column.get_or_insert_with(|| Column {
-            tag_index: None, marked_rows: Vec::new(), nodes: Vec::new(), path: Vec::new(), host: Default::default(), overview: Default::default(), styles: Default::default(), reveal: None, proposal_available: false, proposal_dismissed: false, sort: Default::default(), ordered: Vec::new(), unfiled: 0, browser_picks: 0, issue_at: None, export_focus: Default::default(), filter: String::new(),
+            tag_index: None, marked_rows: Vec::new(), nodes: Vec::new(), path: Vec::new(), host: Default::default(), overview: Default::default(), styles: Default::default(), reveal: None, proposal_available: false, proposal_dismissed: false, sort: Default::default(), ordered: Vec::new(), unfiled: 0, browser_picks: 0, issue_at: None, filter: String::new(),
             filing: None, focus_filter: false, group_rows: Vec::new(), row_menu: None, choosing_folder: false, renaming: None, focus_rename: false, head_menu: None,
             kind_menu: None, kinds: Vec::new(), prompt: None, columns: Default::default(), cells_scroll: 0., readiness_sent: Some(false), checklist_open: false, tag_from_node: false, edits: Default::default(), mode: String::new(), issues: false,
             identity: Vec::new(),
@@ -609,11 +608,6 @@ impl Ui {
             } else {
                 col.styles.applied(verb, key);
             }
-        }
-    }
-    pub fn set_export_focus(&mut self, node: Option<String>, placements: Vec<Vec<String>>) {
-        if let Some(col) = self.column.as_mut() {
-            col.export_focus = (node, placements.into_iter().map(|path| serde_json::json!(path).to_string()).collect());
         }
     }
     pub fn step_issue(&mut self, step: i32) {

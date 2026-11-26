@@ -92,9 +92,7 @@ fn inspector<'py>(a: &Args<'py>) -> Reply<'py> {
             (!attr(&view, "_ui_tree_sig")?.is_none()).into_bound_py_any(py)?,
             get(&state, "_ui_mat_focus")?,
             get(&state, "_ui_mode")?,
-            // The columns never change the inspector; whether the export
-            // checks are shown only decides if their focus is kept up.
-            get(&state, "_ui_readiness")?,
+            // (The tree's columns are not here: they never change the inspector.)
             filename.as_str().into_bound_py_any(py)?,
             direct(py, super::chrome_tree::current_material_name, ())?,
             tool,
@@ -125,16 +123,6 @@ fn inspector<'py>(a: &Args<'py>) -> Reply<'py> {
     let focused = node_focus.is_truthy()?;
     let focus_name = if focused { text(&node_focus)? } else { String::new() };
     let renderer = view.getattr("renderer")?;
-    if super::chrome_tree::wants_readiness(&view)? {
-        let row = if focused && focus_name != "solid:active" { format!("n:{focus_name}").into_bound_py_any(py)? } else { none(py) };
-        let paths = empty(py);
-        if !focused {
-            for group in groups.iter() {
-                paths.append(scene.call_method1("occurrence_path", (group,))?)?;
-            }
-        }
-        renderer.call_method1("ui_set_export_focus", (row, paths))?;
-    }
     let registry = py.import("core.bim_registry")?.call_method1("get", (&scene,))?;
     let nodes = structure.call_method1("_nodes", (&registry,))?;
     let data = or_dict(attr(&view, "_ui_tree")?)?;
