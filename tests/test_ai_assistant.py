@@ -696,7 +696,7 @@ def test_a_busy_provider_is_retried_with_backoff(monkeypatch):
     # Out of retries: the error says how many tries it took.
     fails[:] = [503] * 5
     calls.clear()
-    with pytest.raises(RuntimeError, match="tras 3 intentos"):
+    with pytest.raises(RuntimeError, match="after 3 attempts"):
         ai._urlopen("https://x/v1/chat", {}, b"{}", retries=2, sleep=lambda s: None)
     assert len(calls) == 3
     # A 401 is final at once.
@@ -728,8 +728,8 @@ def test_house_wall_and_prism_helpers_build_closed_solids(native_host):
     assert r["error"] is None, r["error"]
     assert r["stdout"].strip() == "4"
     names = [g.name for g in vp.scene.groups[-6:]]
-    assert names == ["Casa · Paredes", "Casa · Piso", "Casa · Carpintería",
-                     "Casa · Techo", "Muro", "Losa"]
+    assert names == ["House · Walls", "House · Floor", "House · Joinery",
+                     "House · Roof", "Muro", "Losa"]
     walls, floor, carp, roof, muro, losa = vp.scene.groups[-6:]
     for g in (walls, floor, roof, muro, losa):
         assert is_closed(g.mesh), g.name

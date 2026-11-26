@@ -113,7 +113,7 @@ fn user_agent(py: Python<'_>) -> PyResult<Bound<'_, PyBytes>> {
     let version = py.import("built_core.version")?.getattr("__version__")?;
     Ok(PyBytes::new(
         py,
-        format!("Built/{version} (https://github.com/ingelibre/ingetrazo)").as_bytes(),
+        format!("Built/{version} (https://github.com/mle-gall/built)").as_bytes(),
     ))
 }
 fn init_service(o: &Obj<'_>, parent: Option<&Obj<'_>>) -> PyResult<()> {

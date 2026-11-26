@@ -2,6 +2,7 @@
 from tests.raster_samples import solid_raster
 import json
 import os
+import sys
 from pathlib import Path
 
 import pytest
@@ -177,7 +178,10 @@ def test_native_settings_device_preferences(tmp_path):
     assert result.returncode == 0 and [s["large_sheet"] for s in states[:2]] == ["settings", "start"], log
     assert not any(s["errors"] or s["blocked_widgets"] for s in states), log
     settings = NativeSettings(profile)
-    assert settings.value("ndof/enabled") == "0"
+    if sys.platform in {"linux", "win32"}:
+        assert settings.value("ndof/enabled") == "0"
+    else:
+        assert settings.value("ndof/enabled") != "0"
 
 
 @pytest.mark.skipif(os.environ.get("BUILT_WINDOW_TESTS") != "1" or not BIN.exists(),
@@ -208,25 +212,31 @@ def test_native_about_copies_diagnostics(tmp_path):
 
 @pytest.mark.skipif(os.environ.get("BUILT_WINDOW_TESTS") != "1" or not BIN.exists(),
                     reason="requires a built window and BUILT_WINDOW_TESTS=1")
-def test_native_section_name_question(tmp_path):
+def test_native_placed_section_plane_is_selected_without_a_prompt(tmp_path):
     from built_core.scene import Scene
-    from formats.igz import save_scene
+    from formats.igz import load_into, save_scene
 
     model = tmp_path / "empty.igz"
+    saved = tmp_path / "section.built"
     save_scene(Scene(), model)
     steps = tmp_path / "commands"
     steps.write_text("wait 650\nkey escape\ntool section\nwait 300\n"
-                     "click 510 435\nwait 350\nstate\nkey enter\nwait 250\nstate\nquit\n")
+                     f"click 510 435\nwait 350\nstate\nmenu save_to:{saved}\nwait 350\nquit\n")
     home = tmp_path / "home"
     home.mkdir()
     result = run([str(BIN), "--root", str(ROOT), "--new-instance", "--size", "1000x720",
-                  "--script", str(steps), str(model)], home=home, settings=tmp_path / "settings",
+                  "--script", str(steps), str(model)], home=home, settings=english(tmp_path / "settings"),
                  capture_output=True, text=True, timeout=90)
     log = result.stdout + result.stderr
     states = [json.loads(line.removeprefix("[built] state ")) for line in log.splitlines()
               if line.startswith("[built] state ")]
-    assert result.returncode == 0 and [s["form_open"] for s in states[:2]] == [True, False], log
-    assert not any(s["errors"] or s["blocked_widgets"] for s in states), log
+    assert result.returncode == 0 and states, log
+    assert states[0]["selection"] == 1 and not states[0]["form_open"], log
+    assert all(not s["errors"] and not s["blocked_widgets"] for s in states), log
+    scene = Scene()
+    load_into(scene, saved)
+    plane, = scene.section_planes
+    assert (plane.name, plane.symbol) == ("Section 1", "A")
 
 
 @pytest.mark.skipif(os.environ.get("BUILT_WINDOW_TESTS") != "1" or not BIN.exists(),
@@ -274,7 +284,9 @@ def test_native_location_coordinates_map_apply_and_cancel(tmp_path):
         "from georef.tile_fetcher import TileFetcher\nfrom pathlib import Path\n"
         f"TileFetcher.request = lambda self, src, x, y, z: Path({str(requested)!r}).touch()\n")
     steps = tmp_path / "commands"
-    steps.write_text("wait 600\nkey escape\nmenu prefs\nwait 350\nclick 116 510\nwait 150\n"
+    # The script can open Settings but cannot address its pages by id. At
+    # 1000x920, Location & north follows Dimension style in the model sidebar.
+    steps.write_text("wait 600\nkey escape\nmenu prefs\nwait 350\nclick 116 535\nwait 150\n"
                      "click 552 328\nwait 200\nclick 550 282\nkey a cmd\ntype 48.85\n"
                      "click 550 311\nkey a cmd\ntype 2.35\nclick 340 351\nwait 450\n"
                      "drag 590 585 625 585 left 7\nwait 250\nstate\nclick 492 747\nwait 250\n"
@@ -546,8 +558,8 @@ Host.state = bevel_state
     steps.write_text("wait 650\nkey escape\nmenu select_all\ntool fillet\nwait 500\nstate\n"
                      "click 1115 466\nclick 1016 490\nwait 400\nstate\n"
                      "click 1025 466\nclick 1016 490\nwait 400\nstate\n"
-                     "click 1130 490\nwait 300\nstate\nclick 700 781\nwait 500\nstate\n"
-                     "click 752 781\nwait 300\nstate\nquit\n")
+                     "click 1130 490\nwait 300\nstate\nclick 627 781\nwait 500\nstate\n"
+                     "click 679 781\nwait 300\nstate\nquit\n")
     result = run([str(BIN), "--root", str(ROOT), "--venv", str(venv), "--new-instance",
                   "--size", "1280x800", "--script", str(steps), str(initial)],
                  env=dict(os.environ, BUILT_ANSWERS="cmd-d"), capture_output=True, text=True, timeout=60)
@@ -598,12 +610,12 @@ def fixture_menu(self, command):
     elif command == "fixture-close-camera":
         wgpu_ui._run(self.window, ['panel:["camera.close",null]'])
     elif command == "fixture-registry":
-        chrome_sheet.action(self.window, chrome_sheet.SEP.join(["library","tab","registry"]))
+        chrome_sheet.action(self.window, chrome_sheet.SEP.join(["settings","side","registry"]))
     elif command == "fixture-namespace":
         for args in (["v","registry_key","survey"],["v","registry_name","Survey"],["verb","registry_add"]):
-            chrome_sheet.action(self.window, chrome_sheet.SEP.join(["library",*args]))
+            chrome_sheet.action(self.window, chrome_sheet.SEP.join(["settings",*args]))
     elif command == "fixture-apply":
-        chrome_sheet.action(self.window, chrome_sheet.SEP.join(["library","verb","registry_apply"]))
+        chrome_sheet.action(self.window, chrome_sheet.SEP.join(["settings","verb","registry_apply"]))
     elif command == "fixture-text":
         self.window._act_3dtext.trigger()
     elif command == "fixture-preview":
@@ -636,7 +648,7 @@ menu fixture-shift
 menu fixture-close-camera
 wait 300
 state
-menu library
+menu prefs
 wait 350
 menu fixture-registry
 wait 300
@@ -677,7 +689,7 @@ quit
               if line.startswith("[built] state ")]
     camera, edited, draft, applied, picker, placed, console, preview = states[:8]
     assert camera["bound"] and edited["saved_shift"] == .25 and not edited["camera_open"], log
-    assert draft["large_sheet"] == "library" and not draft["namespace"], log
+    assert draft["large_sheet"] == "settings" and not draft["namespace"], log
     assert applied["namespace"] and not applied["large_sheet"], log
     assert picker["font"] and not placed["font"] and placed["tool"] == "PlaceGroupTool", log
     assert placed["selected_font"], log

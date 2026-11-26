@@ -173,9 +173,12 @@ fn inspector<'py>(a: &Args<'py>) -> Reply<'py> {
     if section_key.starts_with("section:") || section_key.starts_with("sections:") {
         let section = core.call_method1("section_inspector", (&scene, &section_key))?;
         if !section.is_none() {
-            show_given(&view, &section)?;
             if !focused && !sel.is_empty() {
-                renderer.call_method1("ui_set_identity", (identity()?,))?;
+                let fields = identity()?;
+                show(&view, fields.get_item(0)?.get_item(1)?, section.get_item(1)?)?;
+                renderer.call_method1("ui_set_identity", (fields,))?;
+            } else {
+                show_given(&view, &section)?;
             }
             return Ok(none(py));
         }
@@ -399,7 +402,7 @@ fn inspector<'py>(a: &Args<'py>) -> Reply<'py> {
                 ("Tag", text_or(attr(&group, "layer")?, "—")?),
             ],
         ))?;
-        show(&view, if name.is_empty() { "Group" } else { name.as_str() }, sections)?;
+        show(&view, identity.get_item(0)?.get_item(1)?, sections)?;
         renderer.call_method1("ui_set_identity", (identity,))?;
         return Ok(none(py));
     }
@@ -468,7 +471,12 @@ fn inspector<'py>(a: &Args<'py>) -> Reply<'py> {
     if !groups.is_empty() {
         sections.append(("Export details", empty(py)))?;
     }
-    show(&view, format!("{} selected", sel.len()), sections)?;
+    let title = if sel.len() == 1 {
+        text(&identity.get_item(0)?.get_item(1)?)?
+    } else {
+        format!("{} selected", sel.len())
+    };
+    show(&view, title, sections)?;
     renderer.call_method1("ui_set_identity", (identity,))?;
     Ok(none(py))
 }

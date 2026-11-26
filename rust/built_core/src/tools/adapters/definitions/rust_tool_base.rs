@@ -22,7 +22,17 @@ fn message<'py>(a: &Args<'py>) -> Reply<'py> {
         }
     }
     let tr = imported(py, "built_core.i18n")?.getattr("tr")?;
-    flash.call1((tr.call((a.get_item(1)?,), Some(&args))?,))?;
+    let template = a.get_item(1)?;
+    let text = tr.call((&template,), Some(&args))?;
+    if matches!(template.extract::<&str>()?, "{n} copies" | "Copy placed") {
+        if let Some(window) = view.getattr_opt("window")? {
+            if let Some(notify) = window.call0()?.getattr_opt("notify")? {
+                notify.call1(("success", &text))?;
+                return Ok(none(py));
+            }
+        }
+    }
+    flash.call1((text,))?;
     Ok(none(py))
 }
 fn initialize<'py>(a: &Args<'py>) -> Reply<'py> {

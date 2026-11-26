@@ -6,7 +6,7 @@ use super::{kit::*, tokens::*};
 use egui::{pos2, vec2, Align2, Color32, Pos2, Rect, Sense, Stroke};
 
 /// The board, in points; the Qt host scales it to fit.
-const BOARD: egui::Vec2 = vec2(1280., 1274.);
+const BOARD: egui::Vec2 = vec2(1280., 1330.);
 /// The surfaces band at the bottom: large sheet, value field, atoms, toasts.
 const BAND_H: f32 = 206.;
 const STATES: [(&str, State); 6] = [
@@ -25,7 +25,7 @@ const GROUPS: [(&str, &[&str]); 6] = [
     (
         "Interaction",
         &[
-            "ACCENT", "ACTIVE", "ACCENT_LINE", "FOCUS_RING", "CONTROL", "HOVER", "PRESS", "THUMB",
+            "ACCENT", "ACTIVE", "LIT", "ACCENT_LINE", "FOCUS_RING", "CONTROL", "HOVER", "PRESS", "THUMB",
             "TRACK", "EDGE", "HOVER_EDGE", "PRIMARY_HOVER", "PRIMARY_PRESS",
         ],
     ),
@@ -60,6 +60,8 @@ enum Row {
     Slider,
     Choice,
     Toggle,
+    SwitchRow,
+    ToolButton,
     Segmented,
     Tabs,
     ListRow,
@@ -67,7 +69,7 @@ enum Row {
     CommandRow,
     Tile,
 }
-const ROWS: [(&str, Row); 16] = [
+const ROWS: [(&str, Row); 18] = [
     ("Primary button", Row::Primary),
     ("Button", Row::Secondary),
     ("Destructive", Row::Destructive),
@@ -78,6 +80,8 @@ const ROWS: [(&str, Row); 16] = [
     ("Percent slider", Row::Slider),
     ("Choice", Row::Choice),
     ("Switch", Row::Toggle),
+    ("Switch row (form)", Row::SwitchRow),
+    ("Tool, bar toggle", Row::ToolButton),
     ("Segmented", Row::Segmented),
     ("Underline tabs", Row::Tabs),
     ("List and tree row", Row::ListRow),
@@ -90,7 +94,7 @@ impl Row {
     /// Whether the state exists for the component; "—" otherwise.
     fn has(self, st: State) -> bool {
         match st {
-            State::On => matches!(self, Row::Toggle | Row::ListRow | Row::MenuRow | Row::CommandRow | Row::Tile),
+            State::On => matches!(self, Row::Toggle | Row::SwitchRow | Row::ToolButton | Row::ListRow | Row::MenuRow | Row::CommandRow | Row::Tile),
             State::Press => !matches!(self, Row::Field),
             State::Focus => !matches!(self, Row::MenuRow),
             _ => true,
@@ -99,6 +103,7 @@ impl Row {
     fn height(self) -> f32 {
         match self {
             Row::Primary | Row::Secondary | Row::Destructive => BUTTON_H,
+            Row::ToolButton => 30.,
             _ => CONTROL_H,
         }
     }
@@ -446,6 +451,19 @@ impl Gallery {
             Row::Toggle => {
                 toggle(ui, &mut cell.on, "Visible");
             }
+            Row::SwitchRow => {
+                // Off in every column but Selected: the empty track is the off value.
+                ui.vertical(|ui| { switch_row(ui, "Snap", st == State::On, st != State::Off); });
+            }
+            Row::ToolButton => {
+                // The armed tool and a bar toggle that is on share the lit state.
+                let (r, _) = ui.allocate_exact_size(vec2(30., 30.), Sense::click());
+                if st == State::On { paint_lit(ui, r, R_CONTROL) } else { paint_state(ui, r, st, R_CONTROL) }
+                let ink = ink_of(st);
+                ui.painter().rect_stroke(r.shrink(9.), R_INSET, Stroke::new(1.5_f32, ink), egui::StrokeKind::Middle);
+                ui.painter().circle_filled(r.shrink(9.).left_bottom(), 2.5, ink);
+                ui.painter().circle_filled(r.shrink(9.).right_top(), 2.5, ink);
+            }
             Row::Segmented => {
                 let w = ui.available_width();
                 segmented(ui, &["Model", "Sheets"], 0, w);
@@ -587,14 +605,15 @@ impl Gallery {
             tag_swatch(ui, sample, None);
             ring(ui);
         });
-        // At most three transient results, the oldest fading.
+        // The three visible results use the same tone marks as the live stack.
         let tx = x + 280.;
         sub(ui, pos2(tx, y), "Toast stack");
         put(ui, Rect::from_min_size(pos2(tx, y + 18.), vec2(w - (tx - at.x), h - 18.)), down(), |ui| {
             ui.spacing_mut().item_spacing = vec2(0., SPACE_XS);
-            let rows = [("Saved", 1.0_f32), ("Drawings exported", 0.7), ("Link reloaded", 0.4), ("Hidden", 0.)];
-            toast_stack(ui, rows.iter().map(|(t, a)| (t, *a)), |ui, t| {
-                ui.label(egui::RichText::new(*t).font(body()).color(INK));
+            let rows = [("error", "File not found"), ("warning", "Select a group first"), ("success", "Saved")];
+            toast_stack(ui, rows.iter().map(|row| (row, 1.)), |ui, (tone, title)| {
+                let (mark, ink) = notice_mark(tone);
+                ui.colored_label(ink, format!("{mark}  {title}"));
             });
         });
     }

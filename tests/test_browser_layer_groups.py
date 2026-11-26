@@ -165,3 +165,15 @@ def test_ten_thousand_placements_counted_under_their_tag_once():
     rows = p.rows()
     assert [rows["preview-tag:" + tag][1][1] for tag in ("Walls", "Roof", DEFAULT_LAYER)] == [3334, 3333, 3333]
     assert time.perf_counter() - start < 10
+
+
+def test_folder_menu_selects_items_on_descendant_tags(native_host):
+    scene = native_host.viewport.scene
+    scene.layer_folders = ["House", "Frame"]
+    scene.folder_parents = {"Frame": "House"}
+    scene.layers.extend([Layer("Walls", folder="House"), Layer("Posts", folder="Frame"), Layer("Site")])
+    wall, post, site = [_group(name, name) for name in ("Walls", "Posts", "Site")]
+    scene.groups[:] = [wall, post, site]
+    scene.version += 1
+    action(native_host, "tagselect", "preview-folder:House")
+    assert set(scene.selection) == {wall, post}

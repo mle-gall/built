@@ -118,3 +118,18 @@ def test_a_hot_retype_shows_its_value_not_the_one_it_replaced(win):
     assert max(v.z() for f in vp.scene.mesh.faces for v in f.vertices) \
         == pytest.approx(3.0)
     assert win.measurements[-1] == units.typed_value_text("3")
+
+
+@pytest.mark.parametrize("tool,typed,shown", [
+    ("rotate", "30", ("Angle", "30°")),
+    ("move", "3x", ("Copies", "3×")),
+    ("move", "/3", ("Copies", "/3")),
+])
+def test_typed_pill_names_the_parsed_value(win, tool, typed, shown):
+    from tests.scene_controls import chrome
+    from views.wgpu_ui import _cursor_value
+    win._activate_tool(tool)
+    win.view.tools._set_value_buffer(typed)
+    with chrome(win) as renderer:
+        _cursor_value(win.view, win)
+        assert renderer.ui_set_cursor_value.call_args.args[:2] == shown

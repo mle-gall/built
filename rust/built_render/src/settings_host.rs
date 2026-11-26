@@ -79,6 +79,7 @@ fn _keys_text(keys: &Bound<'_, PyAny>) -> PyResult<String> {
 /// row the search matches) in the middle.
 #[pyclass(module = "built_render.settings_sheet", extends = crate::sheet_runtime::Provider, dict, get_all, set_all)]
 pub struct SettingsSheet {
+    registry: Py<PyAny>,
     site: Py<PyAny>,
     site_requests: Py<PyAny>,
     site_scene: Py<PyAny>,
@@ -141,6 +142,7 @@ impl SettingsSheet {
     fn new_state(py: Python<'_>, section: &str) -> PyResult<Self> {
         let n = || none(py);
         Ok(SettingsSheet {
+            registry: n(),
             site: n(),
             site_requests: n(),
             site_scene: n(),
@@ -224,12 +226,34 @@ impl SettingsSheet {
         let py = slf.py();
         let sid: String = state(slf)?.getattr("section")?.extract()?;
         let (title, scope, subtitle): (String, String, String) = state(slf)?.call_method0("heading")?.extract()?;
+        if sid == "ndof" && !crate::settings_rows::NDOF_SUPPORTED {
+            sheet.call_method1("content", (tr(py, &title)?, tr(py, "3D mouse input is unavailable on this platform.")?))?;
+            return Ok(());
+        }
         let mut sub = tr(py, &subtitle)?;
         if scope == MODEL {
             sub = format!("{}{}", if sub.is_empty() { String::new() } else { format!("{sub} ") }, tr(py, "(Saved in the document, not on this Mac.)")?);
         }
         let c = sheet.call_method1("content", (tr(py, &title)?, sub))?;
         Self::top(slf, &c)?;
+        if sid == "general" {
+            let lang = py.import("built_core.i18n")?;
+            let saved = envb.getattr("st")?.call_method1("value", ("language",))?;
+            if saved.is_truthy()? && !saved.eq("system")? && !lang.call_method1("resolve_language", (&saved,))?.eq(&saved)? {
+                let name = crate::settings_rows::language_name(&lang.getattr("LANGUAGE_NAMES")?, &saved)?;
+                c.call_method1("text", (trf(py, "Using English because your saved language ({name}) is unavailable.", &[("name", s(py, &name))])?,))?;
+            }
+        }
+        if sid == "registry" {
+            let scene = envb.getattr("scene")?;
+            let mut editor = slf.getattr("registry")?;
+            if editor.is_none() || !editor.getattr("scene")?.is(&scene) {
+                editor = py.import("built_render")?.getattr("RegistryEditor")?.call1((scene,))?;
+                slf.setattr("registry", &editor)?;
+            }
+            editor.call_method1("build", (&c,))?;
+            return Ok(());
+        }
         let site = slf.getattr("site")?;
         if sid == "location" && !site.is_none() {
             let tr_fn = py.import("built_core.i18n")?.getattr("tr")?;
@@ -523,7 +547,7 @@ impl SettingsSheet {
             slf.call_method0("end_site")?;
         }
         let query = state(slf)?.getattr("query")?.str()?.to_string().trim().to_lowercase();
-        slf.call_method1("_monitor", (section == "ndof" && query.is_empty(),))?;
+        slf.call_method1("_monitor", (crate::settings_rows::NDOF_SUPPORTED && section == "ndof" && query.is_empty(),))?;
         envb.setattr("device_readings", slf.getattr("_readings")?)?;
         slf.setattr("_rows", PyDict::new(py))?;
         let cs = chrome(py)?;
@@ -559,7 +583,7 @@ impl SettingsSheet {
             Some(h) => Self::search_pane(slf, &sheet, &envb, h, &keyboard)?,
             None => Self::section_pane(slf, &sheet, &envb, &keyboard)?,
         }
-        if slf.getattr("site")?.is_none() {
+        if section != "registry" && slf.getattr("site")?.is_none() {
             let hint = format!("{} · {}", tr(py, "Changes apply at once")?, tr(py, "esc back to the model")?);
             sheet.call_method1("footer", (vec![("restore", tr(py, "Restore defaults")?)], hint))?;
         } else {
@@ -888,7 +912,17 @@ impl SettingsSheet {
                 slf.call_method1("_kb_verb", (format!("kb_{}", args[1]),))?;
             }
             "verb" => {
-                if arg.starts_with("site_") {
+                if arg.starts_with("registry_") && state(slf)?.getattr("section")?.eq("registry")? {
+                    let editor = slf.getattr("registry")?;
+                    let w = win(slf)?;
+                    let mut path = s(py, "");
+                    if arg == "registry_csv" {
+                        path = py.import("built_render.shell_files")?.getattr("ShellFileDialog")?.call_method1("getOpenFileName", (&w, "Codes CSV", "", "CSV (*.csv)"))?.get_item(0)?;
+                    }
+                    if editor.call_method1("act", (&w, &arg, path))?.is_truthy()? && arg == "registry_apply" {
+                        chrome(py)?.call_method1("close", (&w,))?;
+                    }
+                } else if arg.starts_with("site_") {
                     slf.call_method1("site_action", (ctx, &arg))?;
                 } else if arg.starts_with("kb_") {
                     slf.call_method1("_kb_verb", (&arg,))?;
@@ -1135,6 +1169,7 @@ impl SettingsSheet {
 
     fn closed(slf: &Slf<'_>, _ctx: &Bound<'_, PyAny>) -> PyResult<()> {
         let py = slf.py();
+        slf.setattr("registry", py.None())?;
         slf.call_method0("end_site")?;
         slf.call_method1("_monitor", (false,))?;
         state(slf)?.setattr("note", py.None())?;

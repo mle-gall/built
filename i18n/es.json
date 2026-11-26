@@ -1,4 +1,9 @@
 {
+ "Click the first corner. Arrows pick the plane.": "Clic en la primera esquina. Las flechas eligen el plano.",
+ "Click the start of the angle.": "Clic en el inicio del ángulo.",
+ "Click the end, or type degrees and Enter.": "Clic en el final o escribe los grados y pulsa Intro.",
+ "Press Enter to apply.": "Pulsa Intro para aplicar.",
+ "Type 3x or /3, then Enter.": "Escribe 3x o /3 y pulsa Intro.",
  "Import .rfa family": "Importar familia .rfa",
  "Import .dxf": "Importar .dxf",
  "Import .dwg": "Importar .dwg",
@@ -3683,7 +3688,7 @@
  "Arabic translation of the interface: the first right-to-left one.": "Traducción al árabe de la interfaz: la primera de derecha a izquierda.",
  "The OpenCode Go provider and a readable chat for the AI Assistant.": "El proveedor OpenCode Go y un chat legible para el Asistente de IA.",
  ".skp components scaled by −1 that keep their front, and nested groups that wear their nearest painted container.": "Componentes .skp escalados por −1 que conservan su cara frontal, y grupos anidados que toman el material de su contenedor pintado más cercano.",
- "The Built Tutorials channel on YouTube, and nine extensions: MultiView, Phasing Animator, Kitchen Maker, Taper and more.": "El canal Built Tutorials en YouTube, y nueve extensiones: MultiView, Phasing Animator, Kitchen Maker, Taper y más.",
+ "The IngeTrazo Tutorials channel on YouTube, and nine extensions: MultiView, Phasing Animator, Kitchen Maker, Taper and more.": "El canal IngeTrazo Tutorials en YouTube, y nueve extensiones: MultiView, Phasing Animator, Kitchen Maker, Taper y más.",
  "Twenty-three extensions in the catalogue: period doors and windows, roof tiles, brick and block, gutters, fences, Loft, Wrap and more.": "Veintitrés extensiones en el catálogo: puertas y ventanas de época, tejas, ladrillo y bloque, canaletas, cercos, Loft, Wrap y más.",
  "Levels: heights in the document's units.": "Niveles: alturas en las unidades del documento.",
  "The Bulgarian translation.": "La traducción al búlgaro.",

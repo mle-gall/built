@@ -206,6 +206,35 @@ impl Rows {
     }
 }
 
+const MAKE_GROUP: &str = "Make group";
+const MAKE_COMPONENT: &str = "Make component…";
+const EXPLODE: &str = "Explode";
+const MAKE_UNIQUE: &str = "Make unique";
+const MERGE_GROUPS: &str = "Merge groups";
+
+/// Single-action rows for a keyed project-tree target.
+pub(crate) fn tree_menu_rows(entries: impl IntoIterator<Item = (String, String, bool)>) -> Vec<Row> {
+    let mut rows = Rows(Vec::new());
+    for (id, label, enabled) in entries {
+        if id == "-" {
+            rows.0.push(("-".into(), Vec::new()));
+        } else {
+            let label = match id.as_str() {
+                "group" => MAKE_GROUP,
+                "component" => MAKE_COMPONENT,
+                "explode" => EXPLODE,
+                "unique" => MAKE_UNIQUE,
+                "merge" => MERGE_GROUPS,
+                _ => &label,
+            };
+            let mut entry = e(&id, label);
+            entry.3 = enabled;
+            rows.one(vec![entry]);
+        }
+    }
+    rows.0
+}
+
 fn intersect() -> Vec<Entry> {
     vec![e("intersect:model", "Model"), e("intersect:selection", "Selection"), e("intersect:context", "Context")]
 }
@@ -228,7 +257,7 @@ fn file_to() -> Vec<Entry> {
     vec![ek("fileto", "File to…", "⌘⇧F")]
 }
 fn make() -> Vec<Entry> {
-    vec![e("makegroup", "Make group"), e("makecomp", "Make component…")]
+    vec![e("makegroup", MAKE_GROUP), e("makecomp", MAKE_COMPONENT)]
 }
 fn lock(f: &Facts) -> Vec<Entry> {
     vec![e("lock", if f.all_locked { "Unlock" } else { "Lock" })]
@@ -381,15 +410,15 @@ pub fn menu_rows(f: &Facts, kind: &str) -> Vec<Row> {
             r.one(zoom());
             r.one(file_to());
             if kind == "group" {
-                r.one(vec![e("explode", "Explode"), e("makecomp", "Make component…")]);
+                r.one(vec![e("explode", EXPLODE), e("makecomp", MAKE_COMPONENT)]);
                 if !f.billboard {
                     r.one(vec![e("split", "Split into pieces")]);
                 }
                 r.family("Intersect", intersect());
                 r.one(vec![soften()]);
             } else {
-                r.one(vec![e("instances", "Select instances"), e("unique", "Make unique")]);
-                let mut row = vec![e("explode", "Explode")];
+                r.one(vec![e("instances", "Select instances"), e("unique", MAKE_UNIQUE)]);
+                let mut row = vec![e("explode", EXPLODE)];
                 if f.replaceable {
                     row.push(e("replace", "Replace component…"));
                 }
@@ -407,9 +436,9 @@ pub fn menu_rows(f: &Facts, kind: &str) -> Vec<Row> {
             r.one(zoom());
             r.one(file_to());
             r.one(make());
-            r.one(vec![e("merge", "Merge groups"), e("explode", "Explode")]);
+            r.one(vec![e("merge", MERGE_GROUPS), e("explode", EXPLODE)]);
             if f.components > 0 {
-                let mut definitions = vec![e("unique", "Make unique")];
+                let mut definitions = vec![e("unique", MAKE_UNIQUE)];
                 if f.replaceable { definitions.push(e("replace", "Replace component…")); }
                 definitions.push(checked(e("keep", "Keep in file"), f.kept));
                 r.one(definitions);

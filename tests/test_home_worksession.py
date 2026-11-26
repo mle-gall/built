@@ -71,7 +71,7 @@ def test_home_lists_opens_and_locates(win, tmp_path, monkeypatch):
     assert any(row[2] == str(old) for key in ("cont", "recent") for row in rows[key])
     assert any(row[2] == str(tmp_path / "job.builtproject") for row in rows["projects"])
     monkeypatch.setattr(ShellFileDialog, 'getOpenFileName', lambda *a: (str(tmp_path / 'moved.igz'), ''))
-    assert wgpu_start.open_recent(win, old)
+    assert wgpu_start.open_recent(win, old, locate=True)
     assert win._doc.path == a
     assert str(old) not in [r['path'] for r in recent.entries()]
 

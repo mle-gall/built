@@ -65,7 +65,7 @@ impl MoveTool {
         self.copy = false; // the Ctrl modifier arms ONE operation
     }
 
-    fn toggle_copy(&mut self, say: bool, host: &mut dyn ToolHost) {
+    fn toggle_copy(&mut self, host: &mut dyn ToolHost) {
         self.copy = !self.copy;
         if self.copy {
             // The original stops following the cursor.
@@ -73,18 +73,16 @@ impl MoveTool {
         } else if let (Some(g), Some(h)) = (self.grab, self.hover) {
             host.call("preview", j(h - g));
         }
-        if say {
-            host.message(if self.copy { "Move a copy: on" } else { "Move a copy: off" }, &[]);
-        }
     }
 
     /// Commit a move (or a copy) by `delta`.
-    fn commit(&mut self, delta: DVec3, host: &mut dyn ToolHost) {
+    fn commit(&mut self, delta: DVec3, announce: bool, host: &mut dyn ToolHost) {
         host.call("revert", json!(null));
         if self.copy && delta.length() > 1e-9 {
             let token = host.call("copy", json!({"deltas": [j(delta)], "fresh": true}));
             if let Some(t) = token.as_u64() {
                 self.last = Some(Window { delta, token: t });
+                if announce { host.message("Copy placed", &[]); }
             }
         } else if delta.length() > 1e-9 {
             host.call("move", j(delta));
@@ -100,7 +98,7 @@ impl MoveTool {
                 if dir.length() < 1e-9 {
                     return false;
                 }
-                self.commit(dir.normalize() * step, host);
+                self.commit(dir.normalize() * step, false, host);
                 if self.last.is_none() {
                     return false;
                 }
@@ -151,7 +149,7 @@ impl MoveTool {
             // A pair is a rectangle's width × height, not a move.
             _ => return false,
         };
-        self.commit(delta, host);
+        self.commit(delta, true, host);
         true
     }
 }
@@ -190,7 +188,7 @@ impl Tool for MoveTool {
                         Reply::redraw()
                     }
                     Some(grab) => {
-                        self.commit(world - grab, host);
+                        self.commit(world - grab, true, host);
                         Reply::committed()
                     }
                 }
@@ -206,7 +204,7 @@ impl Tool for MoveTool {
             ToolEvent::Value(v) => done(self.value(v, host)),
             ToolEvent::Array { count, mode, step } => done(self.array(*count, mode, *step, host)),
             ToolEvent::Key { key, .. } if key == "Control" => {
-                self.toggle_copy(true, host);
+                self.toggle_copy(host);
                 self.ctrl_toggled = true;
                 Reply::redraw()
             }
@@ -216,13 +214,13 @@ impl Tool for MoveTool {
                 }
                 self.ctrl_toggled = false;
                 if !tapped {
-                    self.toggle_copy(false, host);
+                    self.toggle_copy(host);
                 }
                 Reply::redraw()
             }
             ToolEvent::Key { key, .. } if key == "ToggleCopy" || key == "ToggleCopyQuiet" => {
                 // Ctrl held as the click lands (the view's own check).
-                self.toggle_copy(key == "ToggleCopy", host);
+                self.toggle_copy(host);
                 Reply::redraw()
             }
             ToolEvent::Key { key, .. } if key == "CloseArray" => {

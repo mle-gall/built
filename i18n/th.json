@@ -1,4 +1,9 @@
 {
+ "Click the first corner. Arrows pick the plane.": "คลิกมุมแรก ใช้ปุ่มลูกศรเลือกระนาบ",
+ "Click the start of the angle.": "คลิกจุดเริ่มต้นของมุม",
+ "Click the end, or type degrees and Enter.": "คลิกจุดปลาย หรือพิมพ์องศาแล้วกด Enter",
+ "Press Enter to apply.": "กด Enter เพื่อนำไปใช้",
+ "Type 3x or /3, then Enter.": "พิมพ์ 3x หรือ /3 แล้วกด Enter",
  "Import .rfa family": "นำเข้าตระกูล .rfa",
  "Import .dxf": "นำเข้า .dxf",
  "Import .dwg": "นำเข้า .dwg",
@@ -3686,7 +3691,7 @@
  "Arabic translation of the interface: the first right-to-left one.": "คำแปลภาษาอาหรับของส่วนติดต่อผู้ใช้: ภาษาแรกที่เขียนจากขวาไปซ้าย",
  "The OpenCode Go provider and a readable chat for the AI Assistant.": "ผู้ให้บริการ OpenCode Go และแชตที่อ่านง่ายสำหรับผู้ช่วย AI",
  ".skp components scaled by −1 that keep their front, and nested groups that wear their nearest painted container.": "คอมโพเนนต์ .skp ที่สเกลด้วย −1 แต่ยังคงด้านหน้าไว้ และกลุ่มซ้อนที่ใช้วัสดุของคอนเทนเนอร์ที่ทาสีซึ่งอยู่ใกล้ที่สุด",
- "The Built Tutorials channel on YouTube, and nine extensions: MultiView, Phasing Animator, Kitchen Maker, Taper and more.": "ช่อง Built Tutorials บน YouTube และส่วนขยายเก้ารายการ: MultiView, Phasing Animator, Kitchen Maker, Taper และอื่น ๆ",
+ "The IngeTrazo Tutorials channel on YouTube, and nine extensions: MultiView, Phasing Animator, Kitchen Maker, Taper and more.": "ช่อง IngeTrazo Tutorials บน YouTube และส่วนขยายเก้ารายการ: MultiView, Phasing Animator, Kitchen Maker, Taper และอื่น ๆ",
  "Twenty-three extensions in the catalogue: period doors and windows, roof tiles, brick and block, gutters, fences, Loft, Wrap and more.": "ส่วนขยายยี่สิบสามรายการในแคตตาล็อก: ประตูและหน้าต่างย้อนยุค, กระเบื้องหลังคา, อิฐและบล็อก, รางน้ำฝน, รั้ว, Loft, Wrap และอื่น ๆ",
  "Levels: heights in the document's units.": "ระดับ: ความสูงตามหน่วยของเอกสาร",
  "The Bulgarian translation.": "คำแปลภาษาบัลแกเรีย",

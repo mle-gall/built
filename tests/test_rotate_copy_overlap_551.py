@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 Built contributors.
+# Copyright (C) 2026 IngeTrazo contributors.
 """#551: Rotate+Ctrl must subdivide coplanar overlaps instead of stacking faces."""
 from collections import Counter
 from types import SimpleNamespace

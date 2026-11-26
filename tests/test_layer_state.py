@@ -122,3 +122,15 @@ def test_layer_state_skips_layers_made_or_deleted_since():
     assert not scene.layer("A").visible
     assert not scene.layer("C").visible               # untouched
     assert scene.active_layer is None                  # B is gone
+
+
+def test_filing_marks_folded_tag_and_reveals_the_selected_occurrence():
+    project, group, _ = drawing()
+    project.action("lens", "0")
+    project.scene.select([group])
+    assert marked(project) == {"preview-tag:A": 1}
+
+    rows = project.action("revealselection", "")
+    target, = project.view.renderer.calls["ui_reveal_row"]
+    assert target.startswith("i:") and rows[target][1][10] == 1
+    assert not marked(project)

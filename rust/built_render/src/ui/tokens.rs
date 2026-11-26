@@ -16,6 +16,9 @@ palette! {
     // Selected: accent at 14 % (was 24 % plus an outline; design pass 2026-11-23).
     ACTIVE = Color32::from_rgba_premultiplied(15, 23, 36, 36);
     ACCENT_LINE = Color32::from_rgba_premultiplied(58, 91, 140, 140);
+    // Lit: an armed tool or a bar toggle that is on: accent at 28 % under an
+    // ACCENT_LINE edge (UX pass 1, M02: ACTIVE alone read as idle on the rail).
+    LIT = Color32::from_rgba_premultiplied(30, 47, 72, 72);
     HOVER = Color32::from_rgba_premultiplied(18, 18, 18, 18);
     // The rest fill of buttons and chips (a neutral wash, no outline).
     CONTROL = Color32::from_rgba_premultiplied(18, 18, 18, 18);
@@ -288,6 +291,27 @@ pub fn chrome_token(name: &str) -> Option<(u8, u8, u8, u8)> {
         let [r, g, b, a] = c.to_srgba_unmultiplied();
         (r, g, b, a)
     })
+}
+
+#[cfg(test)]
+mod lit_tests {
+    use super::*;
+    /// A premultiplied fill over an opaque grey, per channel.
+    fn over(fill: Color32, grey: u8) -> [f32; 3] {
+        let a = fill.a() as f32 / 255.0;
+        [fill.r(), fill.g(), fill.b()].map(|c| c as f32 + grey as f32 * (1.0 - a))
+    }
+    #[test]
+    fn an_armed_tool_reads_as_accent_on_the_rail() {
+        // M02: the armed tool must stand out from the rail's graphite far more
+        // than the selection wash does, and lean blue (the accent), not grey.
+        let grey = Surface::Panel.grey();
+        let shift = |fill| over(fill, grey)[2] - grey as f32;
+        assert!(shift(LIT) >= 2.0 * shift(ACTIVE), "{} vs {}", shift(LIT), shift(ACTIVE));
+        let [r, _, b] = over(LIT, grey);
+        assert!(b - r > 30.0);
+        assert!(LIT.a() < 255 / 2, "a control is never filled with full accent");
+    }
 }
 
 #[cfg(test)]

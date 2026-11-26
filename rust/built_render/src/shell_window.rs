@@ -157,7 +157,9 @@ impl ShellWindow {
         w.setattr("_command_actions", PyDict::new(py))?;
         w.setattr("_rest_shown_mode", "fade")?;
         w.setattr("_style_before_xray", (py.None(), py.None()))?;
-        w.setattr("_status", py.get_type::<ShellStatusBar>().call1((host,))?)?;
+        let status = py.get_type::<ShellStatusBar>().call1((host,))?;
+        status.setattr("_window", py.import("weakref")?.call_method1("ref", (w,))?)?;
+        w.setattr("_status", status)?;
         for name in ["_doc", "_tool_filter", "_workspace", "_session_path"] {
             w.setattr(name, py.None())?;
         }
@@ -202,6 +204,12 @@ impl ShellWindow {
     fn statusBar<'p>(slf: &Bound<'p, Self>) -> PyResult<Obj<'p>> {
         slf.getattr("_status")
     }
+    /// Publish a result, refusal or error to the viewport and recent activity.
+    #[pyo3(signature=(tone, text, actions=None))]
+    fn notify(slf: &Bound<'_, Self>, tone: &str, text: &str, actions: Option<Vec<(String, Py<PyAny>)>>) -> PyResult<()> {
+        crate::dialogs_host::post_notice(slf.as_any(), tone, text, actions.unwrap_or_default())
+    }
+
     fn window(slf: Bound<'_, Self>) -> Bound<'_, Self> {
         slf
     }
@@ -338,7 +346,7 @@ impl ShellWindow {
     fn _activate_nav(slf: &Bound<'_, Self>, key: &str) -> PyResult<()> {
         let vp = slf.getattr("viewport")?;
         vp.call_method1("set_nav_mode", (key,))?;
-        slf.call_method0("_update_status_hint")?;
+        crate::native_view_actions::activate_tool_hint(slf.as_any())?;
         let tools = vp.getattr("keys_stand_in")?.getattr("tools")?;
         tools.call_method0("sync")?;
         tools.call_method0("_apply_tool_cursor")?;
@@ -366,13 +374,13 @@ impl ShellWindow {
         let vp = slf.getattr("viewport")?;
         vp.call_method1("set_active_tool", (&tool,))?;
         let display = vp.getattr("keys_stand_in")?;
-        display.getattr("tools")?.call_method0("pick_up")?;
+        display.getattr("tools")?.call_method0("sync")?;
         display.call_method1("set_scene", (vp.getattr("scene")?,))?;
         display.call_method0("update")?;
         for (k, a) in actions.cast::<PyDict>()?.iter() {
             a.call_method1("setChecked", (k.eq(key)?,))?;
         }
-        slf.call_method0("_update_status_hint")?;
+        crate::native_view_actions::activate_tool_hint(slf.as_any())?;
         if !matches!(
             key,
             "select" | "texture_position" | "change_axes" | "scale_manager"

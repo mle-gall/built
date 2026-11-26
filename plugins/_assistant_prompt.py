@@ -183,15 +183,15 @@ def handle_reply(self, msg, round_limit, screenshots):
     if result["stdout"]:
         out = result["stdout"].rstrip()
         if len(out) > 1500:      # a print-happy recipe rides EVERY turn
-            out = out[:700] + "\n… (recortado) …\n" + out[-700:]
+            out = out[:700] + "\n… (truncated) …\n" + out[-700:]
         summary.append(out)
     self._failed = self._failed + 1 if result["error"] else 0
     if result["error"]:
-        summary.append("ERROR (todo revertido): " + str(result["error"]))
+        summary.append(tr("Error (changes rolled back): {error}", error=result["error"]))
         if result["stderr"]:
             summary.append(result["stderr"].rstrip()[-800:])
-    summary.append(f"(cambió el modelo: {result['changed']})")
-    feedback = "Resultado de la ejecución:\n" + "\n".join(summary)
+    summary.append(tr("Model changed") if result["changed"] else tr("Model unchanged"))
+    feedback = tr("Execution result:") + "\n" + "\n".join(summary)
     self._append(feedback, "muted")
     provider, model = self._config()[:2]
     shot = None

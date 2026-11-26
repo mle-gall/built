@@ -29,7 +29,9 @@ def test_every_contributor_in_authors_is_in_the_credits():
     authors = (Path(__file__).resolve().parents[1] / "AUTHORS").read_text()
     handles = set(re.findall(r"github\.com/([\w.-]+)\)", authors))
     links = {link.rsplit("/", 1)[-1] for _, _, link, _ in AboutReview.contributors() if link}
-    assert not handles - links - {"tuxiasumari"}
+    # The credits list IngeTrazo's contributors; Built's own maintainer is
+    # named in AUTHORS only.
+    assert not handles - links - {"tuxiasumari", "mle-gall"}
     sheet = About()
     ctx = SimpleNamespace(win=SimpleNamespace())
     sheet.build(ctx)

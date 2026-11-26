@@ -53,7 +53,7 @@ const TOOLS: &[(&str, Phases)] = &[
         ("idle", "Press and drag to draw a freehand line."),
     ]),
     ("rectangle", &[
-        ("idle", "Click the first corner. Arrows pick the plane; Ctrl = centre."),
+        ("idle", "Click the first corner. Arrows pick the plane."),
         ("started", "Click the opposite corner, or type width;height and Enter."),
     ]),
     ("rotated_rect", &[
@@ -95,7 +95,8 @@ const TOOLS: &[(&str, Phases)] = &[
     ]),
     ("rotate", &[
         ("idle", "Click the centre of rotation — on a face, the protractor takes its plane."),
-        ("started", "Click the start of the angle, then the end; or type the degrees."),
+        ("started", "Click the start of the angle."),
+        ("angle", "Click the end, or type degrees and Enter."),
     ]),
     ("scale", &[
         ("idle", "Select something, then drag a grip: corners uniform, edges along an axis."),
@@ -190,6 +191,7 @@ fn phase_of(key: &str, tool: &Bound<PyAny>) -> PyResult<&'static str> {
     let started =
         |attr| -> PyResult<bool> { Ok(tool.getattr_opt(attr)?.is_some_and(|p| !p.is_none())) };
     Ok(match key {
+        "rotate" if started("ref_point")? => "angle",
         "arc" if started("end_point")? => "bulge",
         "arc" if started("start_point")? => "end",
         "arc" => "idle",
@@ -249,7 +251,9 @@ pub(crate) fn hint_for(
         .unwrap_or(&phases[0])
         .1;
     let text = tr(py, instruction)?;
-    let clause = if phase == "idle" {
+    let clause = if phase == "idle" && matches!(key, "rectangle" | "pushpull" | "move") {
+        String::new()
+    } else if phase == "idle" {
         match tool
             .getattr_opt("status_clause")?
             .filter(|v| v.is_callable())

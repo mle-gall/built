@@ -567,6 +567,11 @@ def test_a_missing_row_still_offers_to_locate(win, monkeypatch, tmp_path):
     blocks = detail(sheet(win))
     assert any(b["kind"] == "buttons" and b["buttons"][-1]["id"] == "locate" for b in blocks)
     act(win, "open", row["id"])
+    from built_render import chrome_dialogs
+    from views import wgpu_ui
+    notice = chrome_dialogs.history(win)[0]
+    assert not asked and notice.action_label == "Locate…"
+    wgpu_ui._run(win, ["activity:" + notice.id])
     assert asked and win._doc.path.resolve() == found.resolve()
 
 

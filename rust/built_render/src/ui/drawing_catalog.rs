@@ -7,7 +7,7 @@ use std::collections::{BTreeMap, BTreeSet};
 #[derive(Default)]
 pub(super) struct Catalog {
     lines: BTreeMap<String, Value>,
-    folders: BTreeMap<String, String>,
+    pub(super) folders: BTreeMap<String, String>,
     labels: BTreeMap<String, String>,
     parents: BTreeMap<String, Option<String>>,
     pub folder: String,
@@ -267,6 +267,16 @@ impl Catalog {
         }
         self.revision = Some(version);
         Ok(())
+    }
+    pub fn can_move_to(&self, row: &str, destination: &str) -> bool {
+        let Some(source) = row.strip_prefix("preview-folder:") else { return true };
+        let mut cursor = Some(destination);
+        let mut seen = BTreeSet::new();
+        while let Some(key) = cursor {
+            if key == source || !seen.insert(key) { return false; }
+            cursor = self.parents.get(key).and_then(Option::as_deref);
+        }
+        true
     }
     pub fn select_folder(&mut self, key: &str) {
         self.folder = key.into();

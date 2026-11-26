@@ -106,7 +106,7 @@ pub(crate) fn project_sidebar(
                 .unwrap_or_else(|| "Layer 0".into());
             *counts.entry(tag).or_default() += 1;
         }
-        let selected: HashSet<String> = if drawing_lens {
+        let selected: HashSet<String> = if drawing_lens || (group.is_none() && !expanded.contains("n:")) {
             scene.py().import("built_core.layers")?.call_method1("selection_layers", (scene,))?.extract()?
         } else {
             HashSet::new()
@@ -162,7 +162,7 @@ pub(crate) fn project_sidebar(
         if let Some(index) = rows.iter().position(|(t, _)| t[0] == "n:") {
             if query.is_empty() && !expanded.contains("n:") {
                 rows.truncate(index);
-            } else {
+            } else if !expanded.contains("n:") {
                 rows.remove(index);
                 for (_, flags) in &mut rows[index..] {
                     flags[0] = (flags[0] - 1).max(0);

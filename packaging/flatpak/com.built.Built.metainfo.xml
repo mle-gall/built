@@ -70,9 +70,9 @@
       <caption xml:lang="es">Etiquetas BIM sobre lo trazado, exportadas a IFC4 para el metrado</caption>
     </screenshot>
   </screenshots>
-  <url type="homepage">https://github.com/mle-gall/ingetrazo</url>
-  <url type="bugtracker">https://github.com/mle-gall/ingetrazo/issues</url>
-  <url type="vcs-browser">https://github.com/mle-gall/ingetrazo</url>
+  <url type="homepage">https://github.com/mle-gall/built</url>
+  <url type="bugtracker">https://github.com/mle-gall/built/issues</url>
+  <url type="vcs-browser">https://github.com/mle-gall/built</url>
   <content_rating type="oars-1.1"/>
   <releases>
     <release version="0.6.2" date="2026-11-14">

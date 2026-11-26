@@ -56,12 +56,12 @@ def test_native_chrome_selects_the_available_lao_face(tmp_path):
     assert chrome_font("lo", "linux", [tmp_path]) == default
 
 
-def test_startup_uses_the_selected_catalogue(native_host):
+def test_incomplete_lao_catalogue_resolves_to_english(native_host):
     from built_core import i18n
     from plugins._widget_language import apply_widget_language
     previous = i18n.current_language()
     try:
         apply_widget_language(native_host, "lo")
-        assert i18n.current_language() == "lo"
+        assert i18n.current_language() == "en"
     finally:
         i18n.set_language(previous)

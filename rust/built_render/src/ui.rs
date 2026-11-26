@@ -184,6 +184,8 @@ pub struct Ui {
     jobs: Vec<Job>,
     history: Vec<ActivityRow>,
     activity_open: bool,
+    activity_secondary: std::collections::HashMap<String, String>,
+    hovered_toast: Option<String>,
     link_banner: String,
     /// The dock's width (points): dragged on its left edge, kept by Python.
     dock_w: f32,
@@ -252,6 +254,8 @@ pub struct Node {
 }
 
 pub struct Column {
+    tag_index: Option<std::collections::HashMap<String, usize>>,
+    marked_rows: Vec<usize>,
     nodes: Vec<Node>,
     path: Vec<(String, String)>,
     host: (String, Vec<crate::host_context::Tag>),
@@ -273,6 +277,7 @@ pub struct Column {
     group_rows: Vec<(String, String, String)>,
     /// The row menu: row key, row type, where.
     row_menu: Option<(String, u8, Pos2)>,
+    choosing_folder: bool,
     /// Inline rename: row key and the text being typed.
     renaming: Option<(String, String)>,
     focus_rename: bool,
@@ -367,6 +372,8 @@ impl Ui {
             jobs: Vec::new(),
             history: Vec::new(),
             activity_open: false,
+            activity_secondary: Default::default(),
+            hovered_toast: None,
             link_banner: String::new(),
             dock_w: DOCK_W,
             plugins: Default::default(),
@@ -452,14 +459,23 @@ impl Ui {
     /// row, eye, lock, expandable, expanded, selected]).
     pub fn set_tree(&mut self, rows: Vec<(Vec<String>, Vec<i64>)>, unfiled: u32) {
         let col = self.column.get_or_insert_with(|| Column {
-            nodes: Vec::new(), path: Vec::new(), host: Default::default(), overview: Default::default(), styles: Default::default(), reveal: None, proposal_available: false, proposal_dismissed: false, sort: Default::default(), ordered: Vec::new(), unfiled: 0, browser_picks: 0, issue_at: None, export_focus: Default::default(), filter: String::new(),
-            filing: None, focus_filter: false, group_rows: Vec::new(), row_menu: None, renaming: None, focus_rename: false, head_menu: None,
+            tag_index: None, marked_rows: Vec::new(), nodes: Vec::new(), path: Vec::new(), host: Default::default(), overview: Default::default(), styles: Default::default(), reveal: None, proposal_available: false, proposal_dismissed: false, sort: Default::default(), ordered: Vec::new(), unfiled: 0, browser_picks: 0, issue_at: None, export_focus: Default::default(), filter: String::new(),
+            filing: None, focus_filter: false, group_rows: Vec::new(), row_menu: None, choosing_folder: false, renaming: None, focus_rename: false, head_menu: None,
             kind_menu: None, kinds: Vec::new(), prompt: None, lens: Lens::Filing, edits: Default::default(), mode: String::new(), issues: false,
             identity: Vec::new(),
             inspector_title: String::new(),
             inspector: Vec::new(), highlighted: None, focused_row: None,
         });
         col.nodes = tree_rows::reconcile(std::mem::take(&mut col.nodes), rows);
+        // Folded, tags-only documents need only a few row mutations on a viewport pick.
+        col.tag_index = col.nodes.iter().all(|n| matches!(n.key.split_once(':').map(|(kind, _)| kind),
+            Some("preview-tag" | "preview-folder" | "geometry" | "sections" | "section" |
+                 "sheet-page" | "sheet-pages" | "sheet-frame" | "saved-scene" | "saved-scenes")))
+            .then(|| col.nodes.iter().enumerate().filter(|(_, n)| n.row == 6)
+                .map(|(i, n)| (n.key.clone(), i)).collect());
+        col.marked_rows = if col.tag_index.is_some() {
+            col.nodes.iter().enumerate().filter(|(_, n)| n.mark != 0 || n.selected != 0).map(|(i, _)| i).collect()
+        } else { Vec::new() };
         if col.highlighted.as_ref().is_some_and(|k| !k.starts_with("n:") && !k.starts_with("preview-tag:") &&
             !col.nodes.iter().any(|n| &n.key == k && n.selected > 0)) {
             col.highlighted = None;
@@ -467,6 +483,28 @@ impl Ui {
         if col.lens == Lens::Drawing { col.styles.refresh(&col.nodes); }
         col.ordered = col.sort.order(&col.nodes);
         col.unfiled = unfiled;
+    }
+    pub fn mark_tag_paths(&mut self, paths: Vec<Vec<String>>, picked: usize) -> bool {
+        let Some(col) = self.column.as_mut() else { return false };
+        let Some(index) = &col.tag_index else { return false };
+        for i in col.marked_rows.drain(..) {
+            col.nodes[i].selected = 0;
+            col.nodes[i].mark = 0;
+        }
+        for path in paths {
+            let mut mark = 1;
+            for key in path {
+                if let Some(&i) = index.get(&key) {
+                    let row = &mut col.nodes[i];
+                    if row.mark == 0 { col.marked_rows.push(i); }
+                    row.mark = if row.mark == 1 { 1 } else { mark };
+                    row.selected += 1;
+                    mark = 2;
+                }
+            }
+        }
+        col.browser_picks = picked;
+        true
     }
     pub fn set_mode(&mut self, mode: String) {
         if let Some(col) = self.column.as_mut() {
@@ -506,7 +544,7 @@ impl Ui {
     }
     pub fn style_catalog(&mut self, owner: usize, lines: Vec<String>, patterns: String, scene: Option<&pyo3::Bound<'_,pyo3::PyAny>>) -> pyo3::PyResult<()> {
         if let Some(col)=self.column.as_mut() {
-            if col.styles.owner != owner { col.styles = Default::default(); col.styles.owner=owner; col.renaming=None; col.proposal_dismissed=false; col.highlighted=None; col.focused_row=None; col.issue_at=None; }
+            if col.styles.owner != owner { col.styles = Default::default(); col.styles.owner=owner; col.row_menu=None; col.renaming=None; col.proposal_dismissed=false; col.highlighted=None; col.focused_row=None; col.issue_at=None; }
             col.styles.lines=lines;
             col.styles.set_patterns(patterns);
             if let Some(scene)=scene { col.styles.sync_catalog(scene)?; col.styles.hatches.sync(scene)?; }
@@ -650,6 +688,12 @@ impl Ui {
         self.ctx.memory_mut(|m| m.stop_text_input());
         self.sheet = Some(Sheet { title, body, tone, buttons });
     }
+    pub fn organise_scenes(&mut self) {
+        let anchor = self.ctx.pointer_latest_pos().unwrap_or(self.ctx.screen_rect().center());
+        self.menu = Some(("scenes".into(), Rect::from_center_size(anchor, Vec2::ZERO)));
+        self.scene_browser.open_management = true;
+    }
+
     pub fn extension_menu(&mut self, rows: Vec<crate::extension_menu::Row>) { self.plugins.commands = rows; }
     pub fn plugin_panel(&mut self, raw: &str) -> Result<(), String> { self.plugins.set(raw) }
     pub fn plugin_open(&mut self, id: &str) { self.plugins.open(id); }
@@ -786,7 +830,7 @@ impl Ui {
     /// fields has focus, or Escape while one of its popups is open.
     pub fn claims_key(&self, name: &str, mods: u8) -> bool {
         if self.gallery.is_some() || self.font_picker.is_some() { return true; }
-        if name == "Escape" && (self.menu_hits.len() > 1 || self.ctx_menu.is_some() || self.strip.menus_open() || self.egui_popup_open() || self.panels.data["terrain"].is_object()) { return true; }
+        if name == "Escape" && (self.activity_open || self.menu_hits.len() > 1 || self.ctx_menu.is_some() || self.strip.menus_open() || self.egui_popup_open() || self.panels.data["terrain"].is_object()) { return true; }
         // The large sheet owns every key while it is up (Python keeps the
         // window's ⌘ shortcuts, sheet_runtime.rs).
         if self.lsheet.open { return true; }
@@ -808,6 +852,10 @@ impl Ui {
         // The sheet's keys are answered in Python (Enter, Esc, ⌘D); none
         // reaches what is under it.
         if self.sheet.is_some() { return true; }
+        if name == "Escape" && self.activity_open && !self.cmd_open && self.dialog.is_none() {
+            if pressed { self.activity_open = false; }
+            return true;
+        }
         if name == "Escape" && self.menu_hits.len() > 1 {
             self.events.push(egui::Event::Key { key: egui::Key::Escape, physical_key: None, pressed, repeat: false, modifiers: mods_from(mods) });
             return true;
@@ -1287,12 +1335,11 @@ impl Ui {
     pub fn top_empty(&self, x: f32, y: f32) -> bool {
         let p = pos2(x, y);
         !self.menu_hits.iter().any(|r| r.contains(p)) && !self.dismissible_menu_open() && self.gallery.is_none() && y <= TOP_H && !self.top_groups.iter().any(|r| r.contains(p))
-            && !((!self.lsheet.open || !self.jobs.is_empty()) && self.ctx.memory(|m| m.area_rect(egui::Id::new("jobs"))).is_some_and(|r| (!self.jobs.is_empty() || !self.history.is_empty()) && r.contains(p)))
+            && !(self.ctx.memory(|m| m.area_rect(egui::Id::new("jobs"))).is_some_and(|r| (!self.jobs.is_empty() || self.activity_open) && r.contains(p)))
             && !(self.projects.is_none() && x < 86.0)
     }
 
-    /// The bottom bar: units | tool, its options, hint or message | where
-    /// new geometry goes.
+    /// The active tool, its options and its gesture hint.
     fn bottom_bar(&mut self, ctx: &egui::Context, screen: Rect, retract: f32) {
         let mut clicked: Option<String> = None;
         egui::Area::new(egui::Id::new("bottom"))
@@ -1307,10 +1354,6 @@ impl Ui {
                     ui.spacing_mut().interact_size.y = 28.0;
                     ui.horizontal(|ui| {
                         ui.spacing_mut().item_spacing = vec2(SPACE_XS, 0.0);
-                        let (r, _) = ui.allocate_exact_size(vec2(56.0, 28.0), Sense::hover());
-                        ui.painter().text(r.center(), egui::Align2::CENTER_CENTER, &self.units, meta(), FAINT);
-                        bar_divider(ui);
-                        ui.add_space(SPACE_S);
                         let icon = self.groups.iter().flatten().find(|t| t.id == self.active).and_then(|t| t.icon.clone())
                             .or_else(|| self.icons.get(&self.active).cloned());
                         if let Some(tex) = icon {
@@ -1340,9 +1383,6 @@ impl Ui {
                         ui.add_space(SPACE_S);
                         let dock_w = if self.review { 0.0 } else { self.dock_w };
                         let room = (ui.available_width() - dock_w - 8.0).max(40.0);
-                        let coordinate = ui.painter().layout_no_wrap(self.coordinate.clone(), meta(), DIM);
-                        let show_coordinate = !self.coordinate.is_empty() && room >= coordinate.size().x + SPACE_S;
-                        let room = if show_coordinate { room - coordinate.size().x - SPACE_S } else { room };
                         let mut job = egui::text::LayoutJob::single_section(self.hint.clone(), egui::TextFormat {
                             font_id: body(), color: DIM, ..Default::default() });
                         job.wrap.max_width = room;
@@ -1351,21 +1391,6 @@ impl Ui {
                         let g = ui.painter().layout_job(job);
                         let (r, _) = ui.allocate_exact_size(vec2(room, 28.0), Sense::hover());
                         ui.painter().galley(pos2(r.min.x, r.center().y - g.size().y / 2.0), g, DIM);
-                        if show_coordinate {
-                            let (rect, response) = ui.allocate_exact_size(vec2(coordinate.size().x, 28.0), Sense::hover());
-                            ui.painter().galley(pos2(rect.left(), rect.center().y - coordinate.size().y / 2.0), coordinate, DIM);
-                            response.on_hover_text(&self.coordinate_tooltip);
-                        }
-                        if !self.review {
-                            if let Some((active, _, _)) = &self.delivery {
-                                if !active.is_empty() {
-                                    bar_divider(ui);
-                                    if text_button(ui, &format!("✎ {active}"), "New geometry goes here — click to see its items", true) {
-                                        clicked = Some("deliver:active".into());
-                                    }
-                                }
-                            }
-                        }
                     });
                 });
             });
@@ -1566,8 +1591,13 @@ impl Ui {
                                   if self.review { 1 } else { 0 }, true);
                     if menu_row(ui, &review) { toggle_review = true; }
                     ui.add_space(SPACE_XS);
-                    egui::ScrollArea::vertical().id_salt("view command groups")
-                        .max_height((self.screen.bottom() - a.bottom() - 90.).max(ROW_H * 3.))
+                    // Down to the bottom bar (M05). The area remembers last
+                    // frame's size, so give the scroll its room explicitly or
+                    // it stays at the first frame's default height.
+                    let room = view_menu_room(self.screen, ui.cursor().top());
+                    let at = Rect::from_min_size(ui.cursor().min, vec2(ui.available_width(), room));
+                    ui.scope_builder(egui::UiBuilder::new().max_rect(at), |ui| egui::ScrollArea::vertical().id_salt("view command groups")
+                        .max_height(room)
                         .show(ui, |ui| {
                             for (si, (title, items)) in self.view_menu.iter().enumerate() {
                                 if si > 0 { ui.add_space(SPACE_XS); }
@@ -1588,7 +1618,7 @@ impl Ui {
                                     }
                                 }
                             }
-                        });
+                        }));
                 });
             });
         if close { self.view_open = false; }
@@ -1635,8 +1665,9 @@ impl Ui {
                                 });
                             }
                             "check" => {
-                                let item = (id.clone(), label.clone(), text.clone(), "check".to_owned(), if f.4 > 0.5 { 1 } else { 0 }, true);
-                                if menu_row(ui, &item) {
+                                let r = switch_row(ui, &label, f.4 > 0.5, true);
+                                let r = if text.is_empty() { r } else { r.on_hover_text(&text) };
+                                if r.clicked() {
                                     f.4 = if f.4 > 0.5 { 0.0 } else { 1.0 };
                                     out.push(format!("form:{id}:{}", f.4 as i32));
                                 }
@@ -1720,6 +1751,15 @@ impl Ui {
             ctx.memory(|m| m.area_rect(egui::Id::new("bottom"))).map_or(screen.max.y - BOT_H, |r| r.min.y)
         };
         (top + GUT, bottom - GUT)
+    }
+
+    /// Where a plugin's utility pane may sit: right of the rail and left of
+    /// the dock, each with a gutter, from the band's top to its bottom.
+    fn utility_bay(&self, ctx: &egui::Context, screen: Rect) -> Rect {
+        let (top, bottom) = self.band(ctx, screen);
+        let left = if self.groups.is_empty() { GUT } else { GUT + self.rail_w + GUT };
+        let right = self.free_right(ctx, screen) - GUT;
+        Rect::from_min_max(pos2(left, top), pos2(right.max(left + 120.), bottom))
     }
 
     /// The right edge of the free viewport (left of the column).
@@ -2056,7 +2096,8 @@ impl Ui {
                                 let ink = if n.dim && !lit { OFF } else { ink };
                                 // The selection is marked once (tree A): lit where it
                                 // is held, a quiet dot on the rows above (after the name).
-                                let marks_w = if file_state.is_some() { 10.0 } else { 0.0 } + if n.mark == 2 { 10.0 } else { 0.0 };
+                                let reveal_dot = n.mark == 2 || (n.mark == 1 && (n.row == 6 || n.expandable && !n.local_placement));
+                                let marks_w = if file_state.is_some() { 10.0 } else { 0.0 } + if reveal_dot { 10.0 } else { 0.0 };
                                 let right = right - marks_w;
                                 if n.active && n.row != 5 {
                                     let icon = Rect::from_center_size(pos2(tx + 6., cy), vec2(12., 12.));
@@ -2098,8 +2139,12 @@ impl Ui {
                                     }
                                     kx += text_width + SPACE_XS;
                                 }
-                                if n.mark == 2 {
-                                    lens::paint_partial(ui.painter(), pos2(kx + 2.0, cy));
+                                let dot = Rect::from_center_size(pos2(kx + 2.0, cy), vec2(14.0, ROW_H));
+                                if reveal_dot {
+                                    lens::paint_partial(ui.painter(), dot.center());
+                                    if ui.rect_contains_pointer(dot) {
+                                        resp.clone().on_hover_text("Reveal selection");
+                                    }
                                     kx += 10.0;
                                 }
                                 let right = right + marks_w;
@@ -2156,7 +2201,9 @@ impl Ui {
                                 if resp.clicked() {
                                     let p = resp.interact_pointer_pos().unwrap_or(rect.center());
                                     if col.lens==Lens::Drawing && n.cells.len()<7 && !n.key.starts_with("preview-folder:") {col.styles.clear_focus();}
-                                    if n.expandable && tri.contains(p) {
+                                    if reveal_dot && dot.contains(p) {
+                                        actions.push("revealselection\u{1f}".into());
+                                    } else if n.expandable && tri.contains(p) {
                                         actions.push(format!("toggle\u{1f}{}", n.key));
                                     } else if drawing_row && on_control(p) {
                                         // Drawing controls own their gesture from the press onward.
@@ -2204,9 +2251,10 @@ impl Ui {
                                     let verb = if n.row == 0 { "isolate" } else { "open" };
                                     actions.push(format!("{verb}\u{1f}{}", n.key));
                                 }
-                                if resp.secondary_clicked() && (drawing_row || n.key.starts_with("section:") || n.row < 6 && n.row != 4 && (n.row != 5 || n.key.starts_with("cm:"))) {
+                                if resp.secondary_clicked() && (col.mode.is_empty() || n.row != 5 || n.key.starts_with("cm:")) {
+                                    col.choosing_folder = false;
                                     col.group_rows.clear();
-                                    if n.key.starts_with("g:") || n.key.starts_with("i:") || n.key.starts_with("c:") || n.key.starts_with("d:") {
+                                    if n.local_placement || n.key.starts_with("g:") || n.key.starts_with("d:") {
                                         actions.push(format!("grouprows\u{1f}{}", n.key));
                                     }
                                     col.row_menu = resp.interact_pointer_pos().map(|p| (n.key.clone(), n.row, p));
@@ -2227,10 +2275,48 @@ impl Ui {
                         return;
                     }
                     if col.mode.is_empty() && col.lens == Lens::Drawing && (col.styles.active() || (col.inspector_title.is_empty() && selection.is_none())) && col.styles.draw(ui, &mut actions) { return; }
+                    let inspected_tag = (col.lens == Lens::Filing && col.proposal_available && selection.is_none())
+                        .then(|| col.highlighted.as_deref()).flatten()
+                        .filter(|key| key.starts_with("preview-tag:"))
+                        .and_then(|key| col.nodes.iter().find(|n| n.key == key));
+                    if !col.inspector_title.is_empty() && inspected_tag.is_none() {
+                        // Title and selection count on one line, painted (a
+                        // Label would widen the panel to fit a long name).
+                        let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 22.0), Sense::hover());
+                        let mut right = r.max.x - 8.0;
+                        if let Some((summary, _)) = &selection {
+                            let measure = match col.inspector_title.as_str() {
+                                "Edge" => Some("Length"),
+                                "Face" => Some("Area"),
+                                _ => None,
+                            };
+                            let subtitle = col.inspector.iter()
+                                .filter(|(section, _)| section == "Geometry")
+                                .flat_map(|(_, rows)| rows)
+                                .find(|(label, _)| Some(label.as_str()) == measure)
+                                .map_or(summary, |(_, value)| value);
+                            let g = ui.painter().layout_no_wrap(subtitle.clone(), meta(), FAINT);
+                            right -= g.size().x;
+                            ui.painter().galley(pos2(right, r.center().y - g.size().y / 2.0), g, FAINT);
+                            right -= 10.0;
+                        }
+                        let mut job = egui::text::LayoutJob::single_section(col.inspector_title.clone(), egui::TextFormat {
+                            font_id: title(), color: INK, ..Default::default() });
+                        job.wrap.max_width = (right - r.min.x - 8.0).max(40.0);
+                        job.wrap.max_rows = 1;
+                        job.wrap.break_anywhere = true;
+                        let g = ui.painter().layout_job(job);
+                        ui.painter().galley(pos2(r.min.x + 8.0, r.center().y - g.size().y / 2.0), g, INK);
+                        ui.add_space(SPACE_XS);
+                    }
+                    ui.spacing_mut().scroll = egui::style::ScrollStyle {
+                        foreground_color: true,
+                        floating_width: SPACE_XS,
+                        ..egui::style::ScrollStyle::thin()
+                    };
                     egui::ScrollArea::vertical().id_salt("inspector").auto_shrink([false, false]).show(ui, |ui| {
                         ui.spacing_mut().item_spacing = vec2(0.0, SPACE_XS);
                         if col.lens == Lens::Export {
-                            if !col.inspector_title.is_empty() { ui.strong(&col.inspector_title); }
                             kit::identity_card(ui, &col.identity, &mut actions);
                             export::checklist(ui,&self.panels.data["readiness"],col.export_focus.0.as_deref(),&col.export_focus.1,&mut actions);
                             self.panels.assembly_problems(ui, &mut cmds);
@@ -2247,11 +2333,11 @@ impl Ui {
                             }
                             return;
                         }
-                        if col.lens==Lens::Filing && col.proposal_available && selection.is_none() {
-                            if let Some(tag)=col.nodes.iter().find(|n|n.key.starts_with("preview-tag:") && col.highlighted.as_ref()==Some(&n.key)) {
-                                if let Some(at)=kit::tag_inspector(ui,&tag.key,&tag.name,tag.count,&tag.cells,&mut actions){col.kind_menu=Some((tag.key.clone(),at));}
-                                return;
+                        if let Some(tag) = inspected_tag {
+                            if let Some(at) = kit::tag_inspector(ui, &tag.key, &tag.name, tag.count, &tag.cells, &mut actions) {
+                                col.kind_menu = Some((tag.key.clone(), at));
                             }
+                            return;
                         }
                         if col.inspector_title.is_empty() {
                             if col.lens==Lens::Drawing { empty_state(ui,"Select tags to edit their drawing style"); return; }
@@ -2264,25 +2350,6 @@ impl Ui {
                             }
                             if col.overview.links>0 {kit::prop_row(ui,"Linked files",&col.overview.links.to_string());}
                             return;
-                        }
-                        {
-                            // Title and selection count on one line, painted (a
-                            // Label would widen the panel to fit a long name).
-                            let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 22.0), Sense::hover());
-                            let mut right = r.max.x - 8.0;
-                            if let Some((summary, _)) = &selection {
-                                let g = ui.painter().layout_no_wrap(summary.clone(), meta(), FAINT);
-                                right -= g.size().x;
-                                ui.painter().galley(pos2(right, r.center().y - g.size().y / 2.0), g, FAINT);
-                                right -= 10.0;
-                            }
-                            let mut job = egui::text::LayoutJob::single_section(col.inspector_title.clone(), egui::TextFormat {
-                                font_id: title(), color: INK, ..Default::default() });
-                            job.wrap.max_width = (right - r.min.x - 8.0).max(40.0);
-                            job.wrap.max_rows = 1;
-                            job.wrap.break_anywhere = true;
-                            let g = ui.painter().layout_job(job);
-                            ui.painter().galley(pos2(r.min.x + 8.0, r.center().y - g.size().y / 2.0), g, INK);
                         }
                         kit::identity_card(ui, &col.identity, &mut actions);
                         if col.mode.is_empty() {
@@ -2322,7 +2389,7 @@ impl Ui {
                         for (title, rows) in &sections {
                             if title == "Actions" { continue; }
                             if title == "Export details" && native_export { continue; }
-                            if title.starts_with("Export") {
+                            if title.starts_with("Export") || matches!(title.as_str(), "What it needs" | "Solid") {
                                 ui.add_space(SPACE_XS);
                                 kit::disclosure(ui, title, title, false,
                                     |ui| inspector_rows(ui, rows, &mut col.edits, &mut actions));
@@ -2335,87 +2402,7 @@ impl Ui {
                     });
                 });
             });
-        // The row menu, near the pointer: node verbs or item verbs.
-        if let Some((key, row, at)) = col.row_menu.clone() {
-            let mut close = false;
-            let node_menu: &[(&str, &str)] = &[("active", "Draw into this node"), ("filehere", "File selection here"),
-                ("node", "Select its items"), ("isolate", "Isolate"), ("hidemembers", "Hide its items"),
-                ("-", ""), ("rename", "Rename"), ("newchild", "New child node"), ("kind", "Kind  ›"),
-                ("-", ""), ("delete", "Delete node")];
-            let item_menu: &[(&str, &str)] = &[("item", "Select"), ("open", "Open for editing"), ("rename", "Rename"),
-                ("-", ""), ("hideitem", "Hide"), ("lockitem", "Lock / unlock"), ("zoom", "Zoom to"), ("groupplan", "Plan of this group…"), ("-", ""), ("fileto", "File to…")];
-            let comp_menu: &[(&str, &str)] = &[("cplace", "Place a copy"), ("cselect", "Select instances"),
-                ("creplace", "Replace selection with this"), ("-", ""), ("ckeep", "Keep in file"), ("crename", "Rename…")];
-            // A linked file's rows are read-only here: no filing, kind or rename.
-            let link_menu: &[(&str, &str)] = &[("node", "Select"), ("contents", "Select contents"),
-                ("isolate", "Isolate"), ("zoom", "Zoom to"), ("-", ""), ("eye", "Show / hide"), ("lock", "Lock / unlock"),
-                ("-", ""), ("linkopen", "Edit source"), ("linkfinder", "Show in Finder"),
-                ("linkreload", "Reload"), ("linkrelink", "Locate…"), ("linkunlink", "Unlink")];
-            let section_menu: &[(&str, &str)] = &[("cutview", "View of the cut…"), ("sectioncut", "Toggle cut"), ("eye", "Show / hide"), ("deleterows", "Delete")];
-            let tag_menu: &[(&str, &str)] = &[("newtag", "New tag"), ("rename", "Rename"), ("tagactive", "Make active"), ("tagassign", "Move selection here"), ("tagselect", "Select items"), ("tagisolate", "Toggle tag isolation"), ("mergetag", "Merge into…"), ("scenetaghide", "Hide in all saved scenes"), ("scenetagshow", "Show in all saved scenes"), ("deletetag", "Delete"), ("purgetags", "Purge unused tags…")];
-            let menu = if key.starts_with("preview-tag:") { tag_menu } else if key.starts_with("preview-folder:") { &[("newtag", "New tag in folder"), ("tagisolate", "Toggle tag isolation")] } else if key.starts_with("section:") { section_menu } else if row == 0 && key.starts_with("n:link") { link_menu } else if row == 0 { node_menu }
-                else if row == 5 { comp_menu } else { item_menu };
-            let resp = egui::Area::new(egui::Id::new("row_menu"))
-                .fixed_pos(at + vec2(4.0, 4.0))
-                .order(egui::Order::Tooltip)
-                .show(ctx, |ui| {
-                    glass(Surface::Raised).inner_margin(Margin::same(6)).show(ui, |ui| {
-                        ui.set_width(200.0);
-                        ui.spacing_mut().item_spacing = vec2(0.0, 1.0);
-                        let row = col.nodes.iter().find(|n| n.key == key);
-                        let editable_file = row.is_some_and(|n| n.icon.starts_with("file:") && !n.badge.starts_with("via "));
-                        for (id, label) in menu {
-                            if matches!(*id, "rename" | "deletetag" | "mergetag" | "tagisolate") && key == "preview-tag:Layer 0" { continue; }
-                            if row.is_some_and(|n| n.icon == "file:missing") &&
-                                matches!(*id, "contents" | "isolate" | "zoom" | "linkopen" | "linkfinder" | "linkreload") { continue; }
-                            if matches!(*id, "linkreload" | "linkrelink" | "linkunlink") &&
-                                !editable_file { continue; }
-                            if *id == "groupplan" && !row.is_some_and(|r| r.local_placement) { continue; }
-                            if *id == "hideitem" {
-                                for (verb, label, why) in &col.group_rows {
-                                    let item = (verb.clone(), label.clone(), String::new(), String::new(), -1, why.is_empty());
-                                    let response = menu_row_resp(ui, &item).0;
-                                    if why.is_empty() {
-                                        if response.clicked() {
-                                            actions.push(format!("{verb}\u{1f}{key}"));
-                                            close = true;
-                                        }
-                                    } else {
-                                        response.on_hover_text(why);
-                                    }
-                                }
-                            }
-                            if *id == "-" {
-                                let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 7.0), Sense::hover());
-                                ui.painter().hline(r.x_range().shrink(6.0), r.center().y, Stroke::new(1.0_f32, EDGE));
-                                continue;
-                            }
-                            let multi_rename = *id == "rename" && row.is_some_and(|n| n.local_placement && n.selected > 0)
-                                && col.browser_picks > 1;
-                            let label = if multi_rename { "Rename selected…" } else { *label };
-                            let item = (id.to_string(), label.to_string(), String::new(), String::new(), -1i8, true);
-                            let (r, rect) = menu_row_resp(ui, &item);
-                            if r.clicked() {
-                                match *id {
-                                    "rename" if multi_rename => actions.push(col.rename_request(true)),
-                                    "rename" => {
-                                        let name = col.nodes.iter().find(|n| n.key == key).map(|n| n.name.clone()).unwrap_or_default();
-                                        col.renaming = Some((key.clone(), name));
-                                        col.focus_rename = true;
-                                    }
-                                    "tagisolate" if row.is_some() => actions.push(col.styles.isolate_action(row.unwrap())),
-                                    "lockitem" if row.is_some_and(|n| n.local_placement) => actions.push(format!("rowlock\u{1f}{key}")),
-                                    "kind" => { col.kind_menu = Some((key.clone(), pos2(rect.max.x + 4.0, rect.min.y))); }
-                                    _ => actions.push(format!("{id}\u{1f}{key}")),
-                                }
-                                close = true;
-                            }
-                        }
-                    });
-                });
-            let _ = resp;
-            if close { col.row_menu = None; }
-        }
+        tree_rows::show_menu(col, ctx, height, &mut actions);
         if let Some((key, at)) = col.kind_menu.clone() {
             let mut close = false;
             egui::Area::new(egui::Id::new("kind_menu"))
@@ -2646,9 +2633,7 @@ impl Ui {
                         ui.horizontal(|ui| {
                             ui.spacing_mut().item_spacing = vec2(SPACE_S, 0.0);
                             let (glyph, ink) = match sheet.tone.as_str() {
-                                "error" => ("!", ERROR),
-                                "warning" => ("!", WARN),
-                                "info" => ("i", ACCENT),
+                                "error" | "warning" | "info" | "success" => notice_mark(&sheet.tone),
                                 _ => ("?", ACCENT),
                             };
                             let (r, _) = ui.allocate_exact_size(vec2(20.0, 20.0), Sense::hover());
@@ -2776,7 +2761,8 @@ impl Ui {
                     self.bottom_bar(ctx, screen, retract);
                 }
                 if !self.review && !sheet_up {
-                    self.plugins.utility(ctx, screen, self.dock_w, &mut self.actions);
+                    let bay = self.utility_bay(ctx, screen);
+                    self.plugins.utility(ctx, bay, &mut self.actions);
                     self.paint_strip(ctx, screen);
                     if self.panels.data["terrain"].is_object() {
                         let bounds = Rect::from_min_max(pos2(12.,0.),pos2(self.free_right(ctx,screen)-8.,screen.bottom()-BOT_H-4.));
@@ -2795,7 +2781,8 @@ impl Ui {
             self.large_sheet(ctx, screen);
             self.command_palette(ctx, screen);
             self.dialog_popup(ctx, screen);
-            if !sheet_up || !self.jobs.is_empty() { self.jobs_chip(ctx, screen); }
+            self.jobs_chip(ctx, screen);
+            self.notices(ctx, screen);
             self.sheet_popup(ctx, screen);
             if let Some(picker) = &mut self.font_picker {
                 if let Some(apply) = picker.popup(ctx) {
@@ -2820,7 +2807,8 @@ impl Ui {
                      ("head_menu", model && self.column.as_ref().is_some_and(|c| c.head_menu.is_some())),
                      ("prompt", model && self.column.as_ref().is_some_and(|c| c.prompt.is_some())),
                      ("terrain_profile", work && model && self.panels.data["terrain"].is_object()),
-                     ("jobs", !self.jobs.is_empty() || (!sheet_up && !self.history.is_empty())),
+                     ("jobs", !self.jobs.is_empty() || self.activity_open),
+                     ("notices", self.history.iter().any(|r| r.5 > 0.)),
                      ("dialog", self.dialog.is_some()),
                      ("tab_menu", self.strip.menu_open()),
                      ("tab_overflow", self.strip.overflow_open()),
@@ -2917,7 +2905,7 @@ fn item_response(ui: &mut egui::Ui, item: &Item, icon: Option<&egui::TextureHand
     let sense = if *enabled { Sense::click() } else { Sense::hover() };
     let (rect, resp) = ui.allocate_exact_size(vec2(width, 28.0), sense);
     let st = state_of(&resp, *checked == 1, *enabled);
-    paint_state(ui, rect, st, R_CONTROL);
+    if st == State::On { paint_lit(ui, rect, R_CONTROL) } else { paint_state(ui, rect, st, R_CONTROL) }
     let ink = ink_of(st);
     match icon {
         Some(tex) => { egui::Image::new(tex).tint(ink).paint_at(ui, rect.shrink(4.0)); }
@@ -3080,6 +3068,12 @@ fn inspector_rows(ui: &mut egui::Ui, rows: &[(String, String)], edits: &mut std:
     }
 }
 
+/// The View menu's scrolling height from `top` (its groups' first row)
+/// down to the bottom bar, less a gutter and the menu's own margin.
+fn view_menu_room(screen: Rect, top: f32) -> f32 {
+    (screen.bottom() - BOT_H - GUT - 6.0 - top).max(ROW_H * 3.)
+}
+
 /// A bar button that opens a menu: label and ▾; returns its rect when clicked.
 fn menu_button(ui: &mut egui::Ui, label: &str, open: bool) -> Option<Rect> {
     let g = ui.painter().layout_no_wrap(label.to_owned(), body(), INK);
@@ -3115,18 +3109,18 @@ fn text_button_response(ui: &mut egui::Ui, label: &str, key: &str, enabled: bool
 
 /// A palette tool: 30 × 30 cell, glyph about 18 pt (the icon art carries
 /// its own margin), idle INK_2, hover INK, current white on accent.
-fn tool_button(ui: &mut egui::Ui, tool: &Tool, active: bool) -> bool {
+fn tool_button(ui: &mut egui::Ui, tool: &Tool, active: bool, mark: &str) -> bool {
     let (rect, resp) = ui.allocate_exact_size(vec2(30.0, 30.0), if tool.enabled { Sense::click() } else { Sense::hover() });
     let st = state_of(&resp, active, tool.enabled);
-    paint_state(ui, rect, st, R_CONTROL);
+    if st == State::On { paint_lit(ui, rect, R_CONTROL) } else { paint_state(ui, rect, st, R_CONTROL) }
     let tint = ink_of(st);
     match &tool.icon {
         Some(tex) => {
             egui::Image::new(tex).tint(tint).paint_at(ui, rect.shrink(3.0));
         }
         None => {
-            let letter: String = tool.label.chars().take(2).collect();
-            ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, letter, meta(), tint);
+            // No art: the rail's unique, language-stable mark (rail::fallback_mark).
+            ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, mark, meta(), tint);
         }
     }
     let tip = if !tool.enabled { format!("{} — Open in classic app", tool.label) } else if tool.key.is_empty() { tool.label.clone() } else { format!("{}    {}", tool.label, tool.key) };
@@ -3163,6 +3157,29 @@ fn scene_chooser_owns_modified_arrows_and_moves_within_one_folder() {
     assert!(ui.take_actions().is_empty());
     assert!(ui.key("ArrowUp", true, 1));
     assert_eq!(ui.take_actions(), ["tab:scene:up"]);
+}
+
+#[test]
+fn the_view_menu_reaches_down_to_the_bottom_bar() {
+    let Some(mut ui) = test_chrome() else { return };
+    ui.ctx = test_context();
+    let (cluster, menu) = crate::commands::command_chrome(Default::default(), Default::default(), Default::default());
+    ui.set_cluster(cluster, menu);
+    for (w, h) in [(1600., 1000.), (1280., 800.)] {
+        let screen = Rect::from_min_size(Pos2::ZERO, vec2(w, h));
+        ui.screen = screen;
+        ui.view_open = true;
+        ui.view_anchor = Rect::from_min_size(pos2(w - 80., 6.), vec2(70., 28.));
+        let ctx = ui.ctx.clone();
+        for _ in 0..3 {
+            let raw = egui::RawInput { screen_rect: Some(screen), ..Default::default() };
+            let _ = ctx.run(raw, |c| ui.view_popup(c));
+        }
+        let r = ctx.memory(|m| m.area_rect(egui::Id::new("view_menu"))).unwrap();
+        // Every row fits at 1000 high; either way the menu stops at the bottom bar.
+        assert!(r.max.y <= h - BOT_H - GUT + 0.5, "{h}: ends at {}", r.max.y);
+        assert!(r.height() > 450., "{h}: only {} high", r.height());
+    }
 }
 
 #[test]
@@ -3326,7 +3343,7 @@ fn occurrence_menu_runs_the_document_action_and_closes() {
     for _ in 0..3 {
         tree_frame(&mut ui, vec![]);
     }
-    let at = tree_frame(&mut ui, vec![])["Explode Group"];
+    let at = tree_frame(&mut ui, vec![])["Explode"];
     tree_click(&mut ui, at, egui::PointerButton::Primary);
     assert!(ui
         .take_actions()
@@ -3697,5 +3714,68 @@ fn browser_rename_uses_focused_row_selection_and_header_scope() {
         tree_click(&mut ui, p, egui::PointerButton::Primary);
         if empty { assert!(ui.take_actions().is_empty()); }
         else { assert_eq!(ui.take_actions(), [action]); }
+    }
+}
+
+#[test]
+fn tag_proxy_reveals_selection_and_its_filing_menu_targets_the_tag() {
+    let Some(mut ui) = test_chrome() else { return };
+    ui.ctx = test_context();
+    ui.set_tree(vec![(vec!["preview-tag:oak".into(), "Oak".into()], vec![0, 1, 0, 0, 6, 1, 0])], 1);
+    assert!(ui.mark_tag_paths(vec![vec!["preview-tag:oak".into()]], 1));
+    for _ in 0..3 { tree_frame(&mut ui, vec![]); }
+    let name = tree_frame(&mut ui, vec![])["Oak"];
+    let half_width = ui.ctx.fonts(|fonts| fonts.layout_no_wrap("Oak".into(), body(), INK).size().x / 2.);
+    tree_click(&mut ui, name + vec2(half_width + 10., 0.), egui::PointerButton::Primary);
+    assert_eq!(ui.take_actions(), ["tree:revealselection\x1f"]);
+    tree_click(&mut ui, name, egui::PointerButton::Secondary);
+    for _ in 0..3 { tree_frame(&mut ui, vec![]); }
+    let menu = tree_frame(&mut ui, vec![]);
+    for label in ["New tag", "Rename…", "Hide", "Move to folder…", "Merge into…", "Delete"] {
+        assert!(menu.contains_key(label), "{label}");
+    }
+    tree_click(&mut ui, menu["Select items"], egui::PointerButton::Primary);
+    assert_eq!(ui.take_actions(), ["tree:tagselect\x1fpreview-tag:oak"]);
+    assert!(ui.mark_tag_paths(vec![], 0));
+    assert_eq!(ui.column.unwrap().nodes[0].mark, 0);
+}
+
+#[test]
+fn scrolling_inspector_details_keeps_the_title_visible() {
+    let Some(mut ui) = test_chrome() else { return };
+    ui.ctx = test_context();
+    ui.set_tree(Vec::new(), 0);
+    ui.set_inspector("Selected group".into(), vec![("Item".into(),
+        (0..70).map(|i| (format!("Field {i}"), format!("Value {i}"))).collect())]);
+    for _ in 0..3 { tree_frame(&mut ui, vec![]); }
+    let before = tree_frame(&mut ui, vec![]);
+    let at = before["Value 0"];
+    tree_frame(&mut ui, vec![egui::Event::PointerMoved(at), egui::Event::MouseWheel {
+        unit: egui::MouseWheelUnit::Point, delta: vec2(0., -450.), modifiers: Default::default()
+    }]);
+    for _ in 0..6 { tree_frame(&mut ui, vec![]); }
+    let after = tree_frame(&mut ui, vec![]);
+    assert_eq!(before["Selected group"], after["Selected group"]);
+    assert!(!after.contains_key("Value 0"));
+}
+
+#[test]
+fn each_project_row_menu_offers_actions_for_its_target() {
+    let Some(mut ui) = test_chrome() else { return };
+    ui.ctx = test_context();
+    for (key, kind, verb) in [
+        ("preview-folder:wood", 6, "New tag in folder"),
+        ("section:cut", 7, "Name and symbol…"),
+        ("saved-scene:view", 8, "Show scene"),
+        ("sheet-page:sheet", 8, "Open sheet"),
+        ("geometry:loose", 7, "Select items"),
+    ] {
+        ui.set_tree(vec![(vec![key.into(), "Target".into()], vec![0, 0, 0, 0, kind, 1, 0])], 0);
+        for _ in 0..3 { tree_frame(&mut ui, vec![]); }
+        let at = tree_frame(&mut ui, vec![])["Target"];
+        tree_click(&mut ui, at, egui::PointerButton::Secondary);
+        for _ in 0..3 { tree_frame(&mut ui, vec![]); }
+        assert!(tree_frame(&mut ui, vec![]).contains_key(verb), "{key}");
+        ui.column.as_mut().unwrap().row_menu = None;
     }
 }

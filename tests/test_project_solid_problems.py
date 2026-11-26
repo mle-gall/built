@@ -47,7 +47,8 @@ def test_dialog_repairs_a_group_without_entering_it(project):
     scene.groups.append(g)
     title, sections = inspect(project, "i:" + g.uid)
     repair, = dict(sections)["Actions"]
-    assert title == g.name and "hole" in repair[1]
+    assert title == "Group" and "hole" in repair[1]
+    assert any(label == "Name" and value.endswith(g.name) for _, rows in sections for label, value in rows)
     wgpu_ui._tree_action(win, view, "insp:" + repair[0])
     assert not scene.edit_group and scene.selection == {g}
     assert ("Watertight", "8.000 m³") in dict(solid_inspector_sections(scene, g))["Solid"]

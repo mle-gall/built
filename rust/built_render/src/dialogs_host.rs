@@ -283,6 +283,10 @@ pub struct Activity {
     action_label: Py<PyAny>,
     action: Py<PyAny>,
     toast: bool,
+    second_label: String,
+    second_action: Option<Py<PyAny>>,
+    paused_at: Option<f64>,
+    paused_seconds: f64,
 }
 
 #[pymethods]
@@ -290,7 +294,25 @@ impl Activity {
     #[new]
     #[allow(clippy::too_many_arguments)]
     fn new(id: String, title: Py<PyAny>, detail: Py<PyAny>, tone: Py<PyAny>, created: f64, action_label: Py<PyAny>, action: Py<PyAny>, toast: bool) -> Self {
-        Activity { id, title, detail, tone, created, action_label, action, toast }
+        Activity { id, title, detail, tone, created, action_label, action, toast, second_label: String::new(), second_action: None, paused_at: None, paused_seconds: 0. }
+    }
+
+    fn opacity(&self, py: Python<'_>, now: f64) -> PyResult<f64> {
+        if !self.toast { return Ok(0.); }
+        if self.paused_at.is_some() { return Ok(1.); }
+        let seconds = match self.tone.bind(py).extract::<String>()?.as_str() {
+            "error" => return Ok(1.),
+            "warning" => 6.,
+            _ => 4.,
+        };
+        Ok((seconds - (now - self.created - self.paused_seconds)).clamp(0., 1.))
+    }
+
+    fn hover(&mut self, py: Python<'_>, on: bool) -> PyResult<()> {
+        let now = monotonic(py)?;
+        if on { self.paused_at.get_or_insert(now); }
+        else if let Some(start) = self.paused_at.take() { self.paused_seconds += now - start; }
+        Ok(())
     }
 
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
@@ -306,11 +328,13 @@ fn monotonic(py: Python<'_>) -> PyResult<f64> {
 #[pyfunction]
 fn history<'py>(py: Python<'py>, win: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let rows = win.getattr("__dict__")?.call_method1("setdefault", ("_chrome_history", PyList::empty(py)))?;
-    let cutoff = monotonic(py)? - 45.0;
+    let now = monotonic(py)?;
+    let cutoff = now - 45.;
     let mut kept = Vec::new();
     for r in rows.try_iter()? {
         let r = r?;
-        if r.getattr("created")?.extract::<f64>()? > cutoff && kept.len() < 30 {
+        let live = r.call_method1("opacity", (now,))?.extract::<f64>()? > 0.;
+        if live || (r.getattr("created")?.extract::<f64>()? > cutoff && kept.len() < 30) {
             kept.push(r);
         }
     }
@@ -319,11 +343,15 @@ fn history<'py>(py: Python<'py>, win: &Bound<'py, PyAny>) -> PyResult<Bound<'py,
 }
 
 #[pyfunction]
-#[pyo3(name = "_record", signature = (win, title, detail, tone, action_label=None, action=None, toast=true))]
+#[pyo3(name = "_record", signature = (win, title, detail, tone, action_label=None, action=None, toast=true, secondary=None))]
 #[allow(clippy::too_many_arguments)]
-fn record(py: Python<'_>, win: &Bound<'_, PyAny>, title: Py<PyAny>, detail: Py<PyAny>, tone: Py<PyAny>, action_label: Option<Py<PyAny>>, action: Option<Py<PyAny>>, toast: bool) -> PyResult<()> {
+fn record(py: Python<'_>, win: &Bound<'_, PyAny>, title: Py<PyAny>, detail: Py<PyAny>, tone: Py<PyAny>, action_label: Option<Py<PyAny>>, action: Option<Py<PyAny>>, toast: bool, secondary: Option<(String, Py<PyAny>)>) -> PyResult<()> {
     let m = cd(py)?;
-    let row = Activity::new(next_id(), title, detail, tone, monotonic(py)?, action_label.unwrap_or_else(|| s(py, "").unbind()), action.unwrap_or_else(|| py.None()), toast);
+    let mut row = Activity::new(next_id(), title, detail, tone, monotonic(py)?, action_label.unwrap_or_else(|| s(py, "").unbind()), action.unwrap_or_else(|| py.None()), toast);
+    if let Some((label, callback)) = secondary {
+        row.second_label = label;
+        row.second_action = Some(callback);
+    }
     m.call_method1("history", (win,))?.call_method1("insert", (0, Bound::new(py, row)?))?;
     m.call_method1("_repaint", (win,))?;
     Ok(())
@@ -336,7 +364,19 @@ fn record_with(py: Python<'_>, win: &Bound<'_, PyAny>, title: Bound<'_, PyAny>, 
     Ok(())
 }
 
-/// A notice under the top bar; kept even if the first frame has yet to draw.
+pub(crate) fn post_notice(win: &Bound<'_, PyAny>, tone: &str, text: &str, actions: Vec<(String, Py<PyAny>)>) -> PyResult<()> {
+    let py = win.py();
+    if !matches!(tone, "info" | "success" | "warning" | "error") || actions.len() > 2
+        || actions.iter().any(|(label, cb)| label.is_empty() || !cb.bind(py).is_callable()) {
+        return Err(pyo3::exceptions::PyValueError::new_err("Expected a notification tone and up to two labelled callbacks"));
+    }
+    let mut actions = actions.into_iter();
+    let (label, cb) = actions.next().unwrap_or_else(|| (String::new(), py.None()));
+    record(py, win, s(py, text).unbind(), s(py, "").unbind(), s(py, tone).unbind(),
+        Some(s(py, &label).unbind()), Some(cb), true, actions.next())
+}
+
+/// A notice above the bottom bar; kept even if the first frame has yet to draw.
 #[pyfunction]
 #[pyo3(signature = (parent, title, text, *, tone="info", button="OK", action_label=None, action=None))]
 #[allow(clippy::too_many_arguments)]
@@ -979,7 +1019,7 @@ impl Job {
         }
         let result = if cancelled { "Cancelled" } else if failed { "Failed" } else { "Done" };
         let title = format!("{result} · {}", label.trim_end_matches('…'));
-        record_with(py, &win, s(py, &title), detail.unwrap_or_else(|| s(py, "")), if failed { "error" } else { "info" }, action_label.unwrap_or_else(|| s(py, "")), action.unwrap_or_else(|| py.None().into_bound(py)), false)
+        record_with(py, &win, s(py, &title), detail.unwrap_or_else(|| s(py, "")), if failed { "error" } else if cancelled { "info" } else { "success" }, action_label.unwrap_or_else(|| s(py, "")), action.unwrap_or_else(|| py.None().into_bound(py)), true)
     }
 }
 

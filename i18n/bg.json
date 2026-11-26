@@ -1,4 +1,9 @@
 {
+ "Click the first corner. Arrows pick the plane.": "Щракнете върху първия ъгъл. Стрелките избират равнината.",
+ "Click the start of the angle.": "Щракнете в началото на ъгъла.",
+ "Click the end, or type degrees and Enter.": "Щракнете в края или въведете градуси и натиснете Enter.",
+ "Press Enter to apply.": "Натиснете Enter за прилагане.",
+ "Type 3x or /3, then Enter.": "Въведете 3x или /3 и натиснете Enter.",
  "Import .rfa family": "Импортиране на семейство .rfa",
  "Import .dxf": "Импортиране на .dxf",
  "Import .dwg": "Импортиране на .dwg",
@@ -3482,7 +3487,7 @@
  "Arabic translation of the interface: the first right-to-left one.": "Арабски превод на интерфейса: първият отдясно наляво.",
  "The OpenCode Go provider and a readable chat for the AI Assistant.": "Доставчикът OpenCode Go и четим чат за ИИ асистента.",
  ".skp components scaled by −1 that keep their front, and nested groups that wear their nearest painted container.": "Компоненти от .skp, мащабирани с −1, които запазват лицевата си страна, и вложени групи, които приемат материала на най-близкия боядисан контейнер.",
- "The Built Tutorials channel on YouTube, and nine extensions: MultiView, Phasing Animator, Kitchen Maker, Taper and more.": "Каналът Built Tutorials в YouTube и девет разширения: MultiView, Phasing Animator, Kitchen Maker, Taper и други.",
+ "The IngeTrazo Tutorials channel on YouTube, and nine extensions: MultiView, Phasing Animator, Kitchen Maker, Taper and more.": "Каналът IngeTrazo Tutorials в YouTube и девет разширения: MultiView, Phasing Animator, Kitchen Maker, Taper и други.",
  "Twenty-three extensions in the catalogue: period doors and windows, roof tiles, brick and block, gutters, fences, Loft, Wrap and more.": "Двадесет и три разширения в каталога: стилни врати и прозорци, керемиди, тухли и блокчета, улуци, огради, Loft, Wrap и други.",
  "Levels: heights in the document's units.": "Нива: височини в мерните единици на документа.",
  "The Bulgarian translation.": "Българският превод.",

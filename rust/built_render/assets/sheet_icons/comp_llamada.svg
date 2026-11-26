@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+  <!-- Detail callout: a circle round the detail, a leader to its tag -->
+  <circle cx="18" cy="18" r="11" stroke-dasharray="3.5 3.5" stroke-width="2.4"/>
+  <path d="M26 26 L32 32"/>
+  <circle cx="36" cy="36" r="7" fill="#fff" fill-opacity="0.45"/>
+  <path d="M29 36 H43" stroke-width="2.2"/>
+</svg>

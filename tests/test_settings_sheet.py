@@ -8,6 +8,7 @@ A stand-in renderer records the sheet sent by the offscreen host."""
 from __future__ import annotations
 
 import json
+import sys
 
 import pytest
 from built_render.shell_files import do_save
@@ -100,7 +101,7 @@ def test_sections_in_two_groups(win):
     assert labels == [("caption", "Built · this Mac"), ("", "General"), ("", "Navigation"),
                       ("", "Display"), ("", "3D mouse"), ("", "Import"), ("", "Keyboard"), ("", "AI assistant"),
                       ("caption", "This model"), ("", "Units"),
-                      ("", "Appearance"), ("", "Dimension style"), ("", "Location & north")]
+                      ("", "Project registry"), ("", "Appearance"), ("", "Dimension style"), ("", "Location & north")]
     assert [r["id"] for r in side if r.get("on")] == ["general"]
     assert "theme" not in fields(sheet) and "autosave" in fields(sheet)
     # No OK/Cancel anywhere: the footer restores defaults, that is all.
@@ -116,7 +117,7 @@ def test_side_picks_a_section(win):
     assert captions(sheet) == ["Mouse", "Trackpad", "Tools"]
     got = fields(sheet)
     assert {"invert_wheel", "invert_orbit", "look_sens", "trackpad_slide",
-            "cursor_style", "ask_section"} <= set(got)
+            "cursor_style"} <= set(got)
     assert {"touch_slide", "trackpad_inertia", "pinch_sensitivity"} <= set(got)
     # Field ids are unique in the whole sheet.
     ids = [r[0] for b in sheet["content"]["blocks"] if b["kind"] == "fields" for r in b["fields"]]
@@ -131,7 +132,7 @@ def test_every_section_builds_with_unique_field_ids(win):
         assert sheet["content"]["title"], sid
         ids = [r[0] for b in sheet["content"]["blocks"] if b["kind"] == "fields" for r in b["fields"]]
         assert len(ids) == len(set(ids)), sid
-        if sid != "keyboard":
+        if sid != "keyboard" and (sid != "ndof" or sys.platform in {"linux", "win32"}):
             assert ids, sid
 
 
@@ -143,13 +144,14 @@ def test_search_lists_hits_from_every_section_with_their_names(win):
     caps = captions(sheet)
     sections = {c.split(" · ")[0] for c in caps}
     assert "Navigation" in sections          # «Invert wheel zoom», «Zooms the view»
-    assert "3D mouse" in sections            # «Pan and zoom only», the axes' Zoom
-    assert len(sections) >= 2
+    supported = sys.platform in {"linux", "win32"}
+    assert ("3D mouse" in sections) == supported
     got = fields(sheet)
-    assert "invert_wheel" in got and "pinch_sensitivity" in got and "ndof_lock" in got
+    assert {"invert_wheel", "pinch_sensitivity"} <= set(got)
+    assert ("ndof_lock" in got) == supported
     # The side says how many rows each section holds, none of them picked.
     counts = {r["id"]: r.get("right", "") for r in sheet["side"] if r.get("kind") != "caption"}
-    assert counts["navigation"] and counts["ndof"]
+    assert counts["navigation"] and bool(counts["ndof"]) == supported
     assert not any(r.get("on") for r in sheet["side"])
     # A hit applies at once, like in its section.
     act(win, "v", "invert_wheel", "1")
@@ -158,6 +160,16 @@ def test_search_lists_hits_from_every_section_with_their_names(win):
     sheet = act(win, "side", "display")
     assert sheet["content"]["title"] == "Display"
     assert sheet["search"]["text"] == "" and sheet["search"]["force"]
+
+
+def test_search_finds_english_shadow_label_with_incomplete_saved_language(win):
+    from built_core import i18n
+    preferences().setValue("language", "fr")
+    i18n.set_language(i18n.resolve_language("fr"))
+    win.open_preferences()
+    frame(win)
+    sheet = act(win, "search", "shadow")
+    assert fields(sheet)["soft_shadows"][2] == "Soft sun shadows"
 
 
 def test_search_finds_this_model_rows_and_commands(win):
@@ -193,23 +205,23 @@ def test_a_built_setting_applies_at_once(win):
     assert int(gs.value("undo_steps")) == 37
 
 
-def test_a_change_for_the_next_start_says_so(win):
-    from built_core.i18n import available_languages, current_language, set_language
-    running = current_language()
-    others = [c for c in available_languages() if c != running]
-    if not others:
-        pytest.skip("one language only")
+def test_a_change_for_the_next_start_says_so(win, monkeypatch):
+    from built_core import i18n
+    running = i18n.current_language()
+    # Exercise a future qualifying catalogue through the real form and applier.
+    monkeypatch.setattr(i18n, "language_coverage", lambda: {"en": (100, 100), "de": (100, 100)})
+    monkeypatch.setattr(i18n, "resolve_language", lambda code: running if code == "system" else code)
     win.open_preferences()
     sheet = frame(win)
     row = fields(sheet)["language"]
     from built_core.i18n import LANGUAGE_NAMES
-    sheet = act(win, "v", "language", row[7].index(LANGUAGE_NAMES.get(others[0], others[0])))
-    assert preferences().value("language") == others[0]
+    sheet = act(win, "v", "language", row[7].index(LANGUAGE_NAMES["de"]))
+    assert preferences().value("language") == "de"
     notes = [b["text"] for b in sheet["content"]["blocks"] if b["kind"] == "text" and b.get("tone") == "warn"]
     assert notes and "Restart Built" in notes[0] and "Language" in notes[0]
     # Back to the running language: nothing waits for a restart any more.
     sheet = act(win, "v", "language", 0)            # «Same as the system»
-    set_language(running)
+    i18n.set_language(running)
 
 
 def test_restore_defaults_asks_then_restores(win, monkeypatch):
@@ -283,6 +295,10 @@ def test_the_3d_mouse_section_holds_the_axis_table(win):
     win.open_preferences(page="ndof")
     sheet = frame(win)
     got = fields(sheet)
+    if sys.platform not in {"linux", "win32"}:
+        assert not got and not sheet["content"]["blocks"]
+        assert "unavailable" in str(sheet["content"])
+        return
     assert {"ndof_on", "ndof_speed", "ndof_lock", "ndof_preset"} <= set(got)
     for axis in AXES:
         assert {f"ndof_map_{axis}", f"ndof_inv_{axis}", f"ndof_speed_{axis}"} <= set(got)

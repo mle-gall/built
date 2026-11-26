@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+  <!-- Baseline dimension: stacked measures from one origin -->
+  <path d="M8 8 V36"/>
+  <path d="M8 15 H25 M8 27 H40" stroke-width="2.6"/>
+  <path d="M25 10 V20 M40 22 V32" stroke-width="2.4"/>
+  <circle cx="8" cy="40" r="3" fill="#fff" stroke="none"/>
+  <circle cx="25" cy="40" r="3" fill="#fff" stroke="none"/>
+  <circle cx="40" cy="40" r="3" fill="#fff" stroke="none"/>
+</svg>

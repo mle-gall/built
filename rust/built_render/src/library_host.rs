@@ -1310,7 +1310,7 @@ fn _state<'py>(view: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     }
     st.set_item("facet", g("facet", s(py, "all"))?)?;
     let ty = st.get_item("type")?.expect("set");
-    let mut known = ty.eq("registry")?;
+    let mut known = false;
     for p in lib(py)?.getattr("PROVIDERS")?.try_iter()? {
         let p = p?;
         known |= p.getattr("ready")?.is_truthy()? && p.getattr("id")?.eq(&ty)?;
@@ -1430,7 +1430,6 @@ pub struct LibrarySheet {
     view: Py<PyAny>,
     paint_target: Py<PyAny>,
     catalogue: Py<PyAny>,
-    registry: Py<PyAny>,
 }
 
 fn cs(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
@@ -1454,7 +1453,6 @@ impl LibrarySheet {
             view,
             paint_target: paint_target.unwrap_or_else(|| py.None()),
             catalogue: py.None(),
-            registry: py.None(),
         })
     }
 
@@ -1554,20 +1552,13 @@ impl LibrarySheet {
             for p in lib(py)?.getattr("PROVIDERS")?.try_iter()? {
                 let p = p?;
                 let ready = p.getattr("ready")?.is_truthy()?;
-                let count = if ready { counts.call_method1("get", (p.getattr("id")?, ""))? } else { s(py, "soon") };
+                if !ready { continue; }
+                let count = counts.call_method1("get", (p.getattr("id")?, ""))?;
                 let kw = PyDict::new(py);
                 kw.set_item("on", p.getattr("id")?.eq(&ty)?)?;
                 kw.set_item("enabled", ready)?;
                 sheet.call_method("tab", (p.getattr("id")?, p.getattr("label")?, count), Some(&kw))?;
             }
-            sheet.call_method("tab", ("registry", "Project registry"), Some(&[("on", ty.eq("registry")?)].into_py_dict(py)?))?;
-        }
-        if ty.eq("registry")? {
-            if slf.getattr("registry")?.is_none() {
-                slf.setattr("registry", render(py)?.getattr("RegistryEditor")?.call1((ctx.getattr("win")?.getattr("viewport")?.getattr("scene")?,))?)?;
-            }
-            slf.getattr("registry")?.call_method1("build", (&sheet,))?;
-            return Ok(sheet);
         }
         let scene = ctx.getattr("win")?.getattr("viewport")?.getattr("scene")?;
         let browse_d = json(py)?.call_method1("loads", (browse(&st)?,))?;
@@ -1780,21 +1771,10 @@ impl LibrarySheet {
                 return Ok(());
             }
         }
-        let registry = slf.getattr("registry")?;
-        if verb == "verb" && !registry.is_none() && st.get_item("type")?.eq("registry")? {
-            let mut path = s(py, "");
-            if arg == "registry_csv" {
-                path = py.import("built_render.shell_files")?.getattr("ShellFileDialog")?.call_method1("getOpenFileName", (&win, "Codes CSV", "", "CSV (*.csv)"))?.get_item(0)?;
-            }
-            if registry.call_method1("act", (&win, &arg, path))?.is_truthy()? && arg == "registry_apply" {
-                cs(py)?.call_method1("close", (&win,))?;
-            }
-            return Ok(());
-        }
         match verb {
             "search" => st.set_item("filter", &arg)?,
             "tab" => {
-                let mut ok = arg == "registry";
+                let mut ok = false;
                 for p in lib(py)?.getattr("PROVIDERS")?.try_iter()? {
                     let p = p?;
                     ok |= p.getattr("id")?.eq(&arg)? && p.getattr("ready")?.is_truthy()?;
@@ -1904,7 +1884,6 @@ impl LibrarySheet {
     }
 
     fn closed(slf: &Bound<'_, Self>, _ctx: &Bound<'_, PyAny>) -> PyResult<()> {
-        slf.setattr("registry", slf.py().None())?;
         slf.call_method0("close_catalogue")?;
         Ok(())
     }

@@ -2700,6 +2700,34 @@ impl Renderer {
     fn ui_show_inspector(&mut self) {
         if let Some(ui) = self.ui.as_mut() { ui.show_inspector(); }
     }
+    fn ui_mark_tag_selection(&mut self, scene: &Bound<'_, PyAny>) -> PyResult<bool> {
+        let Some(ui) = &mut self.ui else { return Ok(false) };
+        let selection = scene.getattr("selection")?;
+        let parents = scene.getattr("folder_parents")?;
+        let mut tags = std::collections::HashSet::new();
+        for item in selection.try_iter()? {
+            let item = item?;
+            if !item.hasattr("mesh")? { return Ok(false); }
+            let tag: Option<String> = item.getattr("layer")?.extract()?;
+            tags.insert(tag.unwrap_or_else(|| "Layer 0".into()));
+        }
+        let mut paths = Vec::new();
+        for tag in tags {
+            let layer = scene.call_method1("layer_by_key", (&tag,))?;
+            let mut path = vec![format!("preview-tag:{tag}")];
+            if !layer.is_none() {
+                let mut next: Option<String> = layer.getattr("folder")?.extract()?;
+                let mut seen = std::collections::HashSet::new();
+                while let Some(folder) = next {
+                    if !seen.insert(folder.clone()) { break; }
+                    path.push(format!("preview-folder:{folder}"));
+                    next = parents.call_method1("get", (&folder,))?.extract()?;
+                }
+            }
+            paths.push(path);
+        }
+        Ok(ui.mark_tag_paths(paths, selection.len()?))
+    }
     #[pyo3(signature=(filename, tree, counts, picked=0))]
     fn ui_set_catalog_info(&mut self, filename: String, tree: &Bound<'_,PyAny>, counts: &Bound<'_,PyAny>, picked: usize) -> PyResult<()> {
         if let Some(ui)=self.ui.as_mut() { ui.set_catalog_info(filename,tree,counts)?; ui.set_browser_picks(picked); }
@@ -2843,8 +2871,12 @@ impl Renderer {
     fn ui_set_jobs(&mut self, jobs: Vec<ui::Job>) {
         if let Some(ui) = self.ui.as_mut() { ui.set_jobs(jobs); }
     }
-    fn ui_set_activity(&mut self, history: Vec<ui::ActivityRow>, banner: String) {
-        if let Some(ui) = self.ui.as_mut() { ui.set_activity(history, banner); }
+    fn ui_open_activity(&mut self) {
+        if let Some(ui) = self.ui.as_mut() { ui.open_activity(); }
+    }
+    #[pyo3(signature=(history, banner, secondary=None))]
+    fn ui_set_activity(&mut self, history: Vec<ui::ActivityRow>, banner: String, secondary: Option<std::collections::HashMap<String,String>>) {
+        if let Some(ui) = self.ui.as_mut() { ui.set_activity(history, banner, secondary.unwrap_or_default()); }
     }
     fn ui_rename_browser_row(&mut self, id: &str) -> bool {
         self.ui.as_mut().is_some_and(|ui| ui.rename_browser_row(id))
@@ -2920,6 +2952,9 @@ impl Renderer {
     #[pyo3(signature = (text=String::new(), scope=String::new()))]
     fn ui_open_commands(&mut self, text: String, scope: String) {
         if let Some(ui) = self.ui.as_mut() { ui.start_commands(text, scope); }
+    }
+    fn ui_organise_scenes(&mut self) {
+        if let Some(ui) = self.ui.as_mut() { ui.organise_scenes(); }
     }
     fn ui_set_command_details(&mut self, details: Vec<(String, bool, bool)>) {
         if let Some(ui) = self.ui.as_mut() { ui.command_details(details); }

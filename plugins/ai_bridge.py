@@ -59,6 +59,8 @@ class _Bridge(InspectionTools, RecordTools, FacetTools, StructureTools,
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
         self._scope: dict = {"__name__": "__ai__"}
+        if notify := getattr(viewport.window(), "notify", None):
+            self._scope["notify"] = notify
         self.port: int | None = None
         self._busy = False
         from core.agent_tools import BUILTIN_TOOLS, extension_registry, register

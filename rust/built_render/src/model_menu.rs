@@ -163,7 +163,7 @@ fn build_entries() -> Vec<MenuEntry> {
     }
     add("plugins_folder", "Plugins", "Open extensions folder", "", Handler::PluginsFolder);
     add("develop_plugin", "Plugins", "Develop an extension…", "",
-        Handler::Web("https://github.com/ingelibre/ingetrazo/blob/main/docs/plugins.md"));
+        Handler::Web("https://github.com/mle-gall/built/blob/main/docs/plugins.md"));
     for (group, id, label, _, _) in crate::commands::view_commands() {
         let path = match group {
             "Style" => "Camera ▸ Style",
@@ -171,7 +171,7 @@ fn build_entries() -> Vec<MenuEntry> {
             "Views" if id.starts_with("view_") => "Camera ▸ Standard Views",
             "walkthrough" => "Camera ▸ Walkthrough",
             "Sections" => "Camera ▸ Sections",
-            "Settings" => continue,
+            "Settings" | "Scenes" => continue,
             _ => "Camera",
         };
         if !matches!(id, "zoom_extents" | "view_top" | "view_front" | "view_right" | "view_iso") {
@@ -250,10 +250,10 @@ pub fn run_model_menu(win: &Bound<'_, PyAny>, id: &str) -> PyResult<bool> {
                     "duplicate" => scenes.call_method1("duplicate_view", (marked,))?,
                     _ => { scenes.call_method1("show_view", (&marked,))?; marked }
                 };
-                if !view.is_none() {
+                if action == "show" && !view.is_none() {
                     let values = pyo3::types::PyDict::new(win.py());
                     values.set_item("name", view.getattr("name")?)?;
-                    let caption = if action == "show" { "Scene '{name}'" } else { "Scene '{name}' added" };
+                    let caption = "Scene '{name}'";
                     let text = crate::model_edit::translated(win.py(), caption, Some(&values))?;
                     win.call_method0("statusBar")?.call_method1("showMessage", (text, 2000))?;
                 }

@@ -41,7 +41,7 @@ impl DrawingDrag {
         })
     }
 
-    fn action(&self, parent: &str) -> String {
+    pub(super) fn action(&self, parent: &str) -> String {
         let data = serde_json::json!({"owner":self.owner,"parent":parent,"folders":self.folders,"tags":self.tags});
         format!("tagfolder\u{1f}batch\u{1f}{data}")
     }

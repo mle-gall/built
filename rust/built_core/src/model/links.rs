@@ -322,11 +322,21 @@ fn doc_link(group: &Obj<'_>) -> Option<Option<Option<String>>> {
     }
 }
 
+/// The suspect containers of `group`'s own attributes written back before
+/// its node is read (`doc::py::fresh_node`): once per placement, so never
+/// the whole document's. A viewport proxy has no node to read.
+fn fresh_for(group: &Obj<'_>) -> PyResult<()> {
+    match crate::doc::py::handle_key(group) {
+        Ok(k) => crate::doc::py::fresh_node(group.py(), k),
+        Err(_) => Ok(()),
+    }
+}
+
 /// `link_of(group)`: the link record (the tracked dict, editable in place)
 /// of a placed linked file, or None.
 pub fn link_of<'py>(group: &Obj<'py>) -> PyResult<Option<Obj<'py>>> {
     let py = group.py();
-    crate::doc::py::fresh(py)?;
+    fresh_for(group)?;
     if let Some(None) = doc_link(group) {
         return Ok(None);
     }
@@ -343,7 +353,7 @@ pub fn link_of<'py>(group: &Obj<'py>) -> PyResult<Option<Obj<'py>>> {
 }
 
 pub fn is_linked(group: &Obj<'_>) -> PyResult<bool> {
-    crate::doc::py::fresh(group.py())?;
+    fresh_for(group)?;
     match doc_link(group) {
         Some(found) => Ok(found.is_some()),
         None => Ok(link_of(group)?.is_some()),

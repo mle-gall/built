@@ -117,3 +117,21 @@ def test_contributor_lines_have_translations():
     assert not missing, (
         f"{len(missing)} contributor lines have no translation entry: "
         f"{missing[:3]}")
+
+
+def test_inventory_tracks_new_ui_strings_and_drops_retired_catalogue_keys(tmp_path, monkeypatch):
+    from scripts import translation_coverage as audit
+
+    monkeypatch.setattr(audit, "ROOT", tmp_path)
+    catalogues = tmp_path / "i18n"
+    catalogues.mkdir()
+    (catalogues / "fr.json").write_text('{"Old": "Ancien", "Menu": "Menu"}')
+    plugins = tmp_path / "plugins"
+    plugins.mkdir()
+    (plugins / "demo.py").write_text('tr("New " "plugin label")\nmenu = "Menu"\n')
+    src = tmp_path / "rust/built_render/src"
+    src.mkdir(parents=True)
+    (src / "example.rs").write_text(
+        'tr(py, "New Rust label"); tr.call1(("Hint",)); ui.label("New control");')
+    (src / "preference_rows.json").write_text('{}')
+    assert audit.inventory() == ["Hint", "Menu", "New Rust label", "New control", "New plugin label"]

@@ -206,7 +206,16 @@ pub(crate) fn selection_identity(
                 .and_then(|v| v.extract().ok())
                 .unwrap_or_else(|| c.trim_start_matches("Ifc").into()),
             None if obj.hasattr("is_component")? && obj.call_method0("is_component")?.is_truthy()? => "Component".into(),
-            None => obj.get_type().name()?.to_string(),
+            None => match obj.get_type().name()?.to_str()? {
+                "EdgeView" => "Edge",
+                "FaceView" => "Face",
+                "VertexView" => "Vertex",
+                "SectionPlane" => "Section plane",
+                "ConstructionLine" | "GuideLine" | "GuidePoint" => "Guide",
+                "TextLabel" => "Text label",
+                "ImagePlane" => "Image",
+                name => name,
+            }.to_owned(),
         };
         let mut parent = obj
             .getattr("_parent")

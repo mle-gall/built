@@ -1,4 +1,9 @@
 {
+ "Click the first corner. Arrows pick the plane.": "最初の角をクリック。矢印キーで平面を選択。",
+ "Click the start of the angle.": "角度の始点をクリック。",
+ "Click the end, or type degrees and Enter.": "終点をクリックするか、角度を入力して Enter。",
+ "Press Enter to apply.": "Enter で適用。",
+ "Type 3x or /3, then Enter.": "3x または /3 を入力して Enter。",
  "Import .rfa family": ".rfa ファミリを読み込む",
  "Import .dxf": ".dxf を読み込む",
  "Import .dwg": ".dwg を読み込む",
@@ -3683,7 +3688,7 @@
  "Arabic translation of the interface: the first right-to-left one.": "インターフェースのアラビア語翻訳：初の右から左への言語。",
  "The OpenCode Go provider and a readable chat for the AI Assistant.": "OpenCode Go プロバイダーと、AI アシスタントの読みやすいチャット。",
  ".skp components scaled by −1 that keep their front, and nested groups that wear their nearest painted container.": "−1 でスケールされても表面を保つ .skp コンポーネントと、最も近い塗装済みコンテナのマテリアルをまとう入れ子のグループ。",
- "The Built Tutorials channel on YouTube, and nine extensions: MultiView, Phasing Animator, Kitchen Maker, Taper and more.": "YouTube の Built Tutorials チャンネルと、9 つの拡張機能：MultiView、Phasing Animator、Kitchen Maker、Taper など。",
+ "The IngeTrazo Tutorials channel on YouTube, and nine extensions: MultiView, Phasing Animator, Kitchen Maker, Taper and more.": "YouTube の IngeTrazo Tutorials チャンネルと、9 つの拡張機能：MultiView、Phasing Animator、Kitchen Maker、Taper など。",
  "Twenty-three extensions in the catalogue: period doors and windows, roof tiles, brick and block, gutters, fences, Loft, Wrap and more.": "カタログに 23 の拡張機能：時代様式のドアと窓、屋根瓦、レンガとブロック、雨樋、フェンス、Loft、Wrap など。",
  "Levels: heights in the document's units.": "レベル：ドキュメントの単位による高さ。",
  "The Bulgarian translation.": "ブルガリア語翻訳。",

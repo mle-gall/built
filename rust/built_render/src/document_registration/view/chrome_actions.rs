@@ -19,7 +19,7 @@ fn stand_in<'py>(win: &Obj<'py>) -> Reply<'py> {
 fn flash(viewport: &Obj<'_>, message: &Obj<'_>) -> PyResult<()> {
     viewport.call_method1("flash_status", (message.str()?,)).map(drop)
 }
-fn prompt<'py>(view: &Obj<'py>, title: impl IntoPyObject<'py>, body: impl IntoPyObject<'py>, yes: impl IntoPyObject<'py>) -> PyResult<()> {
+pub(super) fn prompt<'py>(view: &Obj<'py>, title: impl IntoPyObject<'py>, body: impl IntoPyObject<'py>, yes: impl IntoPyObject<'py>) -> PyResult<()> {
     let py = view.py();
     let buttons = PyList::new(py, [("yes", yes.into_bound_py_any(py)?), ("no", "Cancel".into_bound_py_any(py)?)])?;
     view.getattr("renderer")?.call_method1("ui_set_prompt", (title, body, buttons)).map(drop)
@@ -126,12 +126,17 @@ fn run_one<'py>(win: &Obj<'py>, action: &Obj<'py>, source_view: &Obj<'py>) -> Py
     }
     match kind {
         "plugin" => return crate::plugin_panels::dispatch(win, pyo3::types::PyString::new(py, arg).as_any()),
-        "activity" => {
+        "activity" | "activity2" | "dismiss" | "pause-toast" | "resume-toast" => {
             for row in dialogs.call_method1("history", (win,))?.try_iter()? {
                 let row = row?;
                 if row.getattr("id")?.eq(arg)? {
-                    if row.is_truthy()? && row.getattr("action")?.is_truthy()? {
-                        row.call_method0("action")?;
+                    match kind {
+                        "pause-toast" | "resume-toast" => { row.call_method1("hover", (kind == "pause-toast",))?; }
+                        _ => {
+                            row.setattr("toast", false)?;
+                            let cb = row.getattr(if kind == "activity2" { "second_action" } else { "action" })?;
+                            if kind != "dismiss" && cb.is_callable() { cb.call0()?; }
+                        }
                     }
                     break;
                 }
@@ -238,6 +243,13 @@ fn run_one<'py>(win: &Obj<'py>, action: &Obj<'py>, source_view: &Obj<'py>) -> Py
             } else {
                 glue.call_method1("delivery_action", (win, &view, arg))?;
             }
+        }
+        "act" if arg == "organise-scenes" => {
+            view.getattr("renderer")?.call_method0("ui_organise_scenes")?;
+            view.call_method0("update")?;
+        }
+        "act" if matches!(arg, "form-style" | "form-shadows") => {
+            win.call_method("open_preferences", (), Some(&fields!(py; "page" => "appearance")))?;
         }
         "act" if arg.starts_with("form-") => {
             if !view.is_none() {
