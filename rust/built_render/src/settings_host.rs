@@ -240,8 +240,8 @@ impl SettingsSheet {
             let lang = py.import("built_core.i18n")?;
             let saved = envb.getattr("st")?.call_method1("value", ("language",))?;
             if saved.is_truthy()? && !saved.eq("system")? && !lang.call_method1("resolve_language", (&saved,))?.eq(&saved)? {
-                let name = lang.getattr("LANGUAGE_NAMES")?.call_method1("get", (&saved, &saved))?;
-                c.call_method1("text", (trf(py, "Using English because your saved language ({name}) is unavailable.", &[("name", name)])?,))?;
+                let name = crate::settings_rows::language_name(&lang.getattr("LANGUAGE_NAMES")?, &saved)?;
+                c.call_method1("text", (trf(py, "Using English because your saved language ({name}) is unavailable.", &[("name", s(py, &name))])?,))?;
             }
         }
         if sid == "registry" {

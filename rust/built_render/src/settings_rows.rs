@@ -513,6 +513,22 @@ fn autosave_put(py: Python<'_>, which: &'static str) -> Res {
     })
 }
 
+/// Inter has no Arabic, Lao, Thai, or CJK glyphs. Keep those entries readable
+/// in the source-language picker, including the note for a saved preference.
+pub fn language_name(names: &Bound<'_, PyAny>, code: &Bound<'_, PyAny>) -> PyResult<String> {
+    let id: String = code.extract()?;
+    Ok(match id.as_str() {
+        "ar" => "Arabic".into(),
+        "ja" => "Japanese".into(),
+        "ko" => "Korean".into(),
+        "lo" => "Lao".into(),
+        "th" => "Thai".into(),
+        "zh-CN" => "Chinese (Simplified)".into(),
+        "zh-TW" => "Chinese (Traditional)".into(),
+        _ => names.call_method1("get", (code, code))?.extract()?,
+    })
+}
+
 fn general<'py>(py: Python<'py>, env: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyList>> {
     let i18n = py.import("built_core.i18n")?;
     let system = i18n.getattr("SYSTEM")?;
@@ -522,13 +538,14 @@ fn general<'py>(py: Python<'py>, env: &Bound<'py, PyAny>) -> PyResult<Bound<'py,
     let mut incomplete = Vec::new();
     for code in coverage.try_iter()? {
         let code = code?;
-        let name = names.call_method1("get", (&code, &code))?.str()?.to_string();
+        let name = language_name(&names, &code)?;
         if i18n.call_method1("resolve_language", (&code,))?.eq(&code)? {
             options.append((&code, name))?;
         } else {
             let (count, total): (usize, usize) = coverage.get_item(&code)?.extract()?;
+            let percent = format!("{:.1}", 100.0 * count as f64 / total as f64);
             let label = trf(py, "{name} · {percent} % — incomplete", &[
-                ("name", s(py, &name)), ("percent", obj(py, count * 100 / total)?.into_bound(py))
+                ("name", s(py, &name)), ("percent", s(py, &percent))
             ])?;
             incomplete.push((code, label));
         }

@@ -117,7 +117,10 @@ def test_going_back_to_the_system_language_is_saved(prefs):
 
 def test_incomplete_choice_is_disabled(prefs):
     ui = Controls(_Win(), "general")
-    assert ui.options("language")["fr"].endswith(" % — incomplete")
+    labels = ui.options("language")
+    count, total = i18n.language_coverage()["fr"]
+    assert labels["fr"] == f"Français · {100 * count / total:.1f} % — incomplete"
+    assert labels["ja"].startswith("Japanese · ")
     ui.set("language", "fr")
     assert settings.settings().value("language") is None
     assert not _PENDING.labels()
