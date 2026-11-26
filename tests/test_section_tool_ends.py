@@ -54,7 +54,9 @@ def test_one_plane_then_back_to_select():
                               screen=QPointF(0, 0), modifiers=Qt.NoModifier,
                               snap=None))
     assert len(scene.section_planes) == 1
-    assert win.prompted and win.activated == ["select"]
+    plane, = scene.section_planes
+    assert plane.name and plane.symbol and plane in scene.selection
+    assert not win.prompted and win.activated == ["select"]
 
 
 from tests.shell_isolation import native_window, restore_shell_patches  # noqa: F401
