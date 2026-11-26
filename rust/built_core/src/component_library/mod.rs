@@ -14,7 +14,6 @@ use std::{
 };
 mod sizing;
 type Obj<'p> = Bound<'p, PyAny>;
-const BASE: &str = "https://ingetrazo.com/biblioteca";
 fn valid(id: &str) -> bool {
     !id.is_empty()
         && id.len() <= 128
@@ -34,8 +33,7 @@ fn cache(py: Python) -> PyResult<PathBuf> {
 fn base() -> String {
     std::env::var("BUILT_LIBRARY")
         .ok()
-        .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| BASE.into())
+        .unwrap_or_default()
         .trim_end_matches('/')
         .into()
 }
@@ -44,6 +42,10 @@ fn path<'p>(py: Python<'p>, p: &Path) -> PyResult<Obj<'p>> {
 }
 fn optional<'p>(py: Python<'p>, p: Option<PathBuf>) -> PyResult<Option<Obj<'p>>> {
     p.as_deref().map(|p| path(py, p)).transpose()
+}
+#[pyfunction]
+fn available(py: Python) -> PyResult<bool> {
+    Ok(!base().is_empty() || cache(py)?.join("index.json").is_file())
 }
 #[pyfunction]
 fn library_cache(py: Python) -> PyResult<Obj> {
@@ -92,6 +94,9 @@ fn publish(dst: &Path, bytes: &[u8]) -> io::Result<()> {
 }
 fn cached(py: Python, root: &Path, base: &str, rel: &str, refresh: bool) -> Option<PathBuf> {
     let dst = root.join(rel);
+    if base.is_empty() {
+        return dst.is_file().then_some(dst);
+    }
     if !refresh && dst.is_file() {
         return Some(dst);
     }
@@ -169,6 +174,7 @@ fn prefetch_thumbnails(idents: &Obj) -> PyResult<()> {
     let py = idents.py();
     let root = cache(py)?;
     let base = base();
+    if base.is_empty() { return Ok(()); }
     let worker = wrap_pyfunction!(fetch_thumbnail, py)?;
     for id in idents.try_iter()? {
         let Ok(id) = id?.extract::<String>() else {
@@ -301,6 +307,7 @@ fn model_file<'p>(entry: &Obj<'p>) -> PyResult<Option<Obj<'p>>> {
 pub(crate) fn register(m: &Bound<PyModule>) -> PyResult<()> {
     let sub = PyModule::new(m.py(), "component_library")?;
     for f in [
+        wrap_pyfunction!(available, &sub)?,
         wrap_pyfunction!(library_cache, &sub)?,
         wrap_pyfunction!(index, &sub)?,
         wrap_pyfunction!(thumbnail, &sub)?,

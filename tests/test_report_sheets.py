@@ -46,8 +46,10 @@ def test_about_and_clipboard(monkeypatch, native_host, pasteboard):
     copied = []
     import webbrowser
     monkeypatch.setattr(webbrowser, "open", copied.append)
-    sheet.act(ctx, "verb", ["upstream"])
-    assert copied[-1] == "https://github.com/ingelibre/ingetrazo"
+    sheet.act(ctx, "verb", ["repository"])
+    assert copied[-1] == "https://github.com/mle-gall/built"
+    sheet.act(ctx, "verb", ["authors"])
+    assert "https://github.com/mle-gall/built/commits/main/" in str(build(sheet, ctx)["content"])
 
 
 def test_extensions_install_toggle_safe_reset_remove(tmp_path, monkeypatch):

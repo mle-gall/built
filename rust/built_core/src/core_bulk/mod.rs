@@ -226,7 +226,7 @@ pub(crate) fn register(core: &Module<'_>) -> PyResult<()> {
                 m.add("__version__", v)?;
                 m.add(
                     "USER_AGENT",
-                    format!("Built/{v} (+https://ingetrazo.com)"),
+                    format!("Built/{v} (+https://github.com/mle-gall/built)"),
                 )?;
             }
             "triangulate" => {

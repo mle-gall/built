@@ -183,7 +183,7 @@ def test_a_download_says_who_it_is(monkeypatch, tmp_path):
         seen["ua"] = req.get_header("User-agent")
         return _Resp()
 
-    monkeypatch.setenv("BUILT_LIBRARY", "https://ingetrazo.com/biblioteca")
+    monkeypatch.setenv("BUILT_LIBRARY", "https://example.invalid/catalogue")
     monkeypatch.setenv("BUILT_TEXTURE_CACHE", str(tmp_path / "tex"))
     monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
     library.index(refresh=True)
@@ -286,3 +286,15 @@ def test_a_failed_unpack_can_be_retried(served):
     assert not (cache / "retry").exists()
     path.write_bytes(original)
     assert (library.model_dir("retry") / "texture.jpg").read_bytes() == b"unique-payload"
+
+
+def test_catalogue_without_a_mirror_only_uses_existing_cache(tmp_path, monkeypatch):
+    monkeypatch.delenv("BUILT_LIBRARY", raising=False)
+    monkeypatch.setenv("BUILT_TEXTURE_CACHE", str(tmp_path / "textures"))
+    assert not library.available()
+    assert library.index(refresh=True) == []
+    root = library.library_cache()
+    root.mkdir(exist_ok=True, parents=True)
+    (root / "index.json").write_text('{"modelos":[{"id":"chair"}]}')
+    assert library.available()
+    assert library.index(refresh=True) == [{"id": "chair"}]

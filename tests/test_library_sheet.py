@@ -353,6 +353,7 @@ def test_failed_or_abandoned_catalogue_download_never_places(win, monkeypatch):
     from built_core import component_library as library
     from threading import Event
 
+    monkeypatch.setenv("BUILT_LIBRARY", "https://example.invalid/catalogue")
     entries = [{"id":"chair", "nombre":"Silla", "nombre_en":"Chair"}]
     monkeypatch.setattr(library, "index", lambda refresh: entries)
     monkeypatch.setattr(library, "model_file", lambda row: None)

@@ -388,7 +388,7 @@ fn run<'py>(py: Python<'py>, name: &str, win: &Bound<'py, PyAny>, a: &Args<'_, '
         }
 
         // ---- help -----------------------------------------------------------------------
-        "_on_documentation" => done!(py.import("built_core.desktop_open")?.call_method1("open_url", ("https://ingetrazo-docs.pages.dev/",))),
+        "_on_documentation" => done!(py.import("built_core.desktop_open")?.call_method1("open_url", ("https://github.com/mle-gall/built/tree/main/docs",))),
         "_on_get_models" => {
             let text = format!(
                 "{}<br><br><b>Poly Haven</b> — <a href='https://polyhaven.com'>polyhaven.com</a> {}<br><b>ambientCG</b> — <a href='https://ambientcg.com'>ambientcg.com</a> {}<br><b>Sketchfab</b> — <a href='https://sketchfab.com'>sketchfab.com</a> {}",

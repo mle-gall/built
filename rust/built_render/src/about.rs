@@ -26,7 +26,7 @@ pub fn sheet(data: &Value, copied: bool, t: impl Fn(&str) -> PyResult<String>) -
         {"kind":"text","text":t("Free 3D modeler for architecture, engineering and 3D design.")?},
         {"kind":"text","text":format!("{} Maxence Le Gall",t("Created by")?)},
         {"kind":"text","text":"Built is based on IngeTrazo by Marco Sumari Tellez and IngeTrazo contributors, and distributed under GPL-3.0-or-later."},
-        {"kind":"buttons","align":"left","buttons":[{"id":"license","label":t("Licence")?},{"id":"upstream","label":"IngeTrazo ↗"},{"id":"copy","label":t(if copied {"Copied"} else {"Copy to clipboard"})?}]},
+        {"kind":"buttons","align":"left","buttons":[{"id":"license","label":t("Licence")?},{"id":"repository","label":"Built on GitHub ↗"},{"id":"copy","label":t(if copied {"Copied"} else {"Copy to clipboard"})?}]},
         {"kind":"caption","text":t("System information")?},
         {"kind":"kv","rows":data["facts"]},
         {"kind":"caption","text":t("With contributions from")?},
@@ -161,7 +161,7 @@ impl AboutReview {
     fn link(verb: &str) -> Option<&'static str> {
         match verb {
             "license" => Some("https://www.gnu.org/licenses/gpl-3.0.html"),
-            "upstream" => Some("https://github.com/ingelibre/ingetrazo"),
+            "repository" => Some("https://github.com/mle-gall/built"),
             _ => credits()
                 .get(verb.strip_prefix("person-")?.parse::<usize>().ok()?)
                 .map(|c| c.2.as_str())

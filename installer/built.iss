@@ -13,7 +13,7 @@
 
 #define MyAppName "Built"
 #define MyAppPublisher "Ing. Marco Sumari Tellez"
-#define MyAppURL "https://github.com/mle-gall/ingetrazo"
+#define MyAppURL "https://github.com/mle-gall/built"
 #define MyAppExeName "built.exe"
 
 ; MyAppVersion is injected from the build command with /DMyAppVersion=X.Y.Z
@@ -29,8 +29,8 @@ AppVersion={#MyAppVersion}
 AppVerName={#MyAppName} {#MyAppVersion}
 AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
-AppSupportURL=https://github.com/mle-gall/ingetrazo/issues
-AppUpdatesURL=https://github.com/mle-gall/ingetrazo/releases
+AppSupportURL=https://github.com/mle-gall/built/issues
+AppUpdatesURL=https://github.com/mle-gall/built/releases
 VersionInfoVersion={#MyAppVersion}
 VersionInfoCompany={#MyAppPublisher}
 VersionInfoDescription=Modelador 3D libre para ingenieria y arquitectura

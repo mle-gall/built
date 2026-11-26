@@ -1848,6 +1848,11 @@ impl LibrarySheet {
             }
         }
         let scene = ctx.getattr("win")?.getattr("viewport")?.getattr("scene")?;
+        let catalogue_available = prov_id == "components" && py.import("built_core")?
+            .getattr("component_library")?.call_method0("available")?.is_truthy()?;
+        if !catalogue_available && st.get_item("scope")?.eq("s:online")? {
+            st.set_item("scope", "s:model")?;
+        }
         let browse_d = json(py)?.call_method1("loads", (browse(&st)?,))?;
         if prov_id == "components" && !st.get_item("scope")?.eq("s:online")? {
             browse_d.set_item("scope", "s:all")?;
@@ -1913,7 +1918,7 @@ impl LibrarySheet {
                 sheet.call_method("side_item", (&scope, collection["name"].as_str().unwrap_or("")), Some(&[("on", st.get_item("scope")?.eq(&scope)?)].into_py_dict(py)?))?;
             }
         }
-        if prov_id == "components" {
+        if catalogue_available {
             let label = py.import("built_core.i18n")?.call_method1("tr", ("Component library",))?;
             sheet.call_method("side_item", ("s:online", label), Some(&[("on", online)].into_py_dict(py)?))?;
         }

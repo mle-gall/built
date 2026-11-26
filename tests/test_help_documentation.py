@@ -13,7 +13,7 @@ def test_help_documentation_opens_the_manual(native_host, monkeypatch):
     monkeypatch.setattr("built_core.desktop_open.open_url", opened.append)
     action = native_host.window._registry_actions["menu:documentation"]
     action.trigger()
-    assert opened == ["https://ingetrazo-docs.pages.dev/"]
+    assert opened == ["https://github.com/mle-gall/built/tree/main/docs"]
 
 
 def test_documentation_texts_translated_everywhere():
