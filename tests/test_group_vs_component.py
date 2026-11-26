@@ -164,3 +164,20 @@ def test_an_older_file_reads_its_groups_of_groups_as_groups(tmp_path):
     igz.load_into(back, old)
     kinds = {g.name: g.is_component() for g in back.groups}
     assert kinds == {"Banca": False, "Import": True}
+
+
+def test_inspector_can_select_shared_copies_then_make_one_unique(native_host):
+    from views import wgpu_ui
+    win, view = native_host.window, native_host.view
+    scene = win.viewport.scene
+    group = _box_group(0, "Bench")
+    scene.groups.append(group)
+    win.viewport.history.execute(GroupToComponentCommand(group, "Bench"))
+    other = copy_group(group, V(5, 0, 0))
+    scene.groups.append(other)
+    scene.select([group])
+    wgpu_ui._tree_action(win, view, "insp:copies")
+    assert set(scene.selection) == {group, other}
+    scene.select([group])
+    wgpu_ui._tree_action(win, view, "insp:unique")
+    assert group.mesh is not other.mesh

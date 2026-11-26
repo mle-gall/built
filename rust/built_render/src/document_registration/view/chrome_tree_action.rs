@@ -115,6 +115,23 @@ fn chip<'py>(win: &Obj<'py>, view: &Obj<'py>, action: &str) -> PyResult<()> {
         again(format!("edit{SEP}section:{}:{}{SEP}{}", fields[1], fields[2], fields.get(3).copied().unwrap_or("")))?;
     } else if key.starts_with("status:") {
         direct(py, super::chrome_inspector::set_status, (win, &groups, tail))?;
+    } else if matches!(key, "copies" | "unique" | "definition") && groups.len() == 1 {
+        let group = groups.get_item(0)?;
+        if group.call_method0("is_component")?.is_truthy()? {
+            if key == "unique" {
+                win.call_method0("_on_make_unique")?;
+            } else if let Some((index, row)) = super::chrome_tree::component_definition(view, win, &group)? {
+                if key == "copies" {
+                    render(py)?.call_method1("select_component_instances", (win, row.get_item(2)?))?;
+                } else {
+                    let library = render(py)?.getattr("wgpu_library")?;
+                    let state = library.call_method1("_state", (view,))?;
+                    state.set_item("cursor", format!("cm:{index}"))?;
+                    state.set_item("force_focus", true)?;
+                    library.call_method1("open_library", (win, "components", row.get_item(0)?, "s:model"))?;
+                }
+            }
+        }
     } else if key == "file" && !groups.is_empty() {
         direct(py, super::chrome_inspector::file_to, (win, groups.len()))?;
     } else if key.starts_with("active:") || key.starts_with("isolate:") {

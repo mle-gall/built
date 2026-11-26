@@ -201,6 +201,7 @@ impl ComponentName {
             return Ok(());
         }
         let name = name.trim();
+        let name = if name.is_empty() { self.fallback.as_str() } else { name };
         let history = py.import("built_core.history")?;
         let kw = PyDict::new(py);
         let cmd = match self.mode {
@@ -208,18 +209,11 @@ impl ComponentName {
                 "GroupToComponentCommand",
                 (
                     self.groups.bind(py).get_item(0)?,
-                    (!name.is_empty()).then_some(name),
+                    name,
                 ),
             )?,
             Component::Assembly | Component::Geometry => {
-                kw.set_item(
-                    "name",
-                    if name.is_empty() {
-                        self.fallback.as_str()
-                    } else {
-                        name
-                    },
-                )?;
+                kw.set_item("name", name)?;
                 if matches!(self.mode, Component::Assembly) {
                     history.getattr("MakeComponentOfCommand")?.call(
                         (
@@ -287,7 +281,7 @@ fn make_component(win: &Bound<'_, PyAny>) -> PyResult<()> {
         (1, false) => Component::Group,
         _ => Component::Assembly,
     };
-    let suggestion: String = if matches!(mode, Component::Group) {
+    let existing_name = if matches!(mode, Component::Group) {
         let g = groups.get_item(0)?;
         if g.call_method0("is_component")?.is_truthy()? {
             vp.call_method1(
@@ -296,13 +290,11 @@ fn make_component(win: &Bound<'_, PyAny>) -> PyResult<()> {
             )?;
             return Ok(());
         }
-        let name = g.getattr("name")?;
-        if name.is_truthy()? {
-            name.extract()?
-        } else {
-            translated(py, "Component", None)?.extract()?
-        }
-    } else {
+        g.getattr("name")?.extract::<Option<String>>()?.filter(|name|
+            !name.trim().is_empty() && !name.strip_prefix("Group ").is_some_and(|number|
+                !number.is_empty() && number.bytes().all(|c| c.is_ascii_digit())))
+    } else { None };
+    let suggestion = if let Some(name) = existing_name { name } else {
         let taken = py
             .import("built_core.kept_components")?
             .call_method1("names_in_use", (&scene,))?;

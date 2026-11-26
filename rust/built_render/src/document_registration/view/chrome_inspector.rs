@@ -285,14 +285,9 @@ fn inspector<'py>(a: &Args<'py>) -> Reply<'py> {
         if glue.call_method1("verbs_read_only", (&sel_kind,))?.is_truthy()? {
             rows.append(("Edits", "Read-only here"))?;
         }
-        if group.call_method0("is_component")?.is_truthy()? {
-            let mesh = group.getattr("mesh")?;
-            let mut same = 0;
-            for placement in structure.call_method1("_placements", (&scene,))?.try_iter()? {
-                same += placement?.get_item(0)?.getattr("mesh")?.is(&mesh) as usize;
-            }
-            rows.append(("Copies", same.to_string()))?;
-        }
+        let definition = if group.call_method0("is_component")?.is_truthy()? {
+            super::chrome_tree::component_definition(&view, &win, &group)?
+        } else { None };
         let link = links.call_method1("link_of", (&group,))?;
         let part = sel_kind.eq("linked_part")?;
         let needs = if link.is_truthy()? || part {
@@ -305,6 +300,10 @@ fn inspector<'py>(a: &Args<'py>) -> Reply<'py> {
             ("Status", text_or(direct(py, status_text, (&record,))?, "Missing")?)
         };
         let sections = empty(py);
+        if definition.is_some() && offered("unique")? {
+            sections.append(("Actions", [("definition", "Open definition in Library")]))?;
+            sections.append(("Component actions", [("copies", "Select copies"), ("unique", "Make unique")]))?;
+        }
         sections.append(("Item", rows))?;
         let offer_filing = !filed && offered("fileto")?;
         if !offer_filing { sections.append(("What it needs", [needs]))?; }
@@ -406,7 +405,13 @@ fn inspector<'py>(a: &Args<'py>) -> Reply<'py> {
                 ("Predefined type", either("predefined_type", "—")?),
             ],
         ))?;
-        show(&view, identity.get_item(0)?.get_item(1)?, sections)?;
+        if let Some((_, definition)) = definition {
+            let n = definition.get_item(2)?.len()?;
+            let subtitle = format!("Component · {n} {}", if n == 1 { "copy" } else { "copies" });
+            renderer.call_method1("ui_set_inspector", (definition.get_item(0)?, sections, subtitle))?;
+        } else {
+            show(&view, identity.get_item(0)?.get_item(1)?, sections)?;
+        }
         renderer.call_method1("ui_set_identity", (facts(offer_filing)?,))?;
         return Ok(none(py));
     }

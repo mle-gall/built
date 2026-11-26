@@ -185,6 +185,20 @@ def test_keys_reach_only_the_open_form_in_the_native_window(win, monkeypatch):
     cf.current(win).close()
 
 
+@pytest.mark.parametrize(("name", "suggestion"), [("Group 5", "Component #1"), ("Bench", "Bench")])
+def test_make_component_names_a_group(win, name, suggestion):
+    from built_core.group import Group
+    scene = win.viewport.scene
+    group = Group(name=name)
+    scene.groups.append(group)
+    scene.select([group])
+    win._on_make_component()
+    form = cf.current(win)
+    assert form.value("text") == suggestion
+    chrome(win, dlg(form, "b", "ok"))
+    assert group.name == suggestion and group.is_component()
+
+
 def test_make_component_names_through_the_chrome(win):
     from built_core.group import Group
     scene = win.viewport.scene

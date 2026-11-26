@@ -23,7 +23,7 @@ def inspector(host, selection):
 
     sections = []
     output = SimpleNamespace(ui_set_identity=lambda value: None,
-                             ui_set_inspector=lambda _, entries: sections.extend(entries))
+                             ui_set_inspector=lambda _, entries, subtitle=None: sections.extend(entries))
     host.viewport.scene.select(selection)
     with patch.object(host.view, "renderer", output):
         host.view._ui_insp_sig = None
