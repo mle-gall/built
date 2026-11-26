@@ -93,7 +93,7 @@ def test_mesh_views_show_their_geometry_kinds():
     from built_core import selection_identity
     scene = Scene()
     face = scene.mesh.add_face([V(0, 0, 0), V(1, 0, 0), V(1, 1, 0)])
-    for entity, label in ((face, "Face"), (next(iter(face.edges)), "Edge")):
+    for entity, label in ((face, "Face"), (next(iter(scene.mesh.edges)), "Edge")):
         scene.select([entity])
         assert dict((k, v) for k, v, _, _ in selection_identity(scene, {}, "", {}))["Kind"] == label
 
