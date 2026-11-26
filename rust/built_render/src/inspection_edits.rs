@@ -100,8 +100,10 @@ fn name_definition(
     }
     // The protocol verb renames every copy, the kept template and this
     // definition as one native step.
-    py.import("built_core.command_protocol")?
-        .call_method1("rename_component", (view.getattr("history")?, definition, name))?;
+    py.import("built_core.command_protocol")?.call_method1(
+        "rename_component",
+        (view.getattr("history")?, definition, name),
+    )?;
     view.call_method0("notify_scene_changed")?;
     Ok(())
 }
@@ -141,6 +143,83 @@ fn name_section(
     Ok(())
 }
 
+fn soften_command<'py>(
+    view: &Bound<'py, PyAny>,
+    values: &Bound<'py, PyAny>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let py = view.py();
+    let angle: Option<f64> = values.get_item("angle")?.extract()?;
+    let backend = py.import("built_core.soften")?;
+    let edges = backend.call_method1("selected_edges", (view.getattr("scene")?,))?;
+    let kw = PyDict::new(py);
+    for key in ["coplanar", "harden", "materials", "smooth"] {
+        kw.set_item(key, values.get_item(key)?)?;
+    }
+    backend
+        .getattr("SoftenByAngleCommand")?
+        .call((edges, angle.unwrap_or_default()), Some(&kw))
+}
+
+/// Project the planned edge changes without editing meshes, undo history or the saved angle.
+pub(crate) fn soften_preview(
+    view: &Bound<'_, PyAny>,
+    values: &Bound<'_, PyAny>,
+) -> PyResult<Vec<([f32; 2], [f32; 2])>> {
+    let py = view.py();
+    let plan = soften_command(view, values)?.call_method0("prepare")?;
+    let keys = PyDict::new(py);
+    for row in plan.try_iter()? {
+        let row = row?;
+        keys.call_method1(
+            "setdefault",
+            (row.get_item(0)?, pyo3::types::PySet::empty(py)?),
+        )?
+        .call_method1("add", (row.get_item(1)?,))?;
+    }
+    let scene = view.getattr("scene")?;
+    let mut lines = Vec::new();
+    let mut project = |mesh: Bound<'_, PyAny>, matrix: Option<Bound<'_, PyAny>>| -> PyResult<()> {
+        let Some(changes) = keys.get_item(&mesh)? else {
+            return Ok(());
+        };
+        for edge in mesh.getattr("edges")?.try_iter()? {
+            let edge = edge?;
+            if !changes.contains(edge.getattr("key")?)? {
+                continue;
+            }
+            let pixel = |end| -> PyResult<Option<[f32; 2]>> {
+                let mut point = edge.getattr(end)?;
+                if let Some(m) = &matrix {
+                    point = m.call_method1("map", (point,))?;
+                }
+                let p = view.call_method1("_world_to_pixel", (point,))?;
+                if p.is_none() {
+                    return Ok(None);
+                }
+                Ok(Some([p.get_item(0)?.extract()?, p.get_item(1)?.extract()?]))
+            };
+            if let (Some(a), Some(b)) = (pixel("a")?, pixel("b")?) {
+                lines.push((a, b));
+            }
+        }
+        Ok(())
+    };
+    if scene.getattr("edit_group")?.is_none() {
+        project(scene.getattr("mesh")?, None)?;
+    }
+    let placements = py.import("built_core.group")?.getattr("iter_placements")?;
+    for root in scene.getattr("groups")?.try_iter()? {
+        for pair in placements.call1((root?,))?.try_iter()? {
+            let pair = pair?;
+            project(
+                pair.get_item(0)?.getattr("mesh")?,
+                pair.get_item(1)?.extract()?,
+            )?;
+        }
+    }
+    Ok(lines)
+}
+
 #[pyfunction]
 fn soften_selection(view: &Bound<'_, PyAny>, values: &Bound<'_, PyAny>) -> PyResult<()> {
     let py = view.py();
@@ -148,15 +227,7 @@ fn soften_selection(view: &Bound<'_, PyAny>, values: &Bound<'_, PyAny>) -> PyRes
     if let Some(angle) = angle {
         settings(py)?.call_method1("setValue", ("tools/soften_angle", angle))?;
     }
-    let backend = py.import("built_core.soften")?;
-    let edges = backend.call_method1("selected_edges", (view.getattr("scene")?,))?;
-    let kw = PyDict::new(py);
-    for key in ["coplanar", "harden", "materials", "smooth"] {
-        kw.set_item(key, values.get_item(key)?)?;
-    }
-    let cmd = backend
-        .getattr("SoftenByAngleCommand")?
-        .call((edges, angle.unwrap_or_default()), Some(&kw))?;
+    let cmd = soften_command(view, values)?;
     let changes = cmd.call_method0("prepare")?;
     if !changes.is_truthy()? {
         view.call_method1(

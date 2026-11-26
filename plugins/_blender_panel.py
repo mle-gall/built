@@ -259,7 +259,7 @@ class BlenderPanel:
                 details.append(field("angle", "Cone", "number", light["angle"], min=1, max=179, unit="°"))
             details.append(item("button", "remove", "Remove light"))
         result = [item("progress", "activity", self.status, fraction=self.fraction),
-                  item("button", "render", "Render", enabled=self.found is not None and self.proc is None)]
+                  item("button", "render", "Render", primary=True, enabled=self.found is not None and self.proc is None)]
         if self.proc:
             result.append(item("button", "cancel", "Cancel render"))
         if self.image:

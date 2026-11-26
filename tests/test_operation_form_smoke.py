@@ -598,8 +598,6 @@ def fixture_menu(self, command):
         wgpu_ui._run(self.window, ["tab:scene:add", "tab:scene:editcamera"])
     elif command == "fixture-shift":
         wgpu_ui._run(self.window, ['panel:["camera.shift_y",0.25]'])
-    elif command == "fixture-close-camera":
-        wgpu_ui._run(self.window, ['panel:["camera.close",null]'])
     elif command == "fixture-registry":
         chrome_sheet.action(self.window, chrome_sheet.SEP.join(["settings","side","registry"]))
     elif command == "fixture-namespace":
@@ -636,7 +634,7 @@ menu fixture-camera
 wait 250
 state
 menu fixture-shift
-menu fixture-close-camera
+key escape
 wait 300
 state
 menu prefs

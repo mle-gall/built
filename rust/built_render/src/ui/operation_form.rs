@@ -373,19 +373,10 @@ impl OperationForm {
                 let flags = if harden { DISABLED } else { 0 };
                 let angle = self.angle().unwrap_or(0.);
                 vec![
-                    number_row(
-                        "angle",
-                        "Angle between faces",
-                        &self.number,
-                        (0., 180.),
-                        "°",
-                        1,
-                        flags,
-                    ),
                     (
                         "slider".into(),
                         "slider".into(),
-                        String::new(),
+                        "Angle between faces".into(),
                         format!("{angle:.1}°"),
                         angle * 10.,
                         0.,
@@ -639,7 +630,8 @@ mod tests {
         model.receive("slider", "113");
         assert_eq!(model.angle(), Some(11.3));
         model.receive("angle", "27,4");
-        assert_eq!(model.rows()[1].4, 274.);
+        assert_eq!(model.rows()[0].4, 274.);
+        assert_eq!(model.rows().iter().filter(|row| row.0 == "angle").count(), 0);
         model.receive("angle", "181");
         assert!(model.invalid_range().is_some());
         model.receive("harden", "1");

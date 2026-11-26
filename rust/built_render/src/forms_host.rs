@@ -875,6 +875,13 @@ fn before_frame(view: &Bound<'_, PyAny>, win: &Bound<'_, PyAny>) -> PyResult<()>
     if !sig.eq(dict.call_method1("get", ("_ui_dialog_sig",))?)? {
         view.setattr("_ui_dialog_sig", &sig)?;
         renderer.call_method1("ui_set_dialog", wire)?;
+        if let Some(scene) = form.getattr_opt("soften_scene")? {
+            let vp = win.getattr("viewport")?;
+            let lines = if vp.getattr("scene")?.is(&scene) {
+                crate::inspection_edits::soften_preview(&vp, &form.call_method0("values")?)?
+            } else { Vec::new() };
+            renderer.call_method1("ui_set_soften_preview", (lines,))?;
+        }
     }
     if let Some(marks) = opt(&form, "join_marks").filter(|m| m.is_truthy().unwrap_or(false)) {
         let vp = win.getattr("viewport")?;
@@ -1091,7 +1098,10 @@ fn draft<'py>(py: Python<'py>, scene: &Bound<'py, PyAny>) -> PyResult<Bound<'py,
 #[pyo3(name = "UnitsQuestion")]
 fn units_form<'py>(py: Python<'py>, model: Py<PyAny>, done: Py<PyAny>) -> PyResult<Bound<'py, Form>> {
     let note: String = model.bind(py).getattr("note")?.str()?.to_string();
-    let mut form = Form::make(py, obj(py, tr(py, "Units")?)?, PyList::empty(py).as_any(), Some(obj(py, crate::shortcut_text::modifier_text(&tr(py, &note)?))?), None, obj(py, "ok")?, obj(py, "cancel")?, None, 520.0, Some(done), None, None, None, Some(obj(py, "start_units")?))?;
+    let key = crate::shortcut_text::shortcut_text(crate::commands::UNITS_SHORTCUT)
+        .map(|sequence| sequence.1).unwrap_or_else(|| crate::commands::UNITS_SHORTCUT.into());
+    let note = tr(py, &note)?.replace("{key}", &key);
+    let mut form = Form::make(py, obj(py, tr(py, "Set document units")?)?, PyList::empty(py).as_any(), Some(obj(py, note)?), None, obj(py, "ok")?, obj(py, "cancel")?, None, 520.0, Some(done), None, None, None, Some(obj(py, "start_units")?))?;
     form.model = model;
     form.source = Source::Units;
     Bound::new(py, form)

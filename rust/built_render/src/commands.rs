@@ -397,6 +397,8 @@ pub(crate) fn invalidate_command_rails(win: &Bound<'_, PyAny>) -> PyResult<()> {
     Ok(())
 }
 
+pub(crate) const UNITS_SHORTCUT: &str = "Ctrl+U";
+
 type RegistryRow = (String, String, String, Vec<String>, String, String);
 
 /// One row per dispatch target. A Cocoa menu entry and egui View command
@@ -451,7 +453,7 @@ pub fn command_registry(
             ("cutlist", "Cut list", ""),
             ("extensions", "Extension Manager", ""),
             ("prefs", "Settings…", "Ctrl+,"),
-            ("units", "Units…", "Ctrl+U"),
+            ("units", "Units…", UNITS_SHORTCUT),
         ] {
             menu.push((id.into(), "Window".into(), label.into(), key.into()));
         }

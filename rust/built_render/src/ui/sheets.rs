@@ -583,15 +583,28 @@ fn sheet_rows(ui: &mut egui::Ui, rows: &[(String, String)], edits: &mut std::col
                     }
                 });
             }
+            "color" => {
+                let value = parts.get(3).copied().unwrap_or_default();
+                let c = parse_hex(value).unwrap_or(SWATCH_FALLBACK);
+                let mut rgb = [c.r(), c.g(), c.b()];
+                kit::property_control(ui, label, |ui| {
+                    if kit::colour_well(ui, &mut rgb).changed() {
+                        out.push(format!("edit{SEP}{id}{SEP}#{:02x}{:02x}{:02x}", rgb[0], rgb[1], rgb[2]));
+                    }
+                    if !value.is_empty() && kit::quiet(ui, "Clear").clicked() {
+                        out.push(format!("edit{SEP}{id}{SEP}"));
+                    }
+                });
+            }
             "check" => {
                 // The kit's switch (design system: a control is never filled
                 // with full accent), not a filled checkbox (council C8).
-                let mut on = parts.get(3).copied() == Some("1");
+                let on = parts.get(3).copied() == Some("1");
                 ui.horizontal(|ui| {
                     ui.add_space(SPACE_S);
                     label_cell(ui, label);
-                    if toggle(ui, &mut on, "").clicked() {
-                        out.push(format!("edit{SEP}{id}{SEP}{}", u8::from(on)));
+                    if switch_row(ui, "", on, true).clicked() {
+                        out.push(format!("edit{SEP}{id}{SEP}{}", u8::from(!on)));
                     }
                 });
             }

@@ -62,8 +62,7 @@ fn number(
     range: std::ops::RangeInclusive<f64>,
     out: &mut Vec<String>,
 ) {
-    ui.horizontal(|ui| {
-        ui.label(name);
+    kit::property_control(ui, name, |ui| {
         let mut n = val.as_f64().unwrap_or_default();
         if ui
             .add(kit::number(&mut n, "").range(range).speed(0.05))
@@ -361,29 +360,26 @@ impl Panels {
 
     pub fn camera(&mut self, ui: &mut Ui, out: &mut Vec<String>) {
         let c = &self.data["camera"];
-        ui.horizontal(|ui| {
-            ui.heading("Camera");
-            if ui.button("Close").clicked() {
-                send(out, "camera.close", Value::Null);
-            }
-        });
         if c["bound"] == true {
             kit::caption_plain(ui, &format!("Editing scene · {}", label(&c["scene"])));
         } else {
             kit::caption_plain(ui, "Current view");
         }
-        ui.add_space(7.);
-        ui.strong("Lens and frame");
-        ui.add_space(4.);
-        ui.label("Projection");
-        choice(
-            ui,
-            "camera.projection",
-            label(&c["projection"]),
-            &["perspective", "two_point", "parallel"],
-            out,
-            &mut self.popup_layers,
-        );
+        let mut select = |ui: &mut Ui, name: &str, current: &str, labels: &[&str]| {
+            let mut picked = None;
+            kit::property_control(ui, name, |ui| {
+                let (index, popup) = kit::select(ui, name, current, labels);
+                self.popup_layers.extend(popup);
+                picked = index;
+            });
+            picked
+        };
+        let projections = ["Perspective", "Two-point", "Parallel"];
+        let keys = ["perspective", "two_point", "parallel"];
+        let index = keys.iter().position(|key| *key == label(&c["projection"])).unwrap_or(0);
+        if let Some(i) = select(ui, "Projection", projections[index], &projections) {
+            send(out, "camera.projection", json!(keys[i]));
+        }
         ui.add_enabled_ui(c["projection"] != "parallel", |ui| {
             number(
                 ui,
@@ -393,16 +389,14 @@ impl Panels {
                 1.0..=2000.0,
                 out,
             );
-            egui::ComboBox::from_label("Lens preset")
-                .selected_text("Choose…")
-                .show_ui(ui, |ui| {
-                    self.popup_layers.push(ui.layer_id().id);
-                    for mm in [14, 18, 24, 28, 35, 50, 85, 105, 135] {
-                        if ui.button(format!("{mm} mm")).clicked() {
-                            send(out, "camera.focal", json!(mm));
-                        }
-                    }
-                });
+            let lenses = [14, 18, 24, 28, 35, 50, 85, 105, 135];
+            let names = lenses.map(|mm| format!("{mm} mm"));
+            let names = names.each_ref().map(String::as_str);
+            let current = lenses.iter().position(|&mm| c["focal"].as_f64() == Some(mm as f64))
+                .map_or("Custom", |i| names[i]);
+            if let Some(i) = select(ui, "Lens preset", current, &names) {
+                send(out, "camera.focal", json!(lenses[i]));
+            }
             let sensors = [
                 ("Full Frame", [36., 24.]),
                 ("APS-C", [23.6, 15.6]),
@@ -414,22 +408,11 @@ impl Panels {
                 .iter()
                 .find(|(_, dims)| c["sensor"] == json!(dims) && !custom)
                 .map_or("Custom", |(name, _)| *name);
-            egui::ComboBox::from_label("Sensor")
-                .selected_text(selected)
-                .show_ui(ui, |ui| {
-                    self.popup_layers.push(ui.layer_id().id);
-                    for (name, dims) in sensors {
-                        if ui.selectable_label(selected == name, name).clicked() {
-                            send(out, "camera.sensor", json!(dims));
-                        }
-                    }
-                    if ui
-                        .selectable_label(selected == "Custom", "Custom")
-                        .clicked()
-                    {
-                        send(out, "camera.sensor", Value::Null);
-                    }
-                });
+            let mut names: Vec<_> = sensors.iter().map(|(name, _)| *name).collect();
+            names.push("Custom");
+            if let Some(i) = select(ui, "Sensor", selected, &names) {
+                send(out, "camera.sensor", sensors.get(i).map_or(Value::Null, |(_, dims)| json!(dims)));
+            }
             if selected == "Custom" {
                 for (i, name) in ["Sensor width (mm)", "Sensor height (mm)"]
                     .iter()
@@ -447,29 +430,13 @@ impl Panels {
             }
         });
         let aspect = c["frame_aspect"].as_f64().unwrap_or_default();
-        egui::ComboBox::from_label("Frame")
-            .selected_text(if aspect > 0. {
-                format!("{aspect:.2} ∶ 1")
-            } else {
-                "Window".into()
-            })
-            .show_ui(ui, |ui| {
-                self.popup_layers.push(ui.layer_id().id);
-                for (name, v) in [
-                    ("Window", 0.),
-                    ("16:9", 16. / 9.),
-                    ("4:3", 4. / 3.),
-                    ("3:2", 1.5),
-                    ("A (√2:1)", std::f64::consts::SQRT_2),
-                    ("2.39:1", 2.39),
-                    ("1:1", 1.),
-                    ("9:16", 9. / 16.),
-                ] {
-                    if ui.button(name).clicked() {
-                        send(out, "camera.frame_aspect", json!(v));
-                    }
-                }
-            });
+        let frames = [("Window", 0.), ("16:9", 16./9.), ("4:3", 4./3.), ("3:2", 1.5),
+                      ("A (√2:1)", std::f64::consts::SQRT_2), ("2.39:1", 2.39), ("1:1", 1.), ("9:16", 9./16.)];
+        let current = frames.iter().find(|(_, value)| (value - aspect).abs() < 1e-5)
+            .map_or_else(|| format!("{aspect:.2} ∶ 1"), |(name, _)| name.to_string());
+        if let Some(i) = select(ui, "Frame", &current, &frames.map(|(name, _)| name)) {
+            send(out, "camera.frame_aspect", json!(frames[i].1));
+        }
         number(
             ui,
             "camera.shift_y",
@@ -478,11 +445,8 @@ impl Panels {
             -1.0..=1.0,
             out,
         );
-        let mut advanced = c["advanced"] == true;
-        if ui.checkbox(&mut advanced, "Advanced options").changed() {
-            send(out, "camera.advanced", json!(advanced));
-        }
-        if advanced {
+        let advanced = c["advanced"] == true;
+        let open = kit::disclosure(ui, "camera_advanced", "Advanced", advanced, |ui| {
             for key in ["eye", "target"] {
                 for (i, axis) in ["X", "Y", "Z"].iter().enumerate() {
                     number(
@@ -508,14 +472,13 @@ impl Panels {
                     |ui| number(ui, &format!("camera.{key}"), name, &c[key], lo..=hi, out),
                 );
             }
-        }
+        }).is_some();
+        if open != advanced { send(out, "camera.advanced", json!(open)); }
         ui.horizontal(|ui| {
-            if ui.button("Reset lens").clicked() {
+            if kit::quiet(ui, "Reset lens").clicked() {
                 send(out, "camera.reset", Value::Null);
             }
-            if ui
-                .add_enabled(c["saved"] == true, egui::Button::new("Update scene"))
-                .clicked()
+            if ui.add_enabled_ui(c["saved"] == true, |ui| kit::chip_button(ui, "Update scene")).inner
             {
                 send(out, "camera.update", c["scene"].clone());
             }
