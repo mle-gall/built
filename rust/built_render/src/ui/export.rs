@@ -55,6 +55,42 @@ pub(super) fn destination(ui: &mut egui::Ui, report: &Value, cmds: &mut Vec<Stri
     egui::ScrollArea::vertical().id_salt("delivery contents")
         .max_height((ui.available_height() - super::BUTTON_H - super::SPACE_M).max(super::ROW_H))
         .auto_shrink([false, false]).show(ui, |ui| {
+        if let Some(review)=report["review"].as_object() {
+            kit::inspector_title(ui, "Review handover", delivery_name(report));
+            kit::prop_row(ui,"Model revision",&review["revision"].to_string());
+            kit::prop_row(ui,"IDS",review["ids_result"].as_str().unwrap_or(""));
+            for file in review["ids"].as_array().into_iter().flatten() {
+                if let Some(text)=file["message"].as_str() { kit::caption_plain(ui,text); }
+                for rule in file["specifications"].as_array().into_iter().flatten().filter(|r|r["status"]==false || r["failed"].as_u64().unwrap_or(0)>0) {
+                    kit::prop_row(ui,rule["name"].as_str().unwrap_or("IDS rule"),&format!("{} failed",rule["failed"]));
+                    for item in rule["placements"].as_array().into_iter().flatten() {
+                        if let Some(path)=item["path"].as_array() {
+                            let name=item["name"].as_str().unwrap_or("Placement");
+                            if kit::quiet(ui,&format!("Reveal {name}")).clicked() {
+                                actions.push(format!("exportshow\u{1f}{}",json!([path])));
+                            }
+                        }
+                    }
+                }
+                for row in review["outputs"].as_array().into_iter().flatten() {
+                    kit::prop_row(
+                        ui,
+                        &row["format"].as_str().unwrap_or("").to_uppercase(),
+                        row["result"].as_str().unwrap_or(""),
+                    );
+                }
+                if kit::quiet(ui, "Back to deliveries").clicked() {
+                    cmds.push("deliver:back".into());
+                }
+                return;
+            }
+            kit::caption_plain(ui, "Kept deliveries");
+            if choices.is_empty() && report.is_object() {
+                kit::empty_state(ui, "No kept deliveries yet");
+            }
+            if kit::quiet(ui,"Back to deliveries").clicked() {cmds.push("deliver:back".into());}
+            return;
+        }
         kit::caption_plain(ui, "Kept deliveries");
         if choices.is_empty() && report.is_object() {
             kit::empty_state(ui, "No kept deliveries yet");
@@ -89,7 +125,10 @@ pub(super) fn destination(ui: &mut egui::Ui, report: &Value, cmds: &mut Vec<Stri
                 for output in outputs {
                     let format = output["format"].as_str().unwrap_or("").to_uppercase();
                     let path = output["destination"].as_str().unwrap_or("");
-                    let row = ui.scope(|ui| kit::prop_row(ui, &format, path));
+                    let last=report["runs"].as_array().and_then(|runs|runs.last()).and_then(|r|r["outputs"].as_array())
+                        .and_then(|rows|rows.iter().find(|row|row["format"]==output["format"]));
+                    let result=last.and_then(|row|row["result"].as_str()).filter(|s|*s!="Delivered").unwrap_or(path);
+                    let row = ui.scope(|ui| kit::prop_row(ui, &format, result));
                     row.response.on_hover_text(path);
                 }
             }
@@ -99,6 +138,10 @@ pub(super) fn destination(ui: &mut egui::Ui, report: &Value, cmds: &mut Vec<Stri
                 for (i, run) in runs.iter().enumerate().rev() {
                     ui.push_id(i, |ui| {
                         kit::prop_row(ui, run["result"].as_str().unwrap_or("Delivered"), run["time"].as_str().unwrap_or(""));
+                        if let Some(ids)=run["ids_result"].as_str() {
+                            kit::prop_row(ui,"IDS",ids);
+                            if kit::quiet(ui,"Review").clicked() {cmds.push(format!("deliver:review:{active}:{i}"));}
+                        }
                         if run["folder"].as_str().is_some_and(|s| !s.is_empty()) && kit::quiet(ui, "Open folder").clicked() {
                             cmds.push(format!("deliver:history:{active}:{i}"));
                         }
@@ -109,7 +152,20 @@ pub(super) fn destination(ui: &mut egui::Ui, report: &Value, cmds: &mut Vec<Stri
         }
     });
     ui.add_space(super::SPACE_S);
-    if !active.is_empty() && kit::sheet_button(ui, "Run", "", 1) { cmds.push(format!("deliver:run:{active}")); }
+    if !active.is_empty()
+        && kit::sheet_button(
+            ui,
+            if report["package"] == true {
+                "Run handover package"
+            } else {
+                "Run"
+            },
+            "",
+            1,
+        )
+    {
+        cmds.push(format!("deliver:run:{active}"));
+    }
     show
 }
 

@@ -318,10 +318,80 @@ fn svg_context<'py>(win: &Bound<'py, PyAny>, active: &Bound<'py, PyAny>, scene: 
 
 // ---- the form ----------------------------------------------------------------------------
 
-fn unpack<'py>(py: Python<'py>, svg: &Bound<'py, PyAny>, v: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+pub(super) fn unpack<'py>(py: Python<'py>, svg: &Bound<'py, PyAny>, v: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
     let options = if v.call_method1("get", ("format",))?.eq("svg")? { svg.call_method0("options_json")?.extract::<String>()? } else { "{}".to_owned() };
     let record: String = py.import("built_core")?.call_method1("delivery_record", (json_dumps(py, v)?, options))?.extract()?;
     json_loads(py, &record)
+}
+
+pub(super) fn package_outputs(py: Python<'_>) -> PyResult<Vec<(String, String, String)>> {
+    py.import("built_core.deliveries")?
+        .getattr("PACKAGE_OUTPUTS")?
+        .extract()
+}
+
+#[pyclass]
+struct ReviewRun {
+    win: Py<PyAny>,
+    key: Py<PyAny>,
+    summary: Py<PyAny>,
+}
+#[pymethods]
+impl ReviewRun {
+    fn __call__(&self, py: Python<'_>) -> PyResult<()> {
+        let win = self.win.bind(py);
+        let view = dialogs(py)?.call_method1("view_of", (win,))?;
+        view.setattr("_delivery_key", self.key.bind(py))?;
+        review_run(&view, self.summary.bind(py))
+    }
+}
+fn review_run(view: &Bound<'_, PyAny>, run: &Bound<'_, PyAny>) -> PyResult<()> {
+    view.setattr("_delivery_review", run)?;
+    view.setattr("_ui_tree_sig", view.py().None())?;
+    view.getattr("renderer")?
+        .call_method1("ui_show_destination", ("deliveries",))?;
+    view.call_method0("update")?;
+    Ok(())
+}
+pub(super) fn review_content(content: &Bound<'_, PyAny>, run: &Bound<'_, PyAny>) -> PyResult<()> {
+    let py = content.py();
+    let run: serde_json::Value = serde_json::from_str(&json_dumps(py, run)?).unwrap_or_default();
+    content.call_method1(
+        "heading",
+        (run["ids_result"].as_str().unwrap_or("Delivery checks"),),
+    )?;
+    content.call_method1("text", (format!("Model revision {}", run["revision"]),))?;
+    for report in run["ids"].as_array().into_iter().flatten() {
+        if let Some(message) = report["message"].as_str() {
+            content.call_method1("text", (message, "error"))?;
+        }
+        for spec in report["specifications"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter(|s| s["status"] == false || s["failed"].as_u64().unwrap_or(0) > 0)
+        {
+            content.call_method1(
+                "kv",
+                ([(
+                    spec["name"].as_str().unwrap_or("IDS rule"),
+                    format!("{} failed placements", spec["failed"]),
+                    "error",
+                )],),
+            )?;
+        }
+    }
+    for output in run["outputs"].as_array().into_iter().flatten() {
+        content.call_method1(
+            "kv",
+            ([(
+                output["format"].as_str().unwrap_or(""),
+                output["result"].as_str().unwrap_or(""),
+                "",
+            )],),
+        )?;
+    }
+    Ok(())
 }
 
 /// Whether field `fid` shows for the form's format and scope.
@@ -333,6 +403,23 @@ struct FieldShows {
 #[pymethods]
 impl FieldShows {
     fn __call__<'py>(&self, py: Python<'py>, form: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+        if let Some(format)=self.fid.strip_prefix("source_") {
+            return Ok((form.call_method1("value",("format",))?.eq("package")? && form.call_method1("value",("output_options",))?.eq(format)?).into_pyobject(py)?.to_owned().into_any());
+        }
+        if let Some(format) = match self.fid.as_str() {
+            "sheet_names" => Some("pdf"),
+            "drawing_names" => Some("dxf"),
+            "topics" => Some("bcf"),
+            _ => None,
+        } {
+            return Ok((form.call_method1("value", ("format",))?.eq("package")?
+                && form
+                    .call_method1("value", ("output_options",))?
+                    .eq(format)?)
+            .into_pyobject(py)?
+            .to_owned()
+            .into_any());
+        }
         py.import("built_core")?.call_method1("delivery_field_visible", (&self.fid, form.call_method1("value", ("format",))?, form.call_method1("value", ("scope",))?))
     }
 }
@@ -351,6 +438,12 @@ struct FormChanged {
 impl FormChanged {
     fn __call__(&self, py: Python<'_>, form: &Bound<'_, PyAny>, fid: &str, value: &Bound<'_, PyAny>) -> PyResult<()> {
         if fid == "format" {
+            let path = form.call_method1("field", ("destination",))?;
+            let package = value.eq("package")?;
+            path.setattr("pick", if package { "folder" } else { "save" })?;
+            if package && !form.call_method1("value", ("destination",))?.is_truthy()? {
+                form.call_method1("set", ("destination", "Deliveries"))?;
+            }
             let choices = scopes(py, value, self.has_nodes)?;
             form.call_method1("field", ("scope",))?.setattr("options", &choices)?;
             let ids = py.import("builtins")?.getattr("dict")?.call1((&choices,))?;
@@ -437,7 +530,7 @@ impl FormDone {
             let kwargs = [("delivery", &r)].into_py_dict(py)?;
             delivery_key = Some(run_command(py, history, "create_delivery", &kwargs)?.get_item("key")?);
         }
-        if self.one_off {
+        if self.one_off || answer == "run" {
             if r.get_item("format")?.eq("stl")? {
                 let unit = r.get_item("options")?.get_item("unit")?;
                 py.import("built_core.settings")?.call_method0("settings")?.call_method1("setValue", ("export/stl_unit", unit))?;
@@ -525,7 +618,16 @@ pub fn export_form<'py>(win: &Bound<'py, PyAny>, key: Option<String>, one_off: b
         Some(k) => all.get_item(k)?,
         None => PyDict::new(py).into_any(),
     };
-    let options = record.call_method1("get", ("options", PyDict::new(py)))?;
+    let mut options = record.call_method1("get", ("options", PyDict::new(py)))?;
+    let stored: serde_json::Value =
+        serde_json::from_str(&json_dumps(py, &record)?).unwrap_or_default();
+    let outputs = stored["outputs"].as_array();
+    let output = |id: &str| outputs.and_then(|rows| rows.iter().find(|r| r["format"] == id));
+    if stored["format"] == "package" {
+        if let Some(ifc) = output("ifc") {
+            options = json_loads(py, &ifc["options"].to_string())?;
+        }
+    }
     let registry = py.import("core.bim_registry")?.call_method1("get", (&scene,))?;
     let nodes = py.import("built_core.link_structure")?.getattr("Tree")?.call1((&scene, &registry))?.getattr("nodes")?;
     let has_nodes = nodes.is_truthy()?;
@@ -560,6 +662,7 @@ pub fn export_form<'py>(win: &Bound<'py, PyAny>, key: Option<String>, one_off: b
         let k = k?;
         formats.append((&k, k.str()?.to_string().to_uppercase()))?;
     }
+    formats.append(("package", "Handover package"))?;
     let node_choices = PyList::empty(py);
     for (k, n) in nodes.cast::<PyDict>()?.iter() {
         node_choices.append((&k, n.get_item("name")?))?;
@@ -573,22 +676,111 @@ pub fn export_form<'py>(win: &Bound<'py, PyAny>, key: Option<String>, one_off: b
     }
     let fmt_text = fmt.str()?.to_string();
     let filters = any(&format!("{} (*.{fmt_text})", fmt_text.to_uppercase()));
-    let fields = vec![
-        field("name", "edit", "Name", get(&record, "name", any("New delivery"))?, vec![("focus", true.into_pyobject(py)?.to_owned().into_any())])?,
-        field("format", "choice", "Format", fmt.clone(), vec![("options", formats.into_any())])?,
+    let package = fmt.eq("package")?;
+    let mut fields = vec![
+        field("name", "edit", "Name", get(&record, "name", any(if package {"Handover package"} else {"New delivery"}))?, vec![("focus", true.into_pyobject(py)?.to_owned().into_any())])?,
+        field("format", "choice", "Preset", fmt.clone(), vec![("options", formats.into_any())])?,
         field("scope", "choice", "Scope", get(&record, "scope", scope)?, vec![("options", scopes(py, &fmt, has_nodes)?)])?,
         field("node", "choice", "Project node", get(&record, "node", first_node)?, vec![("options", node_choices.into_any()), ("visible", shows("node")?)])?,
         field("names", "edit", "Names (one per line, blank for all)", names, vec![("multiline", true.into_pyobject(py)?.to_owned().into_any()), ("visible", shows("names")?)])?,
         field("profile", "choice", "IFC profile", get(&options, "profile", any(""))?, vec![("options", profiles.into_any()), ("visible", shows("profile")?)])?,
         field("textures", "check", "Embed textures", get(&options, "textures", true.into_pyobject(py)?.to_owned().into_any())?, vec![("visible", shows("textures")?)])?,
         field("unit", "choice", "Units", get(&options, "unit", unit)?, vec![("options", PyList::new(py, ["mm", "cm", "m", "in", "ft"])?.into_any()), ("visible", shows("unit")?)])?,
-        field("destination", "path", "Destination", get(&record, "destination", any(""))?, vec![("pick", any("save")), ("filters", filters)])?,
+        field("destination", "path", "Destination", get(&record, "destination", any(if package {"Deliveries"} else {""}))?, vec![("pick", any(if package {"folder"} else {"save"})), ("filters", filters)])?,
     ];
+    let hidden = || false.into_pyobject(py).unwrap().to_owned().into_any();
+    for (id, _, _) in package_outputs(py)? {
+        let enabled = stored["format"] != "package" || output(&id).is_some();
+        fields.push(field(
+            &format!("include_{id}"),
+            "check",
+            &id,
+            enabled.into_pyobject(py)?.to_owned().into_any(),
+            vec![("visible", hidden())],
+        )?);
+    }
+    fields.push(field(
+        "output_options",
+        "edit",
+        "",
+        any(""),
+        vec![("visible", hidden())],
+    )?);
+    let ids = output("ifc")
+        .and_then(|o| o["options"]["ids"].as_str())
+        .unwrap_or("");
+    fields.push(field(
+        "ids",
+        "path",
+        "IDS file",
+        any(ids),
+        vec![
+            ("visible", shows("ids")?),
+            ("pick", any("open")),
+            ("filters", any("IDS (*.ids)")),
+        ],
+    )?);
+    for (id, format, title) in [
+        ("sheet_names", "pdf", "Sheet names · blank for all"),
+        (
+            "drawing_names",
+            "dxf",
+            "Scene names · blank for current view",
+        ),
+        ("topics", "bcf", "Topic GUIDs · blank for all"),
+    ] {
+        let names = output(format)
+            .and_then(|v| v["options"]["names"].as_array())
+            .map(|v| {
+                v.iter()
+                    .filter_map(|n| n.as_str())
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            })
+            .unwrap_or_default();
+        fields.push(field(
+            id,
+            "edit",
+            title,
+            any(&names),
+            vec![
+                ("multiline", true.into_pyobject(py)?.to_owned().into_any()),
+                ("visible", shows(id)?),
+            ],
+        )?);
+    }
+    for format in ["ifc", "dxf", "csv"] {
+        let fid = format!("source_{format}");
+        let source = output(format)
+            .and_then(|o| o["scope"].as_str())
+            .unwrap_or("");
+        let source = if stored["scope"] == source || matches!(source, "scenes" | "node") {
+            ""
+        } else {
+            source
+        };
+        let choices = PyList::new(
+            py,
+            [
+                ("", "Delivery scope"),
+                ("whole", "Whole model"),
+                ("visible", "Visible"),
+                ("selection", "Selection"),
+            ],
+        )?;
+        fields.push(field(
+            &fid,
+            "choice",
+            "Output scope",
+            any(source),
+            vec![("options", choices.into_any()), ("visible", shows(&fid)?)],
+        )?);
+    }
     let mut buttons = vec![("cancel", "Cancel")];
     if one_off {
         buttons.extend([("keep", "Keep as delivery"), ("export", "Export")]);
     } else {
-        buttons.push(("save", "Save delivery"));
+        buttons.extend([("save", "Keep delivery"), ("run", "Run")]);
     }
     let kwargs = PyDict::new(py);
     kwargs.set_item("buttons", &buttons)?;
@@ -597,6 +789,10 @@ pub fn export_form<'py>(win: &Bound<'py, PyAny>, key: Option<String>, one_off: b
     kwargs.set_item("on_change", Py::new(py, FormChanged { has_nodes })?)?;
     kwargs.set_item("validate", Py::new(py, FormCheck { export_scene: one_off.then(|| scene.clone().unbind()), svg: svg.clone().unbind() })?)?;
     let form = forms.getattr("Form")?.call((if one_off { "Export" } else { "Delivery" }, fields), Some(&kwargs))?;
+    form.setattr("_delivery_key",key.as_deref())?;
+    if let Some(run) = stored["runs"].as_array().and_then(|v|v.last()) {
+        form.setattr("_delivery_run",json_loads(py,&run.to_string())?)?;
+    }
     let preview = Bound::new(py, FormPreview { win: win.clone().unbind(), history: history.clone().unbind(), svg: svg.clone().unbind(), form: None })?;
     preview.borrow_mut().form = Some(form.clone().unbind());
     py.import("built_render")?.call_method1("show_delivery_form", (win, &form, one_off, &svg, &preview))?;
@@ -707,6 +903,11 @@ struct DeliveryStep {
 
 fn record_activity(win: &Bound<'_, PyAny>, title: String, detail: String, tone: &str, action: Option<(&str, Py<OpenUrl>)>) -> PyResult<()> {
     let py = win.py();
+    if win.hasattr("notify")? {
+        let actions: Vec<_> = action.into_iter().collect();
+        win.call_method1("notify", (tone, format!("{title} · {detail}"), actions))?;
+        return Ok(());
+    }
     let d = dialogs(py)?;
     match action {
         Some((label, run)) => d.call_method1("_record", (win, title, detail, tone, label, run))?,
@@ -754,13 +955,51 @@ impl DeliveryStep {
                     Some(c) => path.call1((c.bind(py),))?.getattr("parent")?.div(&dest)?,
                     None => dest,
                 };
-                let folder = base.call_method0("resolve")?.getattr("parent")?;
+                let summary = me
+                    .steps
+                    .bind(py)
+                    .getattr_opt("summary")?
+                    .filter(|s| !s.is_none());
+                if let Some(run) = &summary {
+                    run.call_method1("setdefault", ("revision", history.getattr("revision")?))?;
+                }
+                let result = match &summary {
+                    Some(s) => s.get_item("result")?.extract::<String>()?,
+                    None => "Delivered".into(),
+                };
+                let folder = match &summary {
+                    Some(s) => path.call1((s.get_item("folder")?,))?,
+                    None => base.call_method0("resolve")?.getattr("parent")?,
+                };
                 if deliveries(py)?.call_method1("records", (history.getattr("scene")?,))?.contains(key)? {
-                    deliveries(py)?.call_method1("finish", (history, key, folder.str()?))?;
+                    deliveries(py)?.call_method1("finish", (history, key, folder.str()?, &result, &summary))?;
                 }
                 win.setattr("_delivery_result", (&name, &folder))?;
                 let open = Py::new(py, OpenUrl { target: folder.clone().unbind() })?;
-                record_activity(win, format!("Delivered · {name}"), folder.str()?.to_string(), "info", Some(("Open folder", open)))?;
+                if result != "Delivered" {
+                    let review = Py::new(
+                        py,
+                        ReviewRun {
+                            win: win.clone().unbind(),
+                            key: key.clone().unbind(),
+                            summary: summary.unwrap().unbind(),
+                        },
+                    )?;
+                    let text = format!("{name} · {result}");
+                    if win.hasattr("notify")? {
+                        win.call_method1("notify", ("error", text, [("Review", review)]))?;
+                    } else {
+                        record_activity(win, text, folder.str()?.to_string(), "error", None)?;
+                    }
+                } else {
+                    record_activity(
+                        win,
+                        format!("Delivered · {name}"),
+                        folder.str()?.to_string(),
+                        "info",
+                        Some(("Open folder", open)),
+                    )?;
+                }
                 Ok(false)
             }
             Err(e) if e.is_instance_of::<PyInterruptedError>(py) => Ok(false),
@@ -787,7 +1026,9 @@ impl DeliveryStep {
         let me = slf.borrow();
         let win = me.win.bind(py);
         me.steps.bind(py).call_method0("close")?;
-        me.job.bind(py).call_method0("end")?;
+        let job = me.job.bind(py);
+        let announce = job.getattr("cancelled")?.is_truthy()? || !history_of(win)?.is(me.history.bind(py));
+        job.call_method("end", (), Some(&[("announce",announce)].into_py_dict(py)?))?;
         let queue = win.getattr("_delivery_queue")?;
         queue.call_method0("popleft")?;
         if queue.is_truthy()? {
@@ -804,8 +1045,6 @@ pub fn enqueue<'py>(win: &Bound<'py, PyAny>, key: &Bound<'py, PyAny>, record: &B
     let history = history_of(win)?;
     let deque = py.import("collections")?.getattr("deque")?.call0()?;
     let queue = win.getattr("__dict__")?.call_method1("setdefault", ("_delivery_queue", deque))?;
-    let job = job(win, &record.get_item("name")?)?;
-    job.call_method1("update", (0, "Queued"))?;
     let active = active_view(win)?;
     let ctx = PyDict::new(py);
     ctx.set_item("camera", py.import("copy")?.call_method1("copy", (active.getattr("camera")?,))?)?;
@@ -817,13 +1056,33 @@ pub fn enqueue<'py>(win: &Bound<'py, PyAny>, key: &Bound<'py, PyAny>, record: &B
     if fmt.eq("dxf")? && record.get_item("scope")?.eq("visible")? {
         ctx.set_item("view_geometry", active.getattr("hlr_geometry")?)?;
     }
-    if fmt.eq("pdf")? {
+    if fmt.eq("package")? {
+        ctx.set_item("revision", history.getattr("revision")?)?;
+    }
+    if fmt.eq("pdf")? || fmt.eq("package")? {
         ctx.set_item("pdf_writer", Py::new(py, PdfWriter { win: win.clone().unbind() })?)?;
     }
     if fmt.eq("svg")? {
         ctx.update(svg_context(win, &active, &history.getattr("scene")?, record, false)?.as_mapping())?;
     }
-    let steps = deliveries(py)?.getattr("write_steps")?.call((history.getattr("scene")?, record), Some(&ctx))?;
+    let steps = match deliveries(py)?
+        .getattr("write_steps")?
+        .call((history.getattr("scene")?, record), Some(&ctx))
+    {
+        Ok(steps) => steps,
+        Err(e) => {
+            record_activity(
+                win,
+                format!("Failed · {}", record.get_item("name")?),
+                e.value(py).str()?.to_string(),
+                "error",
+                None,
+            )?;
+            return Err(e);
+        }
+    };
+    let job = job(win, &record.get_item("name")?)?;
+    job.call_method1("update", (0, "Queued"))?;
     let advance = Py::new(py, DeliveryStep {
         win: win.clone().unbind(),
         history: history.unbind(),
@@ -853,13 +1112,17 @@ fn delivery_action(win: &Bound<'_, PyAny>, view: &Bound<'_, PyAny>, arg: &str) -
     let (verb, given) = arg.split_once(':').unwrap_or((arg, ""));
     let key = if given.is_empty() { opt(view, "_delivery_key") } else { Some(given.into_pyobject(py)?.into_any()) };
     let vp = win.getattr("viewport")?;
+    if matches!(verb, "select" | "new" | "edit" | "run" | "back") {
+        view.setattr("_delivery_review", py.None())?;
+    }
     if verb == "new" {
-        export_form(win, None, false, "ifc")?;
-    } else if verb == "history" {
+        export_form(win, None, false, "package")?;
+    } else if verb == "history" || verb == "review" {
         if let Some((key, i)) = given.rsplit_once(':') {
             let records = deliveries(py)?.call_method1("records", (vp.getattr("scene")?,))?;
             if let (Some(record), Ok(i)) = (records.call_method1("get", (key,))?.extract::<Option<Bound<'_, PyAny>>>()?, i.parse::<usize>()) {
                 if let Ok(run) = record.get_item("runs")?.get_item(i) {
+                    if verb == "review" { return review_run(view, &run); }
                     let folder = py.import("pathlib")?.getattr("Path")?.call1((run.get_item("folder")?,))?;
                     if folder.call_method0("is_dir")?.is_truthy()? {
                         py.import("built_core.desktop_open")?.call_method1("open_url", (folder,))?;

@@ -1004,8 +1004,8 @@ impl Job {
     }
 
     /// Finish once and optionally keep a result action in the capsule.
-    #[pyo3(signature = (*, failed=false, detail=None, action_label=None, action=None, result_title=None))]
-    fn end(slf: &Bound<'_, Self>, failed: bool, detail: Option<Bound<'_, PyAny>>, action_label: Option<Bound<'_, PyAny>>, action: Option<Bound<'_, PyAny>>, result_title: Option<String>) -> PyResult<()> {
+    #[pyo3(signature = (*, failed=false, detail=None, action_label=None, action=None, result_title=None, announce=true))]
+    fn end(slf: &Bound<'_, Self>, failed: bool, detail: Option<Bound<'_, PyAny>>, action_label: Option<Bound<'_, PyAny>>, action: Option<Bound<'_, PyAny>>, result_title: Option<String>, announce: bool) -> PyResult<()> {
         let py = slf.py();
         if slf.borrow().ended {
             return Ok(());
@@ -1022,6 +1022,7 @@ impl Job {
         if exclusive {
             guard_release(&win)?;
         }
+        if !announce { return Ok(()); }
         let label = label.trim_end_matches('…');
         let title = if cancelled || failed {
             format!("{} · {label}", if cancelled { "Cancelled" } else { "Failed" })
