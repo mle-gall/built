@@ -105,6 +105,10 @@ jobs:
             VENV=.venv scripts/build_native.sh
           fi
 
+      - name: Report UI translation coverage
+        if: runner.os != 'Windows'
+        run: PYTHONPATH=. .venv/bin/python scripts/translation_coverage.py
+
       - name: Verify native modules and select the release launcher
         if: runner.os == 'macOS'
         run: |

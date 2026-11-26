@@ -6,7 +6,74 @@ use pyo3::{
     prelude::*,
     types::{PyDict, PyFrozenSet},
 };
-use std::{fs, path::PathBuf};
+use serde_json::Value;
+use std::{
+    collections::BTreeMap,
+    fs,
+    path::PathBuf,
+    sync::{Mutex, OnceLock},
+};
+
+type Coverage = BTreeMap<String, (usize, usize)>;
+
+fn source_strings() -> &'static Vec<String> {
+    static SOURCES: OnceLock<Vec<String>> = OnceLock::new();
+    SOURCES.get_or_init(|| serde_json::from_str(include_str!("translation_sources.json")).unwrap())
+}
+
+fn translated_count(sources: &[String], catalogue: &Value) -> usize {
+    sources
+        .iter()
+        .filter(|key| {
+            catalogue
+                .get(key.as_str())
+                .and_then(Value::as_str)
+                .is_some_and(|s| !s.trim().is_empty())
+        })
+        .count()
+}
+
+fn qualifies((translated, total): (usize, usize)) -> bool {
+    total > 0 && translated * 100 >= total * 98
+}
+
+/// Installed catalogues are immutable for a running application. Keep just the
+/// counts, so drawing or searching Settings never decodes the catalogues again.
+#[pyfunction]
+fn language_coverage(py: Python<'_>) -> PyResult<Coverage> {
+    static CACHE: OnceLock<Mutex<Option<(PathBuf, Coverage)>>> = OnceLock::new();
+    let dir = directory(py)?;
+    let mut cache = CACHE.get_or_init(Mutex::default).lock().unwrap();
+    if let Some((root, counts)) = cache.as_ref() {
+        if root == &dir {
+            return Ok(counts.clone());
+        }
+    }
+    let sources = source_strings();
+    let total = sources.len();
+    let mut counts = BTreeMap::from([("en".to_owned(), (total, total))]);
+    if let Ok(entries) = fs::read_dir(&dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|s| s.to_str()) != Some("json") {
+                continue;
+            }
+            let Some(code) = path.file_stem().and_then(|s| s.to_str()) else {
+                continue;
+            };
+            if code == "en" {
+                continue;
+            }
+            let data = fs::read(path.as_path())
+                .ok()
+                .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+                .unwrap_or(Value::Null);
+            counts.insert(code.to_owned(), (translated_count(sources, &data), total));
+        }
+    }
+    *cache = Some((dir, counts.clone()));
+    Ok(counts)
+}
 
 const LANGUAGE_NAMES: &[(&str, &str)] = &[
     ("en", "English"),
@@ -79,30 +146,14 @@ fn directory(py: Python<'_>) -> PyResult<PathBuf> {
 /// Return the sorted language codes with installed JSON catalogues.
 #[pyfunction]
 fn available_languages(py: Python<'_>) -> PyResult<Vec<String>> {
-    let dir = directory(py)?;
-    if !dir.is_dir() {
-        return Ok(vec!["en".into()]);
-    }
-    let mut codes = Vec::new();
-    if let Ok(entries) = fs::read_dir(dir) {
-        for entry in entries.flatten() {
-            if let Some(code) = entry
-                .file_name()
-                .to_str()
-                .and_then(|s| s.strip_suffix(".json"))
-            {
-                codes.push(code.to_owned());
-            }
-        }
-    }
-    codes.sort();
-    Ok(codes)
+    Ok(language_coverage(py)?.into_keys().collect())
 }
 
 /// Choose the catalogue for the first matching system locale, or English.
 #[pyfunction]
 fn language_for_locales(locales: &Obj<'_>) -> PyResult<String> {
-    let codes = available_languages(locales.py())?;
+    let counts = language_coverage(locales.py())?;
+    let codes: Vec<_> = counts.keys().collect();
     for name in locales.try_iter()? {
         let tag = name?
             .str()?
@@ -126,7 +177,11 @@ fn language_for_locales(locales: &Obj<'_>) -> PyResult<String> {
                     .find(|s| s.split('-').next().unwrap().eq_ignore_ascii_case(base))
             });
         if let Some(code) = found {
-            return Ok(code.clone());
+            return Ok(if qualifies(counts[*code]) {
+                (*code).clone()
+            } else {
+                "en".into()
+            });
         }
     }
     Ok("en".into())
@@ -136,7 +191,17 @@ fn language_for_locales(locales: &Obj<'_>) -> PyResult<String> {
 #[pyfunction(signature=(choice))]
 fn resolve_language(py: Python<'_>, choice: Option<&str>) -> PyResult<String> {
     if let Some(code) = choice.filter(|s| !s.is_empty() && *s != SYSTEM) {
-        return Ok(code.to_owned());
+        return Ok(
+            if language_coverage(py)?
+                .get(code)
+                .copied()
+                .is_some_and(qualifies)
+            {
+                code.to_owned()
+            } else {
+                "en".into()
+            },
+        );
     }
     if py
         .import("built_render.shell_services")?
@@ -246,6 +311,7 @@ pub(super) fn install(m: &Module<'_>) -> PyResult<()> {
         wrap_pyfunction!(current_language, m)?,
         wrap_pyfunction!(is_rtl, m)?,
         wrap_pyfunction!(language_for_locales, m)?,
+        wrap_pyfunction!(language_coverage, m)?,
         wrap_pyfunction!(resolve_language, m)?,
         wrap_pyfunction!(set_language, m)?,
         wrap_pyfunction!(source_of, m)?,
@@ -254,4 +320,18 @@ pub(super) fn install(m: &Module<'_>) -> PyResult<()> {
         m.add_function(f)?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn coverage_counts_live_nonblank_entries_and_compares_exactly() {
+        let keys = ["Air", "OK", "Water", "Glass"].map(str::to_owned);
+        let data = serde_json::json!({"Air": "Air", "OK": "Oui", "Water": " ", "Old": "Ancien"});
+        assert_eq!(translated_count(&keys, &data), 2);
+        assert!(qualifies((49, 50)));
+        assert!(!qualifies((979, 1000)));
+    }
 }
