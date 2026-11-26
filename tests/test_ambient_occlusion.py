@@ -235,9 +235,20 @@ def test_a_dark_corner_stays_darker_than_a_light_one(
         return (float(np.median(light[corner] - dark[corner])) if corner.sum() else None, int(corner.sum()),
                 round(float(np.median(light[corner])), 4), round(float(np.median(dark[corner])), 4), counts)
 
+    def sweep(samples):
+        """The corner's light for five greys: it rises with the wall's colour."""
+        out = {}
+        for grey in (0.1, 0.3, 0.5, 0.7, 0.9):
+            vp = corner_blocks((grey, grey, grey))
+            vp.keys_stand_in.renderer.set_msaa_samples(samples)
+            out[grey] = round(_corner_light(vp, monkeypatch), 3)
+        vp.keys_stand_in.renderer.set_msaa_samples(4)
+        return out
+
     seen = difference(True)
     assert seen[1] > 100, seen
-    assert seen[0] > 0.025, {"antialiased": seen, "plain": difference(False)}
+    assert seen[0] > 0.025, {"antialiased": seen, "plain": difference(False),
+                             "corner light by grey, 4 samples": sweep(4), "1 sample": sweep(1)}
 
 
 def test_intensity_zero_leaves_the_picture_untouched(
