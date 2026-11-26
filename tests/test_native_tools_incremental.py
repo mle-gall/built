@@ -34,9 +34,18 @@ def _model(path):
 
 
 @pytest.fixture
-def far_window(tmp_path):
+def far_window(tmp_path, monkeypatch):
     path = tmp_path / "far.igz"
     _model(path)
+    import views.wgpu_view as resident_view
+    real = resident_view.pack_scene
+    whole = []
+
+    def counted(scene, *args, **kwargs):
+        whole.append(scene)
+        return real(scene, *args, **kwargs)
+    # The view's whole-scene path packs through this name.
+    monkeypatch.setattr(resident_view, "pack_scene", counted)
     with open_test_host(tmp_path / "profile", width=900, height=700) as host:
         win = host.window
         assert win.open_path(path) is not False
@@ -51,6 +60,7 @@ def far_window(tmp_path):
             host.idle()
             host.frame()
         assert view.packed.model_translations is not None, "the model packs rebased"
+        view.whole_packs = whole
         yield host, vp, view
 
 
@@ -92,17 +102,23 @@ def assert_resident_like_fresh(vp, view):
     assert live == drawn(pack_scene(vp.scene))
 
 
-def committed(host, vp, view, before, packs):
+def packs(view):
+    """Whole-scene packs so far: the view's own count (its test hook) and
+    the calls of the pack it makes them with."""
+    return getattr(view, "full_packs", None), len(view.whole_packs)
+
+
+def committed(host, vp, view, before, start):
     assert len(vp.history.undo_stack) == before + 1, "the gesture committed"
-    assert view.full_packs == packs, "a whole-scene pack"
+    assert packs(view) == start, "a whole-scene pack"
     assert_resident_like_fresh(vp, view)
     host.menu("undo")
     _settle(host)
-    assert view.full_packs == packs, "undo repacked the scene"
+    assert packs(view) == start, "undo repacked the scene"
     assert_resident_like_fresh(vp, view)
     host.menu("redo")
     _settle(host)
-    assert view.full_packs == packs, "redo repacked the scene"
+    assert packs(view) == start, "redo repacked the scene"
     assert_resident_like_fresh(vp, view)
 
 
@@ -112,18 +128,18 @@ def W(x, y, z=0.0):
 
 def test_line_commit(far_window):
     host, vp, view = far_window
-    packs, before = view.full_packs, len(vp.history.undo_stack)
+    start, before = packs(view), len(vp.history.undo_stack)
     host.menu("tool:line")
     _settle(host)
     _click(host, view, W(3.5, 3.5))
     _click(host, view, W(6.5, 3.5))
     _escape(host)
-    committed(host, vp, view, before, packs)
+    committed(host, vp, view, before, start)
 
 
 def test_erase_commit(far_window):
     host, vp, view = far_window
-    packs, before = view.full_packs, len(vp.history.undo_stack)
+    start, before = packs(view), len(vp.history.undo_stack)
     host.menu("tool:eraser")
     _settle(host)
     x, y = _px(view, W(5.0, 4.0))
@@ -132,38 +148,38 @@ def test_erase_commit(far_window):
     _settle(host)
     host.pointer("release", x, y, 1, 0, 0)
     _settle(host)
-    committed(host, vp, view, before, packs)
+    committed(host, vp, view, before, start)
 
 
 def test_push_pull_commit(far_window):
     host, vp, view = far_window
-    packs, before = view.full_packs, len(vp.history.undo_stack)
+    start, before = packs(view), len(vp.history.undo_stack)
     host.menu("tool:pushpull")
     _settle(host)
     _click(host, view, W(8.5, 5.5))
     _click(host, view, W(8.5, 6.5))
-    committed(host, vp, view, before, packs)
+    committed(host, vp, view, before, start)
 
 
 def test_move_commit(far_window):
     host, vp, view = far_window
-    packs, before = view.full_packs, len(vp.history.undo_stack)
+    start, before = packs(view), len(vp.history.undo_stack)
     host.menu("tool:move")
     _settle(host)
     _click(host, view, W(2.0, 6.0))
     _click(host, view, W(2.3, 6.2))
-    committed(host, vp, view, before, packs)
+    committed(host, vp, view, before, start)
 
 
 def test_first_tool_after_a_document_change_does_not_repack(far_window):
     """The first tool event after any change of the document's version used
     to repack a far model whole (the first L press of a session)."""
     host, vp, view = far_window
-    packs = view.full_packs
+    start = packs(view)
     vp.scene.version += 1
     host.key(True, Qt.Key_L.value, 0, "l")
     host.key(False, Qt.Key_L.value, 0, "l")
     _move(host, view, W(3.5, 3.5))
     _settle(host)
     assert type(vp.active_tool).__name__ == "LineTool"
-    assert view.full_packs == packs
+    assert packs(view) == start
