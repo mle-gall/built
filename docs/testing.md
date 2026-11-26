@@ -14,8 +14,10 @@ workers replaced (`--max-worker-restart 8`).
 ```bash
 export HOME=$(mktemp -d) BUILT_SETTINGS_DIR=$(mktemp -d)   # never the real profile
 python -m pytest -n 4 -m "not slow and not window" tests  # quick subset: while iterating
-python -m pytest -n 8 -m "not slow" tests     # fast suite: before handing work back
-python -m pytest -n 8 tests                   # full suite: before installing a build
+python -m pytest -n 8 -m "not slow and not perf" tests     # fast suite: before handing work back
+# Full release suite with window tests. Keep timing budgets off the parallel runners.
+export BUILT_WINDOW_TESTS=1
+python -m pytest -n 8 -m "not perf" tests && python -m pytest -n 0 -m perf tests
 python -m pytest tests/test_x.py::test_y      # one test, serially (no -n)
 ```
 
@@ -119,7 +121,7 @@ packages are cached by runner platform. Tests use temporary homes and settings.
 
 | Runner | Checks |
 | --- | --- |
-| macOS arm64 | Build the three release wheels and launcher. Run the full pytest suite with `-n auto --dist loadfile`, then the Rust library tests. Build a local app bundle and run its executable with `--check`. |
+| macOS arm64 | Build the three release wheels and launcher. Run the full pytest suite with `-n auto --dist loadfile -m "not perf"`, then serial performance budgets and the Rust library tests. Build a local app bundle and run its executable with `--check`. |
 | Ubuntu | Install GTK, Wayland and Mesa development/runtime packages, build the core and render wheels, run the `not slow and not window` tier and Rust library tests, and check the launcher with Cargo. |
 | Windows x86-64 | Type-check all five crate manifests with the MSVC target and the runner's Python. |
 

@@ -187,6 +187,8 @@ jobs:
           echo "BUILT_BINARY=$PWD/rust/built_app/target/release/built" >> "$GITHUB_ENV"
 
       - name: Run the full macOS suite
+        env:
+          SELECTED_TESTS: ${{ inputs.tests }}
         if: runner.os == 'macOS'
         run: |
           swift .github/ci/window-session.swift configure || true
@@ -204,7 +206,13 @@ jobs:
             esac
             echo "::notice::$BUILT_CI_SKIP_WINDOWS; window tests will be marked skipped."
           fi
-          .venv/bin/python -m pytest -n auto --dist loadfile -q -rs ${{ inputs.tests || 'tests' }}
+          if [[ -n "$SELECTED_TESTS" ]]; then
+            read -ra selection <<< "$SELECTED_TESTS"
+            .venv/bin/python -m pytest -n 0 -q -rs "${selection[@]}"
+          else
+            .venv/bin/python -m pytest -n auto --dist loadfile -q -rs -m "not perf" tests
+            .venv/bin/python -m pytest -n 0 -q -rs -m perf tests
+          fi
 
       - name: Run the Linux non-window tier and check the launcher
         if: runner.os == 'Linux' && !inputs.tests
@@ -214,7 +222,11 @@ jobs:
 
       - name: Run the selected tests
         if: runner.os == 'Linux' && inputs.tests
-        run: .venv/bin/python -m pytest -n auto --dist loadfile -q -rs ${{ inputs.tests }}
+        env:
+          SELECTED_TESTS: ${{ inputs.tests }}
+        run: |
+          read -ra selection <<< "$SELECTED_TESTS"
+          .venv/bin/python -m pytest -n 0 -q -rs "${selection[@]}"
 
       - name: Rust library tests
         if: runner.os != 'Windows' && !inputs.tests
