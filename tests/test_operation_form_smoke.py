@@ -354,7 +354,7 @@ def test_native_f3_finds_and_runs_a_misspelled_command(tmp_path):
     path = tmp_path / "empty.built"
     save_scene(Scene(), path)
     steps = tmp_path / "f3"
-    steps.write_text("wait 600\nkey escape\nkey f3\nwait 250\ntype cut lsit\nwait 300\n"
+    steps.write_text("wait 600\nkey escape\nkey f3\nwait 250\ntype abuot\nwait 300\n"
                      "key enter\nwait 350\nstate\nkey escape\nwait 300\nstate\nquit\n")
     home = tmp_path / "home"
     home.mkdir()
@@ -365,7 +365,7 @@ def test_native_f3_finds_and_runs_a_misspelled_command(tmp_path):
     log = result.stdout + result.stderr
     states = [json.loads(line.removeprefix("[built] state ")) for line in log.splitlines()
               if line.startswith("[built] state ")]
-    assert result.returncode == 0 and [s["large_sheet"] for s in states[:2]] == ["cutlist", ""], log
+    assert result.returncode == 0 and [s["large_sheet"] for s in states[:2]] == ["about", ""], log
     assert all(not s["errors"] and not s["blocked_widgets"] for s in states), log
 
 
@@ -383,7 +383,7 @@ def test_native_menu_search_and_persisted_keyboard_binding(tmp_path):
     config.mkdir(parents=True)
     home.mkdir()
     settings = NativeSettings(profile)
-    settings.setValue("shortcuts/" + settings_key("menu:cutlist"), "Ctrl+Shift+F9")
+    settings.setValue("shortcuts/" + settings_key("menu:about"), "Ctrl+Shift+F9")
     settings.sync()
     steps = tmp_path / "menu-commands"
     steps.write_text("wait 800\nkey escape\nkey f9 cmd+shift\nwait 350\nstate\nkey escape\n"
@@ -393,7 +393,7 @@ def test_native_menu_search_and_persisted_keyboard_binding(tmp_path):
                  env=dict(os.environ, BUILT_ANSWERS="escape"), capture_output=True, text=True, timeout=60)
     log = result.stdout + result.stderr
     states = [json.loads(s.removeprefix("[built] state ")) for s in log.splitlines() if s.startswith("[built] state ")]
-    assert result.returncode == 0 and states[0]["large_sheet"] == "cutlist", log
+    assert result.returncode == 0 and states[0]["large_sheet"] == "about", log
     assert states[1]["windows"] == 2 and all(not s["errors"] for s in states), log
 
 

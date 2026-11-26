@@ -114,8 +114,18 @@ def test_cut_list_group_copy_export(tmp_path, monkeypatch, pasteboard):
         assert list(csv.reader(f)) == sheet.table
 
 
-@pytest.mark.parametrize("sid", ["about", "extensions", "cutlist"])
+@pytest.mark.parametrize("sid", ["about", "extensions"])
 def test_offscreen_window_commands_open_report_sheets(native_host, sid):
     win = native_host.window
     win.run_command(sid)
     assert chrome_sheet.current(win).id == sid
+
+
+def test_empty_cut_list_gives_selection_hint(native_host, monkeypatch):
+    from built_render import chrome_dialogs
+    notices = []
+    monkeypatch.setattr(chrome_dialogs, "notify", lambda *args: notices.append(args))
+    win = native_host.window
+    win.run_command("cutlist")
+    assert chrome_sheet.current(win) is None
+    assert "Select an assembly" in notices[0][2]

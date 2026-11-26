@@ -325,7 +325,6 @@ impl CutListSheet {
             Some(n) => n,
             None => "Parts".into_pyobject(py)?.into_any(),
         })?;
-        snapshot.set_item("revision", scene.getattr("content_version")?)?;
         snapshot.set_item("parts", parts)?;
         snapshot.set_item("selected", &self.selected)?;
         snapshot.set_item("match_material", self.match_material)?;
@@ -707,7 +706,20 @@ fn show_report_sheet<'py>(py: Python<'py>, win: &Bound<'py, PyAny>, sid: &str) -
     }
     let provider = match sid {
         "about" => Py::new(py, AboutSheet::new())?.into_any(),
-        "cutlist" => Py::new(py, CutListSheet::new())?.into_any(),
+        "cutlist" => {
+            let scene = win.getattr("viewport")?.getattr("scene")?;
+            let assembly = assembly_of(&scene)?;
+            let has_parts = match assembly {
+                Some(group) => group.getattr("children")?.len()? > 0,
+                None => false,
+            };
+            if !has_parts {
+                let detail = tr(py)?.call1(("Select an assembly containing parts to see its cut list.",))?;
+                py.import("built_render.chrome_dialogs")?.call_method1("notify", (win, tr(py)?.call1(("Cut list",))?, detail))?;
+                return Ok(py.None().into_bound(py));
+            }
+            Py::new(py, CutListSheet::new())?.into_any()
+        }
         _ => return Err(pyo3::exceptions::PyKeyError::new_err(sid.to_owned())),
     };
     chrome.call_method1("open", (win, provider))

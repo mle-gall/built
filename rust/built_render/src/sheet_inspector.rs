@@ -71,21 +71,21 @@ fn catalogue(kind: &str) -> &'static [Row] {
             ("fill_color", "Fill colour", F::Color), ("radius_mm", "Corner radius", F::Num("mm")),
             ("sides", "Sides", F::Int), ("w_mm", "Width", F::Num("mm")), ("h_mm", "Height", F::Num("mm")),
             ("locked", "Locked", F::Check)],
-        "dimension" => &[("text", "Text (<> = value)", F::Text), ("text_mm", "Text height", F::Num("mm")),
+        "dimension" => &[("text", "Override text", F::Text), ("text_mm", "Text height", F::Num("mm")),
             ("decimals", "Decimals", F::Int), ("units", "Units", F::Pick(UNITS)), ("show_unit", "Show unit", F::Check),
             ("ends", "Ends", F::Pick(ENDS)),
             ("text_pos", "Text position", F::Pick(&[("above", "Above"), ("below", "Below"), ("centered", "On the line"),
                 ("aside", "Beside"), ("aside_below", "Beside, below")])),
-            ("text_align", "Text", F::Pick(&[("aligned", "Along the line"), ("horizontal", "Horizontal")])),
+            ("text_align", "Text direction", F::Pick(&[("aligned", "Along the line"), ("horizontal", "Horizontal")])),
             ("sep_mm", "Line offset", F::Num("mm")), ("offset_mm", "Text gap", F::Num("mm")),
             ("scale_n", "Scale", F::Scale), ("color", "Colour", F::Color), ("locked", "Locked", F::Check)],
-        "angular" => &[("text", "Text (<> = value)", F::Text), ("text_mm", "Text height", F::Num("mm")),
+        "angular" => &[("text", "Override text", F::Text), ("text_mm", "Text height", F::Num("mm")),
             ("decimals", "Decimals", F::Int), ("ends", "Ends", F::Pick(ENDS)), ("radius_mm", "Arc radius", F::Num("mm")),
             ("offset_mm", "Text gap", F::Num("mm")), ("color", "Colour", F::Color), ("locked", "Locked", F::Check)],
         "radial" => &[("kind", "Measures", F::Pick(&[("radius", "Radius"), ("diameter", "Diameter")])),
-            ("text", "Text (<> = value)", F::Text), ("text_mm", "Text height", F::Num("mm")),
+            ("text", "Override text", F::Text), ("text_mm", "Text height", F::Num("mm")),
             ("decimals", "Decimals", F::Int), ("units", "Units", F::Pick(UNITS)), ("ends", "Ends", F::Pick(ENDS)),
-            ("placement", "Text", F::Pick(&[("auto", "Automatic"), ("in", "Inside"), ("out", "Outside")])),
+            ("placement", "Text placement", F::Pick(&[("auto", "Automatic"), ("in", "Inside"), ("out", "Outside")])),
             ("centre_mark", "Centre mark", F::Check), ("radius_mm", "Radius", F::Num("mm")),
             ("angle_deg", "Angle", F::Num("°")), ("scale_n", "Scale", F::Scale), ("color", "Colour", F::Color),
             ("locked", "Locked", F::Check)],
@@ -189,7 +189,9 @@ fn row(doc: &Snapshot, owner: &str, fields: &J, (name, label, kind): &Row) -> Op
     };
     Some(((*label).to_string(), match kind {
         F::Num(unit) => {
-            let t = text(v);
+            let t = if *name == "sep_mm" {
+                v.as_f64().map(|n| format!("{n:.1}")).unwrap_or_else(|| text(v))
+            } else { text(v) };
             format!("{ED}edit{ED}{fid}{ED}{}", if unit.is_empty() { t } else { format!("{t} {unit}") })
         }
         F::Color => format!("{ED}color{ED}{fid}{ED}{}", text(v)),

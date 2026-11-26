@@ -70,7 +70,7 @@ fn cutlist(d: &Value) -> PyResult<Value> {
     }
     Ok(
         json!({"id":"cutlist","title":"Cut list","content":{"title":d["assembly"],
-        "sub":format!("{} parts · revision {}", parts.len(), d["revision"]), "blocks":blocks,
+        "sub":format!("{} {}", parts.len(), if parts.len() == 1 { "part" } else { "parts" }), "blocks":blocks,
         "empty":"Select an assembly containing parts to see its cut list."},
         "members":members,
         "verbs":[button("group", if match_material {"✓ Match material"}else{"Match material"}),

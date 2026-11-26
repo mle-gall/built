@@ -1601,7 +1601,7 @@ impl Workspace {
             };
             rows.push((
                 c.getattr("name")?,
-                format!("{} {shape} · {n}", c.getattr("paper")?.str()?),
+                format!("{} {shape} · {n} {}", c.getattr("paper")?.str()?, if n == 1 { "item" } else { "items" }),
                 c.is(&cur),
             ));
         }
