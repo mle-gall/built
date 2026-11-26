@@ -2277,7 +2277,17 @@ impl Ui {
                             let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 22.0), Sense::hover());
                             let mut right = r.max.x - 8.0;
                             if let Some((summary, _)) = &selection {
-                                let g = ui.painter().layout_no_wrap(summary.clone(), meta(), FAINT);
+                                let measure = match col.inspector_title.as_str() {
+                                    "Edge" => Some("Length"),
+                                    "Face" => Some("Area"),
+                                    _ => None,
+                                };
+                                let subtitle = col.inspector.iter()
+                                    .filter(|(section, _)| section == "Geometry")
+                                    .flat_map(|(_, rows)| rows)
+                                    .find(|(label, _)| Some(label.as_str()) == measure)
+                                    .map_or(summary, |(_, value)| value);
+                                let g = ui.painter().layout_no_wrap(subtitle.clone(), meta(), FAINT);
                                 right -= g.size().x;
                                 ui.painter().galley(pos2(right, r.center().y - g.size().y / 2.0), g, FAINT);
                                 right -= 10.0;
