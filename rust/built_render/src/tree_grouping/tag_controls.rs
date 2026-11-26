@@ -48,17 +48,12 @@ pub fn inspector_tag_row(scene: &Bound<'_, PyAny>) -> PyResult<Vec<(String, Stri
     if !super::row_actions::writable(scene)? || !editable_tag_selection(scene)? {
         return Ok(vec![]);
     }
-    let layers = scene.py().import("built_core.layers")?;
-    let picked = layers.call_method1("taggable", (scene.getattr("selection")?,))?;
-    if picked.len()? == 0 {
+    // The tags the selection sits on: empty when nothing in it takes one.
+    // `selection_layers` reads a big selection's faces and edges in bulk,
+    // where a tag lookup per entity was a frame's worth of time per change.
+    let current: HashSet<String> = scene.py().import("built_core.layers")?.call_method1("selection_layers", (scene,))?.extract()?;
+    if current.is_empty() {
         return Ok(vec![]);
-    }
-    let mut current = HashSet::<String>::new();
-    for entity in picked.try_iter()? {
-        current.insert(layers.call_method1("layer_of", (entity?,))?.extract()?);
-        if current.len() > 1 {
-            break;
-        }
     }
     let mut options = vec![];
     let mut at = 0;

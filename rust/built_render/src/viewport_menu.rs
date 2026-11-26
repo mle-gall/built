@@ -101,6 +101,23 @@ fn repeat_value(py: Python<'_>, win: &Bound<'_, PyAny>, label: &Bound<'_, PyAny>
     Ok(String::new())
 }
 
+/// Whether Hide has anything to hide (`_hideable` is not empty), stopping
+/// at the first: the full list was an `is_hidden` per entity of a
+/// select-all, on every change of the selection.
+fn any_hideable(entities: &Bound<'_, PyAny>) -> PyResult<bool> {
+    let py = entities.py();
+    let mesh = py.import("built_core.mesh")?;
+    let types = (mesh.getattr("Edge")?, mesh.getattr("Face")?, py.import("built_core.group")?.getattr("Group")?).into_pyobject(py)?;
+    let hidden = py.import("built_core")?.getattr("is_hidden")?;
+    for e in entities.try_iter()? {
+        let e = e?;
+        if e.is_instance(&types)? && !hidden.call1((&e,))?.is_truthy()? {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
 /// Where loose geometry lives: the groups open for editing, else Model.
 fn context_path(py: Python<'_>, scene: &Bound<'_, PyAny>) -> PyResult<String> {
     let open = py.import("built_core.outliner")?.call_method1("open_path", (scene,))?;
@@ -204,15 +221,30 @@ pub fn read_facts(
     let geometry = !sel.is_empty() && faces.len() + edges.len() == sel.len();
     let selection = PyList::new(py, sel)?;
     f.taggable = crate::tree_grouping::tag_visibility::has_tag_actions(scene, selection.as_any())?;
-    f.hideable = win.call_method1("_hideable", (&selection,))?.is_truthy()?;
+    f.hideable = any_hideable(&selection)?;
     f.makes_faces = geometry && win.call_method1("_makes_faces", (&selection,))?.is_truthy()?;
     f.textured_face = faces.len() == 1 && sel.len() == 1 && !win.call_method0("_single_textured_face")?.is_none();
     f.bridgeable = geometry && win.call_method1("_bridgeable", (&selection,))?.is_truthy()?;
     f.context = context_path(py, scene)?;
-    let mesh_edges = scene.getattr("mesh")?.getattr("edges")?;
-    let loose: Vec<_> = edges.iter().filter(|e| mesh_edges.contains(*e).unwrap_or(false)).collect();
-    f.loose_edges = loose.len();
-    f.curve = loose.iter().any(|e| opt(e, "curve").is_some());
+    let store = opt(&scene.getattr("mesh")?, "_store").filter(|s| s.hasattr("stale_keys").unwrap_or(false) && s.hasattr("curved_edges").unwrap_or(false));
+    match store {
+        // Many edges: which are the active mesh's, and whether one is a
+        // curve's, from the store in two calls.
+        Some(store) if edges.len() > 256 => {
+            let keys = PyList::new(py, edges.iter().map(|e| e.getattr("key")).collect::<PyResult<Vec<_>>>()?)?;
+            let stale: std::collections::HashSet<u128> = store.call_method1("stale_keys", ("edge", &keys))?.extract::<Vec<u128>>()?.into_iter().collect();
+            let mine: std::collections::HashSet<u128> = keys.extract::<Vec<u128>>()?.into_iter().filter(|k| !stale.contains(k)).collect();
+            f.loose_edges = mine.len();
+            let curved: Vec<(i128, u128)> = store.call_method0("curved_edges")?.extract()?;
+            f.curve = curved.iter().any(|(_, key)| mine.contains(key));
+        }
+        _ => {
+            let mesh_edges = scene.getattr("mesh")?.getattr("edges")?;
+            let loose: Vec<_> = edges.iter().filter(|e| mesh_edges.contains(*e).unwrap_or(false)).collect();
+            f.loose_edges = loose.len();
+            f.curve = loose.iter().any(|e| opt(e, "curve").is_some());
+        }
+    }
     if let Some(one) = one.filter(|o| o.is_instance(&group_cls).unwrap_or(false)) {
         let editable = crate::context_tools::text_editable(scene, one)?;
         f.name = text(one, "name");

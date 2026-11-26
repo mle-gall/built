@@ -74,7 +74,7 @@ fn selection_stamp<'py>(scene: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>
 fn selection(view: &Bound<'_, PyAny>, win: &Bound<'_, PyAny>) -> PyResult<()> {
     let py = view.py();
     let scene = win.getattr("viewport")?.getattr("scene")?;
-    let sel: Vec<Bound<'_, PyAny>> = scene.getattr("selection")?.try_iter()?.collect::<PyResult<_>>()?;
+    let selected = scene.getattr("selection")?;
     let focus = opt(view, "_ui_insp_node").filter(|f| f.is_truthy().unwrap_or(false));
     let stamp = selection_stamp(&scene)?;
     let focused = match &focus {
@@ -82,7 +82,14 @@ fn selection(view: &Bound<'_, PyAny>, win: &Bound<'_, PyAny>) -> PyResult<()> {
         None => false,
     };
     let delivery_key = opt(view, "_delivery_key");
-    let ids = PyTuple::new(py, sel.iter().map(id_of))?;
+    // The selection by its revision (a stand-in set by its members): this
+    // runs every frame, and a tuple of every member's id was hundreds of
+    // milliseconds a frame with a select-all of a big model.
+    let ids = if selected.hasattr("revision")? {
+        (id_of(&selected), &stamp).into_pyobject(py)?.into_any()
+    } else {
+        PyTuple::new(py, selected.try_iter()?.map(|e| e.map(|e| id_of(&e))).collect::<PyResult<Vec<_>>>()?)?.into_any()
+    };
     let focus_node = if focused { Some(focus.as_ref().expect("focused").get_item(0)?) } else { None };
     let sig = PyTuple::new(py, [
         id_of(&scene).into_pyobject(py)?.into_any(),
@@ -97,6 +104,14 @@ fn selection(view: &Bound<'_, PyAny>, win: &Bound<'_, PyAny>) -> PyResult<()> {
     }
     view.setattr("_panel_selection_sig", &sig)?;
     view.setattr("_assembly_drag", py.None())?;
+    // Only the placements are read one by one: a select-all's faces and
+    // edges are counted, never walked.
+    let count = selected.len()?;
+    let sel: Vec<Bound<'_, PyAny>> = if selected.hasattr("values_of")? {
+        selected.call_method1("values_of", ("placement",))?.try_iter()?.collect::<PyResult<_>>()?
+    } else {
+        selected.try_iter()?.collect::<PyResult<_>>()?
+    };
     let groups = if focused { Vec::new() } else { groups_in(py, &sel)? };
     let records = PyList::empty(py);
     let mut schema = "IFC4".into_pyobject(py)?.into_any();
@@ -170,8 +185,8 @@ fn selection(view: &Bound<'_, PyAny>, win: &Bound<'_, PyAny>) -> PyResult<()> {
     let out = PyDict::new(py);
     out.set_item("schema", schema)?;
     out.set_item("vocabulary", vocabulary)?;
-    out.set_item("selection_count", sel.len())?;
-    if !groups.is_empty() && groups.len() == sel.len() {
+    out.set_item("selection_count", count)?;
+    if !groups.is_empty() && groups.len() == count {
         let face_count = py.import("built_core.mesh")?.getattr("face_count")?;
         let mut faces = 0usize;
         for group in &groups {
@@ -182,7 +197,8 @@ fn selection(view: &Bound<'_, PyAny>, win: &Bound<'_, PyAny>) -> PyResult<()> {
     out.set_item("rule", rule)?;
     out.set_item("records", records)?;
     out.set_item("parts", parts)?;
-    out.set_item("path", sel.len() == 1 && sel[0].is_instance(&geopath)?)?;
+    let only = if count == 1 { selected.try_iter()?.next().transpose()? } else { None };
+    out.set_item("path", match only { Some(one) => one.is_instance(&geopath)?, None => false })?;
     send(view, "selection", out.as_any())
 }
 

@@ -361,13 +361,102 @@ fn taggable<'py>(entities: &Obj<'py>) -> PyResult<Bound<'py, PyList>> {
     Ok(out)
 }
 
+/// Selections past this many entries read their faces' and edges' tags
+/// from the mesh in bulk.
+pub(crate) const BULK_SELECTION: usize = 256;
+
+/// The distinct raw tags (a face's `attrs["layer"]`, an edge's `layer`;
+/// None untagged) of the selected faces or edges (`kind`) of the scene's
+/// active mesh, in one store call: the attribute rows a loaded file's faces
+/// carry, a face's own attributes once touched (`_attr_own`), never a
+/// handle per entry (reading `face.attrs` also copies each row into the
+/// mesh's own attributes). None when the bulk read cannot answer (a
+/// stand-in set, an element the active mesh does not know): read them one
+/// by one then.
+pub(crate) fn mesh_element_tags<'py>(scene: &Obj<'py>, selection: &Obj<'py>, kind: &str) -> PyResult<Option<Vec<Option<String>>>> {
+    let py = scene.py();
+    if !selection.hasattr("element_keys")? {
+        return Ok(None);
+    }
+    let mesh = scene.getattr(intern!(py, "mesh"))?;
+    let Some(store) = mesh.attr_opt("_store")?.filter(|s| s.hasattr("distinct_tags").unwrap_or(false)) else {
+        return Ok(None);
+    };
+    let Some(table) = mesh.attr_opt("_attr_table")? else {
+        return Ok(None);
+    };
+    let mut keys = selection.call_method1("element_keys", (kind,))?;
+    let mut tags: Vec<Option<String>> = Vec::new();
+    if kind == "face" {
+        if let Some(own) = mesh.attr_opt("_attr_own")?.and_then(|o| o.cast_into::<PyDict>().ok()).filter(|o| !o.is_empty()) {
+            let rest = PyList::empty(py);
+            for key in keys.try_iter()? {
+                let key = key?;
+                match own.get_item(&key)?.filter(|d| !d.is_none()) {
+                    Some(attrs) => {
+                        let tag: Option<String> = attrs.call_method1("get", ("layer",))?.extract().unwrap_or(None);
+                        if !tags.contains(&tag) {
+                            tags.push(tag);
+                        }
+                    }
+                    None => rest.append(key)?,
+                }
+            }
+            keys = rest.into_any();
+        }
+    }
+    if keys.len()? == 0 {
+        return Ok(Some(tags));
+    }
+    let found = store.call_method1("distinct_tags", (kind, keys))?;
+    if found.get_item(1)?.len()? > 0 {
+        return Ok(None);
+    }
+    for tag in found.get_item(0)?.try_iter()? {
+        let tag = tag?;
+        let tag: Option<String> = if kind == "face" {
+            let row: i64 = tag.extract()?;
+            if row < 0 { None } else { table.get_item(row)?.call_method1("get", ("layer",))?.extract().unwrap_or(None) }
+        } else {
+            tag.extract()?
+        };
+        if !tags.contains(&tag) {
+            tags.push(tag);
+        }
+    }
+    Ok(Some(tags))
+}
+
 /// The layers what is selected sits on (empty with nothing selected): what
-/// the Layers panel and the Layers toolbar highlight.
+/// the Layers panel and the Layers toolbar highlight. A big selection's
+/// faces and edges are read in bulk (`mesh_element_tags`).
 #[pyfunction]
 fn selection_layers<'py>(scene: &Obj<'py>) -> PyResult<Bound<'py, PySet>> {
     let py = scene.py();
     let out = PySet::empty(py)?;
     let sel = scene.attr_opt(intern!(py, "selection"))?.unwrap_or_else(|| none(py));
+    if !sel.is_none() && sel.hasattr("values_of")? && sel.len()? > BULK_SELECTION {
+        for kind in ["placement", "other"] {
+            for e in taggable(&sel.call_method1("values_of", (kind,))?)?.iter() {
+                out.add(layer_of(&e)?)?;
+            }
+        }
+        for kind in ["face", "edge"] {
+            match mesh_element_tags(scene, &sel, kind)? {
+                Some(tags) => {
+                    for tag in tags {
+                        out.add(tag.filter(|t| !t.is_empty()).unwrap_or_else(|| DEFAULT_LAYER.to_owned()))?;
+                    }
+                }
+                None => {
+                    for e in sel.call_method1("values_of", (kind,))?.try_iter()? {
+                        out.add(layer_of(&e?)?)?;
+                    }
+                }
+            }
+        }
+        return Ok(out);
+    }
     for e in taggable(&sel)?.iter() {
         out.add(layer_of(&e)?)?;
     }
