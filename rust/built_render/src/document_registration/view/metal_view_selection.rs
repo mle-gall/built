@@ -300,6 +300,83 @@ fn leave_edit_on_empty_click<'py>(a: &Args<'py>) -> Reply<'py> {
     leaves.into_bound_py_any(py)
 }
 
+/// What changes exactly when the selection does: its native revision
+/// (`ElementSet.revision`, a process-wide counter taken on every change of
+/// content and for every new set), or the identities of a stand-in set.
+pub(super) fn selection_key<'py>(selected: &Obj<'py>) -> Reply<'py> {
+    let py = selected.py();
+    if let Some(revision) = selected.getattr_opt("revision")? {
+        return (id(selected), revision).into_bound_py_any(py);
+    }
+    let identity = py.import("built_core.mesh")?.getattr("element_identity")?;
+    py.get_type::<pyo3::types::PyFrozenSet>().call1((py.import("builtins")?.call_method1("map", (&identity, selected))?,))
+}
+
+/// `(key, groups, faces, edges, face keys, edge keys)`: what a frame reads
+/// of the selection, sorted out once per change of it (`selection_key`).
+/// Every frame used to walk the whole selection (a type test per entry,
+/// several times a frame): with 600k entries that alone was frames of
+/// hundreds of milliseconds while nothing changed. The keys are None for
+/// a stand-in set (the marks then read them off the handles).
+pub(super) fn selection_digest<'py>(view: &Obj<'py>) -> PyResult<Bound<'py, PyTuple>> {
+    let py = view.py();
+    let selected = view.getattr("scene")?.getattr("selection")?;
+    let key = selection_key(&selected)?;
+    if let Some(digest) = view.getattr("__dict__")?.call_method1("get", ("_selection_digest",))?.cast_into::<PyTuple>().ok() {
+        if digest.get_item(0)?.eq(&key)? {
+            return Ok(digest);
+        }
+    }
+    let group = py.import("built_core.group")?.getattr("Group")?;
+    let (groups, faces, edges) = (PyList::empty(py), PyList::empty(py), PyList::empty(py));
+    let (mut face_keys, mut edge_keys) = (none(py), none(py));
+    if selected.hasattr("values_of")? {
+        for placement in selected.call_method1("values_of", ("placement",))?.try_iter()? {
+            let placement = placement?;
+            if isinstance(&placement, &group)? {
+                groups.append(placement)?;
+            }
+        }
+        faces.call_method1("extend", (selected.call_method1("values_of", ("face",))?,))?;
+        edges.call_method1("extend", (selected.call_method1("values_of", ("edge",))?,))?;
+        face_keys = selected.call_method1("element_keys", ("face",))?;
+        edge_keys = selected.call_method1("element_keys", ("edge",))?;
+    } else {
+        let mesh = py.import("built_core.mesh")?;
+        let (face, edge) = (mesh.getattr("Face")?, mesh.getattr("Edge")?);
+        for entity in selected.try_iter()? {
+            let entity = entity?;
+            if isinstance(&entity, &group)? {
+                groups.append(entity)?;
+            } else if isinstance(&entity, &face)? {
+                faces.append(entity)?;
+            } else if isinstance(&entity, &edge)? {
+                edges.append(entity)?;
+            }
+        }
+    }
+    let digest = PyTuple::new(py, [key, groups.into_any(), faces.into_any(), edges.into_any(), face_keys, edge_keys])?;
+    view.setattr("_selection_digest", &digest)?;
+    Ok(digest)
+}
+
+/// Selected loose edges the overlay painter strokes itself under a mesh
+/// tool; more go to the native line slot below.
+const PAINTED_EDGES: usize = 2000;
+const SELECTED_EDGES_SLOT: &str = "selected_edges";
+
+/// The renderer's view of the selection and of what is under the cursor.
+///
+/// Two parts, each uploaded only when it changes: the selection's (its
+/// placements' highlight rows, its faces' dots, its loose edges and its
+/// groups' boxes), keyed on the selection's revision and the document's
+/// version; and the hover's (the hovered rows, a hovered face's dots, a
+/// hovered edge), which a renderer with `set_hover_marks` keeps apart, so
+/// hovering over a huge selection re-sends a few vertices. Nothing here
+/// depends on the camera: the side of a face the camera sees picks its dot
+/// colour on the GPU (`preview.wgsl`), so orbiting re-sends nothing (the
+/// eye was part of the key, and every camera move rebuilt the dots of
+/// every selected face).
 fn sync_selection<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let view = a.get_item(0)?;
@@ -309,23 +386,16 @@ fn sync_selection<'py>(a: &Args<'py>) -> Reply<'py> {
     }
     let mesh = py.import("built_core.mesh")?;
     let (face, edge, identity) = (mesh.getattr("Face")?, mesh.getattr("Edge")?, mesh.getattr("element_identity")?);
-    let group = py.import("built_core.group")?.getattr("Group")?;
     let parity = py.import("views.wgpu_parity")?;
     let np = py.import("numpy")?;
-    let (tools, packed) = (view.getattr("tools")?, view.getattr("packed")?);
-    let selected = view.getattr("scene")?.getattr("selection")?;
+    let (tools, packed, scene) = (view.getattr("tools")?, view.getattr("packed")?, view.getattr("scene")?);
+    let selected = scene.getattr("selection")?;
+    let digest = selection_digest(&view)?;
     let hover = match attr(&view, "hover_rows")? {
         rows if rows.is_truthy()? => positional(&rows)?,
         _ => PyTuple::empty(py),
     };
     let review = crate::tasks_host::preview_rows(&view)?.unwrap_or_else(|| PyTuple::empty(py).into_any());
-    let faces = PyList::empty(py);
-    for entity in selected.try_iter()? {
-        let entity = entity?;
-        if isinstance(&entity, &face)? {
-            faces.append(entity)?;
-        }
-    }
     let hovered = hovered_entity(&view)?;
     let mode = tools.getattr("mode")?;
     // A tool's face under the cursor wears the selection dots (GL's
@@ -333,68 +403,93 @@ fn sync_selection<'py>(a: &Args<'py>) -> Reply<'py> {
     // already shows them.
     let hover_face = if isinstance(&hovered, &face)? && mode.ne("select")? && !selected.contains(&hovered)? { hovered.clone() } else { none(py) };
     let placement = if hover_face.is_truthy()? { attr(&tools, "_mesh_hover_placement")? } else { none(py) };
+    let hover_edge = if isinstance(&hovered, &edge)? && !selected.contains(&hovered)? { hovered.clone() } else { none(py) };
     // Outside the mesh tools (whose feedback owns the preview), the native
-    // preview edges carry the selected and hovered loose edges and the
-    // selected groups' boxes, all depth-tested as in GL.
+    // preview edges carry the selected loose edges and the selected groups'
+    // boxes, all depth-tested as in GL.
     let edges_here = mode.ne("mesh")? && renderer.hasattr("set_preview_mesh")?;
     let [box_key, boxes] = if edges_here {
         unpack::<2>(&view.call_method0("_selection_box_vertices")?)?
     } else {
         [none(py), PyTuple::empty(py).into_any()]
     };
-    let eye = if !faces.is_empty() || hover_face.is_truthy()? {
-        positional(&view.getattr("camera")?.call_method0("eye")?.call_method0("toTuple")?)?
-    } else {
-        PyTuple::empty(py)
-    };
-    let identities = py.get_type::<pyo3::types::PyFrozenSet>().call1((py.import("builtins")?.call_method1("map", (&identity, &selected))?,))?;
-    let signature = (identities, &hover, &review, identity.call1((&hovered,))?, id(&packed), id(&placement), eye, &mode, box_key).into_bound_py_any(py)?;
-    if signature.eq(view.getattr("_selection_signature")?)? {
+    let split = renderer.hasattr("set_hover_marks")?;
+    let mesh_revision = attr(&scene.getattr("mesh")?, "revision")?;
+    let geometry = (scene.getattr("version")?, id(&scene.getattr("mesh")?), mesh_revision).into_bound_py_any(py)?;
+    let selection_part = (digest.get_item(0)?, id(&packed), &mode, &box_key, geometry, edges_here).into_bound_py_any(py)?;
+    let hover_part = (&hover, &review, identity.call1((&hovered,))?, id(&placement), edges_here).into_bound_py_any(py)?;
+    let signature = (&selection_part, &hover_part).into_bound_py_any(py)?;
+    let old = view.getattr("_selection_signature")?;
+    if signature.eq(&old)? {
         return Ok(none(py));
     }
-    let rows = PySet::empty(py)?;
-    for root in selected.try_iter()? {
-        let root = root?;
-        if isinstance(&root, &group)? {
-            rows.call_method1("update", (view.call_method1("_rows_for_group", (&root,))?,))?;
+    let selection_changed = old.is_none() || !old.get_item(0)?.eq(&selection_part)? || !split;
+    // The selected placements' rows, once per change of the selection.
+    if selection_changed || attr(&view, "_selection_rows_list")?.is_none() {
+        let rows = PySet::empty(py)?;
+        for root in digest.get_item(1)?.try_iter()? {
+            rows.call_method1("update", (view.call_method1("_rows_for_group", (root?,))?,))?;
         }
-    }
-    // GL never tints a face-me figure (its mesh quad is not what is on
-    // screen): its cue is the outline of the quad as drawn.
-    let groups = packed.getattr("groups")?;
-    let indices = PyList::empty(py);
-    for row in rows.iter() {
-        if !truthy(&groups.get_item(&row)?, "billboard")? {
-            indices.append(row)?;
+        // GL never tints a face-me figure (its mesh quad is not what is on
+        // screen): its cue is the outline of the quad as drawn.
+        let groups = packed.getattr("groups")?;
+        let indices = PyList::empty(py);
+        for row in rows.iter() {
+            if !truthy(&groups.get_item(&row)?, "billboard")? {
+                indices.append(row)?;
+            }
         }
+        view.setattr("_selection_rows_list", indices)?;
     }
-    renderer.call_method1("set_highlight", (indices, PyList::new(py, hover.iter())?, review))?;
-    if renderer.hasattr("set_face_marks")? {
-        let mut marks = parity.call_method1("face_marks", (&view, &faces))?;
-        if !hover_face.is_none() {
-            marks = np.call_method1("concatenate", ((marks, parity.call_method1("hover_face_marks", (&view, &hover_face, &placement))?),))?;
+    renderer.call_method1("set_highlight", (view.getattr("_selection_rows_list")?, PyList::new(py, hover.iter())?, review))?;
+    let (faces, edges) = (digest.get_item(2)?, digest.get_item(3)?);
+    let hover_dots = if hover_face.is_none() { None } else { Some(parity.call_method1("hover_face_marks", (&view, &hover_face, &placement))?) };
+    let vertex = py.import("built_core")?.getattr("VERTEX")?;
+    let hover_line = |edge: &Obj<'py>| -> Reply<'py> {
+        let ends = PyList::empty(py);
+        for end in ["a", "b"] {
+            ends.append((edge.getattr(end)?.call_method0("toTuple")?, (0, 0, 1), (76, 140, 242, 255)))?;
+        }
+        np.call_method1("array", (ends, &vertex))
+    };
+    if split {
+        if selection_changed && renderer.hasattr("set_face_marks")? {
+            renderer.call_method1("set_face_marks", (parity.call_method1("face_marks", (&view, &faces, digest.get_item(4)?))?,))?;
+        }
+        let no_bytes = np.call_method1("empty", (0, np.getattr("uint8")?))?;
+        let dots = hover_dots.unwrap_or_else(|| no_bytes.clone());
+        let line = if edges_here && !hover_edge.is_none() { parity.call_method1("raw", (hover_line(&hover_edge)?,))? } else { no_bytes };
+        renderer.call_method1("set_hover_marks", (dots, line))?;
+    } else if renderer.hasattr("set_face_marks")? {
+        let mut marks = parity.call_method1("face_marks", (&view, &faces, digest.get_item(4)?))?;
+        if let Some(dots) = hover_dots {
+            marks = np.call_method1("concatenate", ((marks, dots),))?;
         }
         renderer.call_method1("set_face_marks", (marks,))?;
     }
-    if edges_here {
-        let vertices = PyList::empty(py);
-        let mark = |entity: &Obj<'py>, colour: (u8, u8, u8, u8)| -> PyResult<()> {
-            for end in ["a", "b"] {
-                vertices.append((entity.getattr(end)?.call_method0("toTuple")?, (0, 0, 1), colour))?;
-            }
-            Ok(())
-        };
-        for entity in selected.try_iter()? {
-            let entity = entity?;
-            if isinstance(&entity, &edge)? {
-                mark(&entity, (242, 114, 40, 255))?;
-            }
+    // Under a mesh tool the overlay painter strokes the selected loose
+    // edges every frame; past a few thousand they go to a native line slot
+    // instead, uploaded once per change of the selection.
+    if selection_changed && renderer.hasattr("set_lines")? {
+        let bulk = !edges_here && edges.len()? > PAINTED_EDGES;
+        let was = truthy(&view, "_selected_edge_lines")?;
+        if bulk {
+            let ends = parity.call_method1("edge_marks", (&view, &edges, digest.get_item(5)?))?.get_item("pos")?.call_method1("reshape", (-1, 2, 3))?;
+            let scale: f64 = view.call_method0("devicePixelRatioF")?.extract()?;
+            let segments = py.import("views.wgpu_lines")?.call_method1("segments", (ends, (242, 114, 40, 255), 1.5 * scale))?;
+            renderer.call_method("set_lines", (SELECTED_EDGES_SLOT, parity.call_method1("raw", (segments,))?), Some(&fields!(py; "above_edges" => true)))?;
+        } else if was {
+            renderer.call_method1("set_lines", (SELECTED_EDGES_SLOT, np.call_method1("empty", (0, np.getattr("uint8")?))?))?;
         }
-        if isinstance(&hovered, &edge)? && !selected.contains(&hovered)? {
-            mark(&hovered, (76, 140, 242, 255))?;
+        view.setattr("_selected_edge_lines", bulk)?;
+    }
+    if edges_here && selection_changed {
+        let mut parts = vec![parity.call_method1("edge_marks", (&view, &edges, digest.get_item(5)?))?];
+        if !split && !hover_edge.is_none() {
+            parts.push(hover_line(&hover_edge)?);
         }
-        let vertex = py.import("built_core")?.getattr("VERTEX")?;
-        let lines = np.call_method1("concatenate", ((np.call_method1("array", (vertices, vertex))?, boxes),))?;
+        parts.push(boxes);
+        let lines = np.call_method1("concatenate", (PyList::new(py, parts)?,))?;
         renderer.call_method1("set_preview_mesh", (np.call_method1("empty", (0, np.getattr("uint8")?))?, parity.call_method1("raw", (lines,))?))?;
     }
     view.setattr("_selection_signature", signature)?;
@@ -414,10 +509,9 @@ fn draw_selection_marks<'py>(a: &Args<'py>) -> Reply<'py> {
     let (pen, colour) = (render.getattr("PaintPen")?, render.getattr("PaintColor")?);
     let selection = view.getattr("scene")?.getattr("selection")?;
     let mut entities = Vec::new();
-    for entity in selection.try_iter()? {
-        let entity = entity?;
-        if isinstance(&entity, &edge)? {
-            entities.push((entity, false));
+    if !truthy(&view, "_selected_edge_lines")? {
+        for entity in selection_digest(&view)?.get_item(3)?.try_iter()? {
+            entities.push((entity?, false));
         }
     }
     let hovered = hovered_entity(&view)?;

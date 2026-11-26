@@ -8,10 +8,14 @@ struct MarkPose { matrix: mat4x4f, counts: vec4u }
 override MARK: bool = false;
 override GHOST: bool = false;
 override EDGE: bool = false;
-struct Out { @builtin(position) position: vec4f, @location(0) color: vec4f, @location(1) section: f32 }
-@vertex fn vs(@builtin(vertex_index) index: u32, @location(0) pos: vec3f, @location(1) normal: vec3f, @location(2) color: vec4f) -> Out {
+struct Out { @builtin(position) position: vec4f, @location(0) color: vec4f, @location(1) section: f32, @location(2) back: vec3f }
+// A face mark (MARK, not EDGE) carries the dot colour for the face's back
+// in its normal: the side the camera sees picks it per pixel, so a camera
+// move re-sends nothing however many faces are selected. Hover marks are
+// instance 1, which a grab's pose leaves where they are.
+@vertex fn vs(@builtin(vertex_index) index: u32, @builtin(instance_index) instance: u32, @location(0) pos: vec3f, @location(1) normal: vec3f, @location(2) color: vec4f) -> Out {
  var point = vec4f(pos, 1.);
- if mark_pose.counts.y != 0u || (MARK && select(index < mark_pose.counts.x, normal.x > 0.5, EDGE)) {
+ if mark_pose.counts.y != 0u || (MARK && instance == 0u && select(index < mark_pose.counts.x, normal.x > 0.5, EDGE)) {
   point = mark_pose.matrix * point;
  }
  var o: Out; o.position = camera.vp * point;
@@ -19,9 +23,10 @@ struct Out { @builtin(position) position: vec4f, @location(0) color: vec4f, @loc
  let face_color = select(style.front.rgb, style.back.rgb, mark_pose.counts.y != 0u && color.r == 1.);
  let unpainted = select(face_color, style.edge.rgb, GHOST && EDGE);
  o.color = vec4f(select(color.rgb,unpainted,color.a == 0.)*shade,select(color.a,1.,color.a == 0.));
+ o.back = select(o.color.rgb, normal, MARK && !EDGE);
  o.section = dot(point,style.section_plane); return o;
 }
-@fragment fn fs(i: Out) -> @location(0) vec4f {
+@fragment fn fs(i: Out, @builtin(front_facing) front: bool) -> @location(0) vec4f {
  if i.section < 0. { discard; }
  // The stipple is anchored to the lower left of the framebuffer.
  let pixel = vec2f(i.position.x, camera.size.y - i.position.y);
@@ -30,7 +35,7 @@ struct Out { @builtin(position) position: vec4f, @location(0) color: vec4f, @loc
   else { if all((pixel%vec2f(4.))>=vec2f(1.)) { discard; } }
  }
  if MARK && !EDGE && !all((pixel % vec2f(6.)) < vec2f(2.)) { discard; }
- let c = i.color.rgb;
+ let c = select(i.back, i.color.rgb, front || !MARK || EDGE);
  return vec4f(c,i.color.a);
 }
 

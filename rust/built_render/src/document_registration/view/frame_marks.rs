@@ -173,64 +173,241 @@ fn face_ranges<'py>(a: &Args<'py>) -> Reply<'py> {
     Ok(ranges.into_any())
 }
 
-/// The dot colour of `face` as seen from the view's camera, GL's orange
-/// when the viewport does not choose.
-fn dot_colour<'py>(view: &Obj<'py>, face: &Obj<'py>, normal: Obj<'py>, origin: Obj<'py>) -> Reply<'py> {
-    let py = view.py();
+/// GL's selection orange, the dot colour when the viewport does not choose.
+const ORANGE: [f64; 3] = [0.95, 0.45, 0.16];
+
+fn rgb_of(colour: &Obj<'_>) -> PyResult<[f64; 3]> {
+    Ok([colour.get_item(0)?.extract()?, colour.get_item(1)?.extract()?, colour.get_item(2)?.extract()?])
+}
+
+/// The dot colours of `face`'s front and back (GL's
+/// `_selection_dot_colors`), orange on both when the viewport does not
+/// choose. Which side the camera sees is the GPU's to decide
+/// (`preview.wgsl`): a face mark carries both, so a camera move never
+/// rebuilds the marks.
+fn dot_colours(view: &Obj<'_>, face: &Obj<'_>) -> PyResult<[[f64; 3]; 2]> {
     let choose = attr(&view.getattr("source_viewport")?, "_selection_dot_colors")?;
     if !choose.is_truthy()? {
-        return (0.95, 0.45, 0.16).into_bound_py_any(py);
+        return Ok([ORANGE, ORANGE]);
     }
     let [front, back] = unpack::<2>(&choose.call1((face,))?)?;
-    let toward = view.getattr("camera")?.call_method0("eye")?.sub(origin)?;
-    let facing = py.import("built_core")?.getattr("Vec3")?.call_method1("dotProduct", (normal, toward))?.gt(0)?;
-    Ok(if facing { front } else { back })
+    Ok([rgb_of(&front)?, rgb_of(&back)?])
+}
+
+/// One 28-byte face-mark vertex: the corner, the back's dot colour where a
+/// normal would be (`preview.wgsl`), the front's as its RGBA.
+fn mark_vertex(out: &mut Vec<u8>, p: [f32; 3], [front, back]: &[[f64; 3]; 2]) {
+    for v in p {
+        out.extend_from_slice(&v.to_le_bytes());
+    }
+    for v in back {
+        out.extend_from_slice(&(*v as f32).to_le_bytes());
+    }
+    out.extend(front.iter().map(|c| (c * 255.).clamp(0., 255.) as u8));
+    out.push(255);
+}
+
+fn as_bytes<'py>(py: Python<'py>, bytes: Vec<u8>) -> Reply<'py> {
+    bytes_of(numpy::PyArray1::from_vec(py, bytes), py)
+}
+
+/// The view's coordinate frame: the corners of its marks are relative to it.
+fn frame_of(view: &Obj<'_>) -> PyResult<[f64; 3]> {
+    let origin = attr(&view.getattr("packed")?, "origin")?;
+    if origin.is_none() {
+        return Ok([0.; 3]);
+    }
+    Ok([origin.get_item(0)?.extract()?, origin.get_item(1)?.extract()?, origin.get_item(2)?.extract()?])
+}
+
+/// The selected faces' dots in one native pass (`MeshStore.mark_triangles`):
+/// every face's own triangles (the triangulation the resident bake and
+/// `Face.triangulate` share), in the active mesh's frame, so the dots sit
+/// on a face inside an open group where the group is, not at its
+/// definition's origin. The dot colours are worked out once per
+/// attribute-table row, not per face: a select-all of a 200k-face mesh was
+/// seconds of per-face calls. Hidden faces are not drawn, so they get none.
+///
+/// `faces` are the handles (for a face the active mesh's store does not
+/// know, measured one by one), `keys` their keys when the caller already
+/// has them (`ElementSet.element_keys`).
+fn marks_of<'py>(view: &Obj<'py>, faces: &Obj<'py>, keys: Option<Obj<'py>>) -> Reply<'py> {
+    let py = view.py();
+    let mesh = view.getattr("scene")?.getattr("mesh")?;
+    let store = attr(&mesh, "_store")?;
+    let table = attr(&mesh, "_attr_table")?;
+    let hypot = py.import("core._native")?.call_method0("qt_hypot")?;
+    let mut out = Vec::new();
+    let mut known = std::collections::HashSet::new();
+    if !store.is_none() && store.hasattr("mark_triangles")? && !table.is_none() && hypot.is_truthy()? {
+        let keys = match keys {
+            Some(keys) => keys,
+            None => {
+                let list = empty(py);
+                for face in faces.try_iter()? {
+                    list.append(face?.getattr("key")?)?;
+                }
+                list.into_any()
+            }
+        };
+        let [corners, rows, counts, missing] = unpack::<4>(&store.call_method1("mark_triangles", (&keys, &hypot, frame_of(view)?))?)?;
+        let corners: numpy::PyReadonlyArray2<'_, f32> = corners.extract()?;
+        let corners = corners.as_array();
+        let rows: Vec<i64> = rows.extract()?;
+        let counts: Vec<u32> = counts.extract()?;
+        let missing: Vec<u128> = missing.extract()?;
+        // A face's attributes are its own once touched (`_attr_own`), else
+        // its table row's: the colours (or None: hidden) are worked out
+        // once per row, and once per distinct paint of the own ones.
+        let own = attr(&mesh, "_attr_own")?.cast_into::<PyDict>().ok().filter(|own| !own.is_empty());
+        let found: Vec<u128> = if own.is_some() {
+            let gone: std::collections::HashSet<u128> = missing.iter().copied().collect();
+            keys.try_iter()?.map(|k| k?.extract::<u128>()).filter(|k| k.as_ref().map_or(true, |k| !gone.contains(k))).collect::<PyResult<_>>()?
+        } else {
+            Vec::new()
+        };
+        let mut by_row: std::collections::HashMap<i64, Option<[[f64; 3]; 2]>> = std::collections::HashMap::new();
+        let mut by_paint: std::collections::HashMap<String, Option<[[f64; 3]; 2]>> = std::collections::HashMap::new();
+        let namespace = py.import("types")?.getattr("SimpleNamespace")?;
+        let colours_of = |attrs: &Obj<'py>| -> PyResult<Option<[[f64; 3]; 2]>> {
+            if attrs.call_method1("get", ("hidden",))?.is_truthy()? {
+                return Ok(None);
+            }
+            Ok(Some(dot_colours(view, &namespace.call((), Some(&fields!(py; "attrs" => attrs)))?)?))
+        };
+        out.reserve(corners.nrows() * 28);
+        let mut at = 0usize;
+        for (i, (row, count)) in rows.iter().zip(&counts).enumerate() {
+            let n = *count as usize * 3;
+            // An own dict left empty (attributes read, never set) is the
+            // unpainted face's.
+            let own_attrs = match &own {
+                Some(own) => own.get_item(found[i])?.filter(|d| !d.is_none()),
+                None => None,
+            };
+            let unpainted = own_attrs.as_ref().is_some_and(|d| d.len().is_ok_and(|n| n == 0));
+            let mine = own_attrs.filter(|_| !unpainted);
+            let colour = match mine {
+                Some(attrs) => {
+                    let mut paint = String::new();
+                    for name in ["color", "mat", "texture", "opacity", "pbr", "back", "hidden"] {
+                        paint.push_str(&attrs.call_method1("get", (name,))?.repr()?.to_string_lossy());
+                        paint.push('\u{1f}');
+                    }
+                    if !by_paint.contains_key(&paint) {
+                        by_paint.insert(paint.clone(), colours_of(&attrs)?);
+                    }
+                    by_paint[&paint]
+                }
+                None => {
+                    let row = &if unpainted { -1 } else { *row };
+                    if !by_row.contains_key(row) {
+                        let attrs = if *row >= 0 { table.get_item(*row)? } else { PyDict::new(py).into_any() };
+                        by_row.insert(*row, colours_of(&attrs)?);
+                    }
+                    by_row[row]
+                }
+            };
+            if let Some(colour) = &colour {
+                for k in at..at + n {
+                    mark_vertex(&mut out, [corners[[k, 0]], corners[[k, 1]], corners[[k, 2]]], colour);
+                }
+            }
+            at += n;
+        }
+        if missing.is_empty() {
+            view.setattr("_selected_mark_count", out.len() / 28)?;
+            return as_bytes(py, out);
+        }
+        known = keys.try_iter()?.map(|k| k?.extract::<u128>()).collect::<PyResult<_>>()?;
+        for key in missing {
+            known.remove(&key);
+        }
+    }
+    // Faces the store does not know (another mesh's, a stand-in's): one by one.
+    let origin = frame_of(view)?;
+    for face in faces.try_iter()? {
+        let face = face?;
+        if !known.is_empty() && known.contains(&face.getattr("key")?.extract::<u128>()?) {
+            continue;
+        }
+        if attr(&face, "attrs")?.is_truthy()? && face.getattr("attrs")?.call_method1("get", ("hidden",))?.is_truthy()? {
+            continue;
+        }
+        let colour = dot_colours(view, &face)?;
+        for triangle in face.call_method0("triangulate")?.try_iter()? {
+            for point in triangle?.try_iter()? {
+                let [x, y, z]: [f64; 3] = point?.call_method0("toTuple")?.extract()?;
+                mark_vertex(&mut out, [(x - origin[0]) as f32, (y - origin[1]) as f32, (z - origin[2]) as f32], &colour);
+            }
+        }
+    }
+    view.setattr("_selected_mark_count", out.len() / 28)?;
+    as_bytes(py, out)
 }
 
 fn face_marks<'py>(a: &Args<'py>) -> Reply<'py> {
-    let py = a.py();
     let (view, faces) = (a.get_item(0)?, a.get_item(1)?);
+    let keys = a.get_item(2)?;
+    marks_of(&view, &faces, (!keys.is_none()).then_some(keys))
+}
+
+/// The selected loose edges as native preview line vertices in GL's
+/// selection orange, `(pos, (0, 0, 1), rgba)` per end, in one native pass
+/// (`MeshStore.mark_segments`) for the edges the active mesh knows, one by
+/// one for any other.
+fn edge_marks<'py>(a: &Args<'py>) -> Reply<'py> {
+    let py = a.py();
+    let (view, edges, keys) = (a.get_item(0)?, a.get_item(1)?, a.get_item(2)?);
     let numpy = np(py)?;
-    let module = parity(py)?;
-    let prepare = py.import("built_render")?.getattr("prepare_face_marks")?;
-    let packed = view.getattr("packed")?;
-    let scene = view.getattr("scene")?;
-    let zero = (0., 0., 0.).into_bound_py_any(py)?;
-    let origins = if faces.is_truthy()? && scene.getattr("mesh")?.is(&attr(&scene, "loose_mesh")?) {
-        packed.getattr_opt("prototype_origins")?.unwrap_or_else(|| PyTuple::empty(py).into_any())
-    } else {
-        PyTuple::empty(py).into_any()
-    };
-    let known = origins.len()?;
-    let parts = empty(py);
-    let three = PySlice::new(py, 0, 3, 1);
-    for face in faces.try_iter()? {
-        let face = face?;
-        for range in module.call_method1("face_ranges", (&view, PyList::new(py, [&face])?))?.try_iter()? {
-            let [code, first, count] = unpack::<3>(&range?)?;
-            let (first, count) = (int(first)?, int(count)?);
-            let command = packed.getattr("commands")?.get_item(&code)?;
-            let start = int(command.get_item("first")?)?;
-            let indices = packed.getattr("indices")?.get_item(PySlice::new(py, start + first * 3, start + (first + count) * 3, 1))?;
-            let rows = indices.call_method1("astype", (numpy.getattr("int64")?,))?.add(int(command.get_item("base")?)?)?;
-            let vertices = packed.getattr("vertices")?.get_item(rows)?.call_method0("copy")?;
-            let colour = dot_colour(&view, &face, face.call_method0("normal")?, face.getattr("vertices")?.get_item(0)?)?;
-            // Incremental prototypes already use the active coordinate frame.
-            let anchored = (int(code.clone())? as usize) < known;
-            let (origin, frame) = if anchored { (origins.get_item(&code)?, packed.getattr("origin")?) } else { (zero.clone(), zero.clone()) };
-            prepare.call1((bytes_of(&vertices, py)?, colour.get_item(&three)?, origin, frame))?;
-            parts.append(vertices)?;
+    let vertex = parity(py)?.getattr("VERTEX")?;
+    let store = attr(&view.getattr("scene")?.getattr("mesh")?, "_store")?;
+    let mut parts = Vec::new();
+    let mut known = std::collections::HashSet::new();
+    if !store.is_none() && store.hasattr("mark_segments")? {
+        let keys = if keys.is_none() {
+            let list = empty(py);
+            for edge in edges.try_iter()? {
+                list.append(edge?.getattr("key")?)?;
+            }
+            list.into_any()
+        } else {
+            keys
+        };
+        let [ends, missing] = unpack::<2>(&store.call_method1("mark_segments", (&keys, (0., 0., 0.)))?)?;
+        let lines = numpy.call_method1("zeros", (ends.len()?, &vertex))?;
+        lines.set_item("pos", &ends)?;
+        lines.set_item("normal", (0, 0, 1))?;
+        lines.set_item("color", (242, 114, 40, 255))?;
+        parts.push(lines);
+        let missing: Vec<u128> = missing.extract()?;
+        if !missing.is_empty() {
+            known = keys.try_iter()?.map(|k| k?.extract::<u128>()).collect::<PyResult<_>>()?;
+            for key in missing {
+                known.remove(&key);
+            }
+        } else {
+            return Ok(parts.pop().expect("one part"));
         }
     }
-    let marks = if parts.is_empty() { numpy.call_method1("empty", (0, module.getattr("VERTEX")?))? } else { numpy.call_method1("concatenate", (parts,))? };
-    view.setattr("_selected_mark_count", marks.len()?)?;
-    bytes_of(marks, py)
+    let rows = empty(py);
+    for edge in edges.try_iter()? {
+        let edge = edge?;
+        if !known.is_empty() && known.contains(&edge.getattr("key")?.extract::<u128>()?) {
+            continue;
+        }
+        for end in ["a", "b"] {
+            rows.append((edge.getattr(end)?.call_method0("toTuple")?, (0, 0, 1), (242, 114, 40, 255)))?;
+        }
+    }
+    parts.push(numpy.call_method1("array", (rows, &vertex))?);
+    numpy.call_method1("concatenate", (PyList::new(py, parts)?,))
 }
 
 /// The dots GL puts on the face under the cursor of Push/Pull, Paint,
 /// Offset, Follow Me... (`_paint_hover`): a selected face's dots, in the
-/// colour picked against the side you see. The Metal view outlined the face
-/// in cyan instead, which reads as a selected edge loop.
+/// colours of its two sides. The Metal view outlined the face in cyan
+/// instead, which reads as a selected edge loop.
 ///
 /// Built from the face's own triangulation through `placement`'s matrix (a
 /// face inside a component is stored in its part's coordinates), not from
@@ -239,33 +416,17 @@ fn face_marks<'py>(a: &Args<'py>) -> Reply<'py> {
 fn hover_face_marks<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let (view, face) = (a.get_item(0)?, a.get_item(1)?);
-    let numpy = np(py)?;
-    let vertex = parity(py)?.getattr("VERTEX")?;
     let matrix = attr(&a.get_item(2)?, "xform")?;
     let placed = |point: Obj<'py>| if matrix.is_none() { Ok(point) } else { matrix.call_method1("map", (point,)) };
-    let mut points = Vec::new();
+    let mut out = Vec::new();
+    let colour = dot_colours(&view, &face)?;
     for triangle in face.call_method0("triangulate")?.try_iter()? {
         for point in triangle?.try_iter()? {
-            points.push(placed(point?)?);
+            let [x, y, z]: [f64; 3] = placed(point?)?.call_method0("toTuple")?.extract()?;
+            mark_vertex(&mut out, [x as f32, y as f32, z as f32], &colour);
         }
     }
-    if points.is_empty() {
-        return bytes_of(numpy.call_method1("empty", (0, vertex))?, py);
-    }
-    let (mut normal, mut origin) = (face.call_method0("normal")?, face.getattr("vertices")?.get_item(0)?);
-    if !matrix.is_none() {
-        (normal, origin) = (matrix.call_method1("mapVector", (normal,))?, matrix.call_method1("map", (origin,))?);
-    }
-    let colour = dot_colour(&view, &face, normal, origin)?;
-    let mut rgba = [0u8, 0, 0, 255];
-    for (byte, level) in rgba.iter_mut().zip(colour.get_item(PySlice::new(py, 0, 3, 1))?.try_iter()?) {
-        *byte = (level?.extract::<f64>()? * 255.).clamp(0., 255.) as u8;
-    }
-    let rows = empty(py);
-    for point in points {
-        rows.append((point.call_method0("toTuple")?, (0, 0, 1), (rgba[0], rgba[1], rgba[2], rgba[3])))?;
-    }
-    bytes_of(numpy.call_method1("array", (rows, vertex))?, py)
+    as_bytes(py, out)
 }
 
 pub(super) fn install_parity(module: &Bound<PyModule>) -> PyResult<()> {
@@ -283,7 +444,8 @@ pub(super) fn install_parity(module: &Bound<PyModule>) -> PyResult<()> {
             ("has_transparency", Mode::Function, has_transparency, &["packed"], "", ""),
             ("hidden_geometry", Mode::Function, hidden_geometry, &["view"], "", ""),
             ("face_ranges", Mode::Function, face_ranges, &["view", "faces"], "", ""),
-            ("face_marks", Mode::Function, face_marks, &["view", "faces"], "", ""),
+            ("face_marks", Mode::Function, face_marks, &["view", "faces", "keys=None"], "", ""),
+            ("edge_marks", Mode::Function, edge_marks, &["view", "edges", "keys=None"], "", ""),
             ("hover_face_marks", Mode::Function, hover_face_marks, &["view", "face", "placement=None"], "", ""),
         ],
     )

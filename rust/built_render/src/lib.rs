@@ -1513,6 +1513,9 @@ impl Renderer {
             let selected: std::collections::HashSet<_> = selected_ids.into_iter().collect();
             let hovered: std::collections::HashSet<_> = hovered_ids.into_iter().collect();
             let review: std::collections::HashSet<_> = review_ids.into_iter().collect();
+            // The changed rows go up in one write of their span (selecting
+            // thousands of placements was a queue write per row).
+            let mut span: Option<(usize, usize)> = None;
             for (i, flag) in s.flags.iter_mut().enumerate() {
                 let next = (*flag & !(6 | TASK_REVIEW_FLAG))
                     | if review.contains(&i) { TASK_REVIEW_FLAG } else { 0 }
@@ -1521,8 +1524,14 @@ impl Renderer {
                 if next != *flag {
                     *flag = next;
                     s.rows[i*80+72..i*80+76].copy_from_slice(&next.to_le_bytes());
-                    self.queue
-                        .write_buffer(&s.inst, i as u64 * 80 + 72, &next.to_le_bytes());
+                    span = Some(span.map_or((i, i), |(a, _)| (a, i)));
+                }
+            }
+            if let Some((first, last)) = span {
+                if first == last {
+                    self.queue.write_buffer(&s.inst, first as u64 * 80 + 72, &s.rows[first*80+72..first*80+76]);
+                } else {
+                    self.queue.write_buffer(&s.inst, first as u64 * 80, &s.rows[first*80..(last+1)*80]);
                 }
             }
         }
@@ -1654,6 +1663,15 @@ impl Renderer {
         let data = triangles.as_slice()?;
         preview::Preview::validate(data, &[]).map_err(PyValueError::new_err)?;
         self.face_marks.set_mark_faces(&self.device, data);
+        Ok(())
+    }
+    /// What is under the cursor, apart from the selection's marks (a
+    /// hovered face's dots, a hovered edge): hovering re-sends these few
+    /// vertices only, however large the selection is.
+    fn set_hover_marks(&mut self, triangles: PyReadonlyArray1<'_, u8>, edges: PyReadonlyArray1<'_, u8>) -> PyResult<()> {
+        let (triangles, edges) = (triangles.as_slice()?, edges.as_slice()?);
+        preview::Preview::validate(triangles, edges).map_err(PyValueError::new_err)?;
+        self.face_marks.set_hover(&self.device, triangles, edges);
         Ok(())
     }
     #[pyo3(signature=(selection, hover, keys))]
