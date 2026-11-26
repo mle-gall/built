@@ -1358,7 +1358,7 @@ impl Ui {
     }
 
     fn lsheet_footer(ui: &mut egui::Ui, f: &Footer, fr: Rect, out: &mut Vec<String>) {
-        let inner = fr.shrink2(vec2(SPACE_M, 2.0));
+        let inner = fr.shrink2(vec2(SPACE_M, SPACE_S));
         ui.scope_builder(egui::UiBuilder::new().max_rect(inner).layout(egui::Layout::left_to_right(egui::Align::Center)), |ui| {
             ui.spacing_mut().item_spacing = vec2(0.0, 0.0);
             for (i, l) in f.links.iter().enumerate() {

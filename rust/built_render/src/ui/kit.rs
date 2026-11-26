@@ -1283,7 +1283,8 @@ pub mod organisms {
         let header = Rect::from_min_size(rect.min, vec2(rect.width(), BUTTON_H + 2.0 * SPACE_M));
         p.hline(rect.x_range(), header.bottom() - 0.5, rule);
         let footer = footer.then(|| {
-            let top = rect.bottom() - CONTROL_H - 2.0 * SPACE_XS;
+            // Room for a primary button with the same 8 pt above and below.
+            let top = rect.bottom() - BUTTON_H - 2.0 * SPACE_S;
             p.hline(rect.x_range(), top + 0.5, rule);
             Rect::from_min_max(pos2(rect.left(), top), rect.max)
         });
