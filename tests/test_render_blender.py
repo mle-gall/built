@@ -169,7 +169,9 @@ def test_the_panel_knows_where_blender_is(native_host, monkeypatch):
     monkeypatch.setattr(rb, "in_snap", lambda: False)
     panel = create_panel(ExtensionApp(native_host.window, "render_blender"), lambda: None)
     controls = {item["id"]: item for section in panel.sections() for item in section["items"]}
-    assert controls["availability"]["available"] and controls["render"]["enabled"]
+    # Found: no availability chip; the link's state and Open in Blender instead.
+    assert "availability" not in controls and controls["render"]["enabled"]
+    assert controls["link_state"]["label"] == "Not linked" and controls["link_open"]["enabled"]
     assert "binary" not in controls and "engine" not in controls
 
     monkeypatch.setattr(rb, "in_snap", lambda: True)
