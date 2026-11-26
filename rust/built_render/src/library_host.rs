@@ -11,6 +11,7 @@
 //! and who uses them, runs the verbs through the protocol, and feeds the
 //! Paint strip and the material inspector. Model edits go through
 //! `built_core.protocol.commands`.
+use crate::library_collections as collections;
 use crate::settings_rows::{func, none, obj, opt, s, Res};
 use pyo3::{
     prelude::*,
@@ -1182,6 +1183,58 @@ impl ComponentsProvider {
     }
 }
 
+#[pyclass(module = "built_render.wgpu_library", extends = LibraryProvider, dict)]
+pub struct FamiliesProvider;
+
+#[pymethods]
+impl FamiliesProvider {
+    #[new]
+    fn new() -> PyClassInitializer<Self> {
+        PyClassInitializer::from(LibraryProvider).add_subclass(FamiliesProvider)
+    }
+
+    #[classattr]
+    fn id() -> &'static str { "families" }
+
+    #[classattr]
+    fn label() -> &'static str { "Families" }
+
+    #[pyo3(signature = (ctx, verb, item, _arg=""))]
+    fn run(&self, py: Python<'_>, ctx: &Bound<'_, PyAny>, verb: &str, item: &Bound<'_, PyAny>, _arg: &str) -> PyResult<()> {
+        if verb != "apply" { return Ok(()); }
+        let file: std::path::PathBuf = item.get_item("file")?.extract()?;
+        let scene = ctx.getattr("scene")?;
+        let cache = scene.getattr("__dict__")?.call_method1("setdefault", ("_library_family_templates", PyDict::new(py)))?;
+        let index: usize = item.get_item("index")?.extract()?;
+        let key = (&file, index);
+        let mut template = cache.call_method1("get", (key,))?;
+        let category: String = item.get_item("family_category")?.extract()?;
+        let class = match category.to_lowercase().as_str() {
+            "door" | "doors" => Some("IfcDoor"), "window" | "windows" => Some("IfcWindow"), _ => None,
+        };
+        if template.is_none() {
+            let payload = json(py)?.call_method1("loads", (std::fs::read_to_string(&file)?,))?;
+            payload.set_item("types", PyList::new(py, [payload.get_item("types")?.get_item(index)?])?)?;
+            template = py.import("built_core")?.call_method1("rfa_library_definitions", (payload,))?.get_item(0)?;
+            template.getattr("ext")?.set_item("library_family_type", item.get_item("key")?)?;
+            if let Some(class) = class {
+                template.getattr("ifc")?.set_item("class", class)?;
+                template.getattr("ext")?.set_item("library_host", "wall")?;
+            }
+            cache.set_item(key, &template)?;
+        }
+        let group = py.import("built_core.kept_components")?.call_method1("place_copy", (template,))?;
+        ctx.getattr("win")?.call_method1("_start_place", (group, class.is_some()))?;
+        Ok(())
+    }
+
+    fn items<'py>(&self, py: Python<'py>, _ctx: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+        let rows: Vec<_> = collections::manifests()?.into_iter()
+            .flat_map(|mut manifest| manifest["items"].take().as_array().cloned().unwrap_or_default()).collect();
+        json(py)?.call_method1("loads", (serde_json::Value::Array(rows).to_string(),))
+    }
+}
+
 /// Coming: section outlines (steel shapes, extrusion and sweep profiles) to
 /// draw, extrude and run along a path.
 #[pyclass(module = "built_render.wgpu_library", extends = LibraryProvider, dict)]
@@ -1436,6 +1489,52 @@ fn cs(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
     render(py)?.getattr("chrome_sheet")
 }
 
+pub(crate) fn start_collection(win: &Bound<'_, PyAny>, folder: std::path::PathBuf, name: Option<String>) -> PyResult<()> {
+    let py = win.py();
+    collections::import_collection(folder, name)?;
+    let job = py.import("built_render.chrome_dialogs")?.call_method1("Job", (win, "Import collection"))?;
+    win.setattr("_family_import_job", job)?;
+    lib(py)?.call_method1("open_library", (win, "families", py.None(), "s:all"))?;
+    Ok(())
+}
+
+pub(crate) fn collection_form(win: &Bound<'_, PyAny>) -> PyResult<()> {
+    let py = win.py();
+    let forms = py.import("built_render.chrome_forms")?;
+    let field = forms.getattr("Field")?;
+    let folder = field.call(("folder", "path", "Collection folder", ""), Some(&[("pick", "folder")].into_py_dict(py)?))?;
+    let name = field.call1(("name", "edit", "Collection name", ""))?;
+    let change = func(py, |py, args| {
+        let form = args.get_item(0)?;
+        if args.get_item(1)?.eq("folder")? && !form.call_method1("value", ("name",))?.is_truthy()? {
+            let path: std::path::PathBuf = args.get_item(2)?.extract()?;
+            form.call_method1("field", ("name",))?.setattr("value", path.file_name().unwrap_or_default().to_string_lossy().as_ref())?;
+        }
+        Ok(none(py))
+    })?;
+    let validate = func(py, |py, args| {
+        let folder: std::path::PathBuf = args.get_item(0)?.call_method1("value", ("folder",))?.extract()?;
+        Ok(s(py, if collections::active() { "A collection is already importing." } else if !folder.is_dir() { "Choose a collection folder." } else { "" }).unbind())
+    })?;
+    let w = win.clone().unbind();
+    let done = func(py, move |py, args| {
+        if args.get_item(0)?.eq("ok")? {
+            let values = args.get_item(1)?;
+            start_collection(w.bind(py), values.get_item("folder")?.extract()?, values.get_item("name")?.extract()?)?;
+        }
+        Ok(none(py))
+    })?;
+    let kw = PyDict::new(py);
+    kw.set_item("buttons", [("cancel","Cancel"),("ok","Import")])?;
+    kw.set_item("note", "Import family types from .rfa files and their type catalogs.")?;
+    kw.set_item("on_change", change)?;
+    kw.set_item("on_done", done)?;
+    kw.set_item("validate", validate)?;
+    let form = forms.getattr("Form")?.call(("Import collection", PyList::new(py, [folder,name])?), Some(&kw))?;
+    forms.call_method1("show", (win, form))?;
+    Ok(())
+}
+
 fn cs_verb<'py>(py: Python<'py>, id: &str, label: &str, kw: &[(&str, Bound<'py, PyAny>)]) -> PyResult<Bound<'py, PyAny>> {
     let d = PyDict::new(py);
     for (k, v) in kw {
@@ -1470,6 +1569,7 @@ impl LibrarySheet {
             scene.getattr("content_version")?,
             crate::document_registration::view::calls::current_material_name(py)?,
             st.get_item("mine_rev")?,
+            obj(py, collections::REVISION.load(std::sync::atomic::Ordering::Relaxed))?.into_bound(py),
             if st.get_item("type")?.eq("components")? { scene.getattr("version")? } else { py.None().into_bound(py) },
             PyTuple::new(py, recent)?.into_any(),
         ])
@@ -1520,7 +1620,7 @@ impl LibrarySheet {
             let mut n = 0;
             for e in items.try_iter()? {
                 let src = e?.get_item("source")?;
-                if src.eq("model")? || src.eq("linked")? {
+                if src.eq("model")? || src.eq("linked")? || p.getattr("id")?.eq("families")? {
                     n += 1;
                 }
             }
@@ -1546,7 +1646,7 @@ impl LibrarySheet {
         drop(me);
         let has_target = !target.is_none();
         let sid: String = slf.getattr("id")?.extract()?;
-        let sheet = cs(py)?.getattr("Sheet")?.call((sid, if has_target { "Choose material" } else { "" }), Some(&[("width", 1240)].into_py_dict(py)?))?;
+        let sheet = cs(py)?.getattr("Sheet")?.call((sid, if has_target { "Choose material" } else { "Library" }), Some(&[("width", 1240)].into_py_dict(py)?))?;
         let ty = st.get_item("type")?;
         if !has_target {
             for p in lib(py)?.getattr("PROVIDERS")?.try_iter()? {
@@ -1578,8 +1678,11 @@ impl LibrarySheet {
         spec.set_item("model_uses", match &got { Some(g) => py.import("builtins")?.getattr("dict")?.call1((g.get_item(0)?,))?, None => PyDict::new(py).into_any() })?;
         spec.set_item("unnamed", match &got { Some(g) => g.get_item(1)?.len()?, None => 0 })?;
         let out = loads(py, &render(py)?.call_method1("library_sheet", (dumps(py, spec.as_any())?,))?)?;
-        for path in out.get_item("thumbs")?.try_iter()? {
-            thumb(&view, &path?)?;
+        if prov_id != "families" {
+            for path in out.get_item("thumbs")?.try_iter()? { thumb(&view, &path?)?; }
+        } else if let Some(key) = out.get_item("cursor")?.extract::<Option<String>>()? {
+            let focused = st.get_item("items")?.get_item(key)?;
+            thumb(&view, &focused.get_item("thumb")?)?;
         }
         st.set_item("scope", out.get_item("scope")?)?;
         let searching = out.get_item("searching")?.is_truthy()?;
@@ -1587,6 +1690,16 @@ impl LibrarySheet {
         sheet.call_method1("search", (out.get_item("search")?,))?;
         sheet.getattr("menus")?.call_method1("append", (out.get_item("sort")?,))?;
         sheet.setattr("side", out.get_item("side")?)?;
+        let collections = if prov_id == "families" { collections::manifests()? } else { Vec::new() };
+        if !has_target {
+            sheet.call_method1("verb", ("import-collection", "Import collection…"))?;
+        }
+        if prov_id == "families" {
+            for collection in &collections {
+                let scope = format!("s:{}", collection["source"].as_str().unwrap_or(""));
+                sheet.call_method("side_item", (&scope, collection["name"].as_str().unwrap_or("")), Some(&[("on", st.get_item("scope")?.eq(&scope)?)].into_py_dict(py)?))?;
+            }
+        }
         if prov_id == "components" {
             let label = py.import("built_core.i18n")?.call_method1("tr", ("Component library",))?;
             sheet.call_method("side_item", ("s:online", label), Some(&[("on", online)].into_py_dict(py)?))?;
@@ -1601,13 +1714,35 @@ impl LibrarySheet {
         } else {
             slf.call_method0("close_catalogue")?;
         }
-        let content = sheet.call_method("content", (), Some(out.get_item("content")?.cast::<PyDict>()?))?;
+        let content_spec = out.get_item("content")?;
+        if let Some(c) = collections.iter().find(|c| st.get_item("scope").is_ok_and(|v|
+            v.eq(format!("s:{}", c["source"].as_str().unwrap_or(""))).unwrap_or(false))) {
+            if !searching { content_spec.set_item("title", c["name"].as_str().unwrap_or(""))?; }
+        }
+        let content = sheet.call_method("content", (), Some(content_spec.cast::<PyDict>()?))?;
+        if prov_id == "families" {
+            let status = collections::status();
+            if !status.is_empty() { content.call_method1("caption", (status,))?; }
+        }
         for g in out.get_item("groups")?.try_iter()? {
             let g = g?;
             if g.get_item("caption")?.is_truthy()? {
                 content.call_method("caption", (g.get_item("caption")?,), Some(&[("right", g.get_item("right")?)].into_py_dict(py)?))?;
             }
-            content.call_method("tiles", (g.get_item("tiles")?,), Some(&[("size", 96)].into_py_dict(py)?))?;
+            let items = g.get_item("tiles")?;
+            if has_target {
+                content.call_method("tiles", (items,), Some(&[("size", 96)].into_py_dict(py)?))?;
+            } else {
+                content.call_method("rows", (items,), Some(&[("thumbs", true)].into_py_dict(py)?))?;
+            }
+        }
+        for collection in &collections {
+            let scope = format!("s:{}", collection["source"].as_str().unwrap_or(""));
+            if st.get_item("scope")?.eq("s:all")? || st.get_item("scope")?.eq(scope)? {
+                for report in collection["reports"].as_array().into_iter().flatten() {
+                    content.call_method1("text", (report.as_str().unwrap_or(""),))?;
+                }
+            }
         }
         if !has_target && out.get_item("type_actions")?.is_truthy()? {
             let lctx = ctx_of(py, &ctx.getattr("win")?, &view)?;
@@ -1637,7 +1772,8 @@ impl LibrarySheet {
         if !e.is_none() && prov_id == "components" {
             slf.call_method1("_component_detail", (&detail, &prov, ctx, &e))?;
         }
-        sheet.call_method1("footer", (PyTuple::empty(py), "Click to see it · double-click or ↩ uses it · esc back to the model"))?;
+        let hint = if matches!(prov_id.as_str(), "components" | "families") { "Drag into the model to place · double-click or ↩ to place · Esc back to the model" } else { "Click to see it · double-click or ↩ uses it · Esc back to the model" };
+        sheet.call_method1("footer", (PyTuple::empty(py), hint))?;
         if cursor.is_truthy()? {
             let force = st.call_method1("pop", ("force_focus", false))?.is_truthy()?;
             sheet.call_method("focus", (&cursor,), Some(&[("force", force)].into_py_dict(py)?))?;
@@ -1744,6 +1880,14 @@ impl LibrarySheet {
         let st = _state(&view)?;
         let arg = args.first().cloned().unwrap_or_default();
         let lctx = ctx_of(py, &win, &view)?;
+        if verb == "family-previews" {
+            for key in &args {
+                if let Some(entry) = st.get_item("items")?.cast::<PyDict>()?.get_item(key)? {
+                    thumb(&view, &entry.get_item("thumb")?)?;
+                }
+            }
+            return Ok(());
+        }
         if verb == "component-previews" {
             return crate::model_panels::component_preview::upload(&lctx, &args);
         }
@@ -1781,7 +1925,7 @@ impl LibrarySheet {
                 }
                 if ok {
                     st.set_item("type", &arg)?;
-                    st.set_item("scope", "s:model")?;
+                    st.set_item("scope", if arg == "families" { "s:all" } else { "s:model" })?;
                     st.set_item("cursor", py.None())?;
                     _save_state(&st)?;
                 }
@@ -1812,7 +1956,9 @@ impl LibrarySheet {
                 slf.call_method1("run", (ctx, &args[1], &arg))?;
             }
             "verb" => {
-                if let Some(action) = arg.strip_prefix("typeact:") {
+                if arg == "import-collection" {
+                    collection_form(&win)?;
+                } else if let Some(action) = arg.strip_prefix("typeact:") {
                     provider(py, &st.get_item("type")?.str()?.to_string())?.call_method1("type_action", (&lctx, action))?;
                 } else {
                     let cursor = st.call_method1("get", ("cursor",))?;
@@ -1912,6 +2058,18 @@ fn _sheet_provider<'py>(view: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>>
 #[pyfunction]
 fn before_frame(view: &Bound<'_, PyAny>, win: &Bound<'_, PyAny>) -> PyResult<()> {
     let py = view.py();
+    if let Some(job) = win.getattr_opt("_family_import_job")?.filter(|j| !j.is_none()) {
+        let status = collections::status();
+        if collections::active() {
+            if !job.getattr("phase")?.eq(&status)? {
+                job.call_method1("update", (py.None(), &status))?;
+            }
+            view.call_method0("update")?;
+        } else {
+            win.setattr("_family_import_job", py.None())?;
+            job.call_method("end", (), Some(&[("detail", status)].into_py_dict(py)?))?;
+        }
+    }
     let items = if ui(py)?.call_method1("_active_tool_id", (win,))?.eq("paint")? { palette_items(view, win)? } else { PyList::empty(py) };
     if !opt(view, "_ui_palette").is_some_and(|p| p.eq(&items).unwrap_or(false)) {
         view.setattr("_ui_palette", &items)?;
@@ -1957,6 +2115,7 @@ fn open_library(py: Python<'_>, win: &Bound<'_, PyAny>, type_id: Option<String>,
     let st = _state(&view)?;
     _land(&view, win)?;
     if let Some(t) = type_id.filter(|t| !t.is_empty()) {
+        if t == "families" && !st.get_item("type")?.eq("families")? { st.set_item("scope", "s:all")?; }
         st.set_item("type", t)?;
     }
     if let Some(sc) = scope.filter(|s| !s.is_empty()) {
@@ -2353,11 +2512,14 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     sub.add_class::<LibraryProvider>()?;
     sub.add_class::<MaterialsProvider>()?;
     sub.add_class::<ComponentsProvider>()?;
+    sub.add_function(wrap_pyfunction!(collections::import_collection, &sub)?)?;
+    sub.add_class::<FamiliesProvider>()?;
     sub.add_class::<ProfilesProvider>()?;
     sub.add_class::<LibrarySheet>()?;
     sub.add("PROVIDERS", vec![
         Bound::new(py, MaterialsProvider::new())?.into_any(),
         Bound::new(py, ComponentsProvider::new())?.into_any(),
+        Bound::new(py, FamiliesProvider::new())?.into_any(),
         Bound::new(py, ProfilesProvider::new())?.into_any(),
     ])?;
     for f in [

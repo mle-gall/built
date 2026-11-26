@@ -35,8 +35,32 @@ fn place_group_host_init<'py>(a: &Args<'py>) -> Reply<'py> {
                 .into_bound_py_any(py)?,
         ),
     )?;
+    tool.setattr("_wall_family", false)?;
+    if group.getattr_opt("ext")?.and_then(|v| v.get_item("library_host").ok()).is_some_and(|v| v.eq("wall").unwrap_or(false)) {
+        tool.setattr("_wall_family", true)?;
+        let window = group.getattr("ifc")?.get_item("class")?.eq("IfcWindow")?;
+        tool.getattr("_machine")?.call_method1("set", ("wall_family", if window { "window" } else { "door" }))?;
+    }
     Ok(none(py))
 }
+fn claims_key<'py>(a: &Args<'py>) -> Reply<'py> {
+    let py = a.py();
+    let hosted = a.get_item(0)?.getattr("_wall_family")?.is_truthy()?;
+    let tab = py.import("built_core")?.getattr("Input")?.getattr("Key_Tab")?;
+    (hosted && a.get_item(1)?.eq(tab)?).into_bound_py_any(py)
+}
+
+fn on_key<'py>(a: &Args<'py>) -> Reply<'py> {
+    let py = a.py();
+    if !a.get_item(2)?.eq(py.import("built_core")?.getattr("Input")?.getattr("Key_Tab")?)? {
+        return false.into_bound_py_any(py);
+    }
+    let event = PyDict::new(py);
+    event.set_item("type","key")?;
+    event.set_item("key","Tab")?;
+    a.get_item(0)?.call_method1("_send",(a.get_item(1)?, event))?.get_item("consumed")
+}
+
 pub(super) fn install(module: &Bound<PyModule>) -> PyResult<()> {
     let py = module.py();
     {
@@ -56,7 +80,9 @@ pub(super) fn install(module: &Bound<PyModule>) -> PyResult<()> {
         install_methods(
             module,
             &cls,
-            &[(
+            &[("claims_key", Mode::Method, claims_key, &["self","key","modifiers"], "bool", ""),
+              ("on_key", Mode::Method, on_key, &["self","viewport","key","modifiers"], "bool", ""),
+              (
                 "__init__",
                 Mode::Method,
                 place_group_host_init,

@@ -39,6 +39,9 @@ release 650 330
 state
 key escape
 state
+click-command library
+wait 300
+state
 quit
 """)
     home, settings = tmp_path / "home", tmp_path / "settings"
@@ -56,7 +59,7 @@ quit
     assert len(start["tab_rects"]) == 1
     # Every navigation tool on the top bar (UX pass 2, M04).
     assert start["cluster"] == [
-        "orbit", "pan", "zoom", "zoom_window", "zoom_extents", "zoom_selection",
+        "library", "orbit", "pan", "zoom", "zoom_window", "zoom_extents", "zoom_selection",
         "look_around", "walk", "position_camera", "xray", "hidden_geometry", "section_cuts",
     ]
     assert orbit["nav_mode"] == "orbit" and orbit["camera_eye"] != start["camera_eye"]
@@ -64,6 +67,7 @@ quit
     assert looking["tool"] == "LookAroundTool" and looking["camera_forward"] != turned["camera_forward"]
     assert walking["tool"] == "WalkTool" and walked["camera_eye"] != pytest.approx(walking["camera_eye"])
     assert done["tool"] == "LineTool"
+    assert states[8]["large_sheet"] == "library"
 
 
 def test_review_exit_and_modelling_keys(tmp_path):

@@ -282,6 +282,13 @@ fn rfa_apply<'p>(py: Python<'p>, scene: &Obj<'p>, payload: &Obj<'p>) -> PyResult
     scene.setattr("version", scene.getattr("version")?.add(1)?)?;
     Ok(warnings)
 }
+/// Detached definitions for library thumbnails and the placement tool.
+#[pyfunction]
+fn rfa_library_definitions<'p>(py: Python<'p>, payload: &Obj<'p>) -> PyResult<Bound<'p, PyList>> {
+    let (_, definitions, _) = build_family(py, PyDict::new(py).as_any(), PyList::empty(py).as_any(), payload)?;
+    Ok(definitions)
+}
+
 fn build_family<'p>(
     py: Python<'p>,
     registry: &Obj<'p>,
@@ -525,5 +532,6 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(rfa_history_undo, m)?)?;
     m.add_function(wrap_pyfunction!(rfa_read, m)?)?;
     m.add_function(wrap_pyfunction!(rfa_triangle_mesh, m)?)?;
+    m.add_function(wrap_pyfunction!(rfa_library_definitions, m)?)?;
     m.add_function(wrap_pyfunction!(rfa_apply, m)?)
 }

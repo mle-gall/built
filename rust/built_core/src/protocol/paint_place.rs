@@ -169,7 +169,7 @@ fn paint_material<'py>(
     execute(history, &cmd)
 }
 #[pyfunction]
-#[pyo3(signature=(history,template,basis,offset,point=None,attachment=None,_pending=None))]
+#[pyo3(signature=(history,template,basis,offset,point=None,attachment=None,_pending=None,wall_host=None))]
 fn place_group<'py>(
     history: &Obj<'py>,
     template: &Obj<'py>,
@@ -178,6 +178,7 @@ fn place_group<'py>(
     point: Option<&Obj<'py>>,
     attachment: Option<&Obj<'py>>,
     _pending: Option<&Obj<'py>>,
+    wall_host: Option<&Obj<'py>>,
 ) -> Reply<'py> {
     let py = history.py();
     let groups = py.import("built_core.group")?;
@@ -189,6 +190,7 @@ fn place_group<'py>(
         Some(g) => g.clone(),
         None => groups.call_method1("copy_group", (one(history, template)?,))?,
     };
+    if let Some(host) = wall_host { g.getattr("ext")?.set_item("wall_host", host)?; }
     let axes = basis.extract::<[[f64; 3]; 3]>()?;
     let shift = offset.extract::<[f64; 3]>()?;
     let mut rows = Vec::with_capacity(16);
@@ -240,7 +242,25 @@ fn place_group<'py>(
         let cmd = py
             .import("built_core.history")?
             .call_method("InsertGroupCommand", (&g,), Some(&kw))?;
-        history.call_method1("execute", (cmd,))?;
+        let api = py.import("built_core.history")?;
+        let mut steps = Vec::new();
+        if let Some(key) = g.getattr_opt("ext")?.and_then(|ext| ext.get_item("library_family_type").ok()) {
+            let reg = py.import("core.bim_registry")?.call_method1("get", (&scene,))?;
+            let types = reg.get_item("types")?;
+            let record = g.getattr("ifc")?;
+            if !types.contains(&key)? {
+                let ty = PyDict::new(py);
+                ty.set_item("name", record.get_item("name")?)?;
+                ty.set_item("ifc_class", record.get_item("class")?)?;
+                ty.set_item("psets", record.get_item("psets")?)?;
+                types.set_item(&key, ty)?;
+                steps.push(api.call_method1("SetRegistryCommand", (reg,))?);
+            }
+            record.set_item("type", key)?;
+        }
+        steps.push(cmd);
+        let step = if steps.len() == 1 { steps.pop().unwrap() } else { api.call_method1("CompoundCommand", (steps,))? };
+        history.call_method1("execute", (step,))?;
         Ok(())
     })();
     if history.getattr("revision")?.eq(&before)? {

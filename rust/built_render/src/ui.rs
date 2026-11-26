@@ -1321,6 +1321,9 @@ impl Ui {
                         {
                             let right = ui.horizontal(|ui| {
                                 ui.spacing_mut().item_spacing = vec2(SPACE_XS, 0.0);
+                                let library = text_button_response(ui, "▤  Library", "Open Library (⇧⌘L)", true);
+                                self.cluster_buttons.push(("library".into(), library.rect.center().into()));
+                                if library.clicked() { clicked = Some("libsheet:".into()); }
                                 for (gi, group) in self.cluster.iter().enumerate() {
                                     if gi > 0 { bar_divider(ui); }
                                     for item in group {
@@ -1361,7 +1364,7 @@ impl Ui {
         }
         match clicked.as_deref() {
             Some("review") => self.toggle_review(),
-            Some(a) => self.actions.push(if a.starts_with("act:") { a.to_owned() } else { format!("tab:{a}") }),
+            Some(a) => self.actions.push(if a.starts_with("act:") || a == "libsheet:" { a.to_owned() } else { format!("tab:{a}") }),
             None => {}
         }
     }

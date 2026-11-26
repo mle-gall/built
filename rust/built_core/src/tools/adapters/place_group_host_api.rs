@@ -108,8 +108,21 @@ fn on_deactivate<'py>(a: &Args<'py>) -> Reply<'py> {
         .call_method1("on_deactivate", (&vp,))?;
     Ok(none(py))
 }
+fn value_label<'py>(a: &Args<'py>) -> Reply<'py> {
+    let py = a.py();
+    let tool = a.get_item(0)?;
+    let values = tool.getattr("_machine")?.call_method1("query", ("wall_values", py.None()))?;
+    if values.is_none() { return Ok(none(py)); }
+    let units = py.import("built_core.units")?;
+    let sill = units.call_method1("fmt_len", (values.get_item(1)?,))?;
+    let offset = units.call_method1("fmt_len", (values.get_item(2)?,))?;
+    let text = format!("Sill {} · Offset {}", sill.str()?, offset.str()?);
+    let at = py.import("built_core")?.getattr("Vec3")?.call(positional(&values.get_item(0)?)?, None)?;
+    (text, at).into_bound_py_any(py)
+}
 #[rustfmt::skip]
 pub(super) const METHODS: &[Method] = &[
+    ("value_label", Mode::Method, value_label, &["self"], "", ""),
     ("_face_frame", Mode::Static, face_frame, &["normal"], "", ""),
     ("on_click", Mode::Method, on_click, &["self", "ctx"], "", ""),
     ("place_at", Mode::Method, place_at, &["self", "viewport", "world", "*", "attachment=None"], "", ""),
