@@ -2521,8 +2521,9 @@ fn before_frame(view: &Bound<'_, PyAny>, win: &Bound<'_, PyAny>) -> PyResult<()>
         }
     }
     // The modal sheet covers the Paint strip. Its hidden swatches need no refresh.
-    if crate::sheet_runtime::shown(win)? { return Ok(()); }
-    let items = if ui(py)?.call_method1("_active_tool_id", (win,))?.eq("paint")? { palette_items(view, win)? } else { PyList::empty(py) };
+    let paint_visible = !crate::sheet_runtime::shown(win)?
+        && ui(py)?.call_method1("_active_tool_id", (win,))?.eq("paint")?;
+    let items = if paint_visible { palette_items(view, win)? } else { PyList::empty(py) };
     if !opt(view, "_ui_palette").is_some_and(|p| p.eq(&items).unwrap_or(false)) {
         view.setattr("_ui_palette", &items)?;
         view.getattr("renderer")?.call_method1("ui_set_palette", (&items,))?;

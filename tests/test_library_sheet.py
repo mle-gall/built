@@ -55,9 +55,19 @@ def win(native_host, monkeypatch):
 def frame(win):
     cs.before_frame(win.view, win)
     job = getattr(win.viewport.scene, "_library_usage_job", None)
-    if job and L._state(win.view)["type"] == "materials":
-        job[1].result(timeout=5)
-        cs.before_frame(win.view, win)
+    if L._state(win.view)["type"] == "materials":
+        # Flushing tracked edits can supersede the first worker's document stamp.
+        for _ in range(3):
+            if not job:
+                break
+            job[1].result(timeout=5)
+            cs.before_frame(win.view, win)
+            current = win.viewport.scene._library_usage_job
+            if current is job:
+                break
+            job = current
+        else:
+            pytest.fail("The material index kept invalidating without edits")
     return win.view.renderer.sheet()
 
 
