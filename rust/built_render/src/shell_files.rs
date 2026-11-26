@@ -213,9 +213,10 @@ fn command<'py>(py: Python<'py>, win: &Any<'py>, name: &str, args: &Bound<'py, P
         }
         "link_source" => return py.import("views.wgpu_tabs")?.call_method1("open_link_source", (win, path_of(py, &s(py, arg))?)),
         "library-import" if !arg.is_empty() => {
-            crate::library_collections::import_collection(arg.into(), None)?;
-            return r.getattr("wgpu_library")?.call_method1("open_library", (win, "families", py.None(), "s:all"));
+            crate::library_host::start_collection(win, arg.into(), None)?;
+            return Ok(b(py, true));
         }
+        "library-import" => { crate::library_host::collection_form(win)?; return Ok(b(py, true)); }
         "library-tab" => return r.getattr("wgpu_library")?.call_method1("open_library", (win, arg)),
         "ctx_demo" => return r.call_method1("context_menu_demo", (win, arg)),
         "close_doc" => {

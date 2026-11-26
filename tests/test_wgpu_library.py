@@ -108,7 +108,7 @@ def test_side_rows_scopes_then_categories_then_linked_files_read_only():
     assert [(r[0], r[1], r[2], r[3]) for r in rows] == [
         ("s:model", "In this model", 2, 0), ("s:recent", "Recently used", 0, 0), ("s:mine", "My library", 0, 0),
         ("s:bundled", "Bundled", 3, 0), ("c:bundled:Stone", "Stone", 1, 1), ("c:bundled:Wood", "Wood", 2, 1),
-        ("", "Linked files · read-only", 0, 0), ("s:linked:/p/Ride.igz", "Ride.igz", 1, 0)]
+        ("s:all", "All collections", 6, 0), ("", "Linked files · read-only", 0, 0), ("s:linked:/p/Ride.igz", "Ride.igz", 1, 0)]
     assert rows[3][5] is True                           # Bundled folds, open
     assert rows[-1][4] == "file"
     folded = L.side_rows(_items(), _state(fold={"s:bundled"}))
@@ -131,7 +131,7 @@ def test_a_scope_shows_its_items_sorted_and_a_search_shows_every_match():
 
 def test_providers_are_data_shaped_and_profiles_is_coming():
     ids = [p.id for p in L.PROVIDERS]
-    assert ids[:3] == ["materials", "components", "profiles"]
+    assert ids == ["materials", "components", "families", "profiles"]
     assert not L.provider("profiles").ready and L.provider("profiles").empty
     for p in L.PROVIDERS:
         for verb, label in p.verbs():

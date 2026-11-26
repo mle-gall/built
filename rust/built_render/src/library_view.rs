@@ -450,7 +450,8 @@ fn tile(t: &str, e: &Item, current: Option<&str>, thumbs: &mut Vec<String>) -> V
     } else {
         String::new()
     };
-    prune(json!({"id": e.key, "kind": if matches!(t, "components" | "families") { "placeable" } else { "" }, "label": shown, "sub": sub, "icon": icon(e, thumbs), "hex": e.hex.clone().unwrap_or_default(),
+    let host = e.defaults.iter().find(|r| r.0 == "Host").map(|r| &r.1);
+    prune(json!({"id": e.key, "right":host, "kind": if matches!(t, "components" | "families") { "placeable" } else { "" }, "label": shown, "sub": sub, "icon": icon(e, thumbs), "hex": e.hex.clone().unwrap_or_default(),
                  "menu": menu, "on": current.is_some_and(|c| c == e.name), "tip": e.name}))
 }
 
@@ -466,8 +467,10 @@ fn detail(inp: &Input, e: &Item, thumbs: &mut Vec<String>) -> Vec<Value> {
     };
     out.push(block("heading", json!({"text": e.shown(), "right": where_})));
     if inp.kind == "families" {
+        let category = e.defaults.iter().find(|r| r.0 == "Category").map(|r| r.1.to_ascii_lowercase());
+        let action = match category.as_deref() { Some("door"|"doors") => "Place door", Some("window"|"windows") => "Place window", _ => "Place type" };
+        out.push(block("buttons", json!({"buttons": [verb("apply", action, "↩", PRIMARY)], "align": "fill"})));
         out.push(block("kv", json!({"rows": e.defaults})));
-        out.push(block("buttons", json!({"buttons": [verb("apply", "Place type", "↩", PRIMARY)], "align": "fill"})));
         return out;
     }
     if inp.kind == "components" {

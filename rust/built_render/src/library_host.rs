@@ -1489,6 +1489,52 @@ fn cs(py: Python<'_>) -> PyResult<Bound<'_, PyAny>> {
     render(py)?.getattr("chrome_sheet")
 }
 
+pub(crate) fn start_collection(win: &Bound<'_, PyAny>, folder: std::path::PathBuf, name: Option<String>) -> PyResult<()> {
+    let py = win.py();
+    collections::import_collection(folder, name)?;
+    let job = py.import("built_render.chrome_dialogs")?.call_method1("Job", (win, "Import collection"))?;
+    win.setattr("_family_import_job", job)?;
+    lib(py)?.call_method1("open_library", (win, "families", py.None(), "s:all"))?;
+    Ok(())
+}
+
+pub(crate) fn collection_form(win: &Bound<'_, PyAny>) -> PyResult<()> {
+    let py = win.py();
+    let forms = py.import("built_render.chrome_forms")?;
+    let field = forms.getattr("Field")?;
+    let folder = field.call(("folder", "path", "Collection folder", ""), Some(&[("pick", "folder")].into_py_dict(py)?))?;
+    let name = field.call1(("name", "edit", "Collection name", ""))?;
+    let change = func(py, |py, args| {
+        let form = args.get_item(0)?;
+        if args.get_item(1)?.eq("folder")? && !form.call_method1("value", ("name",))?.is_truthy()? {
+            let path: std::path::PathBuf = args.get_item(2)?.extract()?;
+            form.call_method1("field", ("name",))?.setattr("value", path.file_name().unwrap_or_default().to_string_lossy().as_ref())?;
+        }
+        Ok(none(py))
+    })?;
+    let validate = func(py, |py, args| {
+        let folder: std::path::PathBuf = args.get_item(0)?.call_method1("value", ("folder",))?.extract()?;
+        Ok(s(py, if collections::active() { "A collection is already importing." } else if !folder.is_dir() { "Choose a collection folder." } else { "" }).unbind())
+    })?;
+    let w = win.clone().unbind();
+    let done = func(py, move |py, args| {
+        if args.get_item(0)?.eq("ok")? {
+            let values = args.get_item(1)?;
+            start_collection(w.bind(py), values.get_item("folder")?.extract()?, values.get_item("name")?.extract()?)?;
+        }
+        Ok(none(py))
+    })?;
+    let kw = PyDict::new(py);
+    kw.set_item("buttons", [("cancel","Cancel"),("ok","Import")])?;
+    kw.set_item("note", "Import family types from .rfa files and their type catalogs.")?;
+    kw.set_item("on_change", change)?;
+    kw.set_item("on_done", done)?;
+    kw.set_item("validate", validate)?;
+    let form = forms.getattr("Form")?.call(("Import collection", PyList::new(py, [folder,name])?), Some(&kw))?;
+    forms.call_method1("show", (win, form))?;
+    Ok(())
+}
+
 fn cs_verb<'py>(py: Python<'py>, id: &str, label: &str, kw: &[(&str, Bound<'py, PyAny>)]) -> PyResult<Bound<'py, PyAny>> {
     let d = PyDict::new(py);
     for (k, v) in kw {
@@ -1600,7 +1646,7 @@ impl LibrarySheet {
         drop(me);
         let has_target = !target.is_none();
         let sid: String = slf.getattr("id")?.extract()?;
-        let sheet = cs(py)?.getattr("Sheet")?.call((sid, if has_target { "Choose material" } else { "" }), Some(&[("width", 1240)].into_py_dict(py)?))?;
+        let sheet = cs(py)?.getattr("Sheet")?.call((sid, if has_target { "Choose material" } else { "Library" }), Some(&[("width", 1240)].into_py_dict(py)?))?;
         let ty = st.get_item("type")?;
         if !has_target {
             for p in lib(py)?.getattr("PROVIDERS")?.try_iter()? {
@@ -1894,15 +1940,7 @@ impl LibrarySheet {
             }
             "verb" => {
                 if arg == "import-collection" {
-                    let path = py.import("built_render.shell_files")?.getattr("ShellFileDialog")?
-                        .call_method1("getExistingDirectory", (&win, "Import family collection", ""))?;
-                    if path.is_truthy()? {
-                        collections::import_collection(path.extract()?, None)?;
-                        st.set_item("type", "families")?;
-                        st.set_item("scope", "s:all")?;
-                        st.set_item("filter", "")?;
-                        _save_state(&st)?;
-                    }
+                    collection_form(&win)?;
                 } else if let Some(action) = arg.strip_prefix("typeact:") {
                     provider(py, &st.get_item("type")?.str()?.to_string())?.call_method1("type_action", (&lctx, action))?;
                 } else {
@@ -2003,6 +2041,18 @@ fn _sheet_provider<'py>(view: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>>
 #[pyfunction]
 fn before_frame(view: &Bound<'_, PyAny>, win: &Bound<'_, PyAny>) -> PyResult<()> {
     let py = view.py();
+    if let Some(job) = win.getattr_opt("_family_import_job")?.filter(|j| !j.is_none()) {
+        let status = collections::status();
+        if collections::active() {
+            if !job.getattr("phase")?.eq(&status)? {
+                job.call_method1("update", (py.None(), &status))?;
+            }
+            view.call_method0("update")?;
+        } else {
+            win.setattr("_family_import_job", py.None())?;
+            job.call_method("end", (), Some(&[("detail", status)].into_py_dict(py)?))?;
+        }
+    }
     let items = if ui(py)?.call_method1("_active_tool_id", (win,))?.eq("paint")? { palette_items(view, win)? } else { PyList::empty(py) };
     if !opt(view, "_ui_palette").is_some_and(|p| p.eq(&items).unwrap_or(false)) {
         view.setattr("_ui_palette", &items)?;

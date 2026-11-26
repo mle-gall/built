@@ -23,6 +23,10 @@ fn progress(active: bool, msg: String) {
     REVISION.fetch_add(1, Ordering::Relaxed);
 }
 
+pub(crate) fn active() -> bool {
+    JOB.lock().unwrap().0
+}
+
 pub(crate) fn status() -> String {
     JOB.lock().unwrap().1.clone()
 }
@@ -149,6 +153,29 @@ fn merge_catalog(py: Python<'_>, path: &Path, data: &mut Value) -> PyResult<()> 
                 "feet" => "ft".into(),
                 other => other.to_owned(),
             };
+            let (kind, units, value) = if kind.eq_ignore_ascii_case("length") {
+                let to_mm = match units.as_str() {
+                    "mm" => 1.,
+                    "cm" => 10.,
+                    "m" => 1000.,
+                    "ft" => 304.8,
+                    "in" => 25.4,
+                    _ => {
+                        return Err(PyValueError::new_err(format!(
+                            "Unsupported length units for {param}"
+                        )))
+                    }
+                };
+                let n: f64 = value
+                    .parse()
+                    .map_err(|_| PyValueError::new_err(format!("Invalid length for {param}")))?;
+                if !n.is_finite() {
+                    return Err(PyValueError::new_err("Non-finite catalog length"));
+                }
+                ("Length", "mm".to_owned(), (n * to_mm).to_string())
+            } else {
+                (kind, units, value.to_owned())
+            };
             params.retain(|p| p["name"] != param);
             params.push(json!({"name":param,"kind":kind,"units":units,"value":value}));
         }
@@ -165,17 +192,21 @@ fn import_file(
 ) -> PyResult<(Vec<Value>, Vec<String>)> {
     let raw: String = py
         .import("built_rfa")?
-        .call_method1("read_family", (path,))?
+        .call_method1("read_family", (path.to_string_lossy().as_ref(),))?
         .extract()?;
     let mut data: Value =
         serde_json::from_str(&raw).map_err(|e| PyValueError::new_err(e.to_string()))?;
-    let mut catalog_data = data.clone();
-    let catalog_warning = match merge_catalog(py, path, &mut catalog_data) {
-        Ok(()) => {
-            data = catalog_data;
-            None
+    let catalog_warning = if path.with_extension("txt").is_file() {
+        let mut catalog_data = data.clone();
+        match merge_catalog(py, path, &mut catalog_data) {
+            Ok(()) => {
+                data = catalog_data;
+                None
+            }
+            Err(e) => Some(format!("Catalog: {e}")),
         }
-        Err(e) => Some(format!("Catalog: {e}")),
+    } else {
+        None
     };
     let raw = data.to_string();
     let types = data["types"]
@@ -205,8 +236,19 @@ fn import_file(
         if !raster.call_method1("save", (&image,))?.is_truthy()? {
             return Err(PyRuntimeError::new_err("Cannot save preview"));
         }
+        let export_as = ty["parameters"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .find(|p| matches!(p["name"].as_str(), Some("IfcExportAs" | "Export to IFC As")))
+            .and_then(|p| p["value"].as_str());
+        let placement_category = match export_as {
+            Some("IfcDoor") => "Doors",
+            Some("IfcWindow") => "Windows",
+            _ => category,
+        };
         let hosted = matches!(
-            category.to_ascii_lowercase().as_str(),
+            placement_category.to_ascii_lowercase().as_str(),
             "door" | "doors" | "window" | "windows"
         );
         let mut defaults = vec![
@@ -214,6 +256,17 @@ fn import_file(
             json!(["Category", category, ""]),
             json!(["Host", if hosted { "Wall" } else { "Free placement" }, ""]),
         ];
+        if hosted {
+            defaults.push(json!([
+                "Default sill",
+                if placement_category.to_lowercase().starts_with("window") {
+                    "900 mm"
+                } else {
+                    "0 mm"
+                },
+                ""
+            ]));
+        }
         for p in ty["parameters"].as_array().into_iter().flatten() {
             defaults.push(json!([
                 p["name"].as_str().unwrap_or(""),
@@ -234,7 +287,7 @@ fn import_file(
         rows.push(
             json!({"key":format!("family:{source}:{}",digest(py, &format!("{relative}\0{name}"))?),
             "name": name, "label": name, "category": family, "source":source, "defaults":defaults,
-            "thumb":image,"file":file,"index":index,"family_category":category,"verbs":["apply"]}),
+            "thumb":image,"file":file,"index":index,"family_category":placement_category,"verbs":["apply"]}),
         );
     }
     Ok((rows, warnings))

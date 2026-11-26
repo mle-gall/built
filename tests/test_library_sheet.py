@@ -391,7 +391,8 @@ def test_family_collection_import_reopen_and_partial_report(win, tmp_path, monke
         (folder / name).touch()
 
     def read(path):
-        if path.name == "invalid.rfa":
+        from pathlib import Path
+        if Path(path).name == "invalid.rfa":
             raise ValueError("Invalid family")
         return json.dumps(payload())
 
@@ -413,3 +414,33 @@ def test_family_collection_import_reopen_and_partial_report(win, tmp_path, monke
     sh = frame(win)
     act(win, "side", "s:" + manifest["source"])
     assert {r["label"] for r in tiles(frame(win))} == {"Standard", "Empty", "Wide"}
+
+
+@pytest.mark.parametrize(("category", "class_name"), [("Doors", "IfcDoor"), ("Windows", "IfcWindow")])
+def test_family_placement_keeps_type_and_records_wall_in_one_undo(win, tmp_path, monkeypatch, category, class_name):
+    from tests.test_rfa_import import payload
+    from core.bim_registry import get
+    from built_core.command_protocol import run
+
+    data = payload()
+    data["family"]["category"] = category
+    path = tmp_path / "family.json"
+    path.write_text(json.dumps(data))
+    row = {"file": path, "index": 1, "name": "Empty", "family_category": category, "key": "family:test"}
+    armed = []
+    monkeypatch.setattr(win, "_start_place", lambda g, align: armed.append((g, align)))
+    ctx = L.Ctx(win, win.view)
+    L.provider("families").run(ctx, "apply", row)
+    group, align = armed.pop()
+    assert align and group.ifc["class"] == class_name and group.name == "Empty"
+    history = win.viewport.history
+    scene = win.viewport.scene
+    previous = list(scene.groups)
+    result = run(history, "place_group", template=group.uid, _pending=group,
+                 basis=[[1, 0, 0], [0, 1, 0], [0, 0, 1]], offset=[2, 0, 1],
+                 wall_host={"uid": "wall", "sill": 1, "offset": 0, "flipped": False})
+    assert result["ok"] and scene.groups[-1] is group
+    assert group.ext["wall_host"]["uid"] == "wall"
+    assert get(scene)["types"][group.ifc["type"]]["ifc_class"] == class_name
+    history.undo()
+    assert list(scene.groups) == previous and "family:test" not in get(scene)["types"]
