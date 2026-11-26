@@ -791,7 +791,8 @@ impl InstanceUpdates {
         // A model far from the origin (site coordinates) is packed rebased:
         // its rows are written in the view frame, each through its
         // prototype's anchor (an edit there repacked the whole scene).
-        let rebase = Rebase::read(&packed)?;
+        // Frames out of step with the prototypes: the full pack sets both.
+        let Ok(rebase) = Rebase::read(&packed) else { return nothing() };
         let rebased = rebase.is_some();
         let meshes = dict(s, "meshes")?;
         let (pending_meshes, pending_materials) = (set(s, "pending_meshes")?, set(s, "pending_materials")?);
