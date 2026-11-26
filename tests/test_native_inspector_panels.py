@@ -208,14 +208,14 @@ def test_report_sheet_commands_and_parts_inspector(host, monkeypatch):
     from tests.test_parts import _stool
     win = host.window
     commands = {name: action for name, _, _, action in wgpu_ui._all_commands(win)}
-    for name, sid in [("About Built", "about"), ("Extension Manager…", "extensions"), ("Cut List…", "cutlist")]:
-        commands[name].trigger()
-        assert chrome_sheet.current(win).id == sid
-        chrome_sheet.close(win)
     scene = host.viewport.scene
     assembly = _stool()
     scene.groups.append(assembly)
     scene.select([assembly])
+    for name, sid in [("About Built", "about"), ("Extension Manager…", "extensions"), ("Cut List…", "cutlist")]:
+        commands[name].trigger()
+        assert chrome_sheet.current(win).id == sid
+        chrome_sheet.close(win)
     run(host, "parts.report", assembly.uid)
     provider = chrome_sheet.current(win)
     ctx = chrome_sheet.Ctx(win, host.view)

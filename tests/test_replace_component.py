@@ -578,8 +578,10 @@ def test_components_from_another_file_arrive_kept_and_placeable(tmp_path, native
     buttons = {b["id"]: b["label"] for block in blocks if block["kind"] == "buttons"
                for b in block["buttons"]}
     assert buttons["typeact:import"] == tr("Components from File…")
-    assert "typeact:purge" in buttons
+    assert "typeact:purge" not in buttons
     act(win, "verb", "typeact:import")
+    assert any(b["id"] == "typeact:purge" for block in frame(win)["content"]["blocks"]
+               if block["kind"] == "buttons" for b in block["buttons"])
     assert len(scene.kept_components) == 3                       # Silla, Mesa and Lámpara
     names = sorted(t.name for t in scene.kept_components)
     assert "Lámpara" in names and "Silla" in names and "Mesa" in names
