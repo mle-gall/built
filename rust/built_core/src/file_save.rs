@@ -317,6 +317,7 @@ fn igz_write_prepared_inner<'p>(
             container = true;
         }
     }
+    let embedded = blobs.len()?;
     let doc = nonfinite(
         &api,
         &payload,
@@ -327,6 +328,20 @@ fn igz_write_prepared_inner<'p>(
         },
     )?;
     if container {
+        // Compact manifests are already cheap to query. Larger ones carry
+        // a separate index so the Start worker never decompresses geometry.
+        let size = if let Some(n) = doc.getattr_opt("size")? {
+            n.extract::<usize>()?
+        } else if let Ok(text) = doc.cast::<pyo3::types::PyString>() {
+            use pyo3::types::PyStringMethods;
+            text.to_cow()?.len()
+        } else {
+            doc.len()?
+        };
+        if size > crate::link_scan::MAX_LEGACY {
+            let summary = crate::link_scan::encode_summary(&payload)?;
+            blobs.set_item("start-summary.json", pyo3::types::PyBytes::new(py, &summary))?;
+        }
         let kw = PyDict::new(py);
         kw.set_item("fast", large)?;
         kw.set_item("deflated", geom)?;
@@ -343,7 +358,7 @@ fn igz_write_prepared_inner<'p>(
         api.call_method1("_write_atomic", (path, bytes))?;
     }
     let stats = PyDict::new(py);
-    stats.set_item("embedded", blobs.len()?)?;
+    stats.set_item("embedded", embedded)?;
     stats.set_item("missing", missing)?;
     Ok(stats.into_any())
 }

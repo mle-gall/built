@@ -925,10 +925,11 @@ pub fn action(win: &Bound<'_, PyAny>, arg: &str) -> PyResult<()> {
             } else {
                 form.call_method1("press", (&args[0],))?;
             }
+            st.borrow_mut().dirty = true;
+            repaint(win);
+            return Ok(());
         }
-        st.borrow_mut().dirty = true;
-        repaint(win);
-        return Ok(());
+        // A raw Spec can own fields directly, without a registered form.
     }
     if verb == "search" {
         st.borrow_mut().search = args.first().map(String::as_str).unwrap_or("").into_pyobject(py)?.into_any().unbind();

@@ -143,31 +143,28 @@ def test_show_home_puts_the_page_on_the_sheet(win, monkeypatch, tmp_path):
     assert getattr(win, "_home", None) is None          # no Qt dialog
     sh = sheet(win)
     assert sh["id"] == "start" and sh["closable"] is False   # blank untitled behind: no return
-    assert [v["id"] for v in sh["verbs"]] == ["new", "openfile", "project"]
-    assert sh["menus"][0]["id"] == "template"
-    assert [o["id"] for o in sh["menus"][0]["options"]] == ["survey", "steel", "arch_mm", "blank"]
+    assert [v["id"] for v in sh["verbs"]] == ["openfile"]
+    assert sh["menus"] == []
+    assert [t["label"] for t in sh["tabs"]] == ["Models", "Projects"]
     assert sh["search"]["placeholder"]
     wait_loader(win)
     sh = sheet(win)
-    # Continue: the last one opened (beta); Recent: the rest, file names.
-    cont = section(sh, "cont")
-    assert [r["label"] for r in cont] == ["beta.built"] and cont[0]["id"] == "cont"
-    alpha = section(sh, "recent")[0]
+    beta, alpha = section(sh, "recent")
+    assert beta["label"] == "beta.built"
     assert alpha["label"] == "alpha.built" and alpha["badge"] == "13"
     assert alpha["sub"].startswith("Ride")
     assert alpha["icon"].startswith("thumb:")           # its picture, uploaded once
-    assert "icon" not in cont[0]                        # beta has none
+    assert "icon" not in beta
     assert any(c[0] == "icons" and alpha["icon"] in c[1] for c in frame(win).calls)
     tpl = section(sh, "templates")
-    assert [t["id"] for t in tpl] == ["tpl:survey", "tpl:steel", "tpl:arch_mm", "tpl:blank"]
-    assert sh["footer"]["hint"].count("Engine:") == 1
-    assert "Renderer: wgpu (native app)" in sh["footer"]["hint"]
+    assert [t["id"] for t in tpl] == ["tpl:blank", "tpl:survey", "tpl:steel", "tpl:arch_mm"]
+    assert sh["footer"]["hint"] == ""
     assert [l["id"] for l in sh["footer"]["links"]] == ["libraries", "prefs", "extensions", "help"]
     # The first row is focused; its preview is on the right.
-    assert sh["focus"] == "cont"
+    assert sh["focus"] == beta["id"]
 
 
-def test_the_preview_shows_project_problems_unfiled_and_where_it_was_left(win, monkeypatch, tmp_path):
+def test_the_preview_shows_saved_metadata_without_opening(win, monkeypatch, tmp_path):
     a = doc(tmp_path, "job.built")
     recent.remember(a)
     recent.note(a, {"project": "Park", "problems": 13, "workspace": "Model › North", "unfiled": 50})
@@ -187,11 +184,11 @@ def test_the_preview_shows_project_problems_unfiled_and_where_it_was_left(win, m
     sent = [k for c in frame(win).calls if c[0] == "icons" for k in c[1]]
     assert sent.count(pic["icon"]) == 1
     kv = dict((r[0], r[1]) for b in blocks if b["kind"] == "kv" for r in b["rows"])
-    assert kv["Project"] == "Park" and kv["Problems"] == "13 to fix" and kv["Unfiled"] == "50"
-    assert kv["Left in"].startswith("Model › North")
+    assert kv["Units"] == "m"
+    assert kv["File size"] and kv["Last saved"]
+    assert win._doc.path is None
     assert any(b["kind"] == "text" and "Auto-save is newer" in b["text"] for b in blocks)
-    assert any(b["kind"] == "buttons" and any(v["id"] == "open" and v["role"] == 1 for v in b["buttons"])
-               for b in blocks)
+    assert sh["footer"]["action"]["label"] == "Open model"
 
 
 def test_the_preview_lists_links_and_their_state(win, monkeypatch, tmp_path):
@@ -214,8 +211,8 @@ def test_the_preview_lists_links_and_their_state(win, monkeypatch, tmp_path):
     assert cap["right"] == "4 · 2 to look at"
     rows = next(b for b in blocks if b["kind"] == "rows")["items"]
     got = [(r["label"], r.get("depth", 0), r["dot"], r.get("dot_text", "")) for r in rows]
-    assert got == [("A.igz", 0, "ok", ""), ("C.igz", 1, "ok", ""), ("D.igz", 1, "error", "missing"),
-                   ("B.igz", 0, "warn", "changed on disk")]
+    assert got == [("A.igz", 0, "ok", "Found"), ("C.igz", 1, "ok", "Found"), ("D.igz", 1, "error", "Missing"),
+                   ("B.igz", 0, "warn", "Changed on disk")]
     assert all(r.get("fixed") for r in rows)            # read, not focused
 
 
@@ -226,11 +223,11 @@ def test_first_frame_never_waits_for_pictures(win, monkeypatch, tmp_path):
     real = ws._load_one
     monkeypatch.setattr(ws, "_load_one", lambda p: (gate.wait(5), real(p))[1])
     ws.show(win)
-    cont = section(sheet(win), "cont")                  # drawn before the worker is done
+    cont = section(sheet(win), "recent")                  # drawn before the worker is done
     assert "icon" not in cont[0]
     gate.set()
     wait_loader(win)
-    assert section(sheet(win), "cont")[0]["icon"].startswith("thumb:")
+    assert section(sheet(win), "recent")[0]["icon"].startswith("thumb:")
 
 
 def test_typing_filters_the_list(win, monkeypatch, tmp_path):
@@ -278,8 +275,7 @@ def test_escape_returns_only_to_an_open_document(win, monkeypatch, tmp_path):
     ws.show(win)
     sh = sheet(win)
     assert sh["closable"] is True
-    cont = section(sh, "cont")[0]
-    assert cont["right"] == "open now" and cont["label"].startswith("open")
+    assert section(sh, "recent")[0]["label"] == a.name
     act(win, "close")                       # Esc on the sheet
     assert not ws.shown(win) and not cs.shown(win)
     assert frame(win).calls[-1] == ("sheet", None)
@@ -335,14 +331,17 @@ def test_pin_toggles_and_pinned_come_first(win, monkeypatch, tmp_path):
 
 
 def test_new_model_and_templates(win, monkeypatch):
-    monkeypatch.setattr("built_render.units_question.offer_at_start", lambda w: None)
+    monkeypatch.setattr("built_render.units_question.offer_at_start", lambda w: pytest.fail("unexpected units modal"))
     ws.show(win)
-    sheet(win)
-    act(win, "verb", "new")
+    sh = sheet(win)
+    assert sh["focus"] == "tpl:blank" and sh["footer"]["action"]["label"] == "New model"
+    act(win, "v", "units", "1")
+    act(win, "verb", "open")
+    assert win.viewport.scene.units["length"] == "cm"
     assert not ws.shown(win)
     ws.show(win)
     sheet(win)
-    act(win, "headmenu", "template", "steel")
+    act(win, "open", "tpl:steel")
     assert not ws.shown(win)
     scene = win.viewport.scene
     from core import bim_registry
@@ -507,20 +506,19 @@ def test_remove_from_recents_leaves_the_file(win, monkeypatch, tmp_path):
     recent.remember(b)                                  # Continue: b
     ws.show(win)
     sheet(win)
-    act(win, "menu", "cont", "forget")
+    act(win, "menu", "file:" + str(b.resolve()), "forget")
     assert [r["path"] for r in recent.entries()] == [str(a.resolve())]
     assert b.is_file()
     assert settings().value("home/last_file", "") == ""
     wait_loader(win)
     sh = sheet(win)
-    assert section(sh, "recent") == []
-    assert section(sh, "cont")[0]["label"] == "a.built"     # Continue falls back
+    assert section(sh, "recent")[0]["label"] == "a.built"
     # Gone for good: the legacy list does not bring it back.
-    act(win, "menu", "cont", "forget")
+    act(win, "menu", "file:" + str(a.resolve()), "forget")
     assert recent.entries() == []
 
 
-def test_a_moved_file_hides_its_dead_duplicate(win, monkeypatch, tmp_path):
+def test_unavailable_paths_can_be_removed_independently(win, monkeypatch, tmp_path):
     (tmp_path / "Project").mkdir()
     ride = doc(tmp_path / "Project", "ride.igz")
     other = doc(tmp_path, "other.igz")
@@ -536,19 +534,14 @@ def test_a_moved_file_hides_its_dead_duplicate(win, monkeypatch, tmp_path):
     ws.show(win)
     wait_loader(win)
     sh = sheet(win)
-    ids = [r["id"] for k in ("cont", "recent") for r in section(sh, k)]
-    assert "file:" + str(old_ride.resolve()) not in ids
-    assert "file:" + str(old_site.resolve()) in ids and "file:" + str(stale) in ids
-    site = next(r for r in section(sh, "recent") if r["id"] == "file:" + str(old_site.resolve()))
-    assert site["dim"] and site["sub"].startswith("Not found")
-    assert [tuple(m)[0] for m in site["menu"]][0] == "locate"
-    # Still on the list (hidden, not dropped) until Clear missing.
-    assert str(old_ride.resolve()) in [r["path"] for r in recent.entries()]
-    clear = next(b for b in sh["content"]["blocks"] if b["kind"] == "buttons")["buttons"][0]
-    assert clear["id"] == "clearmissing" and "(3)" in clear["label"]
-    act(win, "verb", "clearmissing")
-    left = [r["path"] for r in recent.entries()]
-    assert left == [str(ride.resolve()), str(other.resolve())]
+    missing = section(sh, "missing")
+    assert {r["id"] for r in missing} == {"file:" + str(p.resolve()) for p in (old_ride, old_site, stale)}
+    assert all(r["dim"] for r in missing)
+    assert {r["label"] for r in section(sh, "recent")} == {ride.name, other.name}
+    row = missing[0]
+    assert [m for m in row["menu"] if m[0] == "forget"] == [["forget", "Remove from recents"]]
+    act(win, "menu", row["id"], "forget")
+    assert len(section(sheet(win), "missing")) == 2
 
 
 def test_a_missing_row_still_offers_to_locate(win, monkeypatch, tmp_path):
@@ -561,17 +554,12 @@ def test_a_missing_row_still_offers_to_locate(win, monkeypatch, tmp_path):
     ws.show(win)
     wait_loader(win)
     sh = sheet(win)
-    row = section(sh, "recent")[0]
+    row = section(sh, "missing")[0]
     assert row["dim"]                                   # shown, missing
     act(win, "focus", row["id"])
     blocks = detail(sheet(win))
-    assert any(b["kind"] == "buttons" and b["buttons"][-1]["id"] == "locate" for b in blocks)
+    assert sheet(win)["footer"]["action"]["id"] == "locate"
     act(win, "open", row["id"])
-    from built_render import chrome_dialogs
-    from views import wgpu_ui
-    notice = chrome_dialogs.history(win)[0]
-    assert not asked and notice.action_label == "Locate…"
-    wgpu_ui._run(win, ["activity:" + notice.id])
     assert asked and win._doc.path.resolve() == found.resolve()
 
 
@@ -602,3 +590,59 @@ def test_link_preview_follows_moved_sources_and_stops_at_a_cycle(tmp_path):
         {"path": stale, "found": str(child.resolve()), "depth": 0, "via": str(root)},
         {"path": str(root), "found": str(root), "depth": 1, "via": str(child.resolve())},
     ]
+
+def test_saved_summary_does_not_read_document_or_geometry(tmp_path):
+    from pathlib import Path
+    from built_core import links, start_document_summary
+    import zipfile
+    path = tmp_path / "indexed.built"
+    scene = Scene()
+    linked = doc(tmp_path, "source.igz", picture=False)
+    scene.groups.append(links.make_link(scene, linked))
+    scene.plugin_data["padding"] = "x" * (1024 * 1024)
+    igz.save_scene(scene, path)
+    with zipfile.ZipFile(path) as archive:
+        index = archive.read("start-summary.json")
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr("start-summary.json", index)
+        archive.writestr("document.json", b"unreadable model")
+    summary = start_document_summary(path)
+    assert summary["units"] == "m"
+    row, = summary["links"]
+    assert Path(row["found"]) == linked.resolve()
+    assert row["status"] == "found"
+
+
+def test_switching_templates_discards_unit_edits(win):
+    from built_core import units
+    usual = dict(units.new_document_units())
+    ws.show(win)
+    sheet(win)
+    act(win, "v", "units", "1")
+    assert units.new_document_units() == usual
+    assert win.viewport.scene.units["length"] == usual["length"]
+    act(win, "focus", "tpl:steel")
+    sh = sheet(win)
+    field = next(b["fields"][0] for b in detail(sh) if b["kind"] == "fields")
+    assert field[7][field[4]] == "mm"
+    act(win, "verb", sh["footer"]["action"]["id"])
+    assert win.viewport.scene.units["length"] == "mm"
+
+
+def test_model_units_menu_changes_the_open_model(win):
+    from built_core import units
+    usual = dict(units.new_document_units())
+    ws.action(win, ws.SEP.join(("units", "1")))
+    assert win.viewport.scene.units["length"] == "cm"
+    assert units.new_document_units() == usual
+
+
+def test_empty_projects_tab_offers_manifest_actions(win):
+    ws.show(win)
+    sheet(win)
+    act(win, "tab", "projects")
+    sh = sheet(win)
+    assert sh["focus"] is None
+    assert sh["footer"]["action"]["id"] == sh["default_verb"] == "project"
+    assert sh["verbs"][0]["label"] == "Open project…"
+    assert any(".builtproject" in b.get("text", "") for b in detail(sh))

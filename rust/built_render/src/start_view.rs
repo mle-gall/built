@@ -1,19 +1,9 @@
-//! The start page's view model (start_host.rs): which rows the list
-//! shows after the filter (Continue, Pinned, Recent, Projects, Templates),
-//! each row's words, the preview of the focused one (its linked files and
-//! their state), the header, the footer and the templates.
-//!
-//! Python sends what it knows (`State`, JSON): the recent rows
-//! (core/recent.py), what each document noted about itself, and what the
-//! worker thread found of each file (exists, mtime, the picture's texture
-//! key, a project's files, the links). This returns the large sheet's spec
-//! (ui/large_sheet.rs `Spec`) with the icons it names and the focused row.
-//! Sizes, ages and the links' state are read here (a `stat` each), as the
-//! page did on a build.
+//! Start sheet rows, selection, and creation or opening details. File facts
+//! come from the host worker cache so building a frame needs no filesystem I/O.
 use pyo3::prelude::*;
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::path::Path;
 
 #[derive(Deserialize, Default, Clone)]
@@ -29,7 +19,7 @@ pub struct Link {
     pub path: String,
     pub found: Option<String>,
     pub depth: i64,
-    pub via: Option<String>,
+    pub status: String,
 }
 
 /// What the worker found of one path; every field "not known yet".
@@ -38,19 +28,15 @@ pub struct Link {
 pub struct Cache {
     pub exists: Option<bool>,
     pub mtime: Option<f64>,
+    pub bytes: Option<u64>,
+    pub units: Option<String>,
     /// The picture's texture key ("" without one).
     pub thumb: String,
     /// A project's files, (path, role); None: unreadable or not read.
     pub files: Option<Vec<(String, String)>>,
     pub links: Option<Vec<Link>>,
+    pub missing_members: Vec<String>,
     pub autosave_newer: bool,
-}
-
-#[derive(Deserialize, Default)]
-#[serde(default)]
-pub struct OpenDoc {
-    pub path: String,
-    pub name: String,
 }
 
 #[derive(Deserialize, Default)]
@@ -60,7 +46,6 @@ pub struct State {
     pub focus: Option<String>,
     /// A document is open behind the page.
     pub back: bool,
-    pub open_doc: OpenDoc,
     /// The document opened or saved last.
     pub last: String,
     pub files: Vec<Recent>,
@@ -70,8 +55,9 @@ pub struct State {
     pub meta: HashMap<String, Value>,
     /// The opening job's label while one runs.
     pub pending: String,
-    /// The engine and renderer line.
-    pub engine: String,
+    pub projects_tab: bool,
+    pub draft_units: String,
+    pub usual_units: String,
     pub home: String,
     pub now: f64,
     /// Local time minus UTC, seconds (dates of old files).
@@ -121,13 +107,13 @@ const ARCH: &[Node] = &[
 /// Stubs until Phase 4 of docs/project-structure.md: a new model with a
 /// structure preset (core/structure.py nodes with recipes) and units.
 pub const TEMPLATES: &[Template] = &[
-    Template { id: "survey", name: "As-built survey", desc: "Existing structure, envelope, services; reference · m",
+    Template { id: "survey", name: "As-built survey", desc: "Existing structure, envelope, services and survey references.",
                nodes: SURVEY, active: "existing.structure", units: Some(("m", 3)) },
-    Template { id: "steel", name: "Steel fabrication", desc: "Columns, beams, bracing, plates, fasteners · mm",
+    Template { id: "steel", name: "Steel fabrication", desc: "Columns, beams, bracing, plates and fasteners.",
                nodes: STEEL, active: "steel.beams", units: Some(("mm", 0)) },
-    Template { id: "arch_mm", name: "Architectural mm", desc: "Walls, slabs, doors, windows, roof · mm",
+    Template { id: "arch_mm", name: "Architectural mm", desc: "Walls, slabs, doors, windows and roof.",
                nodes: ARCH, active: "building.walls", units: Some(("mm", 0)) },
-    Template { id: "blank", name: "Blank", desc: "An empty model in your usual units", nodes: &[], active: "",
+    Template { id: "blank", name: "Blank", desc: "Start with an empty model.", nodes: &[], active: "",
                units: None },
 ];
 
@@ -211,14 +197,8 @@ pub fn ago(mtime: f64, now: f64, utc_offset: f64) -> String {
     format!("{d:02} {} {y}", MONTHS[m - 1])
 }
 
-fn mtime_of(path: &str) -> Option<f64> {
-    let t = std::fs::metadata(path).ok()?.modified().ok()?;
-    t.duration_since(std::time::UNIX_EPOCH).ok().map(|d| d.as_secs_f64())
-}
-
-pub fn size(path: &str) -> String {
-    let Ok(meta) = std::fs::metadata(path) else { return String::new() };
-    let mut n = meta.len() as f64;
+fn size(bytes: u64) -> String {
+    let mut n = bytes as f64;
     for unit in ["B", "KB", "MB", "GB"] {
         if n < 1024.0 || unit == "GB" {
             return if unit == "B" || unit == "KB" {
@@ -230,35 +210,6 @@ pub fn size(path: &str) -> String {
         n /= 1024.0;
     }
     String::new()
-}
-
-/// ``missing``, ``changed`` (the source is newer than the file that links
-/// it was saved) or ``found``.
-pub fn link_state(link: &Link, host_mtime: Option<f64>) -> &'static str {
-    let Some(found) = link.found.as_deref().filter(|f| !f.is_empty()) else { return "missing" };
-    let Some(src) = mtime_of(found) else { return "missing" };
-    let reference = match link.via.as_deref().filter(|v| !v.is_empty()) {
-        Some(via) => match mtime_of(via) {
-            Some(t) => Some(t),
-            None => return "missing",
-        },
-        None => host_mtime,
-    };
-    match reference {
-        Some(r) if src > r + 2.0 => "changed",
-        _ => "found",
-    }
-}
-
-fn imported_name(code: &str) -> String {
-    match code {
-        "skp" => ".skp".into(),
-        "dwg" => "DWG".into(),
-        "dxf" => "DXF".into(),
-        "ifc" => "IFC".into(),
-        "rfa" => ".rfa".into(),
-        other => other.to_uppercase(),
-    }
 }
 
 fn joined(parts: &[&str]) -> String {
@@ -280,7 +231,7 @@ fn verb(id: &str, label: &str, key: &str, role: i64) -> Value {
     json!({"id": id, "label": label, "key": key, "role": role, "enabled": true, "tip": ""})
 }
 const PRIMARY: i64 = 1;
-const QUIET: i64 = 3;
+pub const UNIT_CODES: [&str; 4] = ["m", "cm", "mm", "ft-in-frac"];
 
 fn block(kind: &str, fields: Value) -> Value {
     let mut b = fields;
@@ -302,31 +253,19 @@ impl Meta<'_> {
     fn problems(&self) -> i64 {
         self.int("problems").unwrap_or(0)
     }
-    fn last_in(&self) -> String {
-        let w = self.text("workspace");
-        if w.is_empty() { w } else { format!("Last in {w}") }
-    }
 }
 
 // ---- The list -------------------------------------------------------------------------------
 pub enum Kind<'a> {
-    Cont(Cont),
     File(&'a Recent),
     Proj(&'a Recent),
     Tpl(&'a Template),
 }
 
-pub struct Cont {
-    pub path: String,
-    pub name: String,
-    pub place: String,
-    pub last_in: String,
-    pub problems: i64,
-    pub open: bool,
-}
-
-pub const SECTIONS: [(&str, &str); 5] = [("cont", "Continue"), ("pinned", "Pinned"), ("recent", "Recent"),
-    ("projects", "Projects"), ("templates", "Templates")];
+pub const SECTIONS: [(&str, &str); 5] = [
+    ("pinned", "Pinned"), ("recent", "Recent"), ("missing", "Unavailable"),
+    ("templates", "Templates"), ("projects", "Recent projects"),
+];
 
 pub struct View<'a> {
     st: &'a State,
@@ -350,49 +289,6 @@ impl<'a> View<'a> {
         self.cache(path).exists == Some(false)
     }
 
-    /// The document to continue: the one open behind the page, else the
-    /// last one opened or saved (when it still exists).
-    pub fn continue_info(&self) -> Option<Cont> {
-        let st = self.st;
-        if st.back {
-            let path = st.open_doc.path.clone();
-            let m = self.meta(&path);
-            let name = if st.open_doc.name.is_empty() { "Untitled".to_owned() } else { st.open_doc.name.clone() };
-            let last_in = m.last_in();
-            return Some(Cont {
-                place: joined(&[&m.text("project"), &folder(&path, &st.home)]),
-                last_in: if last_in.is_empty() { "In Model".into() } else { last_in },
-                problems: m.problems(), name, path, open: true });
-        }
-        let path = st.last.clone();
-        if path.is_empty() || self.missing(&path) {
-            return None;
-        }
-        let m = self.meta(&path);
-        Some(Cont { place: joined(&[&m.text("project"), &folder(&path, &st.home)]), last_in: m.last_in(),
-                    problems: m.problems(), name: name_of(&path), path, open: false })
-    }
-
-    /// The recent files the page shows: all of them but a missing one whose
-    /// name a file higher up the list has, and that one exists — the same
-    /// document, moved. Until the worker has looked, every row shows.
-    pub fn visible_files(&self) -> Vec<&'a Recent> {
-        let mut here = HashSet::new();
-        let mut out = vec![];
-        for r in &self.st.files {
-            let c = self.cache(&r.path);
-            let name = name_of(&r.path).to_lowercase();
-            if c.exists == Some(false) && here.contains(&name) {
-                continue;
-            }
-            if c.exists == Some(true) {
-                here.insert(name);
-            }
-            out.push(r);
-        }
-        out
-    }
-
     /// The recent files the worker found gone (hidden duplicates included).
     pub fn missing_files(&self) -> Vec<String> {
         self.st.files.iter().filter(|r| self.missing(&r.path)).map(|r| r.path.clone()).collect()
@@ -406,21 +302,19 @@ impl<'a> View<'a> {
             words.iter().all(|w| text.contains(w.as_str()))
         };
         let mut out: Vec<(&'static str, Vec<(String, Kind<'a>)>)> = SECTIONS.iter().map(|(k, _)| (*k, vec![])).collect();
-        let cont = self.continue_info();
-        let skip = cont.as_ref().map(|c| c.path.clone()).unwrap_or_default();
-        if let Some(c) = cont {
-            if matches(&[&c.name, &c.place]) {
-                out[0].1.push(("cont".into(), Kind::Cont(c)));
+        if !self.st.projects_tab {
+            for r in &self.st.files {
+                if matches(&[&name_of(&r.path), &self.meta(&r.path).text("project"), &r.path]) {
+                    let group = if self.missing(&r.path) { 2 } else if r.pinned { 0 } else { 1 };
+                    out[group].1.push((format!("file:{}", r.path), Kind::File(r)));
+                }
             }
-        }
-        for r in self.visible_files() {
-            if r.path == skip {
-                continue;
+            for t in TEMPLATES.iter().filter(|t| t.id == "blank").chain(TEMPLATES.iter().filter(|t| t.id != "blank")) {
+                if matches(&[t.name, t.desc]) {
+                    out[3].1.push((format!("tpl:{}", t.id), Kind::Tpl(t)));
+                }
             }
-            if !matches(&[&name_of(&r.path), &self.meta(&r.path).text("project"), &r.path]) {
-                continue;
-            }
-            out[if r.pinned { 1 } else { 2 }].1.push((format!("file:{}", r.path), Kind::File(r)));
+            return out;
         }
         for r in &self.st.projects {
             let names: Vec<String> = self.cache(&r.path).files.iter().flatten().map(|(f, _)| name_of(f)).collect();
@@ -429,22 +323,13 @@ impl<'a> View<'a> {
             if !matches(&hay.iter().map(String::as_str).collect::<Vec<_>>()) {
                 continue;
             }
-            out[if r.pinned { 1 } else { 3 }].1.push((format!("proj:{}", r.path), Kind::Proj(r)));
-        }
-        for t in TEMPLATES {
-            if matches(&[t.name, t.desc]) {
-                out[4].1.push((format!("tpl:{}", t.id), Kind::Tpl(t)));
-            }
+            out[4].1.push((format!("proj:{}", r.path), Kind::Proj(r)));
         }
         out
     }
 
     fn ago(&self, mtime: f64) -> String {
         ago(mtime, self.st.now, self.st.utc_offset)
-    }
-
-    fn ago_of(&self, path: &str) -> String {
-        if path.is_empty() { String::new() } else { mtime_of(path).map(|t| self.ago(t)).unwrap_or_default() }
     }
 
     fn row(&self, rid: &str, kind: &Kind, icons: &mut Vec<String>) -> Value {
@@ -457,18 +342,13 @@ impl<'a> View<'a> {
             key
         };
         match kind {
-            Kind::Cont(c) => prune(json!({"id": rid, "label": c.name, "sub": joined(&[&c.place, &c.last_in]),
-                "right": if c.open { "open now".into() } else { self.ago_of(&c.path) },
-                "icon": thumb(&c.path), "badge": if c.problems != 0 { c.problems.to_string() } else { String::new() },
-                "tip": c.path})),
-            Kind::Tpl(t) => prune(json!({"id": rid, "label": t.name, "sub": t.desc,
-                                         "menu": [["open", "New from this template"]]})),
+            Kind::Tpl(t) => prune(json!({"id": rid, "label": t.name, "kind": "file"})),
             Kind::Proj(r) | Kind::File(r) => {
                 let path = &r.path;
                 let c = self.cache(path);
                 let missing = c.exists == Some(false);
                 let mut menu = json!([["open", "Open"], ["pin", if r.pinned { "Unpin" } else { "Pin" }],
-                                      ["finder", "Show in Finder"], ["-", ""], ["forget", "Remove from list"]]);
+                                      ["finder", "Show in Finder"], ["-", ""], ["forget", "Remove from recents"]]);
                 if matches!(kind, Kind::Proj(_)) {
                     let n = c.files.as_ref().map_or(0, Vec::len);
                     let right = if n == 0 { String::new() } else { format!("{n} file{}", if n != 1 { "s" } else { "" }) };
@@ -478,15 +358,15 @@ impl<'a> View<'a> {
                 }
                 let m = self.meta(path);
                 let (sub, right) = if missing {
-                    menu = json!([["locate", "Locate…"], ["-", ""], ["forget", "Remove from list"]]);
-                    ("Not found · Locate…".to_owned(), String::new())
+                    menu = json!([["locate", "Locate…"], ["-", ""], ["forget", "Remove from recents"]]);
+                    ("File missing".to_owned(), String::new())
                 } else {
                     (joined(&[&m.text("project"), &folder(path, home)]), c.mtime.map(|t| self.ago(t)).unwrap_or_default())
                 };
                 let problems = m.problems();
                 prune(json!({"id": rid, "label": name_of(path), "sub": sub, "right": right, "icon": thumb(path),
                     "dim": missing, "badge": if problems != 0 && !missing { problems.to_string() } else { String::new() },
-                    "tip": path, "menu": menu}))
+                    "tip": path, "menu": menu, "kind":"file"}))
             }
         }
     }
@@ -494,24 +374,34 @@ impl<'a> View<'a> {
     fn preview(&self, found: Option<&(String, Kind)>, icons: &mut Vec<String>) -> Value {
         let mut blocks = vec![];
         let detail = |blocks: Vec<Value>| json!({"title": "", "sub": "",
-            "empty": "Pick a file to see what it holds before opening it.", "width": 520.0, "blocks": blocks});
-        let Some((_, kind)) = found else { return detail(blocks) };
-        let buttons = |list: Vec<Value>| block("buttons", json!({"buttons": list, "align": "right"}));
+            "empty": "Pick a file to see what it holds before opening it.", "width": 580.0, "blocks": blocks});
+        let Some((_, kind)) = found else {
+            if self.st.projects_tab {
+                blocks.push(block("heading", json!({"text": "Projects"})));
+                blocks.push(block("text", json!({"text": "A .builtproject file keeps linked models and their project structure together."})));
+            }
+            return detail(blocks);
+        };
+        let buttons = |list: Vec<Value>| block("buttons", json!({"buttons": list, "align": "left"}));
         let (path, name, pinned) = match kind {
             Kind::Tpl(t) => {
                 blocks.push(block("heading", json!({"text": t.name})));
                 blocks.push(block("text", json!({"text": t.desc})));
-                let mut rows = vec![json!(["Units", t.units.map_or("your usual units", |u| u.0), ""])];
+                let usual = if self.st.usual_units.is_empty() { "m" } else { &self.st.usual_units };
+                let units = if self.st.draft_units.is_empty() { t.units.map_or(usual, |u| u.0) } else { &self.st.draft_units };
+                let mut codes = UNIT_CODES.to_vec();
+                if !codes.contains(&units) { codes.push(units); }
+                let index = codes.iter().position(|code| *code == units).unwrap_or(0);
+                blocks.push(block("fields", json!({"id":"creation", "fields":[["units","choice","Units","",index,0,codes.len(),codes,0,""]]})));
+                let mut rows = vec![];
                 if !t.nodes.is_empty() {
                     let tops: Vec<&str> = t.nodes.iter().filter(|n| n.2.is_empty()).map(|n| n.1).collect();
                     rows.push(json!(["Structure", tops.join(", "), ""]));
                     rows.push(json!(["Nodes", t.nodes.len().to_string(), ""]));
                 }
-                blocks.push(block("kv", json!({"rows": rows})));
-                blocks.push(buttons(vec![verb("open", "New from this template", "↩", PRIMARY)]));
+                if !rows.is_empty() { blocks.push(block("kv", json!({"rows": rows}))); }
                 return detail(blocks);
             }
-            Kind::Cont(c) => (c.path.clone(), c.name.clone(), false),
             Kind::File(r) => (r.path.clone(), name_of(&r.path), r.pinned),
             Kind::Proj(r) => (r.path.clone(), stem_of(&r.path), r.pinned),
         };
@@ -523,14 +413,13 @@ impl<'a> View<'a> {
             if !c.thumb.is_empty() && !icons.contains(&c.thumb) {
                 icons.push(c.thumb.clone());
             }
-            blocks.push(block("picture", json!({"icon": c.thumb, "size": 250.0})));
         }
-        let right = joined(&[&folder(&path, &self.st.home), &size(&path)]);
-        blocks.push(block("heading", json!({"text": name, "right": right, "tone": if pinned { "accent" } else { "" }})));
+        blocks.push(block("heading", json!({"text": name, "tone": if pinned { "accent" } else { "" }})));
+        blocks.push(block("text", json!({"text": Path::new(&path).parent().unwrap_or(Path::new("")).display().to_string(), "tone":"faint"})));
         if missing {
-            blocks.push(block("text", json!({"text": "This file is not where it was. Locate it, or take it off the list.",
+            blocks.push(block("text", json!({"text": "File missing. Locate it to update its path in recents.",
                                              "tone": "warn"})));
-            blocks.push(buttons(vec![verb("forget", "Remove from list", "", 0), verb("locate", "Locate…", "↩", PRIMARY)]));
+            blocks.push(buttons(vec![verb("forget", "Remove from recents", "", 0)]));
             return detail(blocks);
         }
         if proj {
@@ -540,7 +429,7 @@ impl<'a> View<'a> {
                 Some(files) if !files.is_empty() => {
                     blocks.push(block("caption", json!({"text": "Files", "right": files.len().to_string()})));
                     let items: Vec<Value> = files.iter().map(|(f, role)| {
-                        let here = Path::new(f).is_file();
+                        let here = !c.missing_members.contains(f);
                         prune(json!({"id": "", "label": name_of(f), "sub": if role != "host" { role.as_str() } else { "" },
                             "dot": if here { "ok" } else { "error" }, "dot_text": if here { "" } else { "missing" },
                             "kind": "file", "fixed": true}))
@@ -549,64 +438,52 @@ impl<'a> View<'a> {
                 }
                 _ => {}
             }
-            blocks.push(buttons(vec![verb("finder", "Show in Finder", "", 0), verb("open", "Open project", "↩", PRIMARY)]));
+            blocks.push(buttons(vec![verb("finder", "Show in Finder", "", 0)]));
             return detail(blocks);
         }
-        let mut rows = vec![];
-        let project = m.text("project");
-        if !project.is_empty() {
-            rows.push(json!(["Project", project, ""]));
+        if c.thumb.is_empty() {
+            blocks.push(block("text", json!({"text":"No saved preview","tone":"faint"})));
+        } else {
+            blocks.push(block("picture", json!({"icon":c.thumb, "size":180.0, "tone":"fit"})));
         }
-        let left = joined(&[&m.text("workspace"), &c.mtime.map(|t| self.ago(t)).unwrap_or_default()]);
-        if !left.is_empty() {
-            rows.push(json!(["Left in", left, ""]));
-        }
-        let n = m.problems();
-        rows.push(json!(["Problems", if n != 0 { format!("{n} to fix") } else { "none".into() }, if n != 0 { "warn" } else { "" }]));
-        if let Some(u) = m.int("unfiled") {
-            rows.push(json!(["Unfiled", u.to_string(), ""]));
-        }
-        let imported = m.text("imported");
-        if !imported.is_empty() {
-            rows.push(json!(["From", imported_name(&imported), ""]));
-        }
+        let units = c.units.clone().unwrap_or_else(|| m.text("units"));
+        let rows = json!([
+            ["Units", if units.is_empty() {"Unavailable"} else {&units}, ""],
+            ["File size", c.bytes.map(size).unwrap_or_else(|| "Unavailable".into()), ""],
+            ["Last saved", c.mtime.map(|t| self.ago(t)).unwrap_or_else(|| "Unavailable".into()), ""]
+        ]);
         blocks.push(block("kv", json!({"rows": rows})));
         if c.autosave_newer {
             blocks.push(block("text", json!({"text": "Auto-save is newer than the file: opening asks which to keep.",
                                              "tone": "warn"})));
         }
         match &c.links {
-            None if c.exists == Some(true) => {
+            None => {
                 blocks.push(block("caption", json!({"text": "Linked files"})));
-                blocks.push(block("text", json!({"text": "Reading links…", "tone": "faint"})));
+                blocks.push(block("text", json!({"text": "Not checked", "tone": "faint"})));
             }
             Some(links) if !links.is_empty() => {
-                let states: Vec<&str> = links.iter().map(|l| link_state(l, c.mtime)).collect();
+                let states: Vec<&str> = links.iter().map(|l| l.status.as_str()).collect();
                 let bad = states.iter().filter(|s| **s != "found").count();
                 let right = if bad > 0 { format!("{} · {bad} to look at", links.len()) } else { links.len().to_string() };
                 blocks.push(block("caption", json!({"text": "Linked files", "right": right})));
                 let items: Vec<Value> = links.iter().zip(&states).map(|(l, s)| {
-                    let (dot, words) = match *s { "found" => ("ok", ""), "changed" => ("warn", "changed on disk"),
-                                                  _ => ("error", "missing") };
+                    let (dot, words) = match *s { "found" => ("ok", "Found"), "changed" => ("warn", "Changed on disk"),
+                                                  _ => ("error", "Missing") };
                     let found = l.found.clone().unwrap_or_default();
                     prune(json!({"id": "", "label": name_of(&l.path), "depth": l.depth, "dot": dot, "dot_text": words,
-                        "right": self.ago_of(&found), "kind": "file", "fixed": true,
+                         "kind": "file", "fixed": true,
                         "tip": if found.is_empty() { l.path.clone() } else { found }}))
                 }).collect();
                 blocks.push(block("rows", json!({"items": items})));
             }
-            _ => {}
+            _ => blocks.push(block("text", json!({"text":"Linked files · None"}))),
         }
-        let open = match kind {
-            Kind::Cont(c) if c.open => verb("open", "Back to the model", "esc", PRIMARY),
-            _ => verb("open", "Open", "↩", PRIMARY),
-        };
-        blocks.push(buttons(vec![verb("finder", "Show in Finder", "", 0), open]));
+
         detail(blocks)
     }
 
-    /// The sheet's spec, with the icons it names, the focused row and the
-    /// path of the Continue row.
+    /// The sheet spec and its referenced textures.
     pub fn sheet(&self) -> Value {
         let st = self.st;
         let mut icons: Vec<String> = vec![];
@@ -624,7 +501,11 @@ impl<'a> View<'a> {
             _ => order.first().map(|s| s.to_string()),
         };
         let mut blocks = vec![];
-        let mut cont_path = String::new();
+
+        if !st.projects_tab && st.files.is_empty() && st.filter.is_empty() {
+            blocks.push(block("caption", json!({"text":"Recent models"})));
+            blocks.push(block("text", json!({"text":"Models you open appear here.", "tone":"faint"})));
+        }
         for (key, rows) in &sections {
             if rows.is_empty() {
                 continue;
@@ -632,41 +513,40 @@ impl<'a> View<'a> {
             let caption = SECTIONS.iter().find(|(k, _)| k == key).map_or("", |s| s.1);
             blocks.push(block("caption", json!({"text": caption})));
             let items: Vec<Value> = rows.iter().map(|(id, kind)| {
-                if let Kind::Cont(c) = kind {
-                    cont_path = c.path.clone();
-                }
                 self.row(id, kind, &mut icons)
             }).collect();
             blocks.push(block("rows", json!({"items": items, "id": key,
-                                             "tone": if *key != "templates" { "thumbs" } else { "" }})));
-            if *key == "recent" {
-                let gone = self.missing_files();
-                if !gone.is_empty() && st.filter.is_empty() {
-                    blocks.push(block("buttons", json!({"buttons": [verb("clearmissing",
-                        &format!("Clear missing ({})", gone.len()), "", QUIET)], "align": "left"})));
-                }
-            }
+                                             "tone": "start-list"})));
         }
         let found = sections.iter().flat_map(|(_, rows)| rows.iter()).find(|(id, _)| Some(id) == focus.as_ref());
         let detail = self.preview(found, &mut icons);
-        let empty = if st.filter.is_empty() { "No recent files yet.".to_owned() }
+        let empty = if st.projects_tab && st.filter.is_empty() { "No recent projects".to_owned() } else if st.filter.is_empty() { "No recent files yet.".to_owned() }
                     else { format!("Nothing matches “{}”.", st.filter) };
-        let hint = format!("↑↓ choose · ↩ open{}   {}", if st.back { " · esc back to the model" } else { "" }, st.engine);
+        let mut verbs = vec![verb("openfile", if st.projects_tab {"Open project…"} else {"Open file…"}, "", 0)];
+        let primary = match found.map(|(_, k)| k) {
+            Some(Kind::Tpl(_)) => Some(("open", "New model")),
+            Some(Kind::File(r) | Kind::Proj(r)) if self.missing(&r.path) => Some(("locate", "Locate…")),
+            Some(Kind::File(_)) => Some(("open", "Open model")),
+            Some(Kind::Proj(_)) => Some(("open", "Open project")),
+            None if st.projects_tab => Some(("project","New project…")),
+            None => None,
+        };
+        if st.projects_tab && found.is_some() {
+            verbs.push(verb("project", "New project…", "", 0));
+        }
         let links = [("libraries", "Library"), ("prefs", "Settings"), ("extensions", "Extensions"), ("help", "Help")];
         json!({
-            "id": "start", "title": "", "closable": st.back, "width": 1180.0, "backdrop_icon": backdrop,
-            "default_verb": "", "tabs": [],
-            "verbs": [verb("new", "New model", "⌘N", PRIMARY), verb("openfile", "Open…", "⌘O", 0),
-                      verb("project", "New project…", "", 0)],
-            "menus": [{"id": "template", "label": "From template", "on": "", "left": true,
-                       "options": TEMPLATES.iter().map(|t| verb(t.id, t.name, "", 0)).collect::<Vec<_>>()}],
+            "id": "start", "title": "Start", "closable": st.back, "width": 1180.0, "backdrop_icon": backdrop,
+            "default_verb": if st.projects_tab && found.is_none() {"project"} else {""},
+            "tabs": [{"id":"models","label":"Models","on":!st.projects_tab},{"id":"projects","label":"Projects","on":st.projects_tab}],
+            "verbs": verbs, "menus": [],
             "side": [], "side_width": 0.0,
             "content": {"title": st.pending, "sub": "", "empty": empty, "width": 0.0, "blocks": blocks},
             "detail": detail,
-            "footer": {"links": links.iter().map(|(i, l)| verb(i, l, "", 0)).collect::<Vec<_>>(), "hint": hint},
-            "focus": focus, "force_focus": false,
-            "search": {"placeholder": "Type to filter", "key": "", "text": "", "force": false},
-            "icons": icons, "cont_path": cont_path,
+            "footer": {"links": links.iter().map(|(i, l)| verb(i, l, "", 0)).collect::<Vec<_>>(), "hint": "", "action": primary.map(|(id,label)| verb(id,label,"↩",PRIMARY))},
+            "focus": focus, "force_focus": st.focus != focus,
+            "search": {"placeholder": if st.projects_tab {"Filter projects"} else {"Filter models and templates"}, "key": "", "text": "", "force": false},
+            "icons": icons,
         })
     }
 }
@@ -689,7 +569,6 @@ pub fn start_sections(state: &str) -> PyResult<Vec<(String, Vec<(String, String,
     let view = View::new(&st);
     Ok(view.sections().into_iter().map(|(key, rows)| (key.to_owned(), rows.into_iter().map(|(id, kind)| {
         let (k, path) = match kind {
-            Kind::Cont(c) => ("cont", c.path),
             Kind::File(r) => ("file", r.path.clone()),
             Kind::Proj(r) => ("proj", r.path.clone()),
             Kind::Tpl(t) => ("tpl", t.id.to_owned()),
@@ -742,48 +621,21 @@ mod tests {
     }
 
     #[test]
-    fn sections_filter_pins_and_hide_moved_duplicates() {
-        let st = state(json!({
-            "last": "/w/a.igz",
-            "files": [{"path": "/w/a.igz"}, {"path": "/w/p.igz", "pinned": true},
-                      {"path": "/n/ride.igz"}, {"path": "/old/ride.igz"}],
-            "projects": [{"path": "/w/job.igzproj"}],
-            "cache": {"/n/ride.igz": {"exists": true}, "/old/ride.igz": {"exists": false},
-                      "/w/job.igzproj": {"exists": true, "files": [["/w/host.igz", "host"]]}},
-            "meta": {"/w/p.igz": {"project": "Ride"}}}));
-        let v = View::new(&st);
-        let ids = |s: &[(&str, Vec<(String, Kind)>)], k: &str| -> Vec<String> {
-            s.iter().find(|x| x.0 == k).unwrap().1.iter().map(|r| r.0.clone()).collect()
-        };
-        let s = v.sections();
-        assert_eq!(ids(&s, "cont"), ["cont"]);
-        assert_eq!(ids(&s, "pinned"), ["file:/w/p.igz"]);
-        assert_eq!(ids(&s, "recent"), ["file:/n/ride.igz"]);         // a moved one: once
-        assert_eq!(ids(&s, "projects"), ["proj:/w/job.igzproj"]);
-        assert_eq!(v.missing_files(), ["/old/ride.igz"]);
-        let st = State { filter: "ride host".into(), ..st };
-        let s = View::new(&st).sections();
-        assert!(ids(&s, "pinned").is_empty() && ids(&s, "recent").is_empty());
-        let st = State { filter: "host".into(), ..st };
-        assert_eq!(ids(&View::new(&st).sections(), "projects"), ["proj:/w/job.igzproj"]);  // by a file it holds
-    }
-
-    #[test]
-    fn the_sheet_names_its_icons_and_focus() {
-        let st = state(json!({"last": "/w/a.igz", "files": [{"path": "/w/a.igz"}],
-                              "cache": {"/w/a.igz": {"exists": true, "thumb": "thumb:1", "links": []}}}));
-        let sheet = View::new(&st).sheet();
-        assert_eq!(sheet["backdrop_icon"], "thumb:1");
-        assert_eq!(sheet["focus"], "cont");
-        assert_eq!(sheet["cont_path"], "/w/a.igz");
-        assert_eq!(sheet["icons"], json!(["thumb:1"]));
-        let text = sheet.to_string();
-        assert!(serde_json::from_str::<crate::ui::large_sheet::Spec>(&text).is_ok(), "{text}");
-        let st = State { focus: Some("tpl:steel".into()), ..st };
-        let sheet = View::new(&st).sheet();
-        let blocks = sheet["detail"]["blocks"].as_array().unwrap();
-        assert_eq!(blocks[0]["text"], "Steel fabrication");
-        assert_eq!(blocks[2]["rows"][1], json!(["Structure", "Steel", ""]));
+    fn selection_owns_the_only_primary_action() {
+        let files = json!([{"path":"file.built"},{"path":"lost.built","pinned":true}]);
+        let cache = json!({"lost.built":{"exists":false}});
+        for (focus, action) in [("tpl:blank","New model"), ("file:file.built","Open model"), ("file:lost.built","Locate…")] {
+            let st = state(json!({"files":files,"cache":cache,"focus":focus}));
+            let spec = View::new(&st).sheet();
+            assert_eq!(spec["focus"], focus);
+            assert_eq!(spec["footer"]["action"]["label"], action);
+            assert_eq!(spec["footer"]["action"]["role"], 1);
+            assert!(spec["verbs"].as_array().unwrap().iter().all(|v| v["role"] != 1));
+            serde_json::from_value::<crate::ui::large_sheet::Spec>(spec).unwrap();
+        }
+        let spec = View::new(&State::default()).sheet();
+        assert_eq!(spec["focus"], "tpl:blank");
+        assert!(spec["menus"].as_array().unwrap().is_empty());
     }
 
     #[test]

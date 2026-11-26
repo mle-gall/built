@@ -159,7 +159,7 @@ impl Strip {
                 self.menu = None;
             }
         }
-        let plus = (String::new(), "+".to_owned(), "New project (⌘N)".to_owned(), String::new(), -1i8, true);
+        let plus = (String::new(), "+".to_owned(), "New model (⌘N)".to_owned(), String::new(), -1i8, true);
         let (rect, resp) = ui.allocate_exact_size(vec2(PLUS_W, CONTROL_H), Sense::click());
         let st = state_of(&resp, false, true);
         paint_state(ui, rect, st, R_CONTROL);
@@ -171,15 +171,15 @@ impl Strip {
     fn menu_rows(&self, i: usize) -> Vec<(&'static str, String, &'static str, bool, i8)> {
         let count = self.tabs.len();
         vec![
-                ("new", "New project".into(), "⌘N", true, -1),
+                ("new", "New model".into(), "⌘N", true, -1),
                 ("open", "Open…".into(), "⌘O", true, -1),
                 ("save", "Save".into(), "⌘S", true, -1),
                 ("save_as", "Save As…".into(), "⇧⌘S", true, -1),
                 ("-", String::new(), "", true, -1),
-                ("close", "Close project".into(), "⌘W", true, -1),
-                ("close_right", "Close projects to the right".into(), "", i + 1 < count, -1),
-                ("close_left", "Close projects to the left".into(), "", i > 0, -1),
-                ("close_all", "Close all projects".into(), "", true, -1),
+                ("close", "Close model".into(), "⌘W", true, -1),
+                ("close_right", "Close models to the right".into(), "", i + 1 < count, -1),
+                ("close_left", "Close models to the left".into(), "", i > 0, -1),
+                ("close_all", "Close all models".into(), "", true, -1),
                 ("-", String::new(), "", true, -1),
                 ("move", "Move to new window".into(), "", self.can_move && count > 1, -1),
                 ("-", String::new(), "", true, -1),
