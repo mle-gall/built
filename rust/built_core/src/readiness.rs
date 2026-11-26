@@ -270,12 +270,23 @@ pub(crate) fn export_readiness(
         .iter()
         .map(|(key, count)| (key, [blockers.get(key).map_or(0, HashSet::len), *count]))
         .collect();
+    let mut outputs = Vec::new();
     let runs = if let Some(record) = delivery.as_ref() {
+        outputs.push(json!({
+            "format": format.as_deref().unwrap_or(""),
+            "destination": record.call_method1("get", ("destination", ""))?.str()?.to_str()?,
+        }));
         let raw = record.call_method1("get", ("runs", pyo3::types::PyList::empty(scene.py())))?;
         let encoded: String = scene.py().import("json")?.call_method1("dumps", (raw,))?.extract()?;
-        serde_json::from_str::<Value>(&encoded).unwrap_or(Value::Null)
+        let mut runs: Vec<Value> = serde_json::from_str(&encoded).unwrap_or_default();
+        if runs.is_empty() {
+            if let Some(time) = record.call_method1("get", ("last_run",))?.extract::<Option<String>>()? {
+                runs.push(json!({"result":"Delivered","time":time}));
+            }
+        }
+        Value::Array(runs)
     } else { Value::Null };
     let report = json!({"choices":deliveries,"active":active,"scope":scope,"ready":total-blocked,"total":total,
-        "runs":runs,"rows":rows,"items":items,"checks":checks,"notes":notes});
+        "outputs":outputs,"runs":runs,"rows":rows,"items":items,"checks":checks,"notes":notes});
     Ok(report.to_string())
 }

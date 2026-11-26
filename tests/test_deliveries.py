@@ -176,6 +176,7 @@ def test_checks_and_file_export_open_deliveries(tmp_path, native_host, monkeypat
     readiness = json.loads(blob)
     assert panel == "readiness" and (readiness["ready"], readiness["total"]) == (0, 1)
     assert readiness["checks"]["*"]["unfiled/"][0] == "Not filed"
+    assert readiness["outputs"] == [{"format": "ifc", "destination": str(tmp_path / "handover.ifc")}]
     renderer = Mock()
     monkeypatch.setattr(win._doc.stand_in, "renderer", renderer)
     native_host.menu("delivery_export")

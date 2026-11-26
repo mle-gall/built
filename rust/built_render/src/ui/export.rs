@@ -84,6 +84,15 @@ pub(super) fn destination(ui: &mut egui::Ui, report: &Value, cmds: &mut Vec<Stri
         if !active.is_empty() {
             ui.separator();
             if kit::quiet(ui, "Edit setup…").clicked() { cmds.push(format!("deliver:edit:{active}")); }
+            if let Some(outputs) = report["outputs"].as_array().filter(|outputs| !outputs.is_empty()) {
+                kit::caption_plain(ui, "Outputs");
+                for output in outputs {
+                    let format = output["format"].as_str().unwrap_or("").to_uppercase();
+                    let path = output["destination"].as_str().unwrap_or("");
+                    let row = ui.scope(|ui| kit::prop_row(ui, &format, path));
+                    row.response.on_hover_text(path);
+                }
+            }
             kit::disclosure(ui, ("delivery history", active), "Run history", true, |ui| {
                 let runs = report["runs"].as_array().map(Vec::as_slice).unwrap_or_default();
                 if runs.is_empty() { kit::empty_state(ui, "No runs yet"); }

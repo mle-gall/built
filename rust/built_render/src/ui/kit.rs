@@ -2355,7 +2355,11 @@ pub fn destination_strip(ui: &mut egui::Ui, rect: Rect, draw: impl FnOnce(&mut e
 /// Each destination has the same hit target, including when a badge is present.
 pub fn destination_button(ui: &mut egui::Ui, name: &str, glyph: &str, shortcut: &str, badge: &str, active: bool) -> bool {
     let (rect, response) = ui.allocate_exact_size(vec2(30., 30.), Sense::click());
-    paint_state(ui, rect, state_of(&response, active, true), R_CONTROL);
+    if active {
+        paint_selected_row(ui, rect);
+    } else {
+        paint_state(ui, rect, state_of(&response, false, true), R_CONTROL);
+    }
     let ink = if active { BRIGHT } else { INK_2 };
     let center = rect.center();
     if glyph == "folder" {
