@@ -22,10 +22,17 @@ fn visible_elements<'py>(
         let all: Vec<u128> = store.call_method1("keys", (kind,))?.extract()?;
         if at.iter().all(|&i| i < all.len()) {
             let keys: Vec<u128> = at.iter().map(|&i| all[i]).collect();
-            if let Some(mask) = crate::model::scene_api::selectable_mask(scene, kind, keys)? {
-                for (i, ok) in at.into_iter().zip(mask) {
+            if let Some(mask) = crate::model::scene_api::selectable_mask(scene, kind, keys.clone())? {
+                // The handles straight from their keys, as `elements[i]`
+                // makes them, without asking the store for each index again
+                // (a window over half a big model is hundreds of thousands).
+                let first = at.iter().zip(&mask).find(|(_, ok)| **ok).map(|(&i, _)| i);
+                let Some(first) = first else { return Ok(result) };
+                let sample = elements.get_item(first)?;
+                let (class, mesh) = (sample.get_type(), sample.getattr("_m")?);
+                for (key, ok) in keys.into_iter().zip(mask) {
                     if ok {
-                        result.append(elements.get_item(i)?)?;
+                        result.append(class.call1((&mesh, key))?)?;
                     }
                 }
                 return Ok(result);
@@ -185,6 +192,25 @@ fn box_group_fast<'py>(a: &Args<'py>) -> Reply<'py> {
 const LARGE_MESH_FACES: usize = 20_000;
 
 fn box_select<'py>(a: &Args<'py>) -> Reply<'py> {
+    let py = a.py();
+    // A window over a big mesh makes hundreds of thousands of handles: the
+    // collector's passes over them in the middle (none can be garbage yet)
+    // were a tenth of it. Paused for the selection, as it was.
+    let big = a.get_item(0)?.getattr("scene")?.getattr_opt("mesh")?
+        .map(|m| m.getattr("faces").and_then(|f| f.len())).transpose()?.unwrap_or(0) > LARGE_MESH_FACES;
+    let gc = py.import("gc")?;
+    let pause = big && gc.call_method0("isenabled")?.is_truthy()?;
+    if pause {
+        gc.call_method0("disable")?;
+    }
+    let result = box_select_now(a);
+    if pause {
+        gc.call_method0("enable")?;
+    }
+    result
+}
+
+fn box_select_now<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let module = imported(py, "tools.select_host")?;
     let [vp, rect, crossing, mode] = unpack::<4>(a.as_any())?;
