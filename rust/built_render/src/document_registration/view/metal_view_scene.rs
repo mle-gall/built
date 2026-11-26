@@ -174,6 +174,37 @@ fn set_scene<'py>(a: &Args<'py>) -> Reply<'py> {
         let packed = view.getattr("packed")?;
         let changed = tracker.getattr("changed")?.is_truthy()?;
         let removed = tracker.getattr("removed")?;
+        // Prototypes new from this edit far from the origin: the tools see
+        // their meshes in the view frame like the others' (GeometryFrame).
+        let remote = attr(&tracker, "remote")?;
+        if remote.is_truthy()? {
+            let known = PyList::empty(py);
+            let before = attr(&view, "_remote_meshes")?;
+            if !before.is_none() {
+                for entry in before.try_iter()? {
+                    known.append(entry?)?;
+                }
+            }
+            for entry in remote.try_iter()? {
+                let entry = entry?;
+                let mesh = entry.get_item(0)?;
+                let mut seen = false;
+                for old in known.iter() {
+                    seen |= old.get_item(0)?.is(&mesh);
+                }
+                if !seen {
+                    known.append(entry)?;
+                }
+            }
+            view.setattr("_remote_meshes", known.to_tuple())?;
+        }
+        // Rows a rebake moved to another frame: the snap index rereads them.
+        let reanchored = attr(&tracker, "reanchored")?;
+        let ids = if reanchored.is_truthy()? {
+            np.call_method1("union1d", (&ids, np.call_method1("asarray", (reanchored, np.getattr("int64")?))?))?
+        } else {
+            ids
+        };
         let written = ids.len()? != 0;
         if changed {
             packed.getattr("__dict__")?.call_method1("pop", ("_face_ranges", py.None()))?;
@@ -249,6 +280,8 @@ fn set_scene<'py>(a: &Args<'py>) -> Reply<'py> {
     } else {
         focus
     };
+    // The test hook: how many edits took the whole-scene path.
+    view.setattr("full_packs", attr(&view, "full_packs")?.extract::<Option<u64>>()?.unwrap_or(0) + 1)?;
     if prepared.is_none() {
         let kw = PyDict::new(py);
         kw.set_item("progress", &progress)?;

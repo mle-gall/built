@@ -22,7 +22,7 @@ use numpy::{
 use pyo3::{
     exceptions::PyValueError,
     prelude::*,
-    types::{PyDict, PyTuple},
+    types::{PyDict, PyList, PyTuple},
 };
 
 type Obj<'py> = Bound<'py, PyAny>;
@@ -401,9 +401,21 @@ impl PackedScene {
         noted(slf, "_reserving")
     }
 
-    /// One more prototype, drawing nothing yet: its code.
-    fn append_prototype(&mut self, py: Python<'_>) -> PyResult<usize> {
+    /// One more prototype, drawing nothing yet: its code. `anchor` is the
+    /// frame its vertices will be baked in (`prototype_origins`, one per
+    /// prototype in a rebased pack).
+    #[pyo3(signature = (anchor = None))]
+    fn append_prototype(&mut self, py: Python<'_>, anchor: Option<[f64; 3]>) -> PyResult<usize> {
         let code = bytes(self.commands.bind(py))?.len() / COMMAND_BYTES;
+        let origins = self.prototype_origins.bind(py);
+        if origins.len()? == code {
+            let grown = PyList::empty(py);
+            for origin in origins.try_iter()? {
+                grown.append(origin?)?;
+            }
+            grown.append(PyTuple::new(py, anchor.unwrap_or([0.; 3]))?)?;
+            self.prototype_origins = grown.to_tuple().into_any().unbind();
+        }
         let mut bounds = bytes(self.bounds.bind(py))?.to_vec();
         bounds.extend_from_slice(&[0u8; 32]);
         let floats: Vec<f32> = bounds.chunks_exact(4).map(|b| f32::from_le_bytes(b.try_into().expect("four bytes"))).collect();
@@ -421,6 +433,13 @@ impl PackedScene {
         let mut rows = bytes(self.instances.bind(py))?.to_vec();
         rows.resize(rows.len() + count * INSTANCE_BYTES, 0);
         self.instances = records(py, rows, "INSTANCE")?.unbind();
+        // A rebased pack keeps each row's model-frame translation too.
+        if !self.model_translations.is_none(py) {
+            let np = py.import("numpy")?;
+            let zeros = np.call_method1("zeros", ((count, 3), np.getattr("float64")?))?;
+            let grown = np.call_method1("concatenate", ((self.model_translations.bind(py), zeros),))?;
+            self.model_translations = grown.unbind();
+        }
         Ok(())
     }
 
