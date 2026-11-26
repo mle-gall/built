@@ -57,7 +57,7 @@ impl Ui {
         let attention = data["unresolved"].as_u64().unwrap_or(0);
         kit::inspector_title(ui, "Tasks", &if attention > 0 { format!("{attention} need attention") } else { String::new() });
         ui.add_space(SPACE_XS);
-        let composer_h = if pane.compose { 150.0 } else { BUTTON_H + SPACE_M };
+        let composer_h = if pane.compose { 165.0 } else { BUTTON_H + SPACE_M };
         let height = (ui.available_height() - composer_h).max(80.0);
         let top = ui.cursor().min;
         let list = Rect::from_min_size(top, vec2(ui.available_width(), height));
@@ -66,16 +66,18 @@ impl Ui {
             ui.set_width(list.width());
             ui.spacing_mut().item_spacing = vec2(0.0, 2.0);
             if data["empty"].as_bool().unwrap_or(true) {
-                ui.add_space(SPACE_S);
-                ui.label(egui::RichText::new("No tasks yet").font(strong(TYPE_BODY)).color(INK));
-                ui.add_space(SPACE_XS);
-                wrapped(ui, "Ask the built-in assistant, or an agent connected over MCP, to change or check the model. Its requests, questions and changes to review appear here.", body(), DIM);
-                if !data["access"].as_bool().unwrap_or(false) {
-                    ui.add_space(SPACE_S);
-                    wrapped(ui, "External agents cannot edit this model. Allow them in Settings › AI.", meta(), FAINT);
-                    if kit::quiet(ui, "Open Settings › AI").clicked() {
-                        cmds.push("task:settings:".into());
+                egui::Frame::new().inner_margin(egui::Margin::symmetric(SPACE_S as i8, SPACE_S as i8)).show(ui, |ui| {
+                    ui.set_width(ui.available_width());
+                    ui.spacing_mut().item_spacing = vec2(0.0, SPACE_XS);
+                    ui.label(egui::RichText::new("No tasks yet").font(strong(TYPE_BODY)).color(INK));
+                    wrapped(ui, "Ask the built-in assistant, or an agent connected over MCP, to change or check the model. Its requests, questions and changes to review appear here.", body(), DIM);
+                    if !data["access"].as_bool().unwrap_or(false) {
+                        ui.add_space(SPACE_XS);
+                        wrapped(ui, "External agents cannot edit this model. Allow them in Settings › AI.", meta(), FAINT);
                     }
+                });
+                if !data["access"].as_bool().unwrap_or(false) && kit::quiet(ui, "Open Settings › AI").clicked() {
+                    cmds.push("task:settings:".into());
                 }
                 return;
             }
@@ -120,10 +122,9 @@ impl Ui {
         let guid = text(d, "guid").to_owned();
         let agent = text(d, "agent").to_owned();
         ui.spacing_mut().item_spacing = vec2(SPACE_XS, SPACE_XS);
-        ui.horizontal(|ui| {
-            ui.add_space(SPACE_S);
-            ui.set_width(ui.available_width() - SPACE_S);
-            ui.vertical(|ui| {
+        egui::Frame::new().inner_margin(egui::Margin { left: SPACE_S as i8, right: SPACE_S as i8, top: SPACE_XS as i8, bottom: 0 }).show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            {
                 ui.spacing_mut().item_spacing = vec2(SPACE_XS, SPACE_XS);
                 wrapped(ui, text(d, "title"), title(), INK);
                 let description = text(d, "description");
@@ -145,7 +146,7 @@ impl Ui {
                     ui.label(egui::RichText::new(format!("{shown} earlier messages")).font(meta()).color(FAINT));
                 }
                 for c in &comments[shown..] {
-                    if text(c, "text") == summary {
+                    if text(c, "text") == summary || text(c, "text") == text(d, "question") {
                         continue;
                     }
                     ui.label(egui::RichText::new(text(c, "author")).font(meta()).color(FAINT));
@@ -160,7 +161,7 @@ impl Ui {
                 if let Some(note) = d["note"].as_str() {
                     wrapped(ui, note, body(), WARN);
                 }
-            });
+            }
         });
         // What it changed.
         let changes = d["changes"].as_array().cloned().unwrap_or_default();
@@ -236,7 +237,7 @@ impl Ui {
         let mut go = false;
         ui.horizontal(|ui| {
             ui.add_space(SPACE_S);
-            let w = (ui.available_width() - 64.0 - SPACE_S).max(60.0);
+            let w = (ui.available_width() - 72.0 - 2.0 * SPACE_S).max(60.0);
             let r = ui.add(kit::field(draft).hint_text(egui::RichText::new(hint).color(FAINT)).desired_width(w));
             go = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
             go |= kit::sheet_button(ui, verb, "", 1);
@@ -261,6 +262,7 @@ impl Ui {
         let agents = if agents.is_empty() { vec![crate::tasks_host::ASSISTANT.to_owned()] } else { agents };
         pane.agent = pane.agent.min(agents.len() - 1);
         ui.add_space(SPACE_XS);
+        ui.spacing_mut().item_spacing = vec2(SPACE_XS, SPACE_XS);
         ui.label(egui::RichText::new("New task").font(strong(TYPE_BODY)).color(INK));
         let r = ui.add(
             egui::TextEdit::multiline(&mut pane.draft)

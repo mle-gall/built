@@ -641,7 +641,8 @@ def setup_command(client: str, platform: str | None = None, **kw) -> tuple[str, 
     """(what to run in a terminal so `client` starts Built's MCP server, a
     note on where). The native app is its own server (``--mcp``)."""
     if "built_shell" in sys.builtin_module_names and not kw:
-        cmd = [sys.executable, "--mcp"]
+        from built_render import app_executable
+        cmd = [app_executable() or sys.executable, "--mcp"]
     else:
         cmd = mcp_command(platform, **kw)
     quoted = " ".join(f'"{c}"' if " " in c else c for c in cmd)

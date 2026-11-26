@@ -8,15 +8,29 @@ revierte entero; el guard de hermeticidad valida sus recetas).
 
 ## Built nativo en macOS y Linux
 
-En el panel **Plugins**, abre **AI Bridge (MCP)** y pulsa **Start bridge**.
-El puente acepta peticiones para el documento activo hasta que pulses
-**Stop bridge** o cierres la ventana. Usa un socket Unix en un directorio
-privado del usuario (modo 0700). El archivo del socket tiene modo 0600.
-Configura el cliente MCP para ejecutar el binario de Built con el argumento
-`--mcp`. Si usas `BUILT_SETTINGS_DIR`, ambos procesos deben usar el mismo
-perfil. El cliente sigue usando entrada y salida estándar.
-Los procesos de la misma cuenta con acceso al perfil pueden ejecutar
-herramientas, incluida la consola Python.
+En **Settings › AI › Model access**, activa **Allow agents to edit this
+model**. El permiso es por modelo y empieza desactivado. Mientras algún
+modelo de la ventana lo tiene activo, el puente acepta peticiones para el
+documento activo; desactivarlo corta el acceso a ese modelo. Usa un socket
+Unix en un directorio privado del usuario (modo 0700). El archivo del
+socket tiene modo 0600. **Connect an agent…** muestra y copia el comando
+para Claude Code, Codex o T3 Code (el binario de Built con `--mcp`). Si
+usas `BUILT_SETTINGS_DIR`, ambos procesos deben usar el mismo perfil. El
+cliente sigue usando entrada y salida estándar. Los procesos de la misma
+cuenta con acceso al perfil pueden ejecutar herramientas, incluida la
+consola Python.
+
+### Tareas
+
+Cada petición es una tarea en el destino **Tasks** (un topic BCF 3.0
+guardado en el documento). El agente abre una con `task_create`, informa
+con `task_update` (`working`, `waiting`, `question`, `done`) y lee las
+respuestas del usuario con `task_list` / `task_get`. Las ediciones hechas
+mientras una tarea está abierta se le atribuyen; una edición sin tarea abre
+una ("Changes from …"). Sin cambios netos la tarea queda en Done; con
+cambios espera revisión: **Accept changes**, **Request changes…** o
+**Revert task** (un solo paso de deshacer, rechazado si un trabajo
+posterior tocó los mismos elementos).
 
 ## Uso en la interfaz clásica
 

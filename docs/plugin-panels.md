@@ -1,6 +1,6 @@
 # Plugin panels
 
-Built draws plugin panels with egui. Select **Plugins** in the right dock to open a panel. A dock panel replaces the project tree. A utility panel opens above the bottom bar and has a resize handle and Close button. The Console and Blender render preview use utility panels. Blender lights, the AI assistant and the Levels extension use dock panels.
+Built draws plugin panels with egui. Select **Plugins** in the right dock to open a panel. A dock panel replaces the project tree. A utility panel opens above the bottom bar and has a resize handle and Close button. The Console and Blender render preview use utility panels. Blender lights and the Levels extension use dock panels. The AI assistant and the MCP bridge are not panels: their requests are tasks in the Tasks destination and their settings live in Settings › AI.
 
 ## Register a panel
 

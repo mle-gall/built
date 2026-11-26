@@ -91,21 +91,20 @@ fn write_plugin_data(scene: &Obj<'_>, value: &Value) -> PyResult<()> {
     } else {
         data.set_item(KEY, py_json(py, value)?)?;
     }
-    Ok(())
+    scene.setattr("_tasks_written", data.call_method1("get", (KEY,))?)
 }
 
-/// Put the records back if a step restored an older `plugin_data`.
+/// Put the records back if a step restored an older `plugin_data` (it
+/// puts back a copy: a different object from the one written).
 fn repair(scene: &Obj<'_>) -> PyResult<()> {
     let Some(text) = opt(scene, "_tasks_json") else { return Ok(()) };
-    let ours: Value = serde_json::from_str(&text.extract::<String>()?).map_err(|e| err(e.to_string()))?;
     let stored = scene.getattr("plugin_data")?.call_method1("get", (KEY,))?;
-    let theirs: Value = if stored.is_none() { json!({"version": tasks::BCF_VERSION, "topics": []}) } else {
-        serde_json::from_str(&json_text(&stored)?).map_err(|e| err(e.to_string()))?
-    };
-    if theirs != ours {
-        write_plugin_data(scene, &ours)?;
+    let written = scene.getattr_opt("_tasks_written")?.unwrap_or_else(|| none(scene.py()));
+    if stored.is(&written) {
+        return Ok(());
     }
-    Ok(())
+    let ours: Value = serde_json::from_str(&text.extract::<String>()?).map_err(|e| err(e.to_string()))?;
+    write_plugin_data(scene, &ours)
 }
 
 /// Change one task and keep it.
@@ -834,14 +833,14 @@ pub fn tasks_before_frame(view: &Obj<'_>, win: &Obj<'_>) -> PyResult<()> {
     let Some(renderer) = opt(view, "renderer").filter(|r| r.hasattr("ui_panel_set").unwrap_or(false)) else {
         return Ok(());
     };
-    let sig = (scene.as_ptr() as usize, serial(&scene), access(&scene), clients(win)?, scene.getattr("selection")?.len()?).into_pyobject(py)?.into_any();
+    let packed = opt(view, "packed").map_or(0, |p| p.as_ptr() as usize);
+    let sig = (scene.as_ptr() as usize, serial(&scene), access(&scene), clients(win)?, scene.getattr("selection")?.len()?, packed).into_pyobject(py)?.into_any();
     let state = view.getattr("__dict__")?;
-    let fresh = sig.ne(state.call_method1("get", ("_ui_tasks_sig",))?)?;
-    let all = load(&scene)?;
-    let chosen = selected(&scene);
-    if fresh {
+    if sig.ne(state.call_method1("get", ("_ui_tasks_sig",))?)? {
         view.setattr("_ui_tasks_sig", &sig)?;
         renderer.call_method1("ui_panel_set", ("tasks", destination_data(win)?.to_string()))?;
+        let all = load(&scene)?;
+        let chosen = selected(&scene);
         // The preview: the selected task's changed elements, lit.
         let rows = PyList::empty(py);
         if let (Some(t), Some(uid_rows)) = (all.get(&chosen), opt(view, "uid_rows")) {
@@ -854,22 +853,34 @@ pub fn tasks_before_frame(view: &Obj<'_>, win: &Obj<'_>) -> PyResult<()> {
             view.setattr("_task_rows", rows)?;
             view.call_method0("update")?;
         }
+        // The pins to draw: open tasks', and the selected one's.
+        let points = PyList::empty(py);
+        for t in all.topics.iter().filter(|t| t.pin.is_some() && (!t.state.settled() || t.guid == chosen)) {
+            let p = t.pin.expect("filtered");
+            points.append((t.guid.clone(), p[0], p[1], p[2], t.guid == chosen, t.state.needs_attention()))?;
+        }
+        view.setattr("_task_pin_points", points)?;
     }
-    if renderer.hasattr("ui_set_task_pins")? {
-        let pins = PyList::empty(py);
-        let to_pixel = opt(view, "_world_to_pixel");
-        if let Some(to_pixel) = to_pixel {
-            let vector = py.import("built_core")?.getattr("Vec3")?;
-            for t in all.topics.iter().filter(|t| t.pin.is_some() && (!t.state.settled() || t.guid == chosen)) {
-                let p = t.pin.expect("filtered");
-                let at = to_pixel.call1((vector.call1((p[0], p[1], p[2]))?,))?;
-                if let Ok((x, y)) = at.extract::<(f64, f64)>() {
-                    pins.append((t.guid.clone(), x as f32, y as f32, t.guid == chosen, t.state.needs_attention()))?;
-                }
+    // Where they are this frame (the camera moves).
+    let Some(points) = opt(view, "_task_pin_points") else { return Ok(()) };
+    if !renderer.hasattr("ui_set_task_pins")? {
+        return Ok(());
+    }
+    let pins = PyList::empty(py);
+    if let (true, Some(to_pixel)) = (points.is_truthy()?, opt(view, "_world_to_pixel")) {
+        let vector = py.import("built_core")?.getattr("Vec3")?;
+        for p in points.try_iter()? {
+            let (guid, x, y, z, chosen, attention): (String, f64, f64, f64, bool, bool) = p?.extract()?;
+            if let Ok((px, py_)) = to_pixel.call1((vector.call1((x, y, z))?,))?.extract::<(f64, f64)>() {
+                pins.append((guid, px as f32, py_ as f32, chosen, attention))?;
             }
         }
-        renderer.call_method1("ui_set_task_pins", (pins,))?;
     }
+    if pins.is_empty() && state.call_method1("get", ("_task_pins_empty", false))?.is_truthy()? {
+        return Ok(());
+    }
+    view.setattr("_task_pins_empty", pins.is_empty())?;
+    renderer.call_method1("ui_set_task_pins", (pins,))?;
     Ok(())
 }
 
@@ -895,8 +906,16 @@ pub fn agent_access(win: &Obj<'_>) -> PyResult<bool> {
     Ok(access(&scene_of(win)?))
 }
 
+/// The running program: inside the app, the Built binary an MCP client
+/// starts with `--mcp` (Python's `sys.executable` is the interpreter).
+#[pyfunction]
+pub fn app_executable() -> Option<String> {
+    std::env::current_exe().ok().map(|p| p.to_string_lossy().into_owned())
+}
+
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<TaskRevert>()?;
+    m.add_function(wrap_pyfunction!(app_executable, m)?)?;
     for f in [
         wrap_pyfunction!(task_new, m)?,
         wrap_pyfunction!(task_report, m)?,
