@@ -25,6 +25,11 @@ fn datum_with_north<'py>(py: Python<'py>, datum: &Obj<'py>, lat: Obj<'py>, lon: 
     let kw = PyDict::new(py);
     kw.set_item("alt", datum.getattr("alt")?)?;
     kw.set_item("north", north)?;
+    if let Some((code,e,n))=datum.getattr("placement")?.extract::<Option<(u32,f64,f64)>>()? {
+        let xy=if lat.eq(datum.getattr("lat")?)? && lon.eq(datum.getattr("lon")?)? {Some((e,n))}
+            else {crate::location::crs::lookup(code).and_then(|c|c.forward(lat.extract().ok()?,lon.extract().ok()?))};
+        if let Some((e,n))=xy {kw.set_item("placement",(code,e,n))?;}
+    }
     datum_class(py)?.call((lat, lon), Some(&kw))
 }
 

@@ -151,6 +151,12 @@ def _save_ifc(scene, path, project_name, profile, stream):
              for kind, prefix, unit in [('LENGTH', '$', 'METRE'), ('AREA', '$', 'SQUARE_METRE'),
                                        ('VOLUME', '$', 'CUBIC_METRE'), ('MASS', '.KILO.', 'GRAM'),
                                        ('PLANEANGLE', '$', 'RADIAN')]]
+    conversion = scene.georef.map_conversion() if scene.georef is not None else None
+    if conversion:
+        code, east, north, height, abscissa, ordinate = conversion
+        crs = w.add('IFCPROJECTEDCRS', _s(f'EPSG:{code}'), '$', '$', '$', '$', '$', ref(units[0]))
+        w.add('IFCMAPCONVERSION', ref(context), ref(crs), _f(east), _f(north), _f(height),
+              _f(abscissa), _f(ordinate), '1.')
     ua = w.add('IFCUNITASSIGNMENT', refs(units))
     placement = w.add('IFCLOCALPLACEMENT', '$', ref(axis))
     project = root('IfcProject', ('project',), Name=_s(project_data.get('name') or project_name),

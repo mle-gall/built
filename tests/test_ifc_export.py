@@ -153,3 +153,20 @@ def test_guid_format():
                   "abcdefghijklmnopqrstuvwxyz_$")
     assert set(g) <= allowed
     assert g[0] in "0123"                           # 128 bits → top char < 4
+
+
+def test_site_map_conversion_keeps_representation_local(tmp_path):
+    from built_core.georef.datum import SceneDatum
+    scene = _tagged_wall_scene()
+    datum = scene.georef = SceneDatum(46.5, 3, 87, 90, (2154, 700000, 6600000))
+    point = V(13, -7, 2)
+    lat, lon, alt = datum.local_to_geodetic(point)
+    back = datum.geodetic_to_local(lat, lon, alt)
+    assert (back.x(), back.y(), back.z()) == pytest.approx((13, -7, 2), abs=1e-6)
+    path = tmp_path / "placed.ifc"
+    save_ifc(scene, path)
+    text = path.read_text()
+    context = re.search(r"#(\d+)=IFCGEOMETRICREPRESENTATIONCONTEXT", text)[1]
+    crs = re.search(r"#(\d+)=IFCPROJECTEDCRS\('EPSG:2154'", text)[1]
+    args = re.search(rf"IFCMAPCONVERSION\(#{context},#{crs},([^)]*)", text)[1]
+    assert list(map(float, args.split(","))) == pytest.approx([700000, 6600000, 87, 0, 1, 1], abs=1e-6)

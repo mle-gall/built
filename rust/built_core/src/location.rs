@@ -1,4 +1,7 @@
 //! WGS84 site coordinates, the editable location draft and its document edit.
+pub(crate) mod crs;
+mod placement;
+
 use pyo3::{exceptions::PyValueError, prelude::*};
 use serde_json::json;
 use std::collections::BTreeMap;
@@ -78,6 +81,9 @@ fn valid(lat: f64, lon: f64) -> bool {
 
 #[pyclass]
 pub struct LocationDraft {
+    placement: Option<placement::Placement>,
+    #[pyo3(get, set)]
+    offline: bool,
     values: BTreeMap<String, String>,
     #[pyo3(get)]
     map: bool,
@@ -99,6 +105,8 @@ impl LocationDraft {
     #[new]
     fn new(lat: f64, lon: f64, mode: &str) -> Self {
         let mut draft = Self {
+            placement: None,
+            offline: false,
             values: Default::default(),
             map: false,
             query: String::new(),
@@ -113,6 +121,43 @@ impl LocationDraft {
         };
         draft.center(lat, lon);
         draft
+    }
+    fn start_placement(&mut self, scene: &Bound<'_, PyAny>, lat: f64, lon: f64) -> PyResult<()> {
+        self.placement = Some(placement::Placement::new(scene, (lat, lon))?);
+        self.map = true;
+        self.zoom = 19;
+        Ok(())
+    }
+    #[getter]
+    fn placing(&self) -> bool {
+        self.placement.is_some()
+    }
+    fn parameters(&self) -> Option<(u32, f64, f64, f64, f64)> {
+        self.placement.as_ref()?.parameters()
+    }
+    fn use_camera(&mut self) {
+        if let Some(p) = &mut self.placement {
+            p.use_camera();
+        }
+    }
+    fn search_coordinates(&mut self) -> bool {
+        self.placement
+            .as_mut()
+            .is_some_and(|p| p.search_coordinates(&self.query))
+    }
+    fn load_placement(&mut self, path: &str) {
+        if let Some(p) = &mut self.placement {
+            self.note = match p.import(path) {
+                Ok(()) => "File loaded for review".into(),
+                Err(e) => e,
+            };
+        }
+    }
+    fn placement_check(&self, tr: &Bound<'_, PyAny>) -> PyResult<String> {
+        self.placement
+            .as_ref()
+            .map(|p| p.check(tr))
+            .unwrap_or_else(|| Ok(String::new()))
     }
     fn center(&mut self, lat: f64, lon: f64) {
         if !valid(lat, lon) {
@@ -130,6 +175,9 @@ impl LocationDraft {
         ]);
     }
     fn position(&self) -> Option<(f64, f64)> {
+        if let Some(p) = &self.placement {
+            return p.position();
+        }
         let number = |key: &str| {
             self.values
                 .get(key)?
@@ -171,6 +219,10 @@ impl LocationDraft {
             }
             _ => (),
         }
+        if let Some(p) = &mut self.placement {
+            p.edit(key, value);
+            return false;
+        }
         if key == "site_mode" && ["geo", "utm"].contains(&value) && self.mode != value {
             let Some((lat, lon)) = self.position() else {
                 return false;
@@ -190,6 +242,9 @@ impl LocationDraft {
     }
     fn groups(&self, tr: &Bound<'_, PyAny>) -> PyResult<String> {
         let t = |s: &str| tr.call1((s,))?.extract::<String>();
+        if let Some(p) = &self.placement {
+            return p.groups(tr, &self.query);
+        }
         let mut rows = vec![
             json!({"id":"site_mode","kind":"choice","label":t("Coordinates:")?,"value":self.mode,
             "options":[["geo",t("Geographic (lat/lon)")?],["utm",t("UTM WGS84")?]]}),
@@ -230,7 +285,11 @@ impl LocationDraft {
     }
     fn move_pin(&mut self, lat: f64, lon: f64, zoom: u8) {
         if valid(lat, lon) {
-            self.center(lat, lon);
+            if let Some(p) = &mut self.placement {
+                p.camera = (lat, lon);
+            } else {
+                self.center(lat, lon);
+            }
             self.zoom = zoom.clamp(1, 22);
         }
     }
@@ -312,6 +371,24 @@ impl LocationDraft {
     ) -> PyResult<String> {
         let t = |s: &str| tr.call1((s,))?.extract::<String>();
         let mut blocks = vec![];
+        if let Some(p) = &self.placement {
+            let (lat, lon) = p.camera;
+            blocks.push(json!({"kind":"map","map":{"placement":true,"pin":p.position(),"footprint":p.overlay(),"markers":p.markers(),"offline":if self.offline{t("Basemap offline · coordinates remain editable")?}else{t("Waiting for basemap")?},"lat":lat,"lon":lon,"source":source,"cache":cache,"zoom":self.zoom.min(max_zoom),"max_zoom":max_zoom,"origin":t("Base point")?,"attribution":attribution,"drawing":false,"limited":false,"revision":self.revision}}));
+            blocks.push(json!({"kind":"buttons","align":"left","buttons":[
+                {"id":"site_search","label":t("Search")?,"enabled":!self.query.trim().is_empty()},
+                {"id":"site_use_camera","label":t("Use map centre")?}
+            ]}));
+            if !self.places.is_empty() {
+                let matches: Vec<_> = self
+                    .places
+                    .iter()
+                    .enumerate()
+                    .map(|(i, (name, _, _))| json!({"id":format!("site_place_{i}"),"label":name}))
+                    .collect();
+                blocks.push(json!({"kind":"buttons","align":"fill","buttons":matches}));
+            }
+            return Ok(json!(blocks).to_string());
+        }
         if self.map {
             let mut verbs = vec![
                 json!({"id":"site_search","label":t("Search")?,"enabled":!self.query.trim().is_empty()}),
@@ -369,7 +446,13 @@ pub struct LocationEdit {
 #[pymethods]
 impl LocationEdit {
     #[new]
-    fn new(scene: &Bound<'_, PyAny>, lat: f64, lon: f64) -> PyResult<Self> {
+    #[pyo3(signature=(scene,lat,lon,placement=None))]
+    fn new(
+        scene: &Bound<'_, PyAny>,
+        lat: f64,
+        lon: f64,
+        placement: Option<(u32, f64, f64, f64, f64)>,
+    ) -> PyResult<Self> {
         if !valid(lat, lon) {
             return Err(PyValueError::new_err("Invalid site coordinates"));
         }
@@ -391,8 +474,15 @@ impl LocationEdit {
         };
         let new = py
             .import("built_core.georef.datum")?
-            .getattr("SceneDatum")?
-            .call1((lat, lon, alt, north))?;
+            .getattr("SceneDatum")?;
+        let new = if let Some((code, e, n, z, angle)) = placement {
+            let (lat, lon) = crs::lookup(code)
+                .and_then(|c| c.inverse(e, n))
+                .ok_or_else(|| PyValueError::new_err("Invalid site coordinates"))?;
+            new.call1((lat, lon, z, angle, (code, e, n)))?
+        } else {
+            new.call1((lat, lon, alt, north))?
+        };
         Ok(Self {
             old: old.unbind(),
             new: new.unbind(),
