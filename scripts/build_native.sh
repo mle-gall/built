@@ -10,12 +10,23 @@ cd "$(dirname "$0")/.."
 # The venv is .venv on the Mac checkouts, ./venv in CI and older ones.
 venv="${VENV:-$( [[ -d venv ]] && echo venv || echo .venv )}"
 out="$(mktemp -d)"
+# With CARGO_TARGET_DIR set (CI caches it), each extension builds in its own
+# subdirectory: they set PyO3 up differently, and in one shared directory
+# each build invalidated the last and everything above PyO3 compiled again.
+maturin() {
+    local crate=$1; shift
+    if [[ -n "${CARGO_TARGET_DIR:-}" ]]; then
+        CARGO_TARGET_DIR="$CARGO_TARGET_DIR/wheel-$crate" ./$venv/bin/maturin "$@"
+    else
+        ./$venv/bin/maturin "$@"
+    fi
+}
 trap 'rm -rf "$out"' EXIT
 ./$venv/bin/python -m pip install --quiet maturin
-./$venv/bin/maturin build --release -m rust/built_core/Cargo.toml -o "$out"
+maturin core build --release -m rust/built_core/Cargo.toml -o "$out"
 ./$venv/bin/python -m pip install --quiet --force-reinstall --no-deps "$out"/built_core-*.whl
 # Preserve Rust's required symbols: rust-lang/rust#157750.
-CARGO_PROFILE_RELEASE_STRIP=none ./$venv/bin/maturin build --release \
+CARGO_PROFILE_RELEASE_STRIP=none maturin render build --release \
     --features extension-module -m rust/built_render/Cargo.toml -o "$out"
 ./$venv/bin/python -m pip install --quiet --force-reinstall --no-deps "$out"/built_render-*.whl
 ./$venv/bin/python -c "import built_render"
@@ -23,7 +34,7 @@ CARGO_PROFILE_RELEASE_STRIP=none ./$venv/bin/maturin build --release \
 # (../rvt-rs, branch ingetrazo/rfa-family). Without it .rfa import reports
 # the reader missing.
 if [[ -d ../rvt-rs ]]; then
-    ./$venv/bin/maturin build --release --features extension-module \
+    maturin rfa build --release --features extension-module \
         -m rust/built_rfa/Cargo.toml -o "$out"
     ./$venv/bin/python -m pip install --quiet --force-reinstall --no-deps "$out"/built_rfa-*.whl
     ./$venv/bin/python -c "import built_rfa"

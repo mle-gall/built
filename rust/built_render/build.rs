@@ -11,6 +11,9 @@ fn git(args: &[&str]) -> Option<String> {
 
 fn main() {
     println!("cargo:rerun-if-env-changed=BUILT_COMMIT");
+    // Given the revision (CI does), the build does not watch git's refs: a
+    // fresh checkout writes them anew, which recompiled an unchanged renderer.
+    let given = env::var_os("BUILT_COMMIT").is_some();
     for reference in [
         Some("HEAD".into()),
         git(&["symbolic-ref", "-q", "HEAD"]),
@@ -19,6 +22,9 @@ fn main() {
     .into_iter()
     .flatten()
     {
+        if given {
+            break;
+        }
         if let Some(path) = git(&["rev-parse", "--git-path", &reference]) {
             if PathBuf::from(&path).exists() {
                 println!("cargo:rerun-if-changed={path}");
