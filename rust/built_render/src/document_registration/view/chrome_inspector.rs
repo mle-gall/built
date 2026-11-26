@@ -28,9 +28,6 @@ fn get<'py>(mapping: &Obj<'py>, key: impl IntoPyObject<'py>) -> Reply<'py> {
 fn or_dict<'py>(value: Obj<'py>) -> Reply<'py> {
     Ok(if value.is_truthy()? { value } else { PyDict::new(value.py()).into_any() })
 }
-fn lens_is(view: &Obj<'_>, lens: i32) -> PyResult<bool> {
-    Ok(own(view, "_ui_lens")?.is_some_and(|shown| shown.eq(lens).unwrap_or(false)))
-}
 /// The chips "All existing", "All new"… or, for one item, "Existing"….
 fn status_chips<'py>(py: Python<'py>, prefix: &str, all: bool) -> PyResult<Bound<'py, PyList>> {
     let chips = empty(py);
@@ -95,7 +92,9 @@ fn inspector<'py>(a: &Args<'py>) -> Reply<'py> {
             (!attr(&view, "_ui_tree_sig")?.is_none()).into_bound_py_any(py)?,
             get(&state, "_ui_mat_focus")?,
             get(&state, "_ui_mode")?,
-            get(&state, "_ui_lens")?,
+            // The columns never change the inspector; whether the export
+            // checks are shown only decides if their focus is kept up.
+            get(&state, "_ui_readiness")?,
             filename.as_str().into_bound_py_any(py)?,
             direct(py, super::chrome_tree::current_material_name, ())?,
             tool,
@@ -125,9 +124,8 @@ fn inspector<'py>(a: &Args<'py>) -> Reply<'py> {
     }
     let focused = node_focus.is_truthy()?;
     let focus_name = if focused { text(&node_focus)? } else { String::new() };
-    let export_lens = lens_is(&view, 2)?;
     let renderer = view.getattr("renderer")?;
-    if export_lens {
+    if super::chrome_tree::wants_readiness(&view)? {
         let row = if focused && focus_name != "solid:active" { format!("n:{focus_name}").into_bound_py_any(py)? } else { none(py) };
         let paths = empty(py);
         if !focused {
@@ -157,7 +155,7 @@ fn inspector<'py>(a: &Args<'py>) -> Reply<'py> {
     } else {
         String::new()
     };
-    if focus_name == "solid:active" && export_lens {
+    if focus_name == "solid:active" {
         let edited = scene.getattr("edit_group")?;
         let title = if edited.is_truthy()? { edited.getattr("name")? } else { "Loose geometry".into_bound_py_any(py)? };
         show(&view, title, core.call_method1("solid_inspector_sections", (&scene, py.None(), true))?)?;
@@ -327,12 +325,15 @@ fn inspector<'py>(a: &Args<'py>) -> Reply<'py> {
             if parts.len()? > 8 {
                 rows.append(("…", format!("{} more kinds", parts.len()? - 8)))?;
             }
-            if !export_lens || !renderer.hasattr("ui_panel_set")? {
-                sections.append(("Parts", rows))?;
-            }
+            sections.append(("Parts", rows))?;
             sections.append(("Actions", [("cutlist", "Cut list…")]))?;
         }
-        let solid = core.call_method1("solid_inspector_sections", (&scene, &group, export_lens))?;
+        // The same under every column preset: the quick check first and, when
+        // it finds a fault, each fault with its own repair.
+        let mut solid = core.call_method1("solid_inspector_sections", (&scene, &group, false))?;
+        if py.get_type::<PyDict>().call1((&solid,))?.contains("Actions")? {
+            solid = core.call_method1("solid_inspector_sections", (&scene, &group, true))?;
+        }
         if solid.is_truthy()? {
             if offered("repair")? {
                 sections.call_method1("extend", (solid,))?;

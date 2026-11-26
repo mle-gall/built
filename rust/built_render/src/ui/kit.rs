@@ -163,6 +163,53 @@ pub mod atoms {
         };
         painter.add(egui::Shape::convex_polygon(pts, color, Stroke::NONE));
     }
+    /// The glyph that tells a tree row's kind apart, in a 12-pt box around
+    /// `c`: "tag", "folder" (a tag folder), "loose" (loose geometry),
+    /// "section", "scene", "sheet", "component", "image", "link"; anything
+    /// else is a group.
+    pub fn row_glyph(painter: &egui::Painter, c: Pos2, kind: &str, ink: Color32) {
+        let line = Stroke::new(1.1_f32, ink);
+        let at = |x: f32, y: f32| c + vec2(x, y);
+        let path = |points: &[(f32, f32)], closed: bool| {
+            let points: Vec<Pos2> = points.iter().map(|&(x, y)| at(x, y)).collect();
+            painter.add(if closed { egui::Shape::closed_line(points, line) } else { egui::Shape::line(points, line) });
+        };
+        match kind {
+            "tag" => {
+                path(&[(-5.0, -3.5), (1.5, -3.5), (5.0, 0.0), (1.5, 3.5), (-5.0, 3.5)], true);
+                painter.circle_filled(at(1.6, 0.0), 1.0, ink);
+            }
+            "folder" => path(&[(-5.0, 4.0), (-5.0, -4.0), (-1.5, -4.0), (0.0, -2.2), (5.0, -2.2), (5.0, 4.0)], true),
+            "loose" => {
+                path(&[(-4.5, 3.5), (-0.5, -3.5), (4.5, 2.0)], false);
+                for (x, y) in [(-4.5, 3.5), (-0.5, -3.5), (4.5, 2.0)] {
+                    painter.circle_filled(at(x, y), 1.5, ink);
+                }
+            }
+            "section" => {
+                path(&[(-3.5, -4.5), (3.5, -4.5), (3.5, 4.5), (-3.5, 4.5)], true);
+                painter.line_segment([at(-6.0, 0.0), at(6.0, 0.0)], line);
+            }
+            "scene" => {
+                path(&[(-5.5, -3.0), (1.5, -3.0), (1.5, 3.0), (-5.5, 3.0)], true);
+                path(&[(1.5, 0.0), (5.5, -3.0), (5.5, 3.0)], true);
+            }
+            "sheet" => {
+                path(&[(-5.5, -4.0), (5.5, -4.0), (5.5, 4.0), (-5.5, 4.0)], true);
+                path(&[(0.5, 4.0), (0.5, 1.0), (5.5, 1.0)], false);
+            }
+            "component" => path(&[(0.0, -5.0), (5.0, 0.0), (0.0, 5.0), (-5.0, 0.0)], true),
+            "image" => {
+                path(&[(-5.0, -4.0), (5.0, -4.0), (5.0, 4.0), (-5.0, 4.0)], true);
+                path(&[(-5.0, 3.0), (-1.5, -0.5), (1.0, 2.0), (2.5, 0.5), (5.0, 3.0)], false);
+            }
+            "link" => {
+                painter.circle_stroke(at(-2.2, 0.0), 2.8, line);
+                painter.circle_stroke(at(2.2, 0.0), 2.8, line);
+            }
+            _ => path(&[(-4.0, -4.0), (4.0, -4.0), (4.0, 4.0), (-4.0, 4.0)], true),
+        }
+    }
 }
 pub use atoms::*;
 pub mod molecules {
@@ -392,6 +439,44 @@ pub mod molecules {
         };
         centered(ui.painter(), rect, g, ink);
         resp.on_hover_text(name)
+    }
+    /// The button at the end of a filter field: three shortening bars. It
+    /// opens the field's quick choices; `active` lights it while one narrows
+    /// or reorders the list.
+    pub fn filter_button(ui: &mut egui::Ui, active: bool, open: bool) -> egui::Response {
+        let (rect, resp) = ui.allocate_exact_size(vec2(CONTROL_H, CONTROL_H), Sense::click());
+        let st = control_state(ui, &resp, open);
+        paint_state(ui, rect, if st == State::On { State::Press } else { st }, R_ROW);
+        let ink = match st {
+            State::Off => OFF,
+            _ if active => ACCENT,
+            State::Idle => DIM,
+            _ => INK,
+        };
+        let c = rect.center();
+        for (dy, half) in [(-4.0, 6.0), (0.0, 4.0), (4.0, 2.0)] {
+            ui.painter().line_segment([c + vec2(-half, dy), c + vec2(half, dy)], Stroke::new(1.4_f32, ink));
+        }
+        resp.on_hover_text("Filter and sort")
+    }
+    /// A compact dropdown: a quiet caption, the current value and a chevron
+    /// on a field well, CONTROL_H high and no wider than `max_width` (the
+    /// value is cut to fit). The caller opens its menu under the returned
+    /// rect; [`popover_pos`] keeps that menu inside the window.
+    pub fn dropdown(ui: &mut egui::Ui, caption: &str, value: &str, open: bool, max_width: f32) -> egui::Response {
+        let cap = ui.painter().layout_no_wrap(caption.to_owned(), meta(), DIM);
+        let cap_w = if caption.is_empty() { 0.0 } else { cap.size().x + SPACE_XS };
+        let room = (max_width - cap_w - 8.0 - 22.0).max(24.0);
+        let text = super::fit(ui, value, strong(TYPE_BODY), INK, room, 1);
+        let (rect, resp) = ui.allocate_exact_size(vec2(8.0 + cap_w + text.size().x + 22.0, CONTROL_H), Sense::click());
+        let st = control_state(ui, &resp, open);
+        ui.painter().rect_filled(rect, CornerRadius::same(R_ROW), FIELD);
+        paint_state(ui, rect, if st == State::On { State::Press } else { st }, R_ROW);
+        let off = st == State::Off;
+        leading(ui.painter(), rect, rect.min.x + 8.0, cap, if off { OFF } else { DIM });
+        leading(ui.painter(), rect, rect.min.x + 8.0 + cap_w, text, if off { OFF } else { INK });
+        chevron(ui.painter(), pos2(rect.max.x - 11.0, rect.center().y), true, if off { OFF } else { DIM });
+        resp
     }
 
     /// A mode or place switch: an inset track, the current segment a raised
@@ -894,6 +979,21 @@ pub mod molecules {
         let x = r.max.x - 8.0 - v.size().x;
         leading(ui.painter(), r, x, v, if off { OFF } else { INK });
     }
+    /// The inspector's subject on one line: the title (13 semibold, cut to
+    /// fit) and, at the trailing edge, what it is or how many ("Tag · 9
+    /// items", "1 group"). Painted, so a long name never widens the panel.
+    pub fn inspector_title(ui: &mut egui::Ui, title: &str, subtitle: &str) {
+        let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 22.0), Sense::hover());
+        let mut right = r.max.x - 8.0;
+        if !subtitle.is_empty() {
+            let g = super::fit(ui, subtitle, meta(), FAINT, (r.width() * 0.6).max(40.0), 1);
+            right -= g.size().x;
+            leading(ui.painter(), r, right, g, FAINT);
+            right -= 10.0;
+        }
+        let g = super::fit(ui, title, super::title(), INK, (right - r.min.x - 8.0).max(40.0), 1);
+        leading(ui.painter(), r, r.min.x + 8.0, g, INK);
+    }
     pub fn material_readout(ui: &mut egui::Ui, label: &str, color: Color32, hex: &str) {
         property_control(ui, label, |ui| {
             ui.horizontal(|ui| {
@@ -1200,6 +1300,23 @@ pub mod organisms {
             "success" => ("✓", OK),
             _ => ("i", ACCENT),
         }
+    }
+    /// Where a menu or popover of `size` opens under `anchor` (its trailing
+    /// edges lined up when `trailing`), moved to stay inside `screen` less
+    /// a gutter: over the anchor when there is no room under it.
+    pub fn popover_pos(anchor: Rect, size: egui::Vec2, screen: Rect, trailing: bool) -> Pos2 {
+        let bounds = screen.shrink(GUT);
+        let x = if trailing { anchor.max.x - size.x } else { anchor.min.x };
+        let x = x.min(bounds.max.x - size.x).max(bounds.min.x);
+        let under = anchor.max.y + SPACE_XS;
+        let y = if under + size.y <= bounds.max.y {
+            under
+        } else if anchor.min.y - SPACE_XS - size.y >= bounds.min.y {
+            anchor.min.y - SPACE_XS - size.y
+        } else {
+            (bounds.max.y - size.y).max(bounds.min.y)
+        };
+        pos2(x, y)
     }
     pub fn toast(ui: &mut egui::Ui, opacity: f32, content: impl FnOnce(&mut egui::Ui)) {
         ui.scope(|ui| {
@@ -2135,24 +2252,24 @@ pub fn host_visibility(ui: &mut egui::Ui, host: &str, tags: &[(String, String, b
     });
 }
 
-pub fn tag_inspector(ui:&mut egui::Ui, key:&str, name:&str, count:u32, cells:&[String], actions:&mut Vec<String>) -> Option<Pos2> {
-    ui.strong(name);
-    caption_plain(ui,&format!("Tag · {count} items"));
-    let mut menu=None;
-    ui.horizontal_wrapped(|ui|{
-        ui.spacing_mut().item_spacing.x=SPACE_XS;
-        for (verb,label) in [("tagselect","Select items"),("tagisolate","Isolate")] {
-            if quiet(ui,label).clicked(){actions.push(format!("{verb}\x1f{key}"));}
+/// A tag's verbs under the inspector title. Returns where the kind menu
+/// opens when "Give it a kind…" is clicked (`kind`: the tag can take one).
+pub fn tag_inspector(ui: &mut egui::Ui, key: &str, kind: bool, actions: &mut Vec<String>) -> Option<Pos2> {
+    let mut menu = None;
+    ui.horizontal_wrapped(|ui| {
+        ui.spacing_mut().item_spacing.x = SPACE_XS;
+        for (verb, label) in [("tagselect", "Select items"), ("tagisolate", "Isolate")] {
+            if quiet(ui, label).clicked() {
+                actions.push(format!("{verb}\x1f{key}"));
+            }
         }
-        if key!="preview-tag:Layer 0" {
-            let button=quiet(ui,"Give it a kind…");
-            if button.clicked(){menu=Some(button.rect.left_bottom());}
+        if kind && key != "preview-tag:Layer 0" {
+            let button = quiet(ui, "Give it a kind…");
+            if button.clicked() {
+                menu = Some(button.rect.left_bottom());
+            }
         }
     });
-    if cells.len()>=5 {
-        prop_row(ui,"Line",&format!("{} · {}",cells[1],if cells[2]=="auto" {"Automatic".into()}else{format!("{} mm",cells[2])}));
-        prop_row(ui,"Colour",if cells[0].is_empty(){"By material"}else{&cells[0]});
-    }
     menu
 }
 

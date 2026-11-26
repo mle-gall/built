@@ -189,7 +189,13 @@ pub(super) struct StyleEditor {
     samples: BTreeMap<String, Option<kit::PaperMarks>>,
     // Tag keys, not row labels: two filing nodes can refer to one tag.
     selected: BTreeMap<String, (String, Vec<String>)>,
+    /// Edits not yet in the document: each applies as soon as its gesture
+    /// ends (`flush`), like every other inspector field.
     patch: BTreeMap<String, String>,
+    /// The patch as last sent, so a pending edit is sent once.
+    sent: BTreeMap<String, String>,
+    /// Text being typed in a field: it joins the patch when the field is left.
+    draft: BTreeMap<String, String>,
 }
 
 impl StyleEditor {
@@ -237,7 +243,7 @@ impl StyleEditor {
 
     pub fn pick(&mut self, n: &Node, extend: bool) {
         let Some(key) = n.cells.get(5) else { return };
-        self.patch.clear();
+        self.forget_edits();
         self.catalog.close_line();
         self.folder_focus = false;
         if !extend {
@@ -269,7 +275,7 @@ impl StyleEditor {
 
     pub fn applied(&mut self, verb: &str, key: &str) {
         if verb == "drawingpatch" {
-            self.patch.clear();
+            self.forget_edits();
         }
         if verb == "documentpiece" {
             self.patch.remove("brick");
@@ -280,15 +286,20 @@ impl StyleEditor {
         self.selected_folders.clear();
         self.selected.clear();
         self.counts.cancel_pending();
-        self.patch.clear();
+        self.forget_edits();
         self.folder_focus = false;
         self.catalog.close_line();
+    }
+    fn forget_edits(&mut self) {
+        self.patch.clear();
+        self.sent.clear();
+        self.draft.clear();
     }
     pub fn pick_folder(&mut self, key: &str, extend: bool) {
         if !extend {
             self.clear_focus();
         }
-        self.patch.clear();
+        self.forget_edits();
         self.catalog.close_line();
         if extend && self.selected_folders.remove(key) {
             self.folder_focus = !self.selected_folders.is_empty();
@@ -319,56 +330,75 @@ impl StyleEditor {
         self.folder_focus || self.catalog.editing_line() || !self.selected.is_empty()
     }
 
-    pub fn draw(&mut self, ui: &mut egui::Ui, actions: &mut Vec<String>) -> bool {
-        let tags: Vec<_> = self.selected.keys().cloned().collect();
-        if !tags.is_empty() {
-            let count: Option<u64> = tags.iter().map(|tag| self.counts.count(tag)).sum();
-            let value = count.map_or_else(|| "Counting…".to_string(), |n| n.to_string());
-            kit::property_control(ui, "Entities", |ui| {
-                ui.label(value);
-            });
+    /// The tags in focus, by key.
+    pub fn tags(&self) -> Vec<String> {
+        self.selected.keys().cloned().collect()
+    }
+    /// The names of the tags in focus.
+    pub fn names(&self) -> Vec<&str> {
+        self.selected.values().map(|(name, _)| name.as_str()).collect()
+    }
+    /// A tag folder is in focus (with or without tags).
+    pub fn folder_focus(&self) -> bool {
+        self.folder_focus
+    }
+
+    /// The line type being created or edited. It takes the inspector while
+    /// open, whatever the columns show.
+    pub fn line_editor(&mut self, ui: &mut egui::Ui, actions: &mut Vec<String>) {
+        let tags = self.tags();
+        ui.spacing_mut().item_spacing.y = super::SPACE_XS;
+        self.catalog.lines(ui, &tags, &self.lines, actions);
+    }
+
+    /// The focused tag folder: its name, its place, and filing tags into it.
+    pub fn folder_editor(&mut self, ui: &mut egui::Ui, actions: &mut Vec<String>) {
+        let tags = self.tags();
+        ui.spacing_mut().item_spacing.y = super::SPACE_XS;
+        self.catalog.folders(ui, &tags, actions);
+    }
+
+    /// What belongs to the document, not to one tag: its tag folders and
+    /// its line types. Sections of the document inspector.
+    pub fn document(&mut self, ui: &mut egui::Ui, actions: &mut Vec<String>) {
+        kit::disclosure(ui, "tag folders", "Tag folders", false, |ui| {
+            ui.spacing_mut().item_spacing.y = super::SPACE_XS;
+            self.catalog.folders(ui, &[], actions)
+        });
+        kit::disclosure(ui, "document line types", "Line types", false, |ui| {
+            ui.spacing_mut().item_spacing.y = super::SPACE_XS;
+            self.catalog.lines(ui, &[], &self.lines, actions)
+        });
+    }
+
+    /// The Drawing style section of the tags in focus. A change applies as
+    /// soon as its gesture ends.
+    pub fn style(&mut self, ui: &mut egui::Ui, actions: &mut Vec<String>) {
+        if self.selected.is_empty() {
+            return;
         }
-        let fields_height =
-            (ui.available_height() - super::BUTTON_H - super::SPACE_S).max(super::CONTROL_H);
-        egui::ScrollArea::vertical()
-            .id_salt("drawing fields")
-            .max_height(fields_height)
-            .auto_shrink([false, true])
-            .show(ui, |ui| {
-                ui.spacing_mut().item_spacing.y = super::SPACE_XS;
-                if self.catalog.editing_line() {
-                    self.catalog.lines(ui, &tags, &self.lines, actions);
-                    return;
-                }
-                if self.folder_focus {
-                    self.catalog.folders(ui, &tags, actions);
-                }
-                if !tags.is_empty() {
-                    self.fields(ui, actions);
-                }
-                if !self.folder_focus {
-                    kit::disclosure(ui, "tag folders", "Tag folders", false, |ui| {
-                        self.catalog.folders(ui, &tags, actions)
-                    });
-                }
-                kit::disclosure(
-                    ui,
-                    "document line types",
-                    "Document line types",
-                    false,
-                    |ui| self.catalog.lines(ui, &tags, &self.lines, actions),
-                );
-                if kit::quiet(ui, "Export hatch patterns…").clicked() {
-                    actions.push("exportpat\u{1f}".into());
-                }
-                if kit::quiet(ui, "Import hatch patterns…").clicked() {
-                    actions.push("importpat\u{1f}".into());
-                }
-            });
-        if !tags.is_empty() && !self.catalog.editing_line() {
-            self.apply_row(ui, actions);
+        let tags = self.tags();
+        let count: Option<u64> = tags.iter().map(|tag| self.counts.count(tag)).sum();
+        let entities = count.map_or_else(|| "Counting…".to_string(), |n| n.to_string());
+        kit::prop_row(ui, "Entities", &entities);
+        ui.add_space(super::SPACE_XS);
+        kit::caption(ui, "Drawing style");
+        ui.scope(|ui| {
+            ui.spacing_mut().item_spacing.y = super::SPACE_XS;
+            self.fields(ui, actions);
+        });
+        self.flush(ui, actions);
+    }
+
+    /// Send what changed once no pointer button is down: a drag on a number
+    /// or in the colour picker applies when it is released, a choice at once.
+    fn flush(&mut self, ui: &egui::Ui, actions: &mut Vec<String>) {
+        if self.patch.is_empty() || self.patch == self.sent || ui.input(|i| i.pointer.any_down()) {
+            return;
         }
-        true
+        let tags: Vec<_> = self.selected.keys().collect();
+        actions.push(format!("drawingpatch\u{1f}{}", serde_json::json!([tags, self.patch])));
+        self.sent = self.patch.clone();
     }
 
     fn committed(&self, index: usize, field: &str) -> Option<String> {
@@ -395,37 +425,21 @@ impl StyleEditor {
     }
 
     fn fields(&mut self, ui: &mut egui::Ui, actions: &mut Vec<String>) {
-        ui.strong(format!(
-            "Drawing style · {} {}",
-            self.selected.len(),
-            if self.selected.len() == 1 {
-                "tag"
-            } else {
-                "tags"
-            }
-        ));
-        ui.label(
-            self.selected
-                .values()
-                .map(|(name, _)| name.as_str())
-                .collect::<Vec<_>>()
-                .join(", "),
-        );
         let weights: Vec<String> = [
             "auto", "0.13", "0.18", "0.25", "0.35", "0.50", "0.70", "1.00",
         ]
         .map(str::to_owned)
         .into();
         for (index, field, name, choices) in [
-            (6, "cut_weight", "Cut weight (mm)", weights.clone()),
             (0, "color", "Colour", vec![]),
+            (1, "linetype", "Line type", self.lines.clone()),
+            (2, "weight", "Line weight (mm)", weights.clone()),
+            (6, "cut_weight", "Cut weight (mm)", weights),
             (4, "hatch", "Hatch", vec![]),
             (8, "hatch_angle", "Hatch angle (°)", vec![]),
             (9, "hatch_scale", "Hatch scale", vec![]),
-            (2, "weight", "Projection weight (mm)", weights),
-            (1, "linetype", "Line type", self.lines.clone()),
-            (3, "print", "Print", vec!["0".into(), "1".into()]),
-            (7, "lock", "Lock", vec!["0".into(), "1".into()]),
+            (3, "print", "Print", vec![]),
+            (7, "lock", "Lock", vec![]),
         ] {
             self.field(ui, index, field, name, choices, actions);
         }
@@ -443,9 +457,9 @@ impl StyleEditor {
                 (12, "hatch_color", "Ink", vec![]),
                 (13, "hatch_on_paper", "Scale with", vec!["", "0", "1"]),
                 (14, "hatch_offset", "Start X, Y (mm)", vec![]),
-                (15, "hatch_cross", "Cross cut grain", vec!["0", "1"]),
+                (15, "hatch_cross", "Cross cut grain", vec![]),
                 (16, "joints", "Joints", vec!["", "single", "double", "none"]),
-                (17, "mortar", "Mortar", vec!["0", "1"]),
+                (17, "mortar", "Mortar", vec![]),
                 (18, "brick", "Piece size (mm)", vec![]),
                 (19, "opacity", "Opacity", vec![]),
             ] {
@@ -503,6 +517,15 @@ impl StyleEditor {
             self.patch.remove(field);
         }
         let current = self.patch.get(field).cloned().or(persisted);
+        // A Boolean is the kit's switch row. Tags that differ say so.
+        if matches!(field, "print" | "lock" | "mortar" | "hatch_cross") {
+            let label = if current.is_none() { format!("{name} · mixed") } else { name.to_owned() };
+            let on = current.as_deref() == Some("1");
+            if kit::switch_row(ui, &label, on, true).clicked() {
+                self.patch.insert(field.into(), if on { "0" } else { "1" }.into());
+            }
+            return;
+        }
         kit::property_control(ui, name, |ui| {
             if field == "hatch" {
                 if let Some(chosen) = self.pick_hatch(ui, current.as_deref()) {
@@ -524,7 +547,7 @@ impl StyleEditor {
                     .unwrap_or(if angle { 0. } else { 1. });
                 if ui
                     .add(
-                        kit::number(&mut value, if angle { "°" } else { "×" }).range(if angle {
+                        kit::number(&mut value, if angle { "°" } else { "×" }).update_while_editing(false).range(if angle {
                             -360.0..=360.0
                         } else {
                             0.05..=20.0
@@ -538,23 +561,27 @@ impl StyleEditor {
                     kit::caption_plain(ui, "Mixed");
                 }
             } else if field == "hatch_offset" {
-                let mut text = current.clone().unwrap_or_default();
-                if ui
-                    .add(
-                        kit::field(&mut text)
-                            .hint_text("X, Y")
-                            .desired_width(ui.available_width()),
-                    )
-                    .changed()
-                {
-                    self.patch.insert(field.into(), text);
+                // Typed text joins the patch when the field is left, not per key.
+                let mut text = self.draft.get(field).cloned().or_else(|| current.clone()).unwrap_or_default();
+                let edit = ui.add(
+                    kit::field(&mut text)
+                        .hint_text("X, Y")
+                        .desired_width((ui.available_width() - super::SPACE_L).max(40.)),
+                );
+                if edit.changed() {
+                    self.draft.insert(field.into(), text);
+                }
+                if edit.lost_focus() {
+                    if let Some(text) = self.draft.remove(field).filter(|text| Some(text) != current.as_ref()) {
+                        self.patch.insert(field.into(), text);
+                    }
                 }
             } else if field == "opacity" {
                 let mut n = current
                     .as_deref()
                     .and_then(|s| s.parse::<f64>().ok())
                     .unwrap_or(1.);
-                if ui.add(kit::number(&mut n, "").range(0.1..=1.)).changed() {
+                if ui.add(kit::number(&mut n, "").update_while_editing(false).range(0.1..=1.)).changed() {
                     self.patch.insert(field.into(), n.to_string());
                 }
             } else if matches!(field, "color" | "hatch_ground" | "hatch_color") {
@@ -615,8 +642,6 @@ impl StyleEditor {
                 let label = |s: &str| match (field, s) {
                     ("hatch_on_paper", "0") => "Drawing".into(),
                     ("hatch_on_paper", "1") => "Paper".into(),
-                    ("print" | "lock" | "mortar" | "hatch_cross", "0") => "Off".into(),
-                    ("print" | "lock" | "mortar" | "hatch_cross", "1") => "On".into(),
                     ("cut_weight" | "weight", "auto") => "From sheet".into(),
                     ("linetype", k) => k.strip_prefix("lin:").unwrap_or(k).replace('_', " "),
                     (_, "") => "Automatic".into(),
@@ -625,7 +650,7 @@ impl StyleEditor {
                 let pen = matches!(field, "linetype" | "weight" | "cut_weight");
                 let cursor = ui.make_persistent_id(("pen cursor", field));
                 let popup = egui::ComboBox::from_id_salt(("style", field))
-                    .width(ui.available_width().min(168.))
+                    .width((ui.available_width() - super::SPACE_S).max(80.))
                     .selected_text(current.as_deref().map(label).unwrap_or("Mixed".into()))
                     .show_ui(ui, |ui| {
                         let mut focus = ui.data(|d| d.get_temp::<usize>(cursor));
@@ -761,7 +786,7 @@ impl StyleEditor {
         );
         let popup = egui::ComboBox::from_id_salt("drawing hatch")
             .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
-            .width(ui.available_width().min(168.))
+            .width((ui.available_width() - super::SPACE_S).max(80.))
             .selected_text(
                 current
                     .map(|key| self.hatches.label(key))
@@ -898,33 +923,6 @@ impl StyleEditor {
         }
         choice
     }
-
-    fn apply_row(&mut self, ui: &mut egui::Ui, actions: &mut Vec<String>) {
-        ui.add_space(super::SPACE_XS);
-        let pending = !self.patch.is_empty();
-        let count = self.selected.len();
-        let label = format!(
-            "Apply to {count} {}",
-            if count == 1 { "tag" } else { "tags" }
-        );
-        ui.horizontal_wrapped(|ui| {
-            ui.spacing_mut().item_spacing.x = super::SPACE_S;
-            let apply = ui.add_enabled_ui(pending, |ui| kit::sheet_button(ui, &label, "", 1));
-            if apply.inner {
-                let tags: Vec<_> = self.selected.keys().collect();
-                actions.push(format!(
-                    "drawingpatch\u{1f}{}",
-                    serde_json::json!([tags, self.patch])
-                ));
-            }
-            if pending && kit::quiet(ui, "Discard").clicked() {
-                self.patch.clear();
-            }
-            if !pending {
-                kit::caption_plain(ui, "Change a field to apply.");
-            }
-        });
-    }
 }
 
 #[cfg(test)]
@@ -932,13 +930,54 @@ mod picker_tests {
     use super::*;
 
     #[test]
-    fn search_keyboard_and_discard_in_the_hatch_inspector() {
+    fn hatch_search_and_keyboard_apply_at_once_to_all_tags() {
         exercise_picker(false);
     }
 
     #[test]
-    fn line_samples_accept_keyboard_and_pointer_and_discard_drafts_for_all_tags() {
+    fn line_samples_accept_keyboard_and_pointer_and_apply_at_once_to_all_tags() {
         exercise_picker(true);
+    }
+
+    #[test]
+    fn booleans_are_switch_rows_and_a_drag_applies_when_it_is_released() {
+        let ctx = super::super::test_context();
+        let mut editor = StyleEditor::default();
+        let mut node = Node { name: "Walls".into(), cells: vec![String::new(); 20], ..Default::default() };
+        node.cells[3] = "1".into();
+        node.cells[5] = "wall".into();
+        editor.pick(&node, false);
+        let frame = |editor: &mut StyleEditor, events: Vec<egui::Event>, flush: bool| {
+            let mut actions = vec![];
+            let mut texts = BTreeMap::new();
+            let out = ctx.run(egui::RawInput { events, ..Default::default() }, |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    editor.field(ui, 3, "print", "Print", vec![], &mut actions);
+                    if flush { editor.flush(ui, &mut actions); }
+                });
+            });
+            for shape in out.shapes {
+                if let egui::Shape::Text(text) = shape.shape {
+                    texts.insert(text.galley.text().to_owned(), text.visual_bounding_rect().center());
+                }
+            }
+            (texts, actions)
+        };
+        let (texts, _) = frame(&mut editor, vec![], true);
+        // No "On"/"Off" dropdown: the label of a switch row.
+        assert!(texts.contains_key("Print") && !texts.contains_key("On"));
+        let at = texts["Print"];
+        let button = |pressed| vec![egui::Event::PointerMoved(at), egui::Event::PointerButton {
+            pos: at, button: egui::PointerButton::Primary, pressed, modifiers: Default::default() }];
+        assert!(frame(&mut editor, button(true), true).1.is_empty());
+        let sent = frame(&mut editor, button(false), true).1;
+        assert_eq!(sent, vec![format!("drawingpatch\u{1f}{}", serde_json::json!([["wall"], {"print": "0"}]))]);
+        // The pending edit is sent once, and nothing is sent while a button is down.
+        assert!(frame(&mut editor, vec![], true).1.is_empty());
+        editor.applied("drawingpatch", "");
+        editor.patch.insert("hatch_scale".into(), "2".into());
+        assert!(frame(&mut editor, button(true), true).1.is_empty());
+        assert_eq!(frame(&mut editor, button(false), true).1.len(), 1);
     }
 
     #[test]
@@ -1004,7 +1043,7 @@ mod picker_tests {
                     if line {
                         editor.field(ui, 1, "linetype", "Line type", vec!["dashed".into(),"dotted".into()], &mut actions);
                     } else { editor.field(ui, 4, "hatch", "Hatch", vec![], &mut actions); }
-                    editor.apply_row(ui, &mut actions);
+                    editor.flush(ui, &mut actions);
                 });
             });
             for shape in frame.shapes {
@@ -1034,6 +1073,7 @@ mod picker_tests {
                 );
                 result.extend(actions);
             }
+            result.extend(frame(editor, vec![]).1);
             result
         };
         let key = |key| egui::Event::Key {
@@ -1043,47 +1083,44 @@ mod picker_tests {
             repeat: false,
             modifiers: Default::default(),
         };
+        let patches = |sent: &[String]| -> Vec<serde_json::Value> {
+            sent.iter().filter_map(|s| s.strip_prefix("drawingpatch\u{1f}"))
+                .map(|wire| serde_json::from_str(wire).unwrap()).collect()
+        };
         let points = frame(&mut editor, vec![]).0;
+        // No Apply button and no "Change a field to apply": a choice applies at once.
+        assert!(!points.keys().any(|text| text.starts_with("Apply to") || text.starts_with("Change a field")));
         if line {
             click(&mut editor, points["dashed"]);
-            frame(&mut editor, vec![]);
             let points = frame(&mut editor, vec![]).0;
             assert!(points.contains_key("dotted"));
-            click(&mut editor, points["dotted"]);
-            let points = frame(&mut editor, vec![]).0;
+            let sent = click(&mut editor, points["dotted"]);
+            assert_eq!(patches(&sent), [serde_json::json!([["slab","wall"],{"linetype":"dotted"}])]);
+            // The field shows the edit until the document answers.
             assert_eq!(editor.common(1, "linetype").as_deref(), Some("dotted"));
-            click(&mut editor, points["Discard"]);
+            editor.applied("drawingpatch", "");
+            assert_eq!(editor.common(1, "linetype").as_deref(), Some("dashed"));
             let points = frame(&mut editor, vec![]).0;
             click(&mut editor, points["dashed"]);
             frame(&mut editor, vec![]);
             frame(&mut editor, vec![key(egui::Key::ArrowDown)]);
-            frame(&mut editor, vec![key(egui::Key::Enter)]);
-            let points = frame(&mut editor, vec![]).0;
-            let sent = click(&mut editor, points["Apply to 2 tags"]);
-            assert_eq!(sent, vec![format!("drawingpatch\u{1f}{}", serde_json::json!([["slab","wall"],{"linetype":"dotted"}]))]);
+            let mut sent = frame(&mut editor, vec![key(egui::Key::Enter)]).1;
+            sent.extend(frame(&mut editor, vec![]).1);
+            assert_eq!(patches(&sent), [serde_json::json!([["slab","wall"],{"linetype":"dotted"}])]);
             return;
         }
         click(&mut editor, points["brick"]);
-        frame(&mut editor, vec![]);
         let points = frame(&mut editor, vec![]).0;
         click(&mut editor, points["Find a hatch"]);
         frame(&mut editor, vec![egui::Event::Text("diagonal".into())]);
         let points = frame(&mut editor, vec![]).0;
         assert!(points.contains_key("diagonal") && !points.contains_key("solid"));
         frame(&mut editor, vec![key(egui::Key::ArrowDown)]);
-        frame(&mut editor, vec![key(egui::Key::Enter)]);
+        let mut sent = frame(&mut editor, vec![key(egui::Key::Enter)]).1;
+        sent.extend(frame(&mut editor, vec![]).1);
         assert_eq!(editor.common(4, "hatch").as_deref(), Some("diagonal"));
-        let points = frame(&mut editor, vec![]).0;
-        let sent = click(&mut editor, points["Apply to 2 tags"]);
-        let wire = sent
-            .iter()
-            .find_map(|s| s.strip_prefix("drawingpatch\u{1f}"))
-            .unwrap();
-        assert_eq!(
-            serde_json::from_str::<serde_json::Value>(wire).unwrap(),
-            serde_json::json!([["slab","wall"],{"hatch":"diagonal"}])
-        );
-        click(&mut editor, points["Discard"]);
+        assert_eq!(patches(&sent), [serde_json::json!([["slab","wall"],{"hatch":"diagonal"}])]);
+        editor.applied("drawingpatch", "");
         assert!(editor.patch.is_empty());
         assert_eq!(editor.common(4, "hatch").as_deref(), Some("brick"));
     }

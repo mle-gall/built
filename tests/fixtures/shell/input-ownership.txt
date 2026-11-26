@@ -40,9 +40,12 @@ state # review
 key escape
 wait 150
 state # model
-click 1160 72
+# The Export columns: a preset from the Columns control. The dock keeps its width.
+click 1020 72
+wait 200
+click 1040 174
 wait 350
-click 941 145
+click 1100 134
 type Oak
 wait 180
 state # filtered
@@ -52,14 +55,14 @@ state # cleared_filter
 key escape
 wait 150
 state # blurred
+# Escape does not leave a column preset: it is not a mode.
 key escape
 wait 150
 state # tree
-click 1160 72
+click 1020 72
 wait 200
-state # deliveries
-key escape
-wait 180
+click 1040 124
+wait 200
 state # filing
 menu delivery_export
 wait 180

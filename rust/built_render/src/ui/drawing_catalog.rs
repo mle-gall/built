@@ -278,6 +278,13 @@ impl Catalog {
         }
         true
     }
+    /// The focused folder's name, as the inspector titles it.
+    pub fn folder_label(&self) -> String {
+        if self.folder.is_empty() {
+            return "Tag folders".into();
+        }
+        self.labels.get(&self.folder).unwrap_or(&self.folder).clone()
+    }
     pub fn select_folder(&mut self, key: &str) {
         self.folder = key.into();
         self.name = self.labels.get(key).map_or(key, String::as_str).to_owned();

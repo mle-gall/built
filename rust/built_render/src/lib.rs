@@ -2898,6 +2898,12 @@ impl Renderer {
     fn ui_set_lens(&mut self, lens: u8) {
         if let Some(ui) = self.ui.as_mut() { ui.set_lens(lens); }
     }
+    /// The tree's columns: the preset and, when the user changed its
+    /// columns, the columns shown.
+    #[pyo3(signature=(lens, mask=None))]
+    fn ui_set_columns(&mut self, lens: u8, mask: Option<u16>) {
+        if let Some(ui) = self.ui.as_mut() { ui.set_columns(lens, mask); }
+    }
     fn ui_set_dock_width(&mut self, width: f32) {
         if let Some(ui) = self.ui.as_mut() { ui.set_dock_width(width); }
     }

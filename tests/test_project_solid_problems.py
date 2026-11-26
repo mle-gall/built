@@ -39,6 +39,42 @@ def inspect(project, key):
     return view.renderer.calls["ui_set_inspector"]
 
 
+def test_the_export_checks_annotate_the_rows_without_changing_them(project):
+    """The Export columns are a preset of the one tree: with the checks on, the
+    rows are those of Filing; the report says what each row's Readiness is."""
+    scene, win, view = project
+    broken, sound = Group(Mesh(), name="Open box"), Group(Mesh(), name="Box")
+    _box(broken.mesh, skip_top=True)
+    _box(sound.mesh)
+    scene.groups += [broken, sound]
+    scene.mesh.add_edge(Vec3(8, 0, 0), Vec3(9, 0, 0))
+    view._ui_lens = 0
+    wgpu_ui._tree(view, win)
+    plain = view.renderer.calls["ui_set_tree"][0]
+    assert "ui_panel_set" not in view.renderer.calls        # no checks run for the Filing columns
+    assert next(t for t, _ in plain if t[0] == "geometry:loose")[3] == "0 faces · 1 edge"
+    view._ui_lens, view._ui_tree_sig = 2, None
+    wgpu_ui._tree(view, win)
+    rows = view.renderer.calls["ui_set_tree"][0]
+    assert rows == plain and not any(t[0].startswith(("check:", "exportitem:")) for t, _ in rows)
+    panel, payload = view.renderer.calls["ui_panel_set"]
+    report = json.loads(payload)
+    # Per row: placements to fix, placements in the delivery's scope.
+    assert panel == "readiness" and report["rows"]["preview-tag:Layer 0"] == [2, 2]
+    assert report["scope"] == "whole" and (report["ready"], report["total"]) == (0, 2)
+    # Per placement row: its open checks (not filed; the open box also is no solid).
+    assert sorted(report["items"].values()) == [1, 2]
+    # The dock says when it shows the checks; without them the tree follows the model only.
+    wgpu_ui._tree_action(win, view, wgpu_ui.SEP.join(["readiness", "0"]))
+    assert view.renderer.calls["ui_panel_set"] == ("readiness", "null")
+    wgpu_ui._tree(view, win)
+    assert view.renderer.calls["ui_panel_set"] == ("readiness", "null")
+    assert view.renderer.calls["ui_set_tree"][0] == plain
+    wgpu_ui._tree_action(win, view, wgpu_ui.SEP.join(["readiness", "1"]))
+    wgpu_ui._tree(view, win)
+    assert json.loads(view.renderer.calls["ui_panel_set"][1])["total"] == 2
+
+
 def test_dialog_repairs_a_group_without_entering_it(project):
     scene, win, view = project
     _box(scene.mesh, skip_top=True)
@@ -143,6 +179,7 @@ def test_scoped_status_fix_updates_readiness_and_undo(project, tmp_path):
 
     initial = report()
     assert (initial["ready"], initial["total"]) == (0, 2)
+    assert initial["scope"] == "node" and initial["rows"]["n:walls"] == [2, 2]
     entries = initial["checks"]["n:walls"]["status/Pset_WallCommon"][1]
     paths = [item["path"] for item in entries]
     target = scene.resolve_occurrence(paths[0])

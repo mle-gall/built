@@ -122,9 +122,17 @@ pub const MENU_H: f32 = if cfg!(any(target_os = "linux", windows)) { 26.0 } else
 pub const TOP_H: f32 = 40.0 + MENU_H;
 pub const BOT_H: f32 = 36.0;
 pub const GUT: f32 = 8.0;
+// The dock has one width, the user's: dragged on its inner edge between
+// DOCK_MIN_W and DOCK_MAX_SHARE of the window, the same under every column
+// preset of the tree. DOCK_MAX_W only bounds a stored value.
 pub const DOCK_W: f32 = 300.0;
-pub const DOCK_MIN_W: f32 = 260.0;
-pub const DOCK_MAX_W: f32 = 560.0;
+pub const DOCK_MIN_W: f32 = 280.0;
+pub const DOCK_MAX_SHARE: f32 = 0.45;
+pub const DOCK_MAX_W: f32 = 1200.0;
+/// The dock's width in a window `window` wide, from the width the user set.
+pub fn dock_width(wanted: f32, window: f32) -> f32 {
+    wanted.clamp(DOCK_MIN_W, (window * DOCK_MAX_SHARE).max(DOCK_MIN_W))
+}
 // Type scale (design pass 2026-11-23): four sizes. Meta 11 for labels,
 // captions, counts and shortcuts; body 12 for values and controls; title 13
 // semibold for a panel's subject; heading 16 semibold for a sheet. Weight
