@@ -155,7 +155,8 @@ def test_guid_format():
     assert g[0] in "0123"                           # 128 bits → top char < 4
 
 
-def test_site_map_conversion_keeps_representation_local(tmp_path):
+@pytest.mark.parametrize("schema", ["IFC4", "IFC4X3_ADD2"])
+def test_site_map_conversion_keeps_representation_local(tmp_path, schema):
     from built_core.georef.datum import SceneDatum
     scene = _tagged_wall_scene()
     datum = scene.georef = SceneDatum(46.5, 3, 87, 90, (2154, 700000, 6600000))
@@ -163,8 +164,9 @@ def test_site_map_conversion_keeps_representation_local(tmp_path):
     lat, lon, alt = datum.local_to_geodetic(point)
     back = datum.geodetic_to_local(lat, lon, alt)
     assert (back.x(), back.y(), back.z()) == pytest.approx((13, -7, 2), abs=1e-6)
+    scene.plugin_data["bim_registry"] = {"export_profiles": {"site": {"schema": schema}}}
     path = tmp_path / "placed.ifc"
-    save_ifc(scene, path)
+    save_ifc(scene, path, profile="site")
     text = path.read_text()
     context = re.search(r"#(\d+)=IFCGEOMETRICREPRESENTATIONCONTEXT", text)[1]
     crs = re.search(r"#(\d+)=IFCPROJECTEDCRS\('EPSG:2154'", text)[1]
