@@ -71,11 +71,13 @@ fn start_placement(
     kw.set_item("align_to_face", align_to_face)?;
     kw.set_item("anchor", anchor)?;
     let tool = transient_tool_class(py, "place_group")?.call((group,), Some(&kw))?;
+    let wall = group.getattr_opt("ext")?.and_then(|ext| ext.get_item("library_host").ok())
+        .is_some_and(|host| host.eq("wall").unwrap_or(false));
     activate(
         win,
         &tool,
-        "Place component",
-        "Click to place the component (Esc cancels)",
+        if wall { "Place hosted family" } else { "Place component" },
+        if wall { "Hover a wall · Tab flips side · enter sill;offset · click to place" } else { "Click to place the component (Esc cancels)" },
         4000,
     )
 }

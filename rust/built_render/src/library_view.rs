@@ -323,7 +323,8 @@ pub fn groups_for<'a>(items: &'a [Item], st: &Browse) -> Vec<(String, String, Ve
                 members.iter().copied().filter(|e| e.category == c).take(ROW_CAP).collect())).collect();
         }
     }
-    vec![(String::new(), String::new(), members.into_iter().take(ROW_CAP).collect())]
+    if scope != "s:all" && !scope.starts_with("s:collection:") { members.truncate(ROW_CAP); }
+    vec![(String::new(), String::new(), members)]
 }
 
 /// The registry materials only linked parts wear move out of «In this
