@@ -189,7 +189,11 @@ fn command<'py>(py: Python<'py>, win: &Any<'py>, name: &str, args: &Bound<'py, P
     let first = || -> PyResult<Any<'py>> { if args.is_empty() { Ok(nil(py)) } else { args.get_item(0) } };
     match name {
         "about" | "extensions" | "cutlist" => return r.call_method1("show_report_sheet", (win, name)),
-        "delivery_export" => return r.getattr("delivery_export_form")?.call((win,), Some(&kw(py, &[("one_off", b(py, true))])?)),
+        "delivery_export" => {
+            let view = crate::dialogs_host::view_of(py, win);
+            view.getattr("renderer")?.call_method1("ui_show_destination", ("deliveries",))?;
+            return view.call_method0("update");
+        }
         "cut" | "copy" | "paste" | "paste_in_place" => return m.getattr("_clipboard")?.call_method1("run", (win, name)),
         _ => {}
     }

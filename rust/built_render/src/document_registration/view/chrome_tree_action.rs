@@ -876,6 +876,9 @@ impl<'a, 'py> Row<'a, 'py> {
             view.setattr("_ui_columns", mask)?;
             super::chrome_frame::keep_columns(view)?;
             self.rebuild()?;
+        } else if self.is(&["fixrows"]) {
+            view.setattr("_ui_fix_rows", rk == "1")?;
+            self.rebuild()?;
         } else if self.is(&["readiness"]) {
             // The dock shows the export checks (or stopped showing them).
             let asked = rk == "1";

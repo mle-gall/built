@@ -79,8 +79,8 @@ fn delete_delivery<'p>(history: &Obj<'p>, key: &Obj<'p>) -> PyResult<Obj<'p>> {
     vals.del_item(key)?;
     store(history, key, &vals)
 }
-#[pyfunction(name="finish")]
-fn delivery_finish<'p>(history: &Obj<'p>, key: &Obj<'p>) -> PyResult<Obj<'p>> {
+#[pyfunction(name="finish", signature=(history,key,folder="",result="Delivered"))]
+fn delivery_finish<'p>(history: &Obj<'p>, key: &Obj<'p>, folder: &str, result: &str) -> PyResult<Obj<'p>> {
     let py = history.py();
     let date = py.import("datetime")?;
     let now = date
@@ -89,7 +89,17 @@ fn delivery_finish<'p>(history: &Obj<'p>, key: &Obj<'p>) -> PyResult<Obj<'p>> {
     let kw = PyDict::new(py);
     kw.set_item("timespec", "seconds")?;
     let changes = PyDict::new(py);
-    changes.set_item("last_run", now.call_method("isoformat", (), Some(&kw))?)?;
+    let time = now.call_method("isoformat", (), Some(&kw))?;
+    let record = records(&history.getattr("scene")?)?.get_item(key)?;
+    let runs = py.get_type::<PyList>().call1((record.call_method1("get", ("runs", PyList::empty(py)))?,))?;
+    let run = PyDict::new(py);
+    run.set_item("time", &time)?;
+    run.set_item("folder", folder)?;
+    run.set_item("result", result)?;
+    run.set_item("revision", history.getattr("revision")?)?;
+    runs.call_method1("append", (run,))?;
+    changes.set_item("runs", runs)?;
+    if result == "Delivered" { changes.set_item("last_run", time)?; }
     edit_delivery(history, key, changes.as_any())
 }
 #[pyfunction(signature=(history,key,**context))]
@@ -120,7 +130,7 @@ fn run_delivery<'p>(
     {
         step?;
     }
-    delivery_finish(history, key)
+    delivery_finish(history, key, "", "Delivered")
 }
 fn mesh_part<'p>(mesh: &Obj<'p>, keep: Option<&Obj<'p>>) -> PyResult<Obj<'p>> {
     let Some(keep) = keep else {

@@ -191,7 +191,7 @@ impl Binding {
         }
         envelope.set_item("api", 1)?;
         let slot = s.getattr("slot")?;
-        if !slot.eq("dock")? && !slot.eq("utility")? {
+        if !slot.eq("dock")? && !slot.eq("utility")? && !slot.eq("destination")? {
             envelope.set_item("slot", "dock")?;
         }
         let unavailable = error_section(py, e.value(py).str()?.as_any(), true)?;

@@ -73,3 +73,8 @@ For a snapped point, call `app.pick_point(prompt, done)`. The host routes the ne
 A model may implement `on_open()` to prepare its content when a command opens it. For document overlays, implement `overlay(viewport)` and yield `views.wgpu_overlay.Primitive` values. Coordinates are logical pixels in the supplied viewport. Project world points with `viewport._world_to_pixel(point)` and skip points outside the projection. The native annotation canvas draws these primitives above the model. Supported shapes include `polyline`, `polygon`, `point` and `text`. Set `color` and optional `fill` to hex colours, and `width` to the stroke width. An empty sequence clears the overlay.
 
 Extensions can use `app.add_context_menu(callback)` alongside a panel. The callback receives a native menu builder and the selection under the pointer. Add a submenu with `addMenu(title)` and a command with `addAction(label, callback)`. The viewport menu displays the submenu path beside each command. `app.add_outliner_kind(provider)` supplies the type and property tooltip for an extension's groups in the Project browser.
+
+For a persistent list tied to model selection, register the same panel factory with
+`slot = "destination"`. Its title appears in the sidebar switcher's tooltip and
+its control sits below the divider. The panel instance owns its state for the
+document, including when another destination is visible.

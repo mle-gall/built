@@ -177,3 +177,11 @@ Existing `showMessage` and `flash_status` calls publish info notices.
 While a job runs, the activity chip shows its label, phase and progress.
 Its result appears as a toast. Choose **View → Recent activity** or search
 for **Recent activity** in the command palette to revisit an outcome.
+
+## Where things go
+
+The right sidebar holds destinations you work in for a while, such as lists tied to the viewport selection. Switching destinations preserves the sidebar width and each destination's state.
+
+A command opens the bottom drawer for one-off settings with a live preview and up to about eight fields. Enter applies and closes it. Esc cancels and closes it. The drawer also holds pinned output such as the console or render preview. An operation can temporarily borrow a pinned drawer while its output continues running. Enter or Esc restores that output.
+
+Use a large sheet to browse a large collection or change a rarely used setup. Use a popover for a quick choice and a toast for a result or error. At most one destination, one drawer and one sheet can be open at once. The drawer fits between the rail and the sidebar.

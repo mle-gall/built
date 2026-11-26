@@ -2912,6 +2912,10 @@ impl Renderer {
     fn ui_set_columns(&mut self, lens: u8, mask: Option<u16>) {
         if let Some(ui) = self.ui.as_mut() { ui.set_columns(lens, mask); }
     }
+    fn ui_show_destination(&mut self, name: &str) {
+        if let Some(ui) = self.ui.as_mut() { ui.show_destination(name); }
+    }
+
     fn ui_set_dock_width(&mut self, width: f32) {
         if let Some(ui) = self.ui.as_mut() { ui.set_dock_width(width); }
     }

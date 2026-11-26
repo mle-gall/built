@@ -435,7 +435,7 @@ def test_native_svg_preview_and_delivery_edit(tmp_path):
     venv = fixture_venv(tmp_path,
         f"from built_render import shell_services as native\nnative.save_file = lambda *args: {str(drawing)!r}\n")
     steps = tmp_path / "steps"
-    steps.write_text("wait 700\nkey escape\nmenu delivery_export\nwait 650\nclick 630 208\n"
+    steps.write_text("wait 700\nkey escape\nmenu export:ifc\nwait 650\nclick 630 208\n"
                      "wait 450\nclick 470 377\nwait 450\nclick 843 269\nwait 250\n"
                      "click 260 329\nwait 900\ncapture one-off\nstate\nclick 392 127\n"
                      "wait 650\nstate\n"

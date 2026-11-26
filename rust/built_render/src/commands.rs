@@ -66,6 +66,9 @@ impl Command {
 }
 #[rustfmt::skip]
 const COMMANDS: &[Command] = &[
+    command("sidebar_project", "Project", "", &["Ctrl+Alt+1"], "Sidebar", Chrome).on(RegistryOnly),
+    command("sidebar_tasks", "Tasks", "", &["Ctrl+Alt+2"], "Sidebar", Chrome).on(RegistryOnly),
+    command("sidebar_deliveries", "Deliveries", "", &["Ctrl+Alt+3"], "Sidebar", Chrome).on(RegistryOnly),
     command("orbit", "Orbit", "orbit", &["O"], "nav", Nav).on(NavigationBar),
     command("pan", "Pan", "pan", &["H"], "nav", Nav).on(NavigationBar),
     command("zoom", "Zoom", "zoom", &["Z"], "nav", Nav).on(NavigationBar),
@@ -270,6 +273,11 @@ pub fn run_view_command(win: &Bound<'_, PyAny>, id: &str, on: bool) -> PyResult<
             win.py().None().into_bound(win.py())
         }
         Method(method) => win.call_method0(method)?,
+        Chrome if id.starts_with("sidebar_") => {
+            let view = crate::dialogs_host::view_of(win.py(), win);
+            view.getattr("renderer")?.call_method1("ui_show_destination", (&id[8..],))?;
+            view.call_method0("update")?
+        }
         Chrome if id == "recent-activity" => {
             let view = win.getattr("_doc")?.getattr("stand_in")?;
             view.getattr("renderer")?.call_method0("ui_open_activity")?;

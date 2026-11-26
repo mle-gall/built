@@ -95,6 +95,14 @@ fn test_context()->egui::Context{
     ctx
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum Destination {
+    Project,
+    Tasks,
+    Deliveries,
+    Plugin(String),
+}
+
 pub struct Ui {
     plugins: plugins::Panels,
     plugin_document: String,
@@ -191,6 +199,9 @@ pub struct Ui {
     link_banner: String,
     /// The dock's width (points): dragged on its left edge, kept by Python.
     dock_w: f32,
+    destination: Destination,
+    fix_rows: bool,
+    fix_rule: Option<(String, String)>,
     /// The pointer shape the chrome asks for ("" or "resize_h").
     cursor_shape: &'static str,
     /// The Sheets workspace: while on, the page replaces the model (ui/sheets.rs).
@@ -298,8 +309,6 @@ pub struct Column {
     /// Whether the document is asked for the export readiness (the
     /// Readiness column shows, or the Fix checklist is open), as last sent.
     readiness_sent: Option<bool>,
-    /// The Fix checklist's section is open in the document inspector.
-    checklist_open: bool,
     /// The tag in focus came with a node row: its Drawing style is a
     /// section under the node's inspector, not the inspector itself.
     tag_from_node: bool,
@@ -392,6 +401,9 @@ impl Ui {
             hovered_toast: None,
             link_banner: String::new(),
             dock_w: DOCK_W,
+            destination: Destination::Project,
+            fix_rows: false,
+            fix_rule: None,
             plugins: Default::default(),
             plugin_document: String::new(),
             background_plugins: Default::default(),
@@ -491,7 +503,7 @@ impl Ui {
         let col = self.column.get_or_insert_with(|| Column {
             tag_index: None, marked_rows: Vec::new(), nodes: Vec::new(), path: Vec::new(), host: Default::default(), overview: Default::default(), styles: Default::default(), reveal: None, proposal_available: false, proposal_dismissed: false, sort: Default::default(), ordered: Vec::new(), unfiled: 0, browser_picks: 0, issue_at: None, filter: String::new(),
             filing: None, focus_filter: false, group_rows: Vec::new(), row_menu: None, choosing_folder: false, renaming: None, focus_rename: false, head_menu: None,
-            kind_menu: None, kinds: Vec::new(), prompt: None, columns: Default::default(), cells_scroll: 0., readiness_sent: Some(false), checklist_open: false, tag_from_node: false, edits: Default::default(), mode: String::new(), issues: false,
+            kind_menu: None, kinds: Vec::new(), prompt: None, columns: Default::default(), cells_scroll: 0., readiness_sent: Some(false), tag_from_node: false, edits: Default::default(), mode: String::new(), issues: false,
             identity: Vec::new(),
             inspector_title: String::new(),
             inspector: Vec::new(), highlighted: None, focused_row: None,
@@ -544,7 +556,7 @@ impl Ui {
     /// The dock's width as last kept (clamped to what the window allows).
     pub fn set_dock_width(&mut self, w: f32) { self.dock_w = w.clamp(DOCK_MIN_W, DOCK_MAX_W); }
     /// The dock's width in this window: the user's, within its bounds.
-    fn dock_width(&self, screen: Rect) -> f32 { dock_width(self.dock_w, screen.width()) }
+    fn dock_width(&self, screen: Rect) -> f32 { dock_width(self.dock_w + DESTINATION_STRIP_W, screen.width()) }
     /// The pointer the chrome wants over it: "resize_h" over the dock's grip.
     pub fn cursor_shape(&self) -> &'static str { self.cursor_shape }
     pub fn set_issues(&mut self, on: bool) {
@@ -562,6 +574,7 @@ impl Ui {
         true
     }
     pub fn reveal_row(&mut self, key: String) {
+        self.destination = Destination::Project;
         self.plugins.showing = false;
         if let Some(col) = self.column.as_mut() {
             col.filter.clear();
@@ -584,6 +597,7 @@ impl Ui {
         Ok(())
     }
     pub fn open_line_type(&mut self,name:&str,tags:Vec<String>)->bool {
+        self.destination = Destination::Project;
         let Some(col)=self.column.as_mut() else{return false;};
         self.plugins.showing=false;
         col.mode.clear();
@@ -676,6 +690,7 @@ impl Ui {
     }
     /// "File to…": the tree takes the next pick; the filter gets the keys.
     pub fn start_filing(&mut self, what: String) {
+        self.destination = Destination::Project;
         if let Some(col) = self.column.as_mut() {
             col.filing = Some(what);
             col.focus_filter = true;
@@ -723,15 +738,35 @@ impl Ui {
 
     pub fn extension_menu(&mut self, rows: Vec<crate::extension_menu::Row>) { self.plugins.commands = rows; }
     pub fn plugin_panel(&mut self, raw: &str) -> Result<(), String> { self.plugins.set(raw) }
-    pub fn plugin_open(&mut self, id: &str) { self.plugins.open(id); }
+    pub fn show_destination(&mut self, name: &str) {
+        self.set_review(false);
+        self.destination = match name {
+            "deliveries" => Destination::Deliveries,
+            "tasks" => Destination::Tasks,
+            "project" => Destination::Project,
+            _ => return,
+        };
+        if let Some(col) = &mut self.column { col.head_menu = None; col.kind_menu = None; }
+    }
+    pub fn plugin_open(&mut self, id: &str) {
+        if self.plugins.destinations().any(|(key, _)| key == id) {
+            self.destination = Destination::Plugin(id.into());
+        } else {
+            self.plugins.open(id);
+            if self.plugins.dock_visible(id) { self.destination = Destination::Project; }
+        }
+    }
     pub fn plugin_visible(&self, instance: &str) -> bool {
         self.gallery.is_none() && !self.review && !self.lsheet.open && !self.sheets.shown
-            && self.plugins.visible(instance)
+            && (self.destination == Destination::Plugin(instance.into()) || self.plugins.utility_visible(instance) || (self.destination == Destination::Project && self.plugins.dock_visible(instance)))
     }
     pub fn plugin_document(&mut self, document: String, live: &[String]) {
         if self.plugin_document != document {
             let next = self.background_plugins.remove(&document).unwrap_or_default();
             let previous = std::mem::replace(&mut self.plugins, next);
+            if matches!(&self.destination, Destination::Plugin(id) if !self.plugins.destinations().any(|(live, _)| live == id)) {
+                self.destination = Destination::Project;
+            }
             let old_id = std::mem::replace(&mut self.plugin_document, document);
             if live.contains(&old_id) {
                 self.background_plugins.insert(old_id, previous);
@@ -1552,7 +1587,10 @@ impl Ui {
                             if kind == "work" && !self.sheets.shown {
                                 if let Some(col) = self.column.as_mut() {
                                     let (sent, plugins) = dock_menus::model_rows(col, ui, self.plugins.available());
-                                    if plugins { self.plugins.showing = !self.plugins.showing; }
+                                    if plugins {
+                                        self.plugins.showing = self.destination != Destination::Project || !self.plugins.showing;
+                                        self.destination = Destination::Project;
+                                    }
                                     close_menu = plugins || !sent.is_empty();
                                     self.actions.extend(sent.into_iter().map(|action| format!("tree:{action}")));
                                 }
@@ -1836,22 +1874,86 @@ impl Ui {
         let self_icons = self.icons.clone();
         let anchor = self.form_anchor(ctx, screen);
         // One width, the user's, whatever the tree's columns.
+        let pane_width = self.dock_width(screen);
         #[allow(non_snake_case)]
-        let W: f32 = self.dock_width(screen);
+        let W = pane_width - DESTINATION_STRIP_W;
         let Some(col) = self.column.as_mut() else { return };
         let height = (bottom - top).max(200.0);
         let mut actions: Vec<String> = Vec::new();
         egui::Area::new(egui::Id::new("column"))
             .constrain(false)
             .interactable(retract == 0.0)
-            .fixed_pos(pos2(screen.max.x - GUT - W + retract * (W + GUT), top))
+            .fixed_pos(pos2(screen.max.x - GUT - pane_width + retract * (pane_width + GUT), top))
             .order(egui::Order::Foreground)
             .show(ctx, |ui| {
                 glass(Surface::Panel).inner_margin(Margin::same(10)).show(ui, |ui| {
+                    ui.set_min_width(pane_width - 20.);
+                    let outer = ui.cursor().min + vec2(pane_width - 20., 0.) + vec2(10., -10.);
+                    let strip = Rect::from_min_size(outer - vec2(DESTINATION_STRIP_W, 0.), vec2(DESTINATION_STRIP_W, height));
+                    let report = &self.panels.data["readiness"];
+                    let blocked = export::blocked(report);
+                    let tasks = self.panels.data["tasks"]["unresolved"].as_u64().filter(|n| *n > 0).map(|n| n.to_string()).unwrap_or_default();
+                    let mut next = None;
+                    kit::destination_strip(ui, strip, |ui| {
+                        for (i, (dest, label, glyph)) in [
+                            (Destination::Project, "Project", "folder"),
+                            (Destination::Tasks, "Tasks", "tasks"),
+                            (Destination::Deliveries, "Deliveries", "component"),
+                        ].into_iter().enumerate() {
+                            let shortcut = if cfg!(target_os="macos") { format!("⌥⌘{}", i+1) } else { format!("Ctrl+Alt+{}", i+1) };
+                            let badge = match dest { Destination::Deliveries if blocked > 0 => "!", Destination::Tasks => &tasks, _ => "" };
+                            if kit::destination_button(ui, label, glyph, &shortcut, badge, self.destination == dest) { next = Some(dest); }
+                        }
+                        for (i, (id, name)) in self.plugins.destinations().enumerate() {
+                            if i == 0 { ui.separator(); }
+                            let dest = Destination::Plugin(id.to_owned());
+                            if kit::destination_button(ui, name, "sheet", "", "", self.destination == dest) { next = Some(dest); }
+                        }
+                    });
+                    if let Some(dest) = next {
+                        self.destination = dest;
+                        col.head_menu = None;
+                        col.kind_menu = None;
+                    }
+                    ui.set_min_height(height - 20.);
+                    let content = Rect::from_min_size(ui.cursor().min, vec2(W - 20., height - 20.));
+                    let mut child = ui.new_child(egui::UiBuilder::new().max_rect(content));
+                    let ui = &mut child;
                     ui.set_width(W - 20.0);
                     ui.set_max_width(W - 20.0);
                     ui.set_height(height - 20.0);
                     ui.spacing_mut().item_spacing = vec2(0.0, 0.0);
+                    match &self.destination {
+                        Destination::Tasks => {
+                            kit::inspector_title(ui, "Tasks", "");
+                            ui.add_space(SPACE_M);
+                            kit::empty_state(ui, "No agent tasks yet");
+                            kit::caption_plain(ui, "Agent reviews and questions appear here.");
+                            return;
+                        }
+                        Destination::Deliveries => {
+                            if export::destination(ui, report, &mut cmds, &mut actions, &mut self.fix_rule) {
+                                self.fix_rows = true;
+                                self.destination = Destination::Project;
+                                actions.push("fixrows\u{1f}1".into());
+                            }
+                            return;
+                        }
+                        Destination::Plugin(id) => {
+                            self.plugins.draw(ui, id, &mut cmds);
+                            return;
+                        }
+                        Destination::Project => {}
+                    }
+                    if self.fix_rows {
+                        kit::caption_plain(ui, self.fix_rule.as_ref().map_or("Delivery checks", |(label, _)| label.as_str()));
+                    }
+                    if self.fix_rows && kit::quiet(ui, "← Back to Deliveries").clicked() {
+                        self.fix_rows = false;
+                        self.destination = Destination::Deliveries;
+                        actions.push("fixrows\u{1f}0".into());
+                        return;
+                    }
                     if self.panels.data["camera"].is_object() {
                         egui::ScrollArea::vertical().id_salt("camera inspector").show(ui, |ui| self.panels.camera(ui,&mut cmds));
                         return;
@@ -1860,7 +1962,7 @@ impl Ui {
                     ui.horizontal(|ui| {
                         ui.set_min_height(28.0);
                         let open = matches!(col.head_menu, Some((dock_menus::HeadMenu::Columns, _)));
-                        let control = kit::dropdown(ui, "Columns", col.columns.name(), open, (ui.available_width() - 84.).max(120.))
+                        let control = kit::dropdown(ui, "Columns", if self.fix_rows { "Export" } else { col.columns.name() }, open, (ui.available_width() - 84.).max(120.))
                             .on_hover_text("The tree's columns: a preset, or column by column");
                         if control.clicked() {
                             self.plugins.showing = false;
@@ -1895,15 +1997,15 @@ impl Ui {
                     }
                     ui.add_space(SPACE_S);
                     {
-                    let readiness_shown = col.columns.has(Col::Readiness);
+                    let columns = if self.fix_rows { lens::Columns::preset(Lens::Export) } else { col.columns };
+                    let readiness_shown = columns.has(Col::Readiness);
                     // One line of context over the filter, the same height whatever it
                     // says, so a preset does not move the rows: the delivery the
                     // Readiness column answers for; otherwise the suggestion to give a
                     // tagged model its filing, or where new items go.
                     if readiness_shown {
-                        let open = matches!(col.head_menu, Some((dock_menus::HeadMenu::Delivery, _)));
-                        if let Some(anchor) = export::strip(ui, &self.panels.data["readiness"], open, &mut cmds) {
-                            col.head_menu = (!open).then_some((dock_menus::HeadMenu::Delivery, anchor));
+                        if export::strip(ui, report) {
+                            self.destination = Destination::Deliveries;
                         }
                         ui.add_space(SPACE_XS);
                     } else if col.proposal_available && !col.proposal_dismissed {
@@ -1952,7 +2054,7 @@ impl Ui {
                             .margin(Margin::symmetric(8, 5))
                             .desired_width((W - 20.0 - 16.0 - 4.0 - CONTROL_H - SPACE_XS).max(40.0))
                             .font(body());
-                        field = Some(ui.add(edit).on_hover_text("Filter by name or wildcard. Use is:hidden, is:visible, is:locked, is:selected, is:component, is:image or is:section. Prefix the query with ! to invert it."));
+                        field = Some(ui.add_enabled(!self.fix_rows, edit).on_hover_text("Filter by name or wildcard. Use is:hidden, is:visible, is:locked, is:selected, is:component, is:image or is:section. Prefix the query with ! to invert it."));
                         let open = matches!(col.head_menu, Some((dock_menus::HeadMenu::Filter, _)));
                         let button = kit::filter_button(ui, narrowed, open);
                         if button.clicked() {
@@ -1994,13 +2096,22 @@ impl Ui {
                     } else {
                         available * 0.6
                     };
-                    if col.nodes.is_empty() {
-                        empty_state(ui, "No matching rows");
+                    let filtered;
+                    let order = if self.fix_rows {
+                        let keys = self.fix_rule.as_ref().map(|rule| export::rule_rows(report, rule));
+                        filtered = col.ordered.iter().copied().filter(|&i| {
+                            let key = &col.nodes[i].key;
+                            keys.as_ref().map_or_else(|| matches!(export::row_state(report, key, None), export::Ready::ToFix(_)), |keys| keys.contains(key))
+                        }).collect::<Vec<_>>();
+                        &filtered
+                    } else { &col.ordered };
+                    let nodes_len = if self.fix_rows { order.len() } else { col.nodes.len() };
+                    if nodes_len == 0 {
+                        empty_state(ui, if self.fix_rows { "No rows to fix" } else { "No matching rows" });
                     }
-                    let nodes_len = col.nodes.len();
                     // The header and virtualized rows share one layout of the columns.
                     let row_left = ui.cursor().min.x;
-                    let cols = lens::RowLayout::plan(col.columns, row_left, row_left + ui.available_width(), col.cells_scroll);
+                    let cols = lens::RowLayout::plan(columns, row_left, row_left + ui.available_width(), col.cells_scroll);
                     col.cells_scroll = col.cells_scroll.clamp(0., cols.max_scroll());
                     let tree_top = ui.cursor().min.y;
                     let row_room = if col.mode.is_empty() && nodes_len > 0 {
@@ -2021,21 +2132,21 @@ impl Ui {
                     } else { room };
                     let visible_rows = (row_room / ROW_H).floor().max(3.0);
                     let tree_h = (nodes_len.max(3) as f32).min(visible_rows) * ROW_H;
-                    let mut scroll = egui::ScrollArea::vertical().id_salt("tree").max_height(tree_h).auto_shrink([false, false]);
+                    let mut scroll = egui::ScrollArea::vertical().id_salt(("tree", self.fix_rows)).max_height(tree_h).auto_shrink([false, false]);
                     if let Some(key) = col.reveal.take() {
                         let pitch = ROW_H + ui.spacing().item_spacing.y;
                         if let Some(offset) = tree_order::reveal_offset(&col.nodes, &col.ordered, &key, pitch, tree_h) {
                             scroll = scroll.vertical_scroll_offset(offset);
                         }
                     }
-                    let by_order = col.mode.is_empty();
+                    let by_order = self.fix_rows || col.mode.is_empty();
                     scroll.show_rows(ui, ROW_H, nodes_len, |ui, range| {
                             // A placement's readiness follows the rows above it: those of
                             // the first row drawn are looked up once.
                             let report = &self.panels.data["readiness"];
                             let mut above: Vec<(usize, export::Ready)> = Vec::new();
                             if readiness_shown && range.start < nodes_len {
-                                let at = |i: usize| if by_order { col.ordered[i] } else { i };
+                                let at = |i: usize| if by_order { order[i] } else { i };
                                 let mut depth = col.nodes[at(range.start)].depth;
                                 let mut chain = Vec::new();
                                 for j in (0..range.start).rev() {
@@ -2050,16 +2161,16 @@ impl Ui {
                                 }
                             }
                             for i in range {
-                                let index = if by_order { col.ordered[i] } else { i };
+                                let index = if by_order { order[i] } else { i };
                                 let n = &col.nodes[index];
                                 let editable = n.row == 0 && n.key.starts_with("n:") && n.key.len() > 2 && !n.key.starts_with("n:link:");
                                 let tag_row = n.key.starts_with("preview-folder:") || n.key.starts_with("preview-tag:");
                                 let sense = if editable || n.local_placement || tag_row { Sense::click_and_drag() } else { Sense::click() };
                                 let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), ROW_H), sense);
-                                let cols = lens::RowLayout::plan(col.columns, rect.min.x, rect.max.x, col.cells_scroll);
+                                let cols = lens::RowLayout::plan(columns, rect.min.x, rect.max.x, col.cells_scroll);
                                 // The model's content, then a divider, then its scenes and sheets.
                                 if n.depth == 0 && tree_order::document_row(n) && i > 0
-                                    && !tree_order::document_row(&col.nodes[if by_order { col.ordered[i - 1] } else { i - 1 }]) {
+                                    && !tree_order::document_row(&col.nodes[if by_order { order[i - 1] } else { i - 1 }]) {
                                     ui.painter().hline(rect.x_range(), rect.min.y, Stroke::new(1.0_f32, EDGE));
                                 }
                                 // Items in the selection are lit like a picked row; nodes count them.
@@ -2521,19 +2632,6 @@ impl Ui {
                             }
                             if col.overview.links>0 {kit::prop_row(ui,"Linked files",&col.overview.links.to_string());}
                             ui.add_space(SPACE_XS);
-                            let shown = col.columns.has(Col::Readiness);
-                            let report = &self.panels.data["readiness"];
-                            // The count is over the tree with the Readiness column; without it, here.
-                            let heading = if col.checklist_open && !shown {
-                                format!("Fix checklist · {}", export::summary(report))
-                            } else {
-                                "Fix checklist".to_owned()
-                            };
-                            // Open with the Readiness column (the checks are there already);
-                            // otherwise the checks run once the section is opened.
-                            col.checklist_open = kit::disclosure(ui, ("fix checklist", shown), &heading, shown, |ui| {
-                                export::checklist(ui, report, None, &Default::default(), &mut actions);
-                            }).is_some();
                             if col.mode.is_empty() {
                                 col.styles.document(ui, &mut actions);
                             }
@@ -2590,9 +2688,14 @@ impl Ui {
                 });
             if close { col.kind_menu = None; }
         }
-        dock_menus::show(col, ctx, screen, &self.panels.data["readiness"], selection.is_some(), &mut actions, &mut cmds);
+        dock_menus::show(col, ctx, screen, selection.is_some(), &mut actions);
         // The document is asked for the export checks only while something shows them.
-        let wanted = col.columns.has(Col::Readiness) || col.checklist_open;
+        let wanted = self.destination == Destination::Deliveries || (self.destination == Destination::Project && (self.fix_rows || col.columns.has(Col::Readiness)));
+        if self.fix_rows && (self.destination == Destination::Deliveries ||
+            actions.iter().any(|action| action.starts_with("lens\u{1f}") || action.starts_with("columns\u{1f}"))) {
+            self.fix_rows = false;
+            actions.push("fixrows\u{1f}0".into());
+        }
         if col.readiness_sent != Some(wanted) {
             col.readiness_sent = Some(wanted);
             actions.push(format!("readiness\u{1f}{}", u8::from(wanted)));
@@ -2660,7 +2763,7 @@ impl Ui {
                         shape = "resize_h";
                         ui.painter().vline(g.center().x + 1.0, g.y_range().shrink(g.height() * 0.3), Stroke::new(2.0_f32, ACCENT_LINE));
                     }
-                    let max_w = dock_width(DOCK_MAX_W, screen.width());
+                    let max_w = dock_width(DOCK_MAX_W, screen.width()) - DESTINATION_STRIP_W;
                     if resp.dragged() {
                         *dock_w = (*dock_w - resp.drag_delta().x).clamp(DOCK_MIN_W, max_w);
                     }
@@ -3328,7 +3431,7 @@ fn the_free_area_leaves_out_the_panels_and_review_frees_them() {
     let px = |v: f64| (v + 1.) / 2. * 1280.;
     let py = |v: f64| (1. - v) / 2. * 800.;
     assert!((px(x0) - f64::from(GUT + rail::width(3))).abs() < 0.01);
-    assert!((px(x1) - f64::from(1280. - GUT - 320.)).abs() < 0.01);
+    assert!((px(x1) - f64::from(1280. - GUT - 320. - DESTINATION_STRIP_W)).abs() < 0.01);
     assert!((py(y1) - f64::from(TOP_H)).abs() < 0.01 && (py(y0) - f64::from(800. - BOT_H)).abs() < 0.01);
     // Review retracts the rail, dock and bottom bar: the free area grows at
     // once (not with the animation) and Python hears it to reframe.
@@ -3917,7 +4020,7 @@ fn a_column_preset_keeps_the_width_the_rows_the_focus_and_the_inspector() {
     }
     // One width, the rows where they were, the same inspector.
     assert!(seen.iter().all(|state| state == &seen[0]), "{seen:?}");
-    assert_eq!(seen[0].0, 340.);
+    assert_eq!(seen[0].0, 340. + DESTINATION_STRIP_W);
 }
 
 #[test]
@@ -3947,50 +4050,39 @@ fn a_selection_has_one_inspector_under_every_preset() {
 }
 
 #[test]
-fn the_document_inspector_holds_the_fix_checklist_and_asks_for_the_checks_only_when_shown() {
+fn destination_round_trip_preserves_project_state_and_width() {
     let Some(mut ui) = test_chrome() else { return };
     ui.ctx = test_context();
-    ui.set_tree(tag_rows(&["Walls"]), 0);
-    for _ in 0..3 { tree_frame(&mut ui, vec![]); }
-    let frame = tree_frame(&mut ui, vec![]);
-    // Nothing selected: the document, under the Filing columns too.
-    for text in ["Untitled", "Fix checklist", "Tag folders", "Line types", "Filter"] {
-        assert!(frame.contains_key(text), "{text}");
-    }
-    assert!(!frame.contains_key("Filter nodes") && !frame.contains_key("Delivery:"));
-    assert!(ui.take_actions().is_empty());
-    // Opening the section asks the document for the export checks.
-    tree_click(&mut ui, frame["Fix checklist"], egui::PointerButton::Primary);
-    for _ in 0..2 { tree_frame(&mut ui, vec![]); }
+    ui.set_tree(tag_rows(&["Walls", "Ceiling"]), 0);
+    ui.set_dock_width(345.);
+    let frame = |ui: &mut Ui| {
+        for _ in 0..3 { tree_frame(ui, vec![]); }
+        tree_frame(ui, vec![])
+    };
+    let project = frame(&mut ui);
+    assert!(project.contains_key("Walls") && !project.contains_key("Fix checklist"));
+    let column_rect = |ui: &Ui| ui.ctx.memory(|m| m.area_rect(egui::Id::new("column")).unwrap());
+    let width = column_rect(&ui).width();
+    ui.show_destination("tasks");
+    assert!(frame(&mut ui).contains_key("No agent tasks yet"));
+    assert_eq!(column_rect(&ui).width(), width);
+    ui.show_destination("deliveries");
+    frame(&mut ui);
     assert_eq!(ui.take_actions(), ["tree:readiness\u{1f}1"]);
     ui.panels.set("readiness", serde_json::json!({
-        "active": "", "choices": [], "ready": 0, "total": 3, "scope": "whole",
+        "active": "d", "choices": [["d", "Handover"]], "ready": 0, "total": 3,
         "rows": {"preview-tag:Walls": [3, 3]}, "items": {}, "notes": [],
-        "checks": {"*": {
-            "active-solid": ["Solid geometry problems", [{"name": "Loose geometry", "path": null, "fix": ""}]],
-            "solid/": ["Solid geometry problems", [{"name": "Wall", "path": ["a"], "fix": ""}]],
-        }},
     }));
-    for _ in 0..2 { tree_frame(&mut ui, vec![]); }
-    let frame = tree_frame(&mut ui, vec![]);
-    // One line for the solids, placements and loose geometry together.
-    assert!(frame.contains_key("Solid geometry problems · 2") && frame.contains_key("Show"), "{frame:?}");
-    // With the Export columns the delivery is named over the tree and every row has a state.
-    ui.set_lens(2);
-    for _ in 0..3 { tree_frame(&mut ui, vec![]); }
-    let frame = tree_frame(&mut ui, vec![]);
-    for text in ["Delivery:", "Project checks", "0 of 3 ready", "Readiness", "3 to fix", "Fix checklist"] {
-        assert!(frame.contains_key(text), "{text}: {frame:?}");
-    }
-    // Closing the section under Filing stops the checks.
-    ui.set_lens(0);
-    for _ in 0..3 { tree_frame(&mut ui, vec![]); }
-    ui.take_actions();
-    let frame = tree_frame(&mut ui, vec![]);
-    let heading = frame.iter().find(|(text, _)| text.starts_with("Fix checklist")).unwrap().1;
-    tree_click(&mut ui, *heading, egui::PointerButton::Primary);
-    for _ in 0..2 { tree_frame(&mut ui, vec![]); }
-    assert_eq!(ui.take_actions(), ["tree:readiness\u{1f}0"]);
+    let delivery = frame(&mut ui);
+    assert!(delivery.contains_key("Fix checklist") && delivery.contains_key("!"));
+    tree_click(&mut ui, delivery["Show 3 to fix"], egui::PointerButton::Primary);
+    let narrowed = frame(&mut ui);
+    assert!(narrowed.contains_key("Walls") && !narrowed.contains_key("Ceiling"));
+    tree_click(&mut ui, narrowed["← Back to Deliveries"], egui::PointerButton::Primary);
+    assert!(frame(&mut ui).contains_key("Handover"));
+    ui.show_destination("project");
+    assert!(frame(&mut ui).contains_key("Ceiling"));
+    assert_eq!(column_rect(&ui).width(), width);
 }
 
 #[test]
@@ -4064,7 +4156,7 @@ fn the_filter_button_opens_the_quick_choices_and_the_sort() {
     let frame = tree_frame(&mut ui, vec![]);
     let dock = ui.ctx.memory(|m| m.area_rect(egui::Id::new("column"))).unwrap();
     // The button ends the filter field's row.
-    let button = pos2(dock.max.x - 10. - CONTROL_H / 2., frame["Filter"].y);
+    let button = pos2(dock.max.x - DESTINATION_STRIP_W - 10. - CONTROL_H / 2., frame["Filter"].y);
     tree_click(&mut ui, button, egui::PointerButton::Primary);
     for _ in 0..2 { tree_frame(&mut ui, vec![]); }
     let popover = tree_frame(&mut ui, vec![]);

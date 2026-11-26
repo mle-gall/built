@@ -230,7 +230,8 @@ fn tree<'py>(a: &Args<'py>) -> Reply<'py> {
     let state = view.getattr("__dict__")?;
     let mut exp = state.call_method1("setdefault", ("_ui_exp", PySet::empty(py)?))?;
     let pages = state.call_method1("setdefault", ("_ui_pages", PyDict::new(py)))?;
-    let flt = if discover { "".into_bound_py_any(py)? } else { state.call_method1("get", ("_ui_filter", ""))? };
+    let fixes = truthy(&view, "_ui_fix_rows")?;
+    let flt = if discover || fixes { "".into_bound_py_any(py)? } else { state.call_method1("get", ("_ui_filter", ""))? };
     let lens = if discover { 0.into_bound_py_any(py)? } else { state.call_method1("get", ("_ui_lens", 0))? };
     let catalog = match own(&view, "_ui_sheet_catalog")? {
         Some(catalog) => catalog,
@@ -243,7 +244,8 @@ fn tree<'py>(a: &Args<'py>) -> Reply<'py> {
     let sheet_revision = catalog.call_method1("refresh", (&scene,))?;
     view.setattr("_ui_sheet_revision", &sheet_revision)?;
     // The export checks include watertightness: they must follow mesh edits.
-    let geometric = !discover && wants_readiness(&view)?;
+    let records = core.getattr("deliveries")?.call_method1("records", (&scene,))?;
+    let geometric = !discover && (records.is_truthy()? || wants_readiness(&view)?);
     let content = scene.getattr("content_version")?;
     let version = if geometric { content.clone() } else { direct(py, tree_version, (&win, &scene))? };
     let kinds = outliner_kinds(&win)?;
@@ -310,7 +312,7 @@ fn tree<'py>(a: &Args<'py>) -> Reply<'py> {
     let part = |name: &str| model.get_item(name);
     let (tree, registry, recipes) = (part("tree")?, part("registry")?, part("recipes")?);
     let (counts, to_fix, node_layers, order) = (part("counts")?, part("to_fix")?, part("node_layers")?, part("order")?);
-    if discover {
+    if discover || fixes {
         exp = core.call_method1("reveal_branches", (&scene, &tree))?;
     }
     let (nodes, children, direct, unfiled) = (tree.getattr("nodes")?, tree.getattr("children")?, tree.getattr("direct")?, tree.getattr("unfiled")?);
@@ -340,7 +342,7 @@ fn tree<'py>(a: &Args<'py>) -> Reply<'py> {
             exp.clone(),
             pages,
             flt.clone(),
-            discover.into_bound_py_any(py)?,
+            (discover || fixes).into_bound_py_any(py)?,
             module.getattr("ROW_CAP")?,
             // Every row carries its tag's drawing cells: a preset only shows them.
             1.into_bound_py_any(py)?,
@@ -370,7 +372,6 @@ fn tree<'py>(a: &Args<'py>) -> Reply<'py> {
     }
     let renderer = view.getattr("renderer")?;
     if geometric {
-        let records = core.getattr("deliveries")?.call_method1("records", (&scene,))?;
         let chosen = attr(&view, "_delivery_key")?;
         let mut delivery = records.call_method1("get", (&chosen,))?;
         if !delivery.is_truthy()? {
