@@ -126,6 +126,7 @@ fn run_one<'py>(win: &Obj<'py>, action: &Obj<'py>, source_view: &Obj<'py>) -> Py
     }
     match kind {
         "plugin" => return crate::plugin_panels::dispatch(win, pyo3::types::PyString::new(py, arg).as_any()),
+        "task" => return crate::tasks_host::task_action(win, arg),
         "activity" | "activity2" | "dismiss" | "pause-toast" | "resume-toast" => {
             for row in dialogs.call_method1("history", (win,))?.try_iter()? {
                 let row = row?;

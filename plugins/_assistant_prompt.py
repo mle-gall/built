@@ -178,7 +178,7 @@ def handle_reply(self, msg, round_limit, screenshots):
         self._finish()
         return
     self._round += 1
-    result = ai.run_transactional(self._viewport, code, self._scope)
+    result = self._run_recipe(code)
     summary = []
     if result["stdout"]:
         out = result["stdout"].rstrip()

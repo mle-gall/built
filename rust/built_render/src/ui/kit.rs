@@ -2021,6 +2021,68 @@ pub fn site_pin(painter:&egui::Painter, center:Pos2, label:&str) {
     painter.galley(pos,text,INK);
 }
 
+/// Text to copy as it stands (a terminal command): monospace, in a well,
+/// selectable.
+pub fn code_block(ui: &mut egui::Ui, text: &str) {
+    egui::Frame::new().fill(WELL).corner_radius(CornerRadius::same(R_ROW)).inner_margin(egui::Margin::symmetric(10, 8)).show(ui, |ui| {
+        ui.set_width(ui.available_width());
+        ui.add(egui::Label::new(egui::RichText::new(text).font(egui::FontId::monospace(TYPE_META)).color(INK)).wrap().selectable(true));
+    });
+}
+
+/// The ink of an agent task's state: `warn` (needs the user), `ok`
+/// (done), `faint` (reverted), anything else dim (working).
+pub fn task_tone(tone: &str) -> Color32 {
+    match tone {
+        "warn" => QUESTION,
+        "ok" => DONE,
+        "faint" => FAINT,
+        _ => WORKING,
+    }
+}
+
+/// An agent task in the Tasks list: the request on the first line (12
+/// medium, cut to fit), the agent and what it changed on the second (11
+/// DIM), and the state at the trailing edge, a dot in its tone before it.
+pub fn task_row(ui: &mut egui::Ui, title: &str, meta_text: &str, state: &str, tone: &str, selected: bool) -> egui::Response {
+    let (rect, resp) = list_row(ui, 40.0, selected);
+    if selected {
+        ui.painter().rect_filled(Rect::from_min_size(rect.min, vec2(MARKER_W, rect.height())), CornerRadius::same(1), ACCENT);
+    }
+    let ink = task_tone(tone);
+    let s = ui.painter().layout_no_wrap(state.to_owned(), meta(), ink);
+    let right = rect.max.x - SPACE_S;
+    let state_x = right - s.size().x;
+    let line2 = Rect::from_min_max(pos2(rect.min.x, rect.center().y), rect.max);
+    let line1 = Rect::from_min_max(rect.min, pos2(rect.max.x, rect.center().y));
+    let t = fit(ui, title, strong(TYPE_BODY), INK, rect.width() - 2.0 * SPACE_S, 1);
+    leading(ui.painter(), line1.translate(vec2(0.0, 2.0)), rect.min.x + SPACE_S, t, INK);
+    let m = fit(ui, meta_text, meta(), DIM, (state_x - rect.min.x - 3.0 * SPACE_S).max(20.0), 1);
+    leading(ui.painter(), line2.translate(vec2(0.0, -2.0)), rect.min.x + SPACE_S, m, DIM);
+    dot(ui.painter(), pos2(state_x - 7.0, line2.center().y - 2.0), ink);
+    leading(ui.painter(), line2.translate(vec2(0.0, -2.0)), state_x, s, ink);
+    resp.on_hover_text(title)
+}
+
+/// A task's 3D pin where the model shows it: a marker on a short stem,
+/// the accent when its task is selected, amber when it needs the user.
+pub fn task_pin(ui: &mut egui::Ui, foot: Pos2, selected: bool, attention: bool) -> egui::Response {
+    let head = Rect::from_center_size(foot - vec2(0.0, 18.0), vec2(22.0, 22.0));
+    let resp = ui.interact(head.union(Rect::from_center_size(foot, vec2(4.0, 4.0))), ui.id().with(("task pin", foot.x as i32, foot.y as i32)), Sense::click());
+    let edge = if selected { ACCENT } else if attention { WARN } else { INK_2 };
+    let painter = ui.painter();
+    painter.line_segment([foot, head.center_bottom()], Stroke::new(MARKER_W, edge));
+    painter.circle_filled(foot, 2.5, edge);
+    painter.rect_filled(head, CornerRadius::same(R_ROW), if resp.hovered() { CARD_HOVER } else { WELL });
+    painter.rect_stroke(head, CornerRadius::same(R_ROW), Stroke::new(if selected { MARKER_W } else { 1.0 }, edge), egui::StrokeKind::Inside);
+    // A push pin: head, body, needle.
+    let c = head.center();
+    painter.line_segment([c + vec2(-4.0, -5.0), c + vec2(4.0, -5.0)], Stroke::new(1.4_f32, INK));
+    painter.add(egui::Shape::convex_polygon(vec![c + vec2(-2.5, -5.0), c + vec2(2.5, -5.0), c + vec2(4.0, 1.0), c + vec2(-4.0, 1.0)], INK, Stroke::NONE));
+    painter.line_segment([c + vec2(0.0, 1.0), c + vec2(0.0, 6.0)], Stroke::new(1.4_f32, INK));
+    resp
+}
+
 #[cfg(test)]
 mod interaction_tests {
     use super::*;

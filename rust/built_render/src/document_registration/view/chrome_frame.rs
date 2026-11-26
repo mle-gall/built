@@ -531,6 +531,7 @@ fn before_frame<'py>(a: &Args<'py>) -> Reply<'py> {
     direct(py, cluster, (&view, &win))?;
     direct(py, super::chrome_actions::form_fields, (&view, &win))?;
     render(py)?.call_method1("bind_deliveries", (&win,))?;
+    crate::tasks_host::tasks_before_frame(&view, &win)?;
     render(py)?.getattr("wgpu_library")?.call_method1("before_frame", (&view, &win))?;
     module.call_method1("_sync_project_rows", (&view, &win))?;
     render(py)?.call_method1("inspector_sync", (&view, &win))?;

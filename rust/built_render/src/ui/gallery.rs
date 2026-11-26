@@ -871,6 +871,16 @@ impl Gallery {
             });
             ui.label(egui::RichText::new("12 pages to Deliveries/Handover").font(meta()).color(DIM));
         });
+        // Agent tasks (Tasks destination): rows, a state chip, a pin and
+        // the setup command Settings › AI shows.
+        caption(ui, "Needs attention");
+        task_row(ui, "Align the backrest slats", "Codex · 3 changes", "To review", "warn", true);
+        task_row(ui, "Check clearance behind the bench", "Claude Code · no change", "Question", "warn", false);
+        task_row(ui, "Check sheet callouts", "Built-in assistant · no change", "Working", "dim", false);
+        status_chip(ui, "Done", task_tone("ok"));
+        let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 34.), egui::Sense::hover());
+        task_pin(ui, r.center_bottom() - vec2(0., 2.), true, false);
+        code_block(ui, "claude mcp add built -- \"/Applications/Built.app/Contents/MacOS/Built\" --mcp");
     }
 }
 

@@ -31,6 +31,9 @@ fn discover(py: Python<'_>) -> PyResult<Obj<'_>> {
     let panels = PyDict::new(py);
     panels.set_item("render_blender", "plugins._blender_panel")?;
     panels.set_item("python_console", "plugins.python_console")?;
+    // None: not loaded from their files. The assistant and the MCP bridge
+    // are not panels (their requests are tasks; their settings, Settings ›
+    // AI); the model tools come from plugins._native.
     for name in ["ai_assistant", "ai_bridge", "model_info", "solid_inspector"] {
         panels.set_item(name, py.None())?;
     }

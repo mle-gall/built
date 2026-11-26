@@ -462,7 +462,7 @@ const SECTIONS: &[(&str, &str, &str, &str)] = &[
         "mac",
         "Pick a command and change its keys. Changes apply at once.",
     ),
-    ("ai", "AI assistant", "mac", "Applies at once."),
+    ("ai", "AI", "mac", "The assistant's provider is kept on this Mac; model access applies to the model in front."),
     (
         "units",
         "Units",

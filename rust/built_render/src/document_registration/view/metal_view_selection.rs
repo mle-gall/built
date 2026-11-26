@@ -314,10 +314,16 @@ fn sync_selection<'py>(a: &Args<'py>) -> Reply<'py> {
     let np = py.import("numpy")?;
     let (tools, packed) = (view.getattr("tools")?, view.getattr("packed")?);
     let selected = view.getattr("scene")?.getattr("selection")?;
-    let hover = match attr(&view, "hover_rows")? {
+    let mut hover = match attr(&view, "hover_rows")? {
         rows if rows.is_truthy()? => positional(&rows)?,
         _ => PyTuple::empty(py),
     };
+    // A selected agent task lights the elements it changed (tasks_host.rs).
+    if let Some(rows) = crate::tasks_host::preview_rows(&view)? {
+        let mut lit: Vec<Obj<'_>> = hover.iter().collect();
+        lit.extend(rows.try_iter()?.collect::<PyResult<Vec<_>>>()?);
+        hover = PyTuple::new(py, lit)?;
+    }
     let faces = PyList::empty(py);
     for entity in selected.try_iter()? {
         let entity = entity?;

@@ -63,6 +63,10 @@ class _Bridge(InspectionTools, RecordTools, FacetTools, StructureTools,
             self._scope["notify"] = notify
         self.port: int | None = None
         self._busy = False
+        #: Connection → the MCP client's name, and the task it works on.
+        self._clients: dict[int, str] = {}
+        self._tasks: dict[int, str] = {}
+        self._clients_lock = threading.Lock()
         from core.agent_tools import BUILTIN_TOOLS, extension_registry, register
         self.registry = {}
         self._extension_tools = extension_registry(viewport.window() or viewport)
@@ -146,6 +150,17 @@ class _Bridge(InspectionTools, RecordTools, FacetTools, StructureTools,
                 continue
             except OSError:
                 return
+            # Several agents at once (Claude Code and Codex): each connection
+            # has its own reader; their calls still run one at a time on the
+            # UI thread.
+            threading.Thread(target=self._session, args=(conn, stop),
+                             name="built-ai-session", daemon=True).start()
+
+    def _session(self, conn, stop) -> None:
+        key = id(conn)
+        with self._clients_lock:
+            self._clients[key] = ""
+        try:
             with conn:
                 conn.settimeout(0.5)
                 buf = b""
@@ -159,11 +174,21 @@ class _Bridge(InspectionTools, RecordTools, FacetTools, StructureTools,
                     if not chunk:
                         break
                     buf += chunk
-                    if not self._drain(conn, buf):
+                    if not self._drain(conn, buf, key):
                         break
                     buf = buf[buf.rfind(b"\n") + 1:]
+        finally:
+            with self._clients_lock:
+                self._clients.pop(key, None)
+                self._tasks.pop(key, None)
 
-    def _drain(self, conn, buf: bytes) -> bool:
+    def clients(self) -> list[str]:
+        """The names of the MCP clients connected now."""
+        with self._clients_lock:
+            names = [n or tr("MCP client") for n in self._clients.values()]
+        return sorted(dict.fromkeys(names))
+
+    def _drain(self, conn, buf: bytes, key: int = 0) -> bool:
         """Answer every complete line in ``buf``. False when the connection
         must close: a line that is not a JSON request ends it, and nothing
         after it runs.
@@ -180,7 +205,7 @@ class _Bridge(InspectionTools, RecordTools, FacetTools, StructureTools,
         for line in lines:
             if not line.strip():
                 continue
-            reply = self._handle_line(line)
+            reply = self._handle_line(line, key)
             try:
                 conn.sendall(reply if reply is not None else _REFUSED)
             except OSError:
@@ -189,7 +214,7 @@ class _Bridge(InspectionTools, RecordTools, FacetTools, StructureTools,
                 return False
         return True
 
-    def _handle_line(self, line: bytes) -> bytes | None:
+    def _handle_line(self, line: bytes, key: int = 0) -> bytes | None:
         """The reply to one request line, or None if it is not a request."""
         try:
             req = json.loads(line)
@@ -197,7 +222,11 @@ class _Bridge(InspectionTools, RecordTools, FacetTools, StructureTools,
             return None
         if not isinstance(req, dict):
             return None
-        job = {"req": req, "done": threading.Event(), "reply": None}
+        client = req.get("client")
+        if isinstance(client, str) and client.strip():
+            with self._clients_lock:
+                self._clients[key] = client.strip()[:60]
+        job = {"req": req, "done": threading.Event(), "reply": None, "key": key}
         self._jobs.put(job)
         import time
         deadline = time.monotonic() + UI_CALL_TIMEOUT
@@ -254,16 +283,31 @@ class _Bridge(InspectionTools, RecordTools, FacetTools, StructureTools,
             entry = self.registry.get(tool) or self._extension_tools.get(tool)
             if entry is None:
                 raise ValueError(f"unknown tool {tool!r}")
+            if tool != "list_tools" and not getattr(self._viewport.scene, "_agent_access", False):
+                raise PermissionError(
+                    "Agents cannot edit this model. In Built, turn on Settings > AI > "
+                    "Allow agents to edit this model.")
             if (entry['mutates'] and tool not in ('set_active_file', 'open_project')
                     and not (tool == 'bootstrap_structure' and not args.get('apply'))
                     and getattr(self._viewport.scene, 'worksession_read_only', False)):
                 raise ValueError('Choose this file in Worksession before editing it')
-            from core.agent_tools import json_value
-            if entry["mutates"] and tool not in self.registry:
-                from core.ai import run_callable_transactional
-                result = run_callable_transactional(self._viewport, lambda: entry["fn"](**args))
-            else:
-                result = json_value(entry["fn"](**args))
+            from core.agent_tools import TASK_TOOLS, json_value
+            self._key = job.get("key", 0)
+            task = (self._task_for_edit() if entry["mutates"] and tool not in TASK_TOOLS
+                    and tool not in ("undo", "redo") else None)
+            import built_render
+            marker = built_render.task_edit_begin(win) if task else None
+            try:
+                if entry["mutates"] and tool not in self.registry:
+                    from core.ai import run_callable_transactional
+                    result = run_callable_transactional(self._viewport, lambda: entry["fn"](**args))
+                else:
+                    result = json_value(entry["fn"](**args))
+            finally:
+                if task:
+                    built_render.task_edit_end(win, task, marker)
+            if task and isinstance(result, dict):
+                result.setdefault("task", task)
             cancel_new_dialogs()
             if refused and isinstance(result, dict):
                 result["dialogs_cancelled"] = refused
@@ -283,6 +327,55 @@ class _Bridge(InspectionTools, RecordTools, FacetTools, StructureTools,
                                inputSchema=e["input_schema"],
                                annotations={"readOnlyHint": not e["mutates"]})
                           for name, e in (self.registry | self._extension_tools).items()]}
+
+    # ---- Tasks -------------------------------------------------------------------
+    def _client_name(self):
+        with self._clients_lock:
+            return self._clients.get(getattr(self, "_key", 0)) or tr("MCP client")
+
+    def _task_for_edit(self):
+        """The task this connection's edit belongs to: the one it opened,
+        else a new one, so every external edit is reviewable."""
+        import built_render
+        win = self._viewport.window()
+        key = getattr(self, "_key", 0)
+        guid = self._tasks.get(key)
+        if guid:
+            try:
+                if json.loads(built_render.task_get(win, guid))["state"] in ("working", "waiting", "question"):
+                    return guid
+            except ValueError:
+                pass
+        name = self._client_name()
+        guid = built_render.task_new(win, tr("Changes from {name}", name=name), "", name, "agent", name, False, True)
+        self._tasks[key] = guid
+        return guid
+
+    def _tool_task_create(self, title="", description="", pin=False):
+        import built_render
+        name = self._client_name()
+        guid = built_render.task_new(self._viewport.window(), title, description, name, "agent", name, bool(pin), True)
+        self._tasks[getattr(self, "_key", 0)] = guid
+        return {"guid": guid, "state": "working"}
+
+    def _tool_task_update(self, guid="", state="working", message=""):
+        import built_render
+        win = self._viewport.window()
+        new = built_render.task_report(win, guid, state, message, self._client_name())
+        key = getattr(self, "_key", 0)
+        if new in ("working", "waiting", "question"):
+            self._tasks[key] = guid      # its edits go to this task again
+        elif self._tasks.get(key) == guid:
+            self._tasks.pop(key, None)
+        return json.loads(built_render.task_get(win, guid))
+
+    def _tool_task_list(self, settled=False):
+        import built_render
+        return {"tasks": json.loads(built_render.task_list(self._viewport.window(), bool(settled)))}
+
+    def _tool_task_get(self, guid=""):
+        import built_render
+        return json.loads(built_render.task_get(self._viewport.window(), guid))
 
     # ---- Tools ---------------------------------------------------------------
     def _tool_run_python(self, code: str = "") -> dict:
@@ -516,6 +609,42 @@ def _bridge_of(viewport) -> _Bridge:
         window._ai_bridge = bridge
         window._extension_closed.connect(bridge.stop)
     return bridge
+
+
+def sync_access(win):
+    """Listen while one of the window's documents lets agents edit it
+    (Settings > AI); stop when none does, which ends their access."""
+    viewports = win.all_viewports() if hasattr(win, "all_viewports") else [win.viewport]
+    wanted = any(getattr(vp.scene, "_agent_access", False) for vp in viewports)
+    bridge = getattr(win, "_ai_bridge", None)
+    if wanted:
+        bridge = _bridge_of(win.viewport)
+        if not bridge.running:
+            from plugins._mcp_endpoint import native_private_transport
+            bridge.start(private=native_private_transport())
+    elif bridge is not None and bridge.running:
+        bridge.stop()
+
+
+#: The agents Settings > AI shows a setup for.
+CLIENTS = ("Claude Code", "Codex", "T3 Code")
+
+
+def setup_command(client: str, platform: str | None = None, **kw) -> tuple[str, str]:
+    """(what to run in a terminal so `client` starts Built's MCP server, a
+    note on where). The native app is its own server (``--mcp``)."""
+    if "built_shell" in sys.builtin_module_names and not kw:
+        cmd = [sys.executable, "--mcp"]
+    else:
+        cmd = mcp_command(platform, **kw)
+    quoted = " ".join(f'"{c}"' if " " in c else c for c in cmd)
+    note = tr("Run it in the same account as Built, then restart the agent's session.")
+    if client == "Codex":
+        return f"codex mcp add built -- {quoted}", note
+    if client == "T3 Code":
+        return (f"claude mcp add built -- {quoted}\ncodex mcp add built -- {quoted}",
+                tr("T3 Code runs Claude Code or Codex: add Built to the provider you use, then start a new thread."))
+    return f"claude mcp add built -- {quoted}", note
 
 
 class BridgeSection:

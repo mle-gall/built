@@ -82,6 +82,8 @@ mod report_sheets;
 mod inspector_host;
 mod shell_events;
 mod deliveries_host;
+pub(crate) mod tasks;
+mod tasks_host;
 mod sheet_runtime;
 mod settings_rows;
 mod settings_host;
@@ -2915,6 +2917,15 @@ impl Renderer {
     }
     fn ui_show_destination(&mut self, name: &str) {
         if let Some(ui) = self.ui.as_mut() { ui.show_destination(name); }
+    }
+    /// The Tasks composer, focused (⌘K "Ask an agent…").
+    fn ui_compose_task(&mut self) {
+        if let Some(ui) = self.ui.as_mut() { ui.compose_task(); }
+    }
+    /// Pinned tasks where the model shows them: (guid, x, y, selected,
+    /// needs attention) in window points.
+    fn ui_set_task_pins(&mut self, pins: Vec<(String, f32, f32, bool, bool)>) {
+        if let Some(ui) = self.ui.as_mut() { ui.set_task_pins(pins); }
     }
 
     fn ui_set_dock_width(&mut self, width: f32) {
