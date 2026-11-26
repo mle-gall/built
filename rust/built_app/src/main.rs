@@ -286,8 +286,8 @@ struct Win {
 }
 
 /// `BUILT_PERF=1`: pointer-move, wheel (slide, notch) and gesture (pinch,
-/// rotate) handler times and frame times, reported (and
-/// reset) by each scripted `state` step.
+/// rotate) handler times, scripted key/click/command step times and frame
+/// times, reported (and reset) by each scripted `state` step.
 mod perf {
     use std::sync::Mutex;
     use std::time::Instant;
@@ -324,7 +324,7 @@ mod perf {
         }
         let samples = std::mem::take(&mut *SAMPLES.lock().unwrap());
         let mut parts = Vec::new();
-        for what in ["move_ms", "wheel_ms", "gesture_ms", "frame_ms", "py_frame_ms", "gpu_ms", "open_stall_ms", "open_total_ms", "open_handover_ms"] {
+        for what in ["move_ms", "wheel_ms", "gesture_ms", "step_ms", "frame_ms", "py_frame_ms", "gpu_ms", "open_stall_ms", "open_total_ms", "open_handover_ms"] {
             let mut v: Vec<f64> = samples.iter().filter(|(w, _)| *w == what).map(|(_, x)| *x).collect();
             if v.is_empty() {
                 continue;
@@ -703,6 +703,9 @@ impl App {
         if !matches!(step, Step::Move(..) | Step::Wait(_) | Step::Wheel(..) | Step::Notch(..) | Step::Pinch(..) | Step::Pan2(..)) {
             self.flush_move(id, true);
         }
+        // BUILT_PERF: how long a key, click or command step took to handle
+        // (the frame after it is timed apart, as frame_ms).
+        let handled = matches!(step, Step::Key(..) | Step::Click(..) | Step::Double(..) | Step::Menu(..) | Step::Drag { .. }).then(Instant::now);
         match step {
             Step::Open(p) => {
                 self.open(&absolute(Path::new(&p)));
@@ -857,6 +860,9 @@ impl App {
                 perf::report();
             }
             Step::Quit => event_loop.exit(),
+        }
+        if let Some(t0) = handled {
+            perf::note("step_ms", t0);
         }
         if self.steps.is_empty() && self.resume_at.is_none() {
             self.print_state();
