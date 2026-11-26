@@ -61,16 +61,24 @@ fn groups_in<'py>(py: Python<'py>, sel: &[Bound<'py, PyAny>]) -> PyResult<Vec<Bo
     Ok(sel.iter().filter(|e| e.is_instance(&cls).unwrap_or(false)).cloned().collect())
 }
 
-/// The selection's records, assembly and filing rule, sent when what the
-/// inspector shows changed.
+/// Match the focus stamp used by the project tree and inspector.
+fn selection_stamp<'py>(scene: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    let selection = scene.getattr("selection")?;
+    if selection.len()? == 0 {
+        Ok(0i64.into_pyobject(scene.py())?.into_any())
+    } else {
+        selection.getattr("revision")
+    }
+}
+
 fn selection(view: &Bound<'_, PyAny>, win: &Bound<'_, PyAny>) -> PyResult<()> {
     let py = view.py();
     let scene = win.getattr("viewport")?.getattr("scene")?;
     let sel: Vec<Bound<'_, PyAny>> = scene.getattr("selection")?.try_iter()?.collect::<PyResult<_>>()?;
     let focus = opt(view, "_ui_insp_node").filter(|f| f.is_truthy().unwrap_or(false));
-    let ends = PyTuple::new(py, [sel.len(), sel.first().map_or(0, id_of), sel.last().map_or(0, id_of)])?;
+    let stamp = selection_stamp(&scene)?;
     let focused = match &focus {
-        Some(f) => f.get_item(1)?.eq(&ends)?,
+        Some(f) => f.get_item(1)?.eq(&stamp)?,
         None => false,
     };
     let delivery_key = opt(view, "_delivery_key");
@@ -114,6 +122,14 @@ fn selection(view: &Bound<'_, PyAny>, win: &Bound<'_, PyAny>) -> PyResult<()> {
                 record.set_item("editable",false)?;
                 for field in record.get_item("fields")?.try_iter()? {field?.set_item("editable",false)?;}
             }
+            let structure = py.import("built_core.structure")?;
+            let node = structure.call_method1("node_of", (g,))?;
+            if structure.call_method1("_nodes", (&registry,))?.contains(&node)? {
+                record.set_item("node", &node)?;
+                record.set_item("node_path", structure.call_method1("path", (&registry, &node))?)?;
+                let recipe = structure.call_method1("resolve", (&registry, &node))?;
+                record.set_item("classes_allowed", recipe.call_method1("get", ("classes_allowed",))?)?;
+            }
             let old = g.getattr("ifc")?;
             if !old.is_none() {
                 let effective = py.import("core.record")?.call_method1("apply_type", (&old,&registry))?;
@@ -143,6 +159,7 @@ fn selection(view: &Bound<'_, PyAny>, win: &Bound<'_, PyAny>) -> PyResult<()> {
         if source.is_truthy()? && !source.contains("source")? {
             let r = PyDict::new(py);
             r.set_item("node", &node)?;
+            r.set_item("focused", focused)?;
             r.set_item("name", source.get_item("name")?)?;
             r.set_item("recipe", source.call_method1("get", ("recipe", PyDict::new(py)))?)?;
             rule = r.into_any();
@@ -455,6 +472,11 @@ fn record_edit(view: &Bound<'_, PyAny>, vp: &Bound<'_, PyAny>, verb:&str, v: &Bo
 
 fn rule_edit(view: &Bound<'_, PyAny>, vp: &Bound<'_, PyAny>, verb: &str, v: &Bound<'_, PyAny>) -> PyResult<()> {
     let py = view.py();
+    if verb == "open" {
+        let scene = vp.getattr("scene")?;
+        view.setattr("_ui_insp_node", (v, selection_stamp(&scene)?))?;
+        return Ok(());
+    }
     let (node, expected, recipe) = (v.get_item(0)?, v.get_item(1)?, v.get_item(2)?);
     if verb == "preview" {
         let kwargs = [("expected", &expected)].into_py_dict(py)?;

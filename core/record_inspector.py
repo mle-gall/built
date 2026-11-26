@@ -12,7 +12,7 @@ def vocabulary(registry):
     favourites = list(dict.fromkeys(entry["class"] for group in registry.get("tag_sets", {}).values()
                                     if group.get("default") for entry in group.get("classes", ())))
     return {
-        "favourites": favourites or bim_registry.ordered_classes(registry),
+        "favourites": favourites,
         "classes": {k: {p: v[p] for p in ("domain", "schemas", "predefined_types")} for k, v in TABLES.items()},
         "systems": registry.get("systems", {}),
         "classifications": registry.get("classification_systems", {}),
@@ -54,6 +54,18 @@ def edit(history, paths, action, values, schema):
                     raise ValueError("This field comes from a filing node")
             if "class" in patch and rule.get("classes_allowed") is not None and patch["class"] not in rule["classes_allowed"]:
                 raise ValueError("Class is outside the filing rule allowlist")
+            if "class" in patch and effective.get("predefined_type"):
+                valid_types = TABLES.get(patch["class"], {}).get("predefined_types", {}).get(schema, ())
+                if effective["predefined_type"] not in valid_types:
+                    patch.setdefault("predefined_type", None)
+        elif action == "quantity":
+            key, value = values
+            if not isinstance(key, str) or not key.strip():
+                raise ValueError("Enter a quantity name")
+            quantities = deepcopy(effective.get("quantities", {}))
+            entry = quantities.setdefault(key, {})
+            entry.update(value=value, source="manual")
+            patch = {"quantities": quantities}
         elif action == "system":
             key, member = values
             if key not in registry.get("systems", {}) or type(member) is not bool:
@@ -75,8 +87,8 @@ def edit(history, paths, action, values, schema):
             patch = {"classifications": rows}
         else:
             raise ValueError("Unknown record action")
-        if not old:
-            patch.setdefault("class", "IfcWall")
+        if not effective.get("class") and not patch.get("class"):
+            raise ValueError("Choose an IFC class first")
         errors = record.validate(record.apply_type({**old, **patch}, registry), registry, schema)
         if errors:
             raise ValueError("\n".join(errors))

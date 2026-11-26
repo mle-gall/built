@@ -1,4 +1,5 @@
 use super::{label, send};
+use crate::ui::{kit, tokens};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
 
@@ -12,7 +13,6 @@ pub(super) struct Records {
     property_name: String,
     property_value: String,
     property_kind: String,
-    pending: Option<Value>,
     error: String,
 }
 #[derive(Default)]
@@ -23,6 +23,7 @@ pub(super) struct Row {
     owner: String,
     targets: Vec<String>,
     draft: String,
+    editing: bool,
     kind: String,
 }
 
@@ -72,40 +73,60 @@ impl Records {
         result
     }
 
-    pub fn draw(&mut self, ui: &mut egui::Ui, out: &mut Vec<String>) {
-        self.editor.draw(ui,out);
-        ui.weak("Edit a value and press Enter");
-        let mut ordered: Vec<_> = self.rows.iter_mut().collect();
-        ordered.sort_by_key(|(path, _)| match path[0].as_str() {
-            "class" => 0,
-            "predefined_type" => 1,
-            "type" => 2,
-            "psets" => 3,
-            "classifications" => 4,
-            _ => 5,
+    pub fn draw(
+        &mut self,
+        ui: &mut egui::Ui,
+        out: &mut Vec<String>,
+        layers: &mut Vec<egui::Id>,
+        measured: &[(String, String)],
+    ) {
+        kit::disclosure(ui, "record identity", "Identity", true, |ui| {
+            self.editor.identity(ui, out, layers)
         });
-        for (path, r) in ordered {
+        let ready = self.editor.ready();
+        kit::disclosure(ui, "record psets", "Property sets", false, |ui| {
+            ui.add_enabled_ui(ready, |ui| self.properties(ui, out))
+        });
+        kit::disclosure(ui, "record quantities", "Quantities", false, |ui| {
+            for (unit, total) in measured {
+                kit::prop_row(ui, &format!("Measured · {unit}"), total);
+            }
+            ui.add_enabled_ui(ready && !self.writable.is_empty(), |ui| {
+                self.editor.quantities(ui, out)
+            })
+        });
+        kit::disclosure(
+            ui,
+            "record classifications",
+            "Classifications",
+            false,
+            |ui| {
+                ui.add_enabled_ui(ready && !self.writable.is_empty(), |ui| {
+                    self.editor.classifications(ui, out)
+                })
+            },
+        );
+    }
+    fn properties(&mut self, ui: &mut egui::Ui, out: &mut Vec<String>) {
+        for (path, r) in self
+            .rows
+            .iter_mut()
+            .filter(|(path, _)| path.first().is_some_and(|s| s == "psets"))
+        {
             ui.push_id(path, |ui| {
                 ui.horizontal_wrapped(|ui| {
-                    let title = match path[0].as_str() {
-                        "class" => "IFC class".to_owned(),
-                        "predefined_type" => "Predefined type".to_owned(),
-                        "object_type" => "Object type".to_owned(),
-                        "psets" | "classifications" => path[1..].join(" › "),
-                        field => field.to_owned(),
-                    };
+                    let title = path[1..].join(" › ");
                     ui.strong(title);
-                    ui.add_space(7.0);
+                    ui.add_space(tokens::SPACE_S);
                     ui.weak(&r.owner);
-                    ui.add_space(4.0);
+                    ui.add_space(tokens::SPACE_XS);
                     if path[0] == "psets"
                         && r.owner == "This object"
-                        && ui
-                            .small_button("Reset")
+                        && kit::quiet(ui, "Reset")
                             .on_hover_text("Restore inherited value")
                             .clicked()
                     {
-                        self.pending = Some(json!([r.targets, path, Value::Null]));
+                        send(out, "record.patch", json!([r.targets, path, Value::Null]));
                     }
                 });
                 if r.targets.is_empty() {
@@ -113,11 +134,27 @@ impl Records {
                     return;
                 }
                 let response = ui.add(
-                    egui::TextEdit::singleline(&mut r.draft)
+                    kit::field(&mut r.draft)
                         .desired_width(ui.available_width())
                         .hint_text(if r.mixed { "Mixed" } else { "Enter value" }),
                 );
-                if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                r.editing |= response.changed();
+                if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                    r.draft = if r.mixed {
+                        String::new()
+                    } else {
+                        r.value
+                            .as_str()
+                            .map(str::to_owned)
+                            .unwrap_or_else(|| r.value.to_string())
+                    };
+                    r.editing = false;
+                }
+                if r.editing
+                    && response.lost_focus()
+                    && ui
+                        .input(|i| i.key_pressed(egui::Key::Enter) || i.key_pressed(egui::Key::Tab))
+                {
                     let val = match r.kind.as_str() {
                         "text" | "label" | "enum" => Some(json!(r.draft)),
                         "boolean" => r.draft.parse::<bool>().ok().map(Value::Bool),
@@ -130,14 +167,17 @@ impl Records {
                             .map(Value::from),
                     };
                     if let Some(v) = val {
+                        r.editing = false;
                         self.error.clear();
-                        if self.total > 1 {
-                            self.pending = Some(json!([r.targets, path, v]));
+                        let targets = if r.targets.len() == r.count {
+                            &self.writable
                         } else {
-                            send(out, "record.patch", json!([r.targets, path, v]));
-                        }
+                            &r.targets
+                        };
+                        send(out, "record.patch", json!([targets, path, v, r.kind]));
                     } else {
                         self.error = format!("Enter a {} value", r.kind);
+                        response.request_focus();
                     }
                 }
             });
@@ -146,25 +186,44 @@ impl Records {
             ui.label(&self.error);
         }
         if !self.writable.is_empty() {
-            ui.collapsing("Add property", |ui| {
-                ui.add(egui::TextEdit::singleline(&mut self.set_name).hint_text("Property set"));
-                ui.add(
-                    egui::TextEdit::singleline(&mut self.property_name).hint_text("Property name"),
-                );
-                egui::ComboBox::from_label("Property kind").selected_text(if self.property_kind.is_empty() { "Automatic" } else { &self.property_kind }).show_ui(ui, |ui| {
-                    for kind in ["", "text", "label", "enum", "boolean", "integer", "real", "length", "area", "volume"] {
-                        ui.selectable_value(&mut self.property_kind, kind.into(), if kind.is_empty() { "Automatic" } else { kind });
+            kit::disclosure(ui, "add property", "Add property", false, |ui| {
+                ui.add(kit::field(&mut self.set_name).hint_text("Property set"));
+                ui.add(kit::field(&mut self.property_name).hint_text("Property name"));
+                let kinds = [
+                    "Automatic",
+                    "text",
+                    "label",
+                    "enum",
+                    "boolean",
+                    "integer",
+                    "real",
+                    "length",
+                    "area",
+                    "volume",
+                ];
+                kit::property_control(ui, "Property kind", |ui| {
+                    let value = if self.property_kind.is_empty() {
+                        kinds[0]
+                    } else {
+                        &self.property_kind
+                    };
+                    if let (Some(index), _) = kit::select(ui, "property kind", value, &kinds) {
+                        self.property_kind = if index == 0 {
+                            String::new()
+                        } else {
+                            kinds[index].into()
+                        };
                     }
                 });
                 ui.add(
-                    egui::TextEdit::singleline(&mut self.property_value)
-                        .hint_text("Text, number, or true / false"),
+                    kit::field(&mut self.property_value).hint_text("Text, number, or true / false"),
                 );
                 if ui
-                    .add_enabled(
+                    .add_enabled_ui(
                         !self.set_name.trim().is_empty() && !self.property_name.trim().is_empty(),
-                        egui::Button::new("Preview addition"),
+                        |ui| kit::quiet(ui, "Add property"),
                     )
+                    .inner
                     .clicked()
                 {
                     let path = vec![
@@ -183,41 +242,24 @@ impl Records {
                             _ => ("text", json!(raw)),
                         };
                         self.error.clear();
-                        let (kind,value) = match self.property_kind.as_str() {
-                            "" => (kind,value),
-                            k @ ("text"|"label"|"enum") => (k,json!(raw)),
-                            k @ ("real"|"length"|"area"|"volume") if value.is_number() => (k,value),
-                            k if k==kind => (k,value),
-                            k => {self.error=format!("Enter a {k} value");return;}
+                        let (kind, value) = match self.property_kind.as_str() {
+                            "" => (kind, value),
+                            k @ ("text" | "label" | "enum") => (k, json!(raw)),
+                            k @ ("real" | "length" | "area" | "volume") if value.is_number() => {
+                                (k, value)
+                            }
+                            k if k == kind => (k, value),
+                            k => {
+                                self.error = format!("Enter a {k} value");
+                                return;
+                            }
                         };
-                        self.pending = Some(json!([self.writable, path, value, kind]));
+                        send(
+                            out,
+                            "record.patch",
+                            json!([self.writable, path, value, kind]),
+                        );
                     }
-                }
-            });
-        }
-        if let Some(request) = self.pending.clone() {
-            ui.separator();
-            let path = request[1]
-                .as_array()
-                .into_iter()
-                .flatten()
-                .map(label)
-                .collect::<Vec<_>>()
-                .join(" › ");
-            let n = request[0].as_array().map_or(0, Vec::len);
-            let value = if request[2].is_null() {
-                "inherited value".into()
-            } else {
-                request[2].to_string()
-            };
-            ui.label(format!("{path} → {value} · {n} of {} objects", self.total));
-            ui.horizontal(|ui| {
-                if ui.button("Apply patch").clicked() {
-                    send(out, "record.patch", request);
-                    self.pending = None;
-                }
-                if ui.button("Cancel").clicked() {
-                    self.pending = None;
                 }
             });
         }
