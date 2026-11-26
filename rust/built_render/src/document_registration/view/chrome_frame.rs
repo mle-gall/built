@@ -446,6 +446,29 @@ fn sync_units<'py>(a: &Args<'py>) -> Reply<'py> {
     Ok(none(py))
 }
 
+/// Resolve the current gesture and its temporary message together for this frame.
+fn sync_tool_status(view: &Obj, win: &Obj) -> PyResult<()> {
+    let py = view.py();
+    crate::native_view_actions::tool_hint(win)?;
+    let bar = win.call_method0("statusBar")?;
+    let mut base = "".into_bound_py_any(py)?;
+    if !bar.is_none() {
+        for candidate in [attr(&bar, "_base")?, bar.call_method0("currentMessage")?] {
+            if candidate.is_truthy()? {
+                base = candidate;
+                break;
+            }
+        }
+    }
+    let [name, _, mut hint] = unpack::<3>(&base.call_method1("partition", (" — ",))?)?;
+    let timer = attr(&bar, "_timer")?;
+    if !timer.is_none() && timer.call_method0("isActive")?.is_truthy()? {
+        hint = bar.getattr("flash")?;
+    }
+    render(py)?.call_method1("sync_status_readout", (view, name, hint))?;
+    Ok(())
+}
+
 /// Mirror the window's state into the chrome (cheap: a few dict reads).
 fn before_frame<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
@@ -487,22 +510,7 @@ fn before_frame<'py>(a: &Args<'py>) -> Reply<'py> {
         }
     }
     renderer.call_method1("ui_set_active", (&active,))?;
-    let bar = win.call_method0("statusBar")?;
-    let mut base = "".into_bound_py_any(py)?;
-    if !bar.is_none() {
-        for candidate in [attr(&bar, "_base")?, bar.call_method0("currentMessage")?] {
-            if candidate.is_truthy()? {
-                base = candidate;
-                break;
-            }
-        }
-    }
-    let [name, _, mut hint] = unpack::<3>(&base.call_method1("partition", (" — ",))?)?;
-    let timer = attr(&bar, "_timer")?;
-    if !timer.is_none() && timer.call_method0("isActive")?.is_truthy()? {
-        hint = bar.getattr("flash")?;
-    }
-    render(py)?.call_method1("sync_status_readout", (&view, name, hint))?;
+    sync_tool_status(&view, &win)?;
     module.call_method1("_sync_units", (&view, win.getattr("viewport")?.getattr("history")?))?;
     module.call_method1("_cursor_value", (&view, &win))?;
     module.call_method1("_selection", (&view, &win, &active))?;
@@ -529,19 +537,7 @@ fn before_frame<'py>(a: &Args<'py>) -> Reply<'py> {
 /// The native name of the key the tools call Ctrl (⌘ on the Mac).
 pub(super) fn ctrl<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let module = ui(py)?;
-    let known = module.getattr("_CTRL")?;
-    if !known.is_none() {
-        return Ok(known);
-    }
-    let text: String = module.call_method1("shortcut_text", ("Ctrl+A",))?.get_item(1)?.extract()?;
-    let mut name: Vec<char> = text.chars().collect();
-    name.pop();
-    let name: String = name.into_iter().collect();
-    let name = name.trim_matches('+');
-    let name = if name.is_empty() { "Ctrl" } else { name };
-    module.setattr("_CTRL", name)?;
-    name.into_bound_py_any(py)
+    crate::shortcut_text::modifier_text("Ctrl").into_bound_py_any(py)
 }
 
 /// (id, label, key, state, toggle) for the active tool's strip. Each toggle
@@ -654,6 +650,31 @@ fn chrome_offset(display: &Obj<'_>) -> PyResult<(f64, f64)> {
     }
 }
 
+/// Label the parsed entry before translation, so its on-canvas readback
+/// keeps the same caption and units after the tool clears its buffer.
+fn typed_pill(py: Python, caption: &str, buffer: &str, value: String) -> PyResult<(String, String)> {
+    let units = py.import("built_core.units")?;
+    let parsed = units.call_method1("parse_value_box", (buffer,))?;
+    let tag = parsed.cast::<PyTuple>().ok()
+        .and_then(|tuple| tuple.get_item(0).ok())
+        .and_then(|item| item.extract::<String>().ok());
+    Ok(match tag.as_deref() {
+        Some("array") if parsed.len()? == 3 && parsed.get_item(2)?.eq("x")? =>
+            ("Copies".into(), format!("{}×", parsed.get_item(1)?)),
+        Some("array") => ("Copies".into(), value),
+        Some("segments") => ("Segments".into(), value),
+        Some("radius") => ("Radius".into(), value),
+        Some("profile") => ("Profile".into(), value),
+        Some("ratio") if caption == "Angle" => {
+            let angle = units.call_method1("fmt_angle_deg", (parsed.get_item(1)?,))?;
+            (caption.into(), format!("{buffer} ({angle})"))
+        }
+        None if caption == "Angle" && parsed.extract::<f64>().is_ok() =>
+            (caption.into(), format!("{}°", buffer.trim())),
+        _ => (caption.into(), value),
+    })
+}
+
 /// The value field on the geometry (Maxence 2026-11-22), drawn and kept by
 /// the chrome (ui/value_field.rs): the tool's caption, the value where the
 /// tool shows it (`_length_label_at`), the tool's start on screen and the
@@ -686,11 +707,22 @@ fn cursor_value<'py>(a: &Args<'py>) -> Reply<'py> {
         direct(py, lens_value, (&view, &tools, &revision))?;
         return Ok(none(py));
     }
+    let buffer: String = attr(&tools, "value_buffer")?.extract::<Option<String>>()?.unwrap_or_default();
+    let typing = !buffer.is_empty();
+    let caption = caption.extract::<Option<String>>()?.unwrap_or_default();
+    let value = if label.is_none() {
+        render(py)?.call_method1("pending_tool_value", (&tool, &buffer))?.extract::<String>()?
+    } else {
+        label.get_item(0)?.extract::<String>()?
+    };
+    let (caption, value) = if typing && !caption.is_empty() {
+        typed_pill(py, &caption, &buffer, value)?
+    } else {
+        (caption, value)
+    };
+    let shown = tr.call1((&caption,))?;
     if at.is_none() {
-        let buffer = tools.getattr_opt("value_buffer")?.unwrap_or("".into_bound_py_any(py)?);
-        let value = render(py)?.call_method1("pending_tool_value", (&tool, buffer))?;
-        let typing = value.is_truthy()?;
-        let shown = if caption.is_truthy()? && typing { tr.call1((&caption,))? } else { "".into_bound_py_any(py)? };
+        let shown = if typing { shown } else { "".into_bound_py_any(py)? };
         renderer.call_method1("ui_set_cursor_value", (shown, &value, typing, py.None(), py.None(), py.None(), &revision))?;
         return Ok(none(py));
     }
@@ -712,7 +744,7 @@ fn cursor_value<'py>(a: &Args<'py>) -> Reply<'py> {
         None => None,
     };
     let (x, y) = xy(&at)?;
-    renderer.call_method1("ui_set_cursor_value", (tr.call1((&caption,))?, label.get_item(0)?, label.get_item(2)?, x, y - 22.0, start, &revision))?;
+    renderer.call_method1("ui_set_cursor_value", (shown, &value, typing, x, y - 22.0, start, &revision))?;
     Ok(none(py))
 }
 

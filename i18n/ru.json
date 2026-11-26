@@ -1,4 +1,9 @@
 {
+ "Click the first corner. Arrows pick the plane.": "Щёлкните первый угол. Стрелками выберите плоскость.",
+ "Click the start of the angle.": "Щёлкните начальную точку угла.",
+ "Click the end, or type degrees and Enter.": "Щёлкните конечную точку или введите градусы и нажмите Enter.",
+ "Press Enter to apply.": "Нажмите Enter для применения.",
+ "Type 3x or /3, then Enter.": "Введите 3x или /3 и нажмите Enter.",
  "Import .rfa family": "Импортировать семейство .rfa",
  "Import .dxf": "Импортировать .dxf",
  "Import .dwg": "Импортировать .dwg",

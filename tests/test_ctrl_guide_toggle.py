@@ -236,7 +236,9 @@ def test_the_status_bar_keeps_the_ctrl_clause_up(native_window):
     for _ in range(3):
         seen.append(win.statusBar()._base)
         _tap(tool, vp)
-    assert all("Ctrl =" in t for t in seen)
+    from built_render import shortcut_text
+    command = shortcut_text("Ctrl+A")[1].removesuffix("A").rstrip("+")
+    assert all(f"{command} =" in t for t in seen)
     assert len(set(seen)) == 3, "the clause must change with the mode"
     assert seen[0].index("[") < seen[1].index("[") < seen[2].index("[")
 

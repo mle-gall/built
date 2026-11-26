@@ -1,4 +1,9 @@
 {
+ "Click the first corner. Arrows pick the plane.": "點擊第一個角點。方向鍵選擇平面。",
+ "Click the start of the angle.": "點擊角的起點。",
+ "Click the end, or type degrees and Enter.": "點擊終點，或輸入度數並按 Enter。",
+ "Press Enter to apply.": "按 Enter 套用。",
+ "Type 3x or /3, then Enter.": "輸入 3x 或 /3，再按 Enter。",
  "Import .rfa family": "匯入 .rfa 族",
  "Import .dxf": "匯入 .dxf",
  "Import .dwg": "匯入 .dwg",

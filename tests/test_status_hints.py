@@ -4,6 +4,8 @@
 2026-09-15: a strip of every shortcut at once «no es bueno»)."""
 from __future__ import annotations
 
+import pytest
+
 from built_core import Vec3 as QVector3D
 
 from tools.arc import ArcTool
@@ -49,3 +51,49 @@ def test_every_registered_tool_has_a_hint(native_window):
     assert win.statusBar().currentMessage().startswith("Line — Click the start point")
     win._activate_nav("orbit")
     assert win.statusBar().currentMessage().startswith("Orbit — Drag to orbit")
+
+
+@pytest.mark.parametrize("key, attr, expected", [
+    ("rectangle", "start_point", "Click the opposite corner"),
+    ("line", "start_point", "Click the end point"),
+    ("offset", "dragging", "Move to set the offset"),
+    ("pushpull", "dragging", "Move, or type the distance"),
+    ("rotate", "start_point", "Click the start of the angle"),
+])
+def test_gesture_reaches_the_displayed_bar(native_window, monkeypatch, key, attr, expected):
+    from unittest.mock import MagicMock
+    from views import wgpu_ui
+    win = native_window
+    win._activate_tool(key)
+    setattr(win.viewport.active_tool, attr, True if attr == "dragging" else QVector3D())
+    renderer = MagicMock()
+    monkeypatch.setattr(win.view, "renderer", renderer)
+    wgpu_ui.attach(win.view)
+    wgpu_ui.before_frame(win.view)
+    assert expected in renderer.ui_set_status.call_args.args[1]
+    win.view.tools._set_value_buffer("30")
+    wgpu_ui.before_frame(win.view)
+    assert "Enter to apply" in renderer.ui_set_status.call_args.args[1]
+
+
+@pytest.mark.parametrize("source,target", [
+    ("followme", "offset"), ("fillet", "outer_shell"),
+    ("fillet", "tape"), ("fillet", "protractor"),
+])
+def test_tool_messages_end_on_switch(native_window, source, target):
+    win = native_window
+    win._activate_tool(source)
+    win.viewport.flash_status("Previous tool message")
+    win._activate_tool(target)
+    assert HINTS[target]["idle"] in win.statusBar().currentMessage()
+
+
+def test_bar_uses_menu_modifier_names_and_omits_chipped_options(native_window):
+    from built_render import shortcut_text
+    win = native_window
+    win._activate_tool("select")
+    assert shortcut_text("Ctrl+A")[1].removesuffix("A").rstrip("+") in win.statusBar().currentMessage()
+    for key in ("rectangle", "pushpull"):
+        win._activate_tool(key)
+        assert "base" not in win.statusBar().currentMessage()
+        assert "centre" not in win.statusBar().currentMessage()

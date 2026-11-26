@@ -1,4 +1,9 @@
 {
+ "Click the first corner. Arrows pick the plane.": "最初の角をクリック。矢印キーで平面を選択。",
+ "Click the start of the angle.": "角度の始点をクリック。",
+ "Click the end, or type degrees and Enter.": "終点をクリックするか、角度を入力して Enter。",
+ "Press Enter to apply.": "Enter で適用。",
+ "Type 3x or /3, then Enter.": "3x または /3 を入力して Enter。",
  "Import .rfa family": ".rfa ファミリを読み込む",
  "Import .dxf": ".dxf を読み込む",
  "Import .dwg": ".dwg を読み込む",

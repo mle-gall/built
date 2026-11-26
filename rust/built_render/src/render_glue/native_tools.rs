@@ -1637,29 +1637,6 @@ impl NativeTools {
         s.getattr("mode")
     }
 
-    /// Synchronize an explicitly chosen tool and adopt a hovered Tape origin.
-    fn pick_up(slf: &Bound<'_, Self>) -> PyResult<()> {
-        let s = slf.as_any();
-        if !s.call_method0("sync")?.eq("tape")? {
-            return Ok(());
-        }
-        let view = s.getattr("view")?;
-        let source = view.getattr("source_viewport")?;
-        let tool = s.getattr("tool")?;
-        let started = if !view.hasattr("_host")? && view.hasattr("winId")? {
-            tool.call_method1("start_from_hover", (source,))?.is_truthy()?
-        } else {
-            match some(&view, "_cursor_pos")? {
-                Some(pos) => tool.call_method1("start_from_hover", (source, pos.call_method0("toPoint")?))?.is_truthy()?,
-                None => false,
-            }
-        };
-        if started {
-            s.setattr("start_point", tool.getattr("start_point")?)?;
-        }
-        Ok(())
-    }
-
     /// Orbit / Pan / Zoom took the view from the tool: park it as it is. No
     /// `on_cancel`, and a Move's rows stay where the preview put them (the
     /// preview mesh too), so the model shows what was being done while the

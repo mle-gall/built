@@ -171,3 +171,9 @@ def test_custom_cancelled_changes_nothing(win):
     assert win.viewport.scene.units == units.DEFAULT_MODEL_UNITS
     assert units.new_document_units() == units.DEFAULT_MODEL_UNITS
     assert win.viewport.scene.version == win._saved_version
+
+
+def test_units_prompt_displays_the_menu_shortcut(win):
+    from built_render import shortcut_text
+    units_question.offer_at_start(win)
+    assert shortcut_text("Ctrl+U")[1] in chrome_forms.current(win).wire()[2]

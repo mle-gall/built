@@ -65,6 +65,8 @@ def _type(vp, text):
 def test_x5_after_a_move_copy_lays_five_copies(native_host):
     win, vp, face = _window(native_host)
     tool = _move_copy(win, vp, face)
+    win._update_status_hint()
+    assert "3x or /3" in win.statusBar().currentMessage()
     _type(vp, "x5")
     assert vp.active_tool is tool                   # not the Text tool
     assert _xs(vp) == [0.0, 2.0, 4.0, 6.0, 8.0, 10.0]

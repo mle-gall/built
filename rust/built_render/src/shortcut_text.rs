@@ -43,6 +43,20 @@ const ALT: u32 = 0x0800_0000;
 const META: u32 = 0x1000_0000;
 const NUM: u32 = 0x2000_0000;
 
+fn modifier_name(mask: u32, mac: bool) -> &'static str {
+    match (mask, mac) {
+        (CTRL, true) => "⌘",
+        (SHIFT, true) => "⇧",
+        (ALT, true) => "⌥",
+        (META, true) => "⌃",
+        (CTRL, false) => "Ctrl",
+        (SHIFT, false) => "Shift",
+        (ALT, false) => "Alt",
+        (META, false) => "Meta",
+        _ => "Num",
+    }
+}
+
 fn modifier(s: &str) -> Option<u32> {
     match s.to_ascii_lowercase().as_str() {
         "ctrl" | "control" | "cmd" | "command" | "⌘" => Some(CTRL),
@@ -120,29 +134,18 @@ fn stroke(mut text: &str, mac: bool) -> Option<(String, String, u32, Option<&'st
         (c as u32, symbol.clone(), symbol, name)
     };
     let mut portable = String::new();
-    for (mask, token) in [
-        (META, "Meta+"),
-        (CTRL, "Ctrl+"),
-        (ALT, "Alt+"),
-        (SHIFT, "Shift+"),
-        (NUM, "Num+"),
-    ] {
+    for mask in [META, CTRL, ALT, SHIFT, NUM] {
         if mods & mask != 0 {
-            portable.push_str(token);
+            portable.push_str(modifier_name(mask, false));
+            portable.push('+');
         }
     }
     portable.push_str(&portable_key);
     let display = if mac {
         let mut value = String::new();
-        for (mask, token) in [
-            (META, "⌃"),
-            (ALT, "⌥"),
-            (SHIFT, "⇧"),
-            (CTRL, "⌘"),
-            (NUM, "Num"),
-        ] {
+        for mask in [META, ALT, SHIFT, CTRL, NUM] {
             if mods & mask != 0 {
-                value.push_str(token);
+                value.push_str(modifier_name(mask, true));
             }
         }
         value.push_str(&mac_key);
@@ -204,6 +207,28 @@ fn parse(text: &str, mac: bool) -> Option<Sequence> {
 #[pyfunction]
 pub fn shortcut_text(text: &str) -> Option<Sequence> {
     parse(text.trim_ascii(), cfg!(target_os = "macos"))
+}
+
+/// Use menu key names in translated instructions as well as in keycaps.
+pub(crate) fn modifier_text(text: &str) -> String {
+    if !cfg!(target_os = "macos") {
+        return text.to_owned();
+    }
+    let mut result = String::with_capacity(text.len());
+    for token in text.split_inclusive(|c: char| !c.is_alphabetic()) {
+        let key = token.trim_end_matches(|c: char| !c.is_alphabetic());
+        let mask = match key {
+            "Ctrl" | "Strg" => CTRL,
+            "Alt" => ALT,
+            "Shift" | "Maj" | "Mayús" | "Maiusc" | "Umschalt" => SHIFT,
+            _ => { result.push_str(token); continue; }
+        };
+        result.push_str(modifier_name(mask, true));
+        if &token[key.len()..] != "+" {
+            result.push_str(&token[key.len()..]);
+        }
+    }
+    result
 }
 
 /// Profiles and exported files store alternatives separated by semicolons.

@@ -1,4 +1,9 @@
 {
+ "Click the first corner. Arrows pick the plane.": "ຄລິກມຸມທຳອິດ. ໃຊ້ປຸ່ມລູກສອນເລືອກລະນາບ.",
+ "Click the start of the angle.": "ຄລິກຈຸດເລີ່ມຂອງມຸມ.",
+ "Click the end, or type degrees and Enter.": "ຄລິກຈຸດປາຍ ຫຼື ພິມອົງສາແລ້ວກົດ Enter.",
+ "Press Enter to apply.": "ກົດ Enter ເພື່ອນຳໃຊ້.",
+ "Type 3x or /3, then Enter.": "ພິມ 3x ຫຼື /3 ແລ້ວກົດ Enter.",
  "Import .rfa family": "ນຳເຂົ້າຕະກູນ .rfa",
  "Import .dxf": "ນຳເຂົ້າ .dxf",
  "Import .dwg": "ນຳເຂົ້າ .dwg",
