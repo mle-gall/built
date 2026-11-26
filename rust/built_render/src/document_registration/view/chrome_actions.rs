@@ -19,7 +19,7 @@ fn stand_in<'py>(win: &Obj<'py>) -> Reply<'py> {
 fn flash(viewport: &Obj<'_>, message: &Obj<'_>) -> PyResult<()> {
     viewport.call_method1("flash_status", (message.str()?,)).map(drop)
 }
-fn prompt<'py>(view: &Obj<'py>, title: impl IntoPyObject<'py>, body: impl IntoPyObject<'py>, yes: impl IntoPyObject<'py>) -> PyResult<()> {
+pub(super) fn prompt<'py>(view: &Obj<'py>, title: impl IntoPyObject<'py>, body: impl IntoPyObject<'py>, yes: impl IntoPyObject<'py>) -> PyResult<()> {
     let py = view.py();
     let buttons = PyList::new(py, [("yes", yes.into_bound_py_any(py)?), ("no", "Cancel".into_bound_py_any(py)?)])?;
     view.getattr("renderer")?.call_method1("ui_set_prompt", (title, body, buttons)).map(drop)

@@ -425,7 +425,7 @@ fn tree<'py>(a: &Args<'py>) -> Reply<'py> {
     for key in scene.getattr("line_types")?.try_iter()? {
         line_types.call_method1("append", (custom.add(key?)?,))?;
     }
-    renderer.call_method1("ui_set_style_catalog", (id(&scene), line_types, scene.getattr("hatch_patterns")?, if drawing { scene.clone() } else { none(py) }))?;
+    renderer.call_method1("ui_set_style_catalog", (id(&scene), line_types, scene.getattr("hatch_patterns")?, if drawing || tree.getattr("_host_roots")?.lt(0)? { scene.clone() } else { none(py) }))?;
     renderer.call_method1("ui_set_lens", (&lens,))?;
     renderer.call_method1("ui_set_mode", (if mode.eq("library")? { "Library" } else { "" },))?;
     renderer.call_method1("ui_set_issues", (own(&view, "_ui_issues")?.is_some_and(|issues| issues.is_truthy().unwrap_or(false)),))?;

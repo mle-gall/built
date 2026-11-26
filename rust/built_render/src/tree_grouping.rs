@@ -272,6 +272,9 @@ pub fn tree_group_rows(
         let why = tree.refusal(scene, &tree.targets, true)?;
         if tree.targets.len() > 1 {
             push("group", "Make Group", None, why)?;
+            if tree.targets.iter().all(|&i| tree.rows[i].parent.is_none()) {
+                push("merge", "Merge groups", None, why)?;
+            }
         }
         push("component", "Make Component", None, why)?;
         push("explode", "Explode Group", None, why)?;
@@ -309,7 +312,7 @@ pub fn tree_group_action(
     }
     if !matches!(
         verb,
-        "group" | "component" | "explode" | "unique" | "instances"
+        "group" | "merge" | "component" | "explode" | "unique" | "instances"
     ) {
         return Err(pyo3::exceptions::PyValueError::new_err(
             "Unknown tree action",
@@ -331,7 +334,8 @@ pub fn tree_group_action(
     } else {
         &tree.targets
     };
-    if indices.is_empty() || (verb == "group" && indices.len() < 2) {
+    if indices.is_empty() || (matches!(verb, "group" | "merge") && indices.len() < 2)
+        || (verb == "merge" && indices.iter().any(|&i| tree.rows[i].parent.is_some())) {
         return Ok(());
     }
     let why = tree.refusal(&scene, indices, verb != "unique")?;
@@ -354,6 +358,7 @@ pub fn tree_group_action(
     }
     scene.call_method1("select", (&groups,))?;
     match verb {
+        "merge" => { win.call_method0("_on_merge_groups")?; }
         "group" => {
             win.call_method0("_on_make_group")?;
         }

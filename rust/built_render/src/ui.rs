@@ -275,6 +275,7 @@ pub struct Column {
     group_rows: Vec<(String, String, String)>,
     /// The row menu: row key, row type, where.
     row_menu: Option<(String, u8, Pos2)>,
+    choosing_folder: bool,
     /// Inline rename: row key and the text being typed.
     renaming: Option<(String, String)>,
     focus_rename: bool,
@@ -455,7 +456,7 @@ impl Ui {
     pub fn set_tree(&mut self, rows: Vec<(Vec<String>, Vec<i64>)>, unfiled: u32) {
         let col = self.column.get_or_insert_with(|| Column {
             tag_index: None, marked_rows: Vec::new(), nodes: Vec::new(), path: Vec::new(), host: Default::default(), overview: Default::default(), styles: Default::default(), reveal: None, proposal_available: false, proposal_dismissed: false, sort: Default::default(), ordered: Vec::new(), unfiled: 0, browser_picks: 0, issue_at: None, export_focus: Default::default(), filter: String::new(),
-            filing: None, focus_filter: false, group_rows: Vec::new(), row_menu: None, renaming: None, focus_rename: false, head_menu: None,
+            filing: None, focus_filter: false, group_rows: Vec::new(), row_menu: None, choosing_folder: false, renaming: None, focus_rename: false, head_menu: None,
             kind_menu: None, kinds: Vec::new(), prompt: None, lens: Lens::Filing, edits: Default::default(), mode: String::new(), issues: false,
             identity: Vec::new(),
             inspector_title: String::new(),
@@ -539,7 +540,7 @@ impl Ui {
     }
     pub fn style_catalog(&mut self, owner: usize, lines: Vec<String>, patterns: String, scene: Option<&pyo3::Bound<'_,pyo3::PyAny>>) -> pyo3::PyResult<()> {
         if let Some(col)=self.column.as_mut() {
-            if col.styles.owner != owner { col.styles = Default::default(); col.styles.owner=owner; col.renaming=None; col.proposal_dismissed=false; col.highlighted=None; col.focused_row=None; col.issue_at=None; }
+            if col.styles.owner != owner { col.styles = Default::default(); col.styles.owner=owner; col.row_menu=None; col.renaming=None; col.proposal_dismissed=false; col.highlighted=None; col.focused_row=None; col.issue_at=None; }
             col.styles.lines=lines;
             col.styles.set_patterns(patterns);
             if let Some(scene)=scene { col.styles.sync_catalog(scene)?; col.styles.hatches.sync(scene)?; }
@@ -2244,9 +2245,10 @@ impl Ui {
                                     let verb = if n.row == 0 { "isolate" } else { "open" };
                                     actions.push(format!("{verb}\u{1f}{}", n.key));
                                 }
-                                if resp.secondary_clicked() && (drawing_row || n.key.starts_with("section:") || n.row < 6 && n.row != 4 && (n.row != 5 || n.key.starts_with("cm:"))) {
+                                if resp.secondary_clicked() && (col.mode.is_empty() || n.row != 5 || n.key.starts_with("cm:")) {
+                                    col.choosing_folder = false;
                                     col.group_rows.clear();
-                                    if n.key.starts_with("g:") || n.key.starts_with("i:") || n.key.starts_with("c:") || n.key.starts_with("d:") {
+                                    if n.local_placement || n.key.starts_with("g:") || n.key.starts_with("d:") {
                                         actions.push(format!("grouprows\u{1f}{}", n.key));
                                     }
                                     col.row_menu = resp.interact_pointer_pos().map(|p| (n.key.clone(), n.row, p));
@@ -2384,87 +2386,7 @@ impl Ui {
                     });
                 });
             });
-        // The row menu, near the pointer: node verbs or item verbs.
-        if let Some((key, row, at)) = col.row_menu.clone() {
-            let mut close = false;
-            let node_menu: &[(&str, &str)] = &[("active", "Draw into this node"), ("filehere", "File selection here"),
-                ("node", "Select its items"), ("isolate", "Isolate"), ("hidemembers", "Hide its items"),
-                ("-", ""), ("rename", "Rename"), ("newchild", "New child node"), ("kind", "Kind  ›"),
-                ("-", ""), ("delete", "Delete node")];
-            let item_menu: &[(&str, &str)] = &[("item", "Select"), ("open", "Open for editing"), ("rename", "Rename"),
-                ("-", ""), ("hideitem", "Hide"), ("lockitem", "Lock / unlock"), ("zoom", "Zoom to"), ("groupplan", "Plan of this group…"), ("-", ""), ("fileto", "File to…")];
-            let comp_menu: &[(&str, &str)] = &[("cplace", "Place a copy"), ("cselect", "Select instances"),
-                ("creplace", "Replace selection with this"), ("-", ""), ("ckeep", "Keep in file"), ("crename", "Rename…")];
-            // A linked file's rows are read-only here: no filing, kind or rename.
-            let link_menu: &[(&str, &str)] = &[("node", "Select"), ("contents", "Select contents"),
-                ("isolate", "Isolate"), ("zoom", "Zoom to"), ("-", ""), ("eye", "Show / hide"), ("lock", "Lock / unlock"),
-                ("-", ""), ("linkopen", "Edit source"), ("linkfinder", "Show in Finder"),
-                ("linkreload", "Reload"), ("linkrelink", "Locate…"), ("linkunlink", "Unlink")];
-            let section_menu: &[(&str, &str)] = &[("cutview", "View of the cut…"), ("sectioncut", "Toggle cut"), ("eye", "Show / hide"), ("deleterows", "Delete")];
-            let tag_menu: &[(&str, &str)] = &[("newtag", "New tag"), ("rename", "Rename"), ("tagactive", "Make active"), ("tagassign", "Move selection here"), ("tagselect", "Select items"), ("tagisolate", "Toggle tag isolation"), ("mergetag", "Merge into…"), ("scenetaghide", "Hide in all saved scenes"), ("scenetagshow", "Show in all saved scenes"), ("deletetag", "Delete"), ("purgetags", "Purge unused tags…")];
-            let menu = if key.starts_with("preview-tag:") { tag_menu } else if key.starts_with("preview-folder:") { &[("newtag", "New tag in folder"), ("tagisolate", "Toggle tag isolation")] } else if key.starts_with("section:") { section_menu } else if row == 0 && key.starts_with("n:link") { link_menu } else if row == 0 { node_menu }
-                else if row == 5 { comp_menu } else { item_menu };
-            let resp = egui::Area::new(egui::Id::new("row_menu"))
-                .fixed_pos(at + vec2(4.0, 4.0))
-                .order(egui::Order::Tooltip)
-                .show(ctx, |ui| {
-                    glass(Surface::Raised).inner_margin(Margin::same(6)).show(ui, |ui| {
-                        ui.set_width(200.0);
-                        ui.spacing_mut().item_spacing = vec2(0.0, 1.0);
-                        let row = col.nodes.iter().find(|n| n.key == key);
-                        let editable_file = row.is_some_and(|n| n.icon.starts_with("file:") && !n.badge.starts_with("via "));
-                        for (id, label) in menu {
-                            if matches!(*id, "rename" | "deletetag" | "mergetag" | "tagisolate") && key == "preview-tag:Layer 0" { continue; }
-                            if row.is_some_and(|n| n.icon == "file:missing") &&
-                                matches!(*id, "contents" | "isolate" | "zoom" | "linkopen" | "linkfinder" | "linkreload") { continue; }
-                            if matches!(*id, "linkreload" | "linkrelink" | "linkunlink") &&
-                                !editable_file { continue; }
-                            if *id == "groupplan" && !row.is_some_and(|r| r.local_placement) { continue; }
-                            if *id == "hideitem" {
-                                for (verb, label, why) in &col.group_rows {
-                                    let item = (verb.clone(), label.clone(), String::new(), String::new(), -1, why.is_empty());
-                                    let response = menu_row_resp(ui, &item).0;
-                                    if why.is_empty() {
-                                        if response.clicked() {
-                                            actions.push(format!("{verb}\u{1f}{key}"));
-                                            close = true;
-                                        }
-                                    } else {
-                                        response.on_hover_text(why);
-                                    }
-                                }
-                            }
-                            if *id == "-" {
-                                let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 7.0), Sense::hover());
-                                ui.painter().hline(r.x_range().shrink(6.0), r.center().y, Stroke::new(1.0_f32, EDGE));
-                                continue;
-                            }
-                            let multi_rename = *id == "rename" && row.is_some_and(|n| n.local_placement && n.selected > 0)
-                                && col.browser_picks > 1;
-                            let label = if multi_rename { "Rename selected…" } else { *label };
-                            let item = (id.to_string(), label.to_string(), String::new(), String::new(), -1i8, true);
-                            let (r, rect) = menu_row_resp(ui, &item);
-                            if r.clicked() {
-                                match *id {
-                                    "rename" if multi_rename => actions.push(col.rename_request(true)),
-                                    "rename" => {
-                                        let name = col.nodes.iter().find(|n| n.key == key).map(|n| n.name.clone()).unwrap_or_default();
-                                        col.renaming = Some((key.clone(), name));
-                                        col.focus_rename = true;
-                                    }
-                                    "tagisolate" if row.is_some() => actions.push(col.styles.isolate_action(row.unwrap())),
-                                    "lockitem" if row.is_some_and(|n| n.local_placement) => actions.push(format!("rowlock\u{1f}{key}")),
-                                    "kind" => { col.kind_menu = Some((key.clone(), pos2(rect.max.x + 4.0, rect.min.y))); }
-                                    _ => actions.push(format!("{id}\u{1f}{key}")),
-                                }
-                                close = true;
-                            }
-                        }
-                    });
-                });
-            let _ = resp;
-            if close { col.row_menu = None; }
-        }
+        tree_rows::show_menu(col, ctx, height, &mut actions);
         if let Some((key, at)) = col.kind_menu.clone() {
             let mut close = false;
             egui::Area::new(egui::Id::new("kind_menu"))
@@ -3375,7 +3297,7 @@ fn occurrence_menu_runs_the_document_action_and_closes() {
     for _ in 0..3 {
         tree_frame(&mut ui, vec![]);
     }
-    let at = tree_frame(&mut ui, vec![])["Explode Group"];
+    let at = tree_frame(&mut ui, vec![])["Explode"];
     tree_click(&mut ui, at, egui::PointerButton::Primary);
     assert!(ui
         .take_actions()
@@ -3750,6 +3672,29 @@ fn browser_rename_uses_focused_row_selection_and_header_scope() {
 }
 
 #[test]
+fn tag_proxy_reveals_selection_and_its_filing_menu_targets_the_tag() {
+    let Some(mut ui) = test_chrome() else { return };
+    ui.ctx = test_context();
+    ui.set_tree(vec![(vec!["preview-tag:oak".into(), "Oak".into()], vec![0, 1, 0, 0, 6, 1, 0])], 1);
+    assert!(ui.mark_tag_paths(vec![vec!["preview-tag:oak".into()]], 1));
+    for _ in 0..3 { tree_frame(&mut ui, vec![]); }
+    let name = tree_frame(&mut ui, vec![])["Oak"];
+    let half_width = ui.ctx.fonts(|fonts| fonts.layout_no_wrap("Oak".into(), body(), INK).size().x / 2.);
+    tree_click(&mut ui, name + vec2(half_width + 10., 0.), egui::PointerButton::Primary);
+    assert_eq!(ui.take_actions(), ["tree:revealselection\x1f"]);
+    tree_click(&mut ui, name, egui::PointerButton::Secondary);
+    for _ in 0..3 { tree_frame(&mut ui, vec![]); }
+    let menu = tree_frame(&mut ui, vec![]);
+    for label in ["New tag", "Rename…", "Hide", "Move to folder…", "Merge into…", "Delete"] {
+        assert!(menu.contains_key(label), "{label}");
+    }
+    tree_click(&mut ui, menu["Select items"], egui::PointerButton::Primary);
+    assert_eq!(ui.take_actions(), ["tree:tagselect\x1fpreview-tag:oak"]);
+    assert!(ui.mark_tag_paths(vec![], 0));
+    assert_eq!(ui.column.unwrap().nodes[0].mark, 0);
+}
+
+#[test]
 fn scrolling_inspector_details_keeps_the_title_visible() {
     let Some(mut ui) = test_chrome() else { return };
     ui.ctx = test_context();
@@ -3766,4 +3711,25 @@ fn scrolling_inspector_details_keeps_the_title_visible() {
     let after = tree_frame(&mut ui, vec![]);
     assert_eq!(before["Selected group"], after["Selected group"]);
     assert!(!after.contains_key("Value 0"));
+}
+
+#[test]
+fn each_project_row_menu_offers_actions_for_its_target() {
+    let Some(mut ui) = test_chrome() else { return };
+    ui.ctx = test_context();
+    for (key, kind, verb) in [
+        ("preview-folder:wood", 6, "New tag in folder"),
+        ("section:cut", 7, "Name and symbol…"),
+        ("saved-scene:view", 8, "Show scene"),
+        ("sheet-page:sheet", 8, "Open sheet"),
+        ("geometry:loose", 7, "Select items"),
+    ] {
+        ui.set_tree(vec![(vec![key.into(), "Target".into()], vec![0, 0, 0, 0, kind, 1, 0])], 0);
+        for _ in 0..3 { tree_frame(&mut ui, vec![]); }
+        let at = tree_frame(&mut ui, vec![])["Target"];
+        tree_click(&mut ui, at, egui::PointerButton::Secondary);
+        for _ in 0..3 { tree_frame(&mut ui, vec![]); }
+        assert!(tree_frame(&mut ui, vec![]).contains_key(verb), "{key}");
+        ui.column.as_mut().unwrap().row_menu = None;
+    }
 }
