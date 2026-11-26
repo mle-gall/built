@@ -247,6 +247,21 @@ fn inspector<'py>(a: &Args<'py>) -> Reply<'py> {
     }
     let identity = identity()?;
     let tag_row = glue.call_method1("inspector_tag_row", (&scene,))?;
+    let has_tag_picker = tag_row.is_truthy()?;
+    let facts = |offer_filing: bool| -> PyResult<Bound<'py, PyList>> {
+        let facts = empty(py);
+        for fact in identity.try_iter()? {
+            let fact = fact?;
+            let label = fact.get_item(0)?;
+            if label.eq("Tag")? && has_tag_picker { continue; }
+            if label.eq("Filed in")? && offer_filing {
+                facts.append(("Filing", "Not filed · File to…", "insp:file", py.None()))?;
+            } else {
+                facts.append(fact)?;
+            }
+        }
+        Ok(facts)
+    };
     let sel_kind = glue.call_method1("selection_kind", (&scene, &sel))?;
     let offered = |verb: &str| -> PyResult<bool> { glue.call_method1("verbs_offered", (&sel_kind, verb))?.is_truthy() };
     if sel.len() == 1 && !groups.is_empty() {
@@ -270,28 +285,28 @@ fn inspector<'py>(a: &Args<'py>) -> Reply<'py> {
         if glue.call_method1("verbs_read_only", (&sel_kind,))?.is_truthy()? {
             rows.append(("Edits", "Read-only here"))?;
         }
-        if group.call_method0("is_component")?.is_truthy()? {
-            let mesh = group.getattr("mesh")?;
-            let mut same = 0;
-            for placement in structure.call_method1("_placements", (&scene,))?.try_iter()? {
-                same += placement?.get_item(0)?.getattr("mesh")?.is(&mesh) as usize;
-            }
-            rows.append(("Copies", same.to_string()))?;
-        }
+        let definition = if group.call_method0("is_component")?.is_truthy()? {
+            super::chrome_tree::component_definition(&view, &win, &group)?
+        } else { None };
         let link = links.call_method1("link_of", (&group,))?;
         let part = sel_kind.eq("linked_part")?;
         let needs = if link.is_truthy()? || part {
             ("Record", "Kept in the source file".to_owned())
         } else if !filed {
-            ("Filing", "Needed first".to_owned())
+            ("Filing", "Not filed".to_owned())
         } else if !record.is_truthy()? {
             ("Record", "Comes with a kind".to_owned())
         } else {
             ("Status", text_or(direct(py, status_text, (&record,))?, "Missing")?)
         };
         let sections = empty(py);
+        if definition.is_some() && offered("unique")? {
+            sections.append(("Actions", [("definition", "Open definition in Library")]))?;
+            sections.append(("Component actions", [("copies", "Select copies"), ("unique", "Make unique")]))?;
+        }
         sections.append(("Item", rows))?;
-        sections.append(("What it needs", [needs]))?;
+        let offer_filing = !filed && offered("fileto")?;
+        if !offer_filing { sections.append(("What it needs", [needs]))?; }
         if get(&record, "class")?.is_truthy()? && offered("status")? {
             sections.append(("Actions", status_chips(py, "status:", false)?))?;
         }
@@ -388,11 +403,16 @@ fn inspector<'py>(a: &Args<'py>) -> Reply<'py> {
             [
                 ("IFC class", either("class", "Not set")?),
                 ("Predefined type", either("predefined_type", "—")?),
-                ("Tag", text_or(attr(&group, "layer")?, "—")?),
             ],
         ))?;
-        show(&view, identity.get_item(0)?.get_item(1)?, sections)?;
-        renderer.call_method1("ui_set_identity", (identity,))?;
+        if let Some((_, definition)) = definition {
+            let n = definition.get_item(2)?.len()?;
+            let subtitle = format!("Component · {n} {}", if n == 1 { "copy" } else { "copies" });
+            renderer.call_method1("ui_set_inspector", (definition.get_item(0)?, sections, subtitle))?;
+        } else {
+            show(&view, identity.get_item(0)?.get_item(1)?, sections)?;
+        }
+        renderer.call_method1("ui_set_identity", (facts(offer_filing)?,))?;
         return Ok(none(py));
     }
     let by_node = counter.call0()?;
@@ -466,7 +486,7 @@ fn inspector<'py>(a: &Args<'py>) -> Reply<'py> {
         format!("{} selected", sel.len())
     };
     show(&view, title, sections)?;
-    renderer.call_method1("ui_set_identity", (identity,))?;
+    renderer.call_method1("ui_set_identity", (facts(false)?,))?;
     Ok(none(py))
 }
 

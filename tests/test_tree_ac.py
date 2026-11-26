@@ -261,6 +261,42 @@ def test_a_column_preset_changes_no_row_and_no_width(ui):
     assert view.renderer.calls["ui_set_columns"] == (2, None)
 
 
+def test_component_inspector_names_and_counts_shared_copies():
+    from built_core.group import Group, copy_group
+    from built_core.scene import Scene
+    from built_core.history import GroupToComponentCommand, History
+    scene = Scene()
+    group = Group(name="Bench")
+    scene.groups.append(group)
+    History(scene).execute(GroupToComponentCommand(group, "Bench"))
+    scene.groups.append(copy_group(group, built_core.Vec3(3, 0, 0)))
+    scene.select([group])
+    win, view = _Win(scene), _View()
+    wu._tree(view, win)
+    wu._inspector(view, win)
+    title, sections, subtitle = view.renderer.calls["ui_set_inspector"]
+    assert (title, subtitle) == ("Bench", "Component · 2 copies")
+    assert dict(sections)["Component actions"] == [("copies", "Select copies"), ("unique", "Make unique")]
+
+
+def test_unfiled_group_has_one_editable_tag_and_a_filing_action():
+    from built_core.group import Group
+    from built_core.scene import Scene
+    scene = Scene()
+    group = Group()
+    scene.groups.append(group)
+    scene.select([group])
+    win, view = _Win(scene), _View()
+    wu._tree(view, win)
+    wu._inspector(view, win)
+    _, sections = view.renderer.calls["ui_set_inspector"]
+    facts = {label: (value, action) for label, value, action, _ in view.renderer.calls["ui_set_identity"][0]}
+    assert "Tag" not in facts and "Inside" not in facts
+    assert facts["Filing"] == ("Not filed · File to…", "insp:file")
+    tags = [value for _, rows in sections for label, value in rows if label == "Tag"]
+    assert len(tags) == 1 and '["Layer 0","Untagged"]' in tags[0]
+
+
 def test_the_inspector_of_a_selection_is_the_same_under_every_column_preset(ui):
     scene, win, view, rows, act = ui
     act("node", "n:" + _key(view, "Paths"))

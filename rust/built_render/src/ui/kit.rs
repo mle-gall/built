@@ -995,6 +995,35 @@ pub mod molecules {
         let g = super::fit(ui, title, super::title(), INK, (right - r.min.x - 8.0).max(40.0), 1);
         leading(ui.painter(), r, r.min.x + 8.0, g, INK);
     }
+    /// Keep the filename suffix visible and reserve the action's measured width.
+    pub fn image_file_row(ui: &mut egui::Ui, label: &str, name: &str) -> bool {
+        let mut replace = false;
+        property_control(ui, label, |ui| {
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                replace = quiet(ui, "Replace…").clicked();
+                let width = ui.available_width();
+                let layout = |text: String| ui.painter().layout_no_wrap(text, body(), INK);
+                let mut text = layout(name.to_owned());
+                if text.size().x > width {
+                    let chars: Vec<char> = name.chars().collect();
+                    let (mut lo, mut hi) = (0, chars.len());
+                    text = layout("…".into());
+                    while lo < hi {
+                        let keep = (lo + hi).div_ceil(2);
+                        let first: String = chars[..keep / 2].iter().collect();
+                        let last: String = chars[chars.len() - keep.div_ceil(2)..].iter().collect();
+                        let candidate = layout(format!("{first}…{last}"));
+                        if candidate.size().x <= width { lo = keep; text = candidate; }
+                        else { hi = keep - 1; }
+                    }
+                }
+                let (rect, response) = ui.allocate_exact_size(vec2(width, CONTROL_H), Sense::hover());
+                leading(&ui.painter().with_clip_rect(rect), rect, rect.left(), text, INK);
+                response.on_hover_text(name);
+            });
+        });
+        replace
+    }
     pub fn material_readout(ui: &mut egui::Ui, label: &str, color: Color32, hex: &str) {
         property_control(ui, label, |ui| {
             ui.horizontal(|ui| {

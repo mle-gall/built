@@ -206,8 +206,8 @@ impl ShellWindow {
     }
     /// Publish a result, refusal or error to the viewport and recent activity.
     #[pyo3(signature=(tone, text, actions=None))]
-    fn notify(slf: &Bound<'_, Self>, tone: &str, text: &str, actions: Option<Vec<(String, Py<PyAny>)>>) -> PyResult<()> {
-        crate::dialogs_host::post_notice(slf.as_any(), tone, text, actions.unwrap_or_default())
+    fn notify(slf: &Bound<'_, Self>, tone: &str, text: &str, actions: Option<Vec<(String, Py<PyAny>)>>) -> PyResult<Py<crate::dialogs_host::Activity>> {
+        crate::dialogs_host::publish_notice(slf.as_any(), tone, text, actions.unwrap_or_default())
     }
 
     fn window(slf: Bound<'_, Self>) -> Bound<'_, Self> {

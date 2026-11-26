@@ -2784,8 +2784,9 @@ impl Renderer {
     fn ui_set_identity(&mut self, rows: Vec<(String, String, String, Option<bool>)>) {
         if let Some(ui) = self.ui.as_mut() { ui.set_identity(rows); }
     }
-    fn ui_set_inspector(&mut self, title: String, sections: Vec<(String, Vec<(String, String)>)>) {
-        if let Some(ui) = self.ui.as_mut() { ui.set_inspector(title, sections); }
+    #[pyo3(signature=(title, sections, subtitle=None))]
+    fn ui_set_inspector(&mut self, title: String, sections: Vec<(String, Vec<(String, String)>)>, subtitle: Option<String>) {
+        if let Some(ui) = self.ui.as_mut() { ui.set_inspector(title, sections); ui.set_inspector_subtitle(subtitle); }
     }
     fn ui_start_filing(&mut self, what: String) {
         if let Some(ui) = self.ui.as_mut() { ui.start_filing(what); }

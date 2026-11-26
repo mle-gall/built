@@ -634,6 +634,20 @@ pub(super) fn components_in_model<'py>(a: &Args<'py>) -> Reply<'py> {
     Ok(rows)
 }
 
+/// The selected occurrence's Library definition and its placed copies.
+pub(super) fn component_definition<'py>(view: &Obj<'py>, win: &Obj<'py>, group: &Obj<'py>) -> PyResult<Option<(usize, Obj<'py>)>> {
+    let rows = direct(view.py(), components_in_model, (view, win))?;
+    let mesh = group.getattr("mesh")?;
+    for (index, row) in rows.try_iter()?.enumerate() {
+        let row = row?;
+        let copies = row.get_item(2)?;
+        if copies.len()? > 0 && copies.get_item(0)?.getattr("mesh")?.is(&mesh) {
+            return Ok(Some((index, row)));
+        }
+    }
+    Ok(None)
+}
+
 /// A Library row: paint with a material, place a component.
 fn library_pick<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();

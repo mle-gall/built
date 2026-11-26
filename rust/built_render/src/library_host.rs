@@ -2059,15 +2059,22 @@ fn _sheet_provider<'py>(view: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>>
 fn before_frame(view: &Bound<'_, PyAny>, win: &Bound<'_, PyAny>) -> PyResult<()> {
     let py = view.py();
     if let Some(job) = win.getattr_opt("_family_import_job")?.filter(|j| !j.is_none()) {
-        let status = collections::status();
-        if collections::active() {
-            if !job.getattr("phase")?.eq(&status)? {
-                job.call_method1("update", (py.None(), &status))?;
+        let status = collections::snapshot();
+        if status.active {
+            if !job.getattr("phase")?.eq(&status.detail)? {
+                job.call_method1("update", (py.None(), &status.detail))?;
             }
             view.call_method0("update")?;
         } else {
             win.setattr("_family_import_job", py.None())?;
-            job.call_method("end", (), Some(&[("detail", status)].into_py_dict(py)?))?;
+            let kw = PyDict::new(py);
+            if let Some(n) = status.imported {
+                kw.set_item("result_title", format!("Imported {n} {}", if n == 1 { "type" } else { "types" }))?;
+            } else {
+                kw.set_item("failed", true)?;
+            }
+            kw.set_item("detail", status.detail)?;
+            job.call_method("end", (), Some(&kw))?;
         }
     }
     let items = if ui(py)?.call_method1("_active_tool_id", (win,))?.eq("paint")? { palette_items(view, win)? } else { PyList::empty(py) };

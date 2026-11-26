@@ -283,9 +283,10 @@ pub(crate) fn material_inspector(
         actions.push(("lib:done".into(), "Done".into()));
     }
     if let Some(path) = image {
+        let filename = crate::model::texture_api::without_cache_prefix(path.rsplit(['/', '\\']).next().unwrap_or(path));
         base.push((
             "Image".into(),
-            path.rsplit(['/', '\\']).next().unwrap_or(path).into(),
+            format!("\u{1d}imagefile\u{1d}lib:image:{key}\u{1d}{filename}"),
         ));
         let w = tex["sw"].as_f64().unwrap_or(1.);
         base.push((
@@ -296,7 +297,6 @@ pub(crate) fn material_inspector(
                 &format!("{w} × {}", tex["sh"].as_f64().unwrap_or(w)),
             ),
         ));
-        actions.push(act("image", "Other image…"));
     }
     let color: Option<(f64, f64, f64)> = attr("color")?.extract()?;
     let (r, g, b) = color.unwrap_or(if image.is_some() {

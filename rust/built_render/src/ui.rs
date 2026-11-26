@@ -311,6 +311,7 @@ pub struct Column {
     edits: std::collections::HashMap<String, String>,
     identity: Vec<(String, String, String, Option<bool>)>,
     inspector_title: String,
+    inspector_subtitle: Option<String>,
     inspector: Vec<(String, Vec<(String, String)>)>,
     highlighted: Option<String>,
     focused_row: Option<String>,
@@ -494,6 +495,7 @@ impl Ui {
             kind_menu: None, kinds: Vec::new(), prompt: None, columns: Default::default(), cells_scroll: 0., readiness_sent: Some(false), checklist_open: false, tag_from_node: false, edits: Default::default(), mode: String::new(), issues: false,
             identity: Vec::new(),
             inspector_title: String::new(),
+            inspector_subtitle: None,
             inspector: Vec::new(), highlighted: None, focused_row: None,
         });
         col.nodes = tree_rows::reconcile(std::mem::take(&mut col.nodes), rows);
@@ -664,11 +666,15 @@ impl Ui {
         if let Some(col) = self.column.as_mut() { col.identity = rows; }
     }
     pub fn show_inspector(&mut self) { self.set_review(false); }
+    pub fn set_inspector_subtitle(&mut self, subtitle: Option<String>) {
+        if let Some(col) = self.column.as_mut() { col.inspector_subtitle = subtitle; }
+    }
     pub fn set_inspector(&mut self, title: String, sections: Vec<(String, Vec<(String, String)>)>) {
         if let Some(col) = self.column.as_mut() {
             if col.inspector_title != title || col.inspector != sections {
                 col.edits.clear();
             }
+            col.inspector_subtitle = None;
             col.inspector_title = title;
             col.inspector = sections;
             col.identity.clear();
@@ -2460,7 +2466,7 @@ impl Ui {
                                 .find(|(label, _)| Some(label.as_str()) == measure)
                                 .map_or(summary, |(_, value)| value).as_str()
                         });
-                        kit::inspector_title(ui, &col.inspector_title, subtitle.unwrap_or(""));
+                        kit::inspector_title(ui, &col.inspector_title, col.inspector_subtitle.as_deref().or(subtitle).unwrap_or(""));
                         ui.add_space(SPACE_XS);
                     } else {
                         kit::inspector_title(ui, if col.overview.file.is_empty() { "Untitled" } else { &col.overview.file }, "Model");
@@ -2468,6 +2474,13 @@ impl Ui {
                     }
                     if !tag_focus && !col.inspector_title.is_empty() {
                         let curated: Vec<_> = col.inspector.iter().filter(|(title,_)|title=="Actions").flat_map(|(_,rows)| rows).collect();
+                        if let Some((_, verbs)) = col.inspector.iter().find(|(title, _)| title == "Component actions") {
+                            ui.horizontal_wrapped(|ui| {
+                                for (id, label) in verbs {
+                                    if kit::quiet(ui, label).clicked() { actions.push(format!("insp:{id}")); }
+                                }
+                            });
+                        }
                         ui.horizontal_wrapped(|ui| {
                             if let Some((_,acts)) = selection {
                                 for (id,label,_,enabled,_) in acts.iter().filter(|a| matches!(a.0.as_str(),"file"|"file_to"|"hide"|"edit"|"linkopen")) {
@@ -2556,7 +2569,7 @@ impl Ui {
                         }
                         let sections = col.inspector.clone();
                         for (title, rows) in &sections {
-                            if title == "Actions" { continue; }
+                            if matches!(title.as_str(), "Actions" | "Component actions") { continue; }
                             if matches!(title.as_str(),"Quantities" | "Export details") && native_export { continue; }
                             if title.starts_with("Export") || matches!(title.as_str(), "What it needs" | "Solid") {
                                 ui.add_space(SPACE_XS);
@@ -3002,6 +3015,10 @@ fn item_response(ui: &mut egui::Ui, item: &Item, icon: Option<&egui::TextureHand
 fn inspector_rows(ui: &mut egui::Ui, rows: &[(String, String)], edits: &mut std::collections::HashMap<String, String>,
                   actions: &mut Vec<String>) {
     for (label, value) in rows {
+        if let Some((id, name)) = value.strip_prefix("\u{1d}imagefile\u{1d}").and_then(|rest| rest.split_once('\u{1d}')) {
+            if kit::image_file_row(ui, label, name) { actions.push(format!("insp:{id}")); }
+            continue;
+        }
         if let Some(data) = value.strip_prefix("\u{1d}tagpicker\u{1d}") {
             if let Ok((mut at, options)) = serde_json::from_str::<(usize, Vec<(String, String)>)>(data) {
                 let before = at;

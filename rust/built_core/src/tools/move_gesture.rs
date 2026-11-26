@@ -191,6 +191,7 @@ impl ViewportToolHost {
             }
             "copy" => {
                 if arg["fresh"] == true || gesture.borrow().builder.is_none() {
+                    tool.setattr("_copy_notice", py.None())?;
                     let builder =
                         tool.call_method1("_make_copy_builder", (view.getattr("scene")?,))?;
                     gesture.borrow_mut().builder = Some(builder.unbind());

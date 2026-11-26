@@ -160,6 +160,17 @@ fn trim_dots(s: &str) -> &str {
     s.trim_matches(|c| c == ' ' || c == '.')
 }
 
+/// Cache names can carry stacked digest prefixes in older documents.
+pub(crate) fn without_cache_prefix(mut name: &str) -> &str {
+    while let Some((prefix, rest)) = name.split_once('-') {
+        if prefix.len() != 16 || !prefix.bytes().all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c)) {
+            break;
+        }
+        name = rest;
+    }
+    name
+}
+
 /// Filesystem-safe base name for an image called `name`: unsafe characters
 /// dropped, any content-hash prefix stripped (old saves stacked them one
 /// level deeper each time), clipped to `NAME_LIMIT` keeping a short
@@ -167,17 +178,7 @@ fn trim_dots(s: &str) -> &str {
 #[pyfunction]
 pub fn texture_file_name(name: &str) -> String {
     let kept: String = last_name(name).chars().filter(|c| c.is_alphanumeric() || " ._-".contains(*c)).collect();
-    let mut safe = trim_dots(&kept).to_string();
-    // ^(?:[0-9a-f]{16}-)+
-    loop {
-        let head: Vec<char> = safe.chars().take(17).collect();
-        if head.len() == 17 && head[..16].iter().all(|c| c.is_ascii_digit() || ('a'..='f').contains(c)) && head[16] == '-' {
-            safe = safe.chars().skip(17).collect();
-        } else {
-            break;
-        }
-    }
-    safe = trim_dots(&safe).to_string();
+    let mut safe = trim_dots(without_cache_prefix(trim_dots(&kept))).to_owned();
     let n = safe.chars().count();
     if n > NAME_LIMIT {
         let (stem, ext) = match safe.rfind('.') {

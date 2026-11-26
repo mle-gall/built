@@ -254,9 +254,12 @@ pub fn viewport_tag_menu(win: &Bound<'_, PyAny>, selection: &Bound<'_, PyAny>) -
     for layer in scene.getattr("layers")?.try_iter()? {
         let layer = layer?;
         let key: String = layer.getattr("key")?.extract()?;
-        let label: String = crate::host_context::core_module(layers.py())?.getattr("tag_edits")?
-            .call_method1("path_label", (&scene, &key))?
-            .extract()?;
+        let label: String = if key == "Layer 0" {
+            "Untagged".into()
+        } else {
+            crate::host_context::core_module(py)?.getattr("tag_edits")?
+                .call_method1("path_label", (&scene, &key))?.extract()?
+        };
         if current.len() == 1 && current.contains(&key) {
             start = options.len();
         }
