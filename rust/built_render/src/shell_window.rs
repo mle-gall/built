@@ -354,6 +354,7 @@ impl ShellWindow {
         Ok(())
     }
     fn _activate_tool(slf: &Bound<'_, Self>, key: &str) -> PyResult<()> {
+        if key == "north" {return crate::settings_host::edit_location_now(slf.as_any(),None,None,None);}
         let tool = slf.getattr("_tools")?.call_method1("get", (key,))?;
         if tool.is_none() {
             slf.getattr("_status")?.call_method1(

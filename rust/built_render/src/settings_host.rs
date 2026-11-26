@@ -537,6 +537,101 @@ impl SettingsSheet {
         Ok(())
     }
 
+    fn placement_sheet<'py>(
+        slf: &Slf<'py>,
+        ctx: &Bound<'py, PyAny>,
+        envb: &Bound<'py, PyAny>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let py = slf.py();
+        let site = slf.getattr("site")?;
+        let cs = chrome(py)?;
+        let sheet = cs.getattr("Sheet")?.call(
+            ("site-placement", tr(py, "Site placement")?),
+            Some(&[("width", 1440)].into_py_dict(py)?),
+        )?;
+        let map = sheet.call_method0("content")?;
+        let inspector = sheet.call_method1("detail", (330.,))?;
+        let source = slf.getattr("site_source")?;
+        let mut requests = slf.getattr("site_requests")?;
+        if requests.is_none() {
+            requests = site_requests::create(
+                &site,
+                source.clone(),
+                ctx.getattr("refresh")?,
+                ctx.getattr("win")?,
+            )?
+            .into_any();
+            slf.setattr("site_requests", &requests)?;
+        }
+        let root = requests
+            .getattr("tiles")?
+            .getattr("cache")?
+            .getattr("root")?
+            .str()?;
+        let translate = py.import("built_core.i18n")?.getattr("tr")?;
+        let json = py.import("json")?;
+        let blocks = json.call_method1(
+            "loads",
+            (site.call_method1(
+                "map_blocks",
+                (
+                    &translate,
+                    source.getattr("id")?,
+                    root,
+                    source.getattr("max_zoom")?,
+                    source.getattr("attribution")?,
+                ),
+            )?,),
+        )?;
+        map.getattr("blocks")?
+            .call_method1("append", (blocks.get_item(0)?,))?;
+        let edit = slf.getattr("site_edit")?.unbind();
+        let put = func(py, move |py, a| Ok(edit.bind(py).call(a, None)?.unbind()))?;
+        let groups = crate::settings_rows::native_groups(
+            py,
+            &site
+                .call_method1("groups", (&translate,))?
+                .extract::<String>()?,
+            put,
+        )?;
+        for group in groups.iter() {
+            let id = group.get_item(0)?;
+            inspector.call_method1("caption", (group.get_item(1)?,))?;
+            let form = slf.call_method1("_form", (envb, group.get_item(2)?, &id))?;
+            inspector.call_method("fields", (form,), Some(&[("id", &id)].into_py_dict(py)?))?;
+            if id.eq("locate")? {
+                for block in blocks.try_iter()?.skip(1) {
+                    inspector
+                        .getattr("blocks")?
+                        .call_method1("append", (block?,))?;
+                }
+            }
+            if id.eq("crs")? {
+                inspector.call_method1(
+                    "buttons",
+                    (vec![cs.call_method1(
+                        "verb",
+                        ("site_load", tr(py, "Load .prj or calibration…")?),
+                    )?],),
+                )?;
+            }
+        }
+        inspector.call_method1("caption", (tr(py, "Check alignment")?,))?;
+        inspector.call_method1(
+            "text",
+            (site.call_method1("placement_check", (&translate,))?,),
+        )?;
+        if site.getattr("note")?.is_truthy()? {
+            inspector.call_method1("text", (site.getattr("note")?,))?;
+        }
+        sheet.call_method1("footer", (vec![("site_cancel", tr(py, "Cancel")?)],))?;
+        let action = cs.call_method1("verb", ("site_apply", tr(py, "Apply")?))?;
+        action.set_item("role", 1)?;
+        action.set_item("enabled", !site.call_method0("parameters")?.is_none())?;
+        sheet.call_method1("footer_action", (action,))?;
+        Ok(sheet)
+    }
+
     fn build<'py>(slf: &Slf<'py>, ctx: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
         let py = slf.py();
         slf.setattr("_win", ctx.getattr("win")?)?;
@@ -550,6 +645,13 @@ impl SettingsSheet {
         slf.call_method1("_monitor", (crate::settings_rows::NDOF_SUPPORTED && section == "ndof" && query.is_empty(),))?;
         envb.setattr("device_readings", slf.getattr("_readings")?)?;
         slf.setattr("_rows", PyDict::new(py))?;
+        let draft=slf.getattr("site")?;
+        if !draft.is_none() {
+            if draft.getattr("placing")?.is_truthy()? {return Self::placement_sheet(slf,ctx,&envb);}
+            let sheet=chrome(py)?.getattr("Sheet")?.call1(("site-capture",tr(py,"Capture area")?))?;
+            Self::section_pane(slf,&sheet,&envb,&py.None().into_bound(py))?;
+            return Ok(sheet);
+        }
         let cs = chrome(py)?;
         let sheet = cs.getattr("Sheet")?.call(("settings", tr(py, "Settings")?), Some(&[("width", 1100)].into_py_dict(py)?))?;
         sheet.call_method1("search", (tr(py, "Search settings")?,))?;
@@ -624,7 +726,35 @@ impl SettingsSheet {
         let args = args.unwrap_or_default();
         let site = slf.getattr("site")?;
         let envb = env(&ctx.getattr("win")?)?;
-        if site.is_none() || !envb.getattr("scene")?.is(&slf.getattr("site_scene")?) || action == "site_cancel" {
+        let placing=!site.is_none() && site.getattr("placing")?.is_truthy()?;
+        if action=="site_cancel" || !envb.getattr("scene")?.is(&slf.getattr("site_scene")?){
+            return chrome(py)?.call_method1("close",(ctx.getattr("win")?,)).map(|_|());
+        }
+        if placing {
+            match action {
+                "site_use_camera"=>{site.call_method0("use_camera")?;return Ok(());}
+                "site_load"=>{
+                    let path=py.import("built_render.shell_files")?.getattr("ShellFileDialog")?.call_method1("getOpenFileName",(ctx.getattr("win")?,tr(py,"Load site placement")?,"","Site placement (*.prj *.json)"))?.get_item(0)?;
+                    if path.is_truthy()?{site.call_method1("load_placement",(path,))?;}
+                    return Ok(());
+                }
+                "site_search" if site.call_method0("search_coordinates")?.is_truthy()?=>return Ok(()),
+                "site_apply"=>{
+                    let params=site.call_method0("parameters")?;
+                    if params.is_none(){return Ok(());}
+                    let pos=site.call_method0("position")?;
+                    let history=crate::settings_rows::apply(py)?.call_method1("document_history",(envb.getattr("vp")?,))?;
+                    let result=py.import("built_core.command_protocol")?.call_method1("set_location",(history,pos.get_item(0)?,pos.get_item(1)?,params))?;
+                    if result.get_item("ok")?.is_truthy()?{
+                        crate::settings_rows::_scene_changed(&envb)?;
+                        chrome(py)?.call_method1("close",(ctx.getattr("win")?,))?;
+                    }else{site.setattr("note",result.get_item("error")?)?;}
+                    return Ok(());
+                }
+                _=>()
+            }
+        }
+        if site.is_none() {
             return slf.call_method0("end_site").map(|_| ());
         }
         if action == "site_map" {
@@ -1185,7 +1315,7 @@ impl SettingsSheet {
 fn show(py: Python<'_>, win: &Bound<'_, PyAny>, page: Option<String>, shortcut_of: Option<Bound<'_, PyAny>>) -> PyResult<bool> {
     let cs = chrome(py)?;
     let cur = cs.call_method1("current", (win,))?;
-    let reuse = cur.is_instance_of::<SettingsSheet>();
+    let reuse = cur.is_instance_of::<SettingsSheet>() && cur.getattr("site")?.is_none();
     let sheet = if reuse { cur.clone() } else { module(py)?.getattr("SettingsSheet")?.call0()? };
     sheet.setattr("_win", win)?;
     let has_shortcut = shortcut_of.is_some();
@@ -1200,8 +1330,8 @@ fn show(py: Python<'_>, win: &Bound<'_, PyAny>, page: Option<String>, shortcut_o
 
 pub fn edit_location_now(win: &Bound<'_, PyAny>, source: Option<Bound<'_, PyAny>>, center: Option<(f64, f64)>, done: Option<Bound<'_, PyAny>>) -> PyResult<()> {
     let py = win.py();
-    show(py, win, Some("location".into()), None)?;
-    let sheet = chrome(py)?.call_method1("current", (win,))?;
+    let sheet = module(py)?.getattr("SettingsSheet")?.call1(("location",))?;
+    sheet.setattr("_win",win)?;
     let scene = win.getattr("viewport")?.getattr("scene")?;
     let datum = scene.getattr("georef")?;
     let (lat, lon) = match center {
@@ -1215,6 +1345,9 @@ pub fn edit_location_now(win: &Bound<'_, PyAny>, source: Option<Bound<'_, PyAny>
     sheet.call_method0("end_site")?;
     let mode = env(win)?.getattr("st")?.call_method1("value", ("georef/coord_mode", "geo"))?;
     sheet.setattr("site", py.import("built_core")?.getattr("LocationDraft")?.call1((lat, lon, mode))?)?;
+    if done.is_none() && center.is_none() {
+        sheet.getattr("site")?.call_method1("start_placement",(&scene,lat,lon))?;
+    }
     sheet.setattr("site_scene", scene)?;
     sheet.setattr("site_done", done)?;
     let source = match source {
@@ -1222,11 +1355,11 @@ pub fn edit_location_now(win: &Bound<'_, PyAny>, source: Option<Bound<'_, PyAny>
         None => crate::model_panels::basemap::current(&env(win)?.getattr("st")?)?,
     };
     sheet.setattr("site_source", source)?;
-    chrome(py)?.call_method1("refresh", (win,))?;
+    chrome(py)?.call_method1("open", (win,sheet))?;
     Ok(())
 }
 
-/// The location editor on Settings' Location page (`done(lat, lon, width,
+/// The site placement sheet or capture editor (`done(lat, lon, width,
 /// length)` instead of setting the document's location when given).
 #[pyfunction]
 #[pyo3(signature = (win, *, source=None, center=None, done=None))]

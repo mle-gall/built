@@ -462,6 +462,13 @@ impl Sheet {
         Ok(())
     }
 
+    fn footer_action(&mut self, py: Python<'_>, action: &Bound<'_, PyAny>) -> PyResult<()> {
+        if let Some(f) = &self.footer_spec {
+            f.bind(py).set_item("action", action)?;
+        }
+        Ok(())
+    }
+
     /// The focused item: taken when the sheet opens, or now with `force`.
     #[pyo3(signature = (item_id, force=false))]
     fn focus(&mut self, item_id: Py<PyAny>, force: bool) {

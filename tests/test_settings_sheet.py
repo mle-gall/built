@@ -73,7 +73,8 @@ def frame(win) -> dict:
 
 
 def act(win, *parts):
-    cs.action(win, SEP.join(("settings",) + tuple(str(p) for p in parts)))
+    sid = json.loads(win._fake_view.renderer.sheets[-1])["id"]
+    cs.action(win, SEP.join((sid,) + tuple(str(p) for p in parts)))
     return frame(win)
 
 
@@ -386,46 +387,45 @@ def test_the_shell_prefs_command_opens_the_sheet(win):
     assert isinstance(cs.current(win), ss.SettingsSheet)
 
 
-def test_add_location_opens_coordinates_first_applies_to_the_document_and_undoes(win, tmp_path, monkeypatch):
-    from built_core.sun import scene_north_deg
+def site_act(win, *parts):
+    cs.action(win, SEP.join(("site-placement", *parts)))
+    return frame(win)
+
+
+def test_site_placement_is_one_document_edit(win, tmp_path, monkeypatch):
     from georef import tile_fetcher
+
+    requests = []
+    monkeypatch.setattr(tile_fetcher.TileFetcher, "request", lambda _, src, x, y, z: requests.append((x, y, z)))
     win.open_preferences(page="location")
     frame(win)
-    scene = win.viewport.scene
-    act(win, "v", "north", "37")
     opened = act(win, "b", "add_location")
-    assert {"site_lat", "site_lon"} <= fields(opened).keys()
-    assert "apply at once" not in opened["footer"]["hint"]
-    assert not any(b["kind"] == "map" for b in opened["content"]["blocks"])
-    invalid = act(win, "v", "site_lat", "91")
-    apply = next(v for b in invalid["content"]["blocks"] for v in b.get("buttons", ()) if v["id"] == "site_apply")
-    assert not apply["enabled"]
-    act(win, "verb", "site_apply")
+    assert opened["id"] == "site-placement"
+    assert {"site_easting", "site_angle"} <= fields(opened, "detail").keys()
+    assert not opened["footer"]["action"]["enabled"]
+    site_act(win, "site_tiles", "4,3,12")
+    assert requests == [(4, 3, 12)]
+    site_act(win, "v", "site_query", "46.5, 3")
+    site_act(win, "verb", "site_search")
+    assert cs.current(win).site.position() is None
+    site_act(win, "verb", "site_use_camera")
+    site_act(win, "v", "site_filter", "Lambert-93")
+    site_act(win, "v", "site_crs", "1")
+    site_act(win, "v", "site_elevation", "37.5")
+    site_act(win, "v", "site_angle", "30")
+    site_act(win, "site_center", "46.86", "2.36", "14")
+    scene = win.viewport.scene
     assert scene.georef is None
-    act(win, "v", "site_lat", "48.85")
-    act(win, "v", "site_lon", "2.35")
-    calls = []
-    monkeypatch.setattr(tile_fetcher.TileFetcher, "request", lambda self, src, x, y, z: calls.append((src.id, x, y, z)))
-    mapped = act(win, "verb", "site_map")
-    map_block = next(b["map"] for b in mapped["content"]["blocks"] if b["kind"] == "map")
-    assert (map_block["lat"], map_block["lon"]) == (48.85, 2.35)
-    assert not calls
-    act(win, "site_tiles", "4,3,12")
-    assert calls == [(map_block["source"], 4, 3, 12)]
-    act(win, "site_center", "48.86", "2.36", "14")
-    act(win, "verb", "site_apply")
-    assert (scene.georef.lat, scene.georef.lon, scene_north_deg(scene)) == (48.86, 2.36, 37)
+    site_act(win, "verb", "site_apply")
+    assert scene.georef.placement == pytest.approx((2154, 700000, 6600000), abs=0.001)
+    assert (scene.georef.alt, scene.georef.north) == (37.5, 30)
     path = tmp_path / "located.igz"
     assert do_save(win, path)
     other = Scene()
     igz.load_into(other, path)
-    assert (other.georef.lat, other.georef.lon, other.georef.north) == (48.86, 2.36, 37)
+    assert other.georef.placement == scene.georef.placement
     assert win.viewport.history.undo() and scene.georef is None
-    assert win.viewport.history.redo() and scene.georef.lat == 48.86
-    act(win, "b", "add_location")
-    act(win, "v", "site_lat", "-22")
-    act(win, "verb", "site_cancel")
-    assert scene.georef.lat == 48.86
+    assert win.viewport.history.redo() and scene.georef.placement == other.georef.placement
 
 
 def test_place_search_approximate_location_and_capture_use_the_open_draft(win, monkeypatch):
@@ -457,22 +457,16 @@ def test_place_search_approximate_location_and_capture_use_the_open_draft(win, m
     assert win.viewport.scene.georef is None
 
 
-def test_move_origin_confirmation_and_undo_restore_survey_datum(win, monkeypatch):
+def test_cancel_site_placement_preserves_survey_datum(win):
     from georef.datum import SceneDatum
-    from built_render import chrome_dialogs
     scene = win.viewport.scene
-    old = SceneDatum(45, 7, alt=1250, north=30)
-    scene.georef = old
+    old = scene.georef = SceneDatum(45, 7, alt=1250, north=30)
     ss.edit_location(win)
     frame(win)
-    act(win, "v", "site_lat", "46")
-    choices = iter(("cancel", "move"))
-    monkeypatch.setattr(chrome_dialogs, "ask", lambda *_a, **_kw: next(choices))
-    act(win, "verb", "site_apply")
+    site_act(win, "v", "site_northing", "46")
+    site_act(win, "verb", "site_cancel")
     assert scene.georef is old
-    act(win, "verb", "site_apply")
-    assert (scene.georef.lat, scene.georef.north, scene.georef.alt) == (46, 30, 0)
-    assert win.viewport.history.undo() and scene.georef is old
+
 
 def test_ai_connection_reads_and_writes_the_plugins_provider_slots(win):
     settings = preferences()
@@ -524,3 +518,37 @@ def test_occlusion_distance_slider_preserves_off_step_file_values(win):
         assert win.active_style().ao_distance == want
     act(win, "v", "ao_distance", "100")
     assert 0.3 < win.active_style().ao_distance < 1.5
+
+
+def test_site_file_preview_and_survey_offsets_stay_in_draft(win, tmp_path, monkeypatch):
+    from built_core import Vec3
+    from built_core.georef.datum import SceneDatum
+    from built_core.georef.points import GeoPoint
+    from built_render.shell_files import ShellFileDialog
+
+    scene = win.viewport.scene
+    old = scene.georef = SceneDatum(46.5, 3., 11.)
+    scene.geo_points.append(GeoPoint(Vec3(), "Benchmark", ""))
+    scene.mesh.add_face([Vec3(), Vec3(3, 0, 0), Vec3(1, 2, 0)])
+    ss.edit_location(win)
+    frame(win)
+    calibration = tmp_path / "calibration.json"
+    calibration.write_text(json.dumps(dict(epsg=2154, easting=700010, northing=6600000,
+                                           elevation=17, north=0)))
+    projection = tmp_path / "survey.prj"
+    projection.write_text('PROJCS["WGS 84 / UTM zone 31N", AUTHORITY["EPSG","32631"]]')
+    unknown = tmp_path / "unknown.prj"
+    unknown.write_text('PROJCS["Unknown",GEOGCS["WGS 84",AUTHORITY["EPSG","4326"]]]')
+    paths = iter([calibration, projection, unknown])
+    monkeypatch.setattr(ShellFileDialog, "getOpenFileName", lambda *_: (str(next(paths)), ""))
+    wire = site_act(win, "verb", "site_load")
+    map_spec = wire["content"]["blocks"][0]["map"]
+    assert len(map_spec["footprint"]) == 3 and len(map_spec["markers"]) == 1
+    assert any("ΔE +10.00 m" in b.get("text", "") for b in wire["detail"]["blocks"])
+    site_act(win, "verb", "site_load")
+    params = cs.current(win).site.parameters()
+    assert params[0] == 32631
+    site_act(win, "verb", "site_load")
+    assert "EPSG" in cs.current(win).site.note
+    assert cs.current(win).site.parameters() == params
+    assert scene.georef is old

@@ -1151,6 +1151,10 @@ impl Ui {
                             }
                             ui.add_space(SPACE_S);
                         }
+                        if spec.id == "site-placement" {
+                            d.blocks(ui,&spec.content.blocks);
+                            return;
+                        }
                         content_scroll(&spec.id)
                             .show(ui, |ui| {
                                 ui.set_width(ui.available_width());

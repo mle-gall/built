@@ -12,7 +12,7 @@ def controls(host):
 
 
 def add(c, name, url):
-    c.row("basemap_add").press(c.env)
+    c.set("basemap_source", "add-source")
     form = current(c.env.win)
     form.receive("name", name)
     form.receive("url", url)
@@ -53,11 +53,11 @@ def test_url_without_placeholders_is_rejected(native_question_host):
 def test_remove_forgets_the_source(native_question_host):
     c = controls(native_question_host)
     add(c, "Dron Yanque", URL)
-    assert c.enabled("basemap_remove")
-    c.row("basemap_remove").press(c.env)
+    assert "remove-source" in c.options("basemap_source")
+    c.set("basemap_source", "remove-source")
     c = controls(native_question_host)
     assert "custom-dron-yanque" not in c.options("basemap_source")
-    assert c.value("basemap_source") == "esri_imagery" and not c.enabled("basemap_remove")
+    assert c.value("basemap_source") == "esri_imagery" and "remove-source" not in c.options("basemap_source")
 
 
 def test_legacy_single_url_pref_migrates_to_a_named_source(native_question_host):

@@ -18,7 +18,8 @@ pub(super) struct SiteRequests {
     #[pyo3(get)]
     locator: Py<PyAny>,
 }
-const SUBSCRIPTIONS: [(&str, &str, &str); 5] = [
+const SUBSCRIPTIONS: [(&str, &str, &str); 6] = [
+    ("tiles", "tileFailed", "tile_failed"),
     ("tiles", "tileReady", "tile_ready"),
     ("searcher", "resultsReady", "places"),
     ("searcher", "failed", "error"),
@@ -57,6 +58,14 @@ pub(super) fn create<'p>(
 }
 #[pymethods]
 impl SiteRequests {
+    #[pyo3(signature=(*_args))]
+    fn tile_failed(&self, py: Python, _args: &Bound<PyTuple>) -> PyResult<()> {
+        if let Some(refresh) = &self.refresh {
+            self.draft.bind(py).setattr("offline", true)?;
+            refresh.call0(py)?;
+        }
+        Ok(())
+    }
     #[pyo3(signature=(*_args))]
     fn tile_ready(&self, py: Python, _args: &Bound<PyTuple>) -> PyResult<()> {
         if let Some(refresh) = &self.refresh {

@@ -1081,15 +1081,7 @@ fn location<'py>(py: Python<'py>, env: &Bound<'py, PyAny>) -> PyResult<Bound<'py
         let deg: f64 = py.import("built_core.sun")?.call_method1("scene_north_deg", (scene,))?.extract()?;
         Ok(py.import("builtins")?.getattr("round")?.call1((deg, 1))?.unbind())
     })?;
-    let where_ = func(py, |py, a| {
-        let datum = a.get_item(0)?.getattr("scene")?.getattr("georef").ok().filter(|d| !d.is_none());
-        let Some(datum) = datum else { return obj(py, tr(py, "No location yet: north turns only the sun.")?) };
-        let lat: f64 = datum.getattr("lat")?.extract()?;
-        let lon: f64 = datum.getattr("lon")?.extract()?;
-        obj(py, trf(py, "{lat}, {lon} — the base map and the terrain turn with north.", &[("lat", s(py, &format!("{lat:.6}"))), ("lon", s(py, &format!("{lon:.6}")))])?)
-    })?;
     let scene = env.getattr("scene")?;
-    let has = !scene.is_none() && scene.getattr("georef").is_ok_and(|g| !g.is_none());
     let rows = PyList::new(py, [
         row(py, "north", "number", &tr(py, "North")?, Some(north), Some(func(py, |py, a| {
             put_north(&a.get_item(0)?, &a.get_item(1)?)?;
@@ -1097,18 +1089,7 @@ fn location<'py>(py: Python<'py>, env: &Bound<'py, PyAny>) -> PyResult<Bound<'py
         })?), &[("lo", obj(py, -180.0)?), ("hi", obj(py, 180.0)?), ("decimals", obj(py, 1)?), ("suffix", obj(py, "°")?),
                ("words", obj(py, "sun shadows angle")?),
                ("tip", obj(py, tr(py, "Where true north lies, in degrees clockwise from the green (Y) axis. The shadows turn with it; the model does not move.")?)?)])?,
-        row(py, "north_tool", "button", &tr(py, "Aim north on screen")?, None, None, &[
-            ("press", func(py, |py, a| {
-                let win = a.get_item(0)?.getattr("win")?;
-                crate::sheet_runtime::close(&win)?;
-                if let Some(activate) = opt(&win, "_activate_tool").filter(|f| f.is_callable()) {
-                    activate.call1(("north",))?;
-                }
-                Ok(none(py))
-            })?),
-            ("tip", obj(py, tr(py, "Tools ▸ North: click a centre, then click toward north.")?)?)])?,
-        row(py, "location", "text", &tr(py, "Location")?, Some(where_), None, &[])?,
-        row(py, "add_location", "button", &tr(py, if has { "Edit location…" } else { "Add location…" })?, None, None, &[
+        row(py, "add_location", "button", &tr(py, "Site placement…")?, None, None, &[
             ("press", func(py, |py, a| {
                 crate::settings_host::edit_location_now(&a.get_item(0)?.getattr("win")?, None, None, None)?;
                 Ok(none(py))
@@ -1117,18 +1098,40 @@ fn location<'py>(py: Python<'py>, env: &Bound<'py, PyAny>) -> PyResult<Bound<'py
             ("words", obj(py, "georeference map site")?),
             ("tip", obj(py, tr(py, "Pick the site on the map: the sun and the base map stand there.")?)?)])?,
     ])?;
-    if has && opt(&scene, "tile_layer").is_some_and(|l| !l.is_none()) {
-        rows.append(row(py, "terrain3d", "check", &tr(py, "3D terrain")?, Some(func(py, |py, a| {
-            let vp = a.get_item(0)?.getattr("win")?.getattr("viewport")?;
-            let terrain = vp.getattr("scene")?.getattr("terrain")?;
-            obj(py, crate::document_terrain::enabled(&vp)? && (terrain.is_none() || terrain.getattr("visible")?.is_truthy()?))
-        })?), Some(func(py, |py, a| {
-            let vp = a.get_item(0)?.getattr("win")?.getattr("viewport")?;
-            crate::document_terrain::set_terrain_enabled(&vp, a.get_item(1)?.extract()?)?;
-            Ok(none(py))
-        })?), &[])?)?;
-    }
     PyList::new(py, [PyTuple::new(py, [s(py, "location"), s(py, &tr(py, "Location & north")?), rows.into_any()])?])
+}
+
+fn terrain_appearance(
+    py: Python<'_>,
+    env: &Bound<'_, PyAny>,
+    groups: &Bound<'_, PyList>,
+) -> PyResult<()> {
+    let scene = env.getattr("scene")?;
+    if !scene.is_none() && opt(&scene, "tile_layer").is_some_and(|l| !l.is_none()) {
+        let field = row(
+            py,
+            "terrain3d",
+            "check",
+            &tr(py, "3D terrain")?,
+            Some(func(py, |py, a| {
+                let vp = a.get_item(0)?.getattr("win")?.getattr("viewport")?;
+                let terrain = vp.getattr("scene")?.getattr("terrain")?;
+                obj(
+                    py,
+                    crate::document_terrain::enabled(&vp)?
+                        && (terrain.is_none() || terrain.getattr("visible")?.is_truthy()?),
+                )
+            })?),
+            Some(func(py, |py, a| {
+                let vp = a.get_item(0)?.getattr("win")?.getattr("viewport")?;
+                crate::document_terrain::set_terrain_enabled(&vp, a.get_item(1)?.extract()?)?;
+                Ok(none(py))
+            })?),
+            &[],
+        )?;
+        groups.append(("terrain", tr(py, "Terrain")?, vec![field]))?;
+    }
+    Ok(())
 }
 
 /// `[(group id, caption, [Row])]` of a section (not Keyboard).
@@ -1149,6 +1152,7 @@ pub fn section_groups<'py>(py: Python<'py>, env: &Bound<'py, PyAny>, section: &s
         "appearance" => {
             let groups = appearance::groups(py, env)?;
             crate::model_panels::model_appearance::append(py, env, &groups)?;
+            terrain_appearance(py,env,&groups)?;
             crate::model_panels::shadows::append(py, env, &groups)?;
             Ok(groups)
         },
