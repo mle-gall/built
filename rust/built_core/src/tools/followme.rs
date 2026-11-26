@@ -204,7 +204,6 @@ impl Tool for FollowMe {
                     ..Drag::default()
                 });
                 host.call("sweep_highlight", Json::Null);
-                host.call("sweep_message", json!("drag"));
             }
             ToolEvent::Release(_) => {
                 if let Some(d) = &self.drag {

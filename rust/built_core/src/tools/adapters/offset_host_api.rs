@@ -440,7 +440,7 @@ fn host_selected_outline<'py>(a: &Args<'py>) -> Reply<'py> {
                 (
                     module.call_method(
                         "tr",
-                        ("{n} edges selected — click to start the offset",),
+                        ("{n} edges selected",),
                         Some(&fields!(py; "n" => selection.len()?.into_bound_py_any(py)?)),
                     )?,
                     4000,

@@ -340,4 +340,4 @@ def test_edges_in_the_profile_plane_are_not_path_edges():
     t.on_hover(_ctx(vp, 30, 0))
     assert t._chain == [] and t.preview_faces() == []
     t.on_click(_ctx(vp, 30, 0))                      # nothing to sweep yet
-    assert len(m.faces) == 1 and vp.messages[-1].startswith("Follow Me: touch")
+    assert len(m.faces) == 1 and vp.messages[-1] == "Follow Me needs at least one path edge."

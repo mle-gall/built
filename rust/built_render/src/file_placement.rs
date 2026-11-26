@@ -38,8 +38,6 @@ fn activate(
     win: &Bound<'_, PyAny>,
     tool: &Bound<'_, PyAny>,
     label: &str,
-    hint: &str,
-    ms: u32,
 ) -> PyResult<()> {
     let py = win.py();
     let vp = win.getattr("viewport")?;
@@ -54,8 +52,7 @@ fn activate(
     let vars = PyDict::new(py);
     vars.set_item("name", translated(py, label, None)?)?;
     win.setattr("tool_label", translated(py, "Tool: {name}", Some(&vars))?)?;
-    if hint.is_empty() { crate::native_view_actions::activate_tool_hint(win)?; }
-    else {vp.call_method1("flash_status", (translated(py, hint, None)?, ms))?;}
+    crate::native_view_actions::activate_tool_hint(win)?;
     vp.call_method0("update")?;
     Ok(())
 }
@@ -81,8 +78,6 @@ fn start_placement(
         win,
         &tool,
         if wall { "Place hosted family" } else { "Place component" },
-        if wall { "" } else { "Click to place the component (Esc cancels)" },
-        4000,
     )
 }
 #[pyfunction]
@@ -205,8 +200,6 @@ fn import_picture(win: &Bound<'_, PyAny>) -> PyResult<()> {
         win,
         &tool,
         "Image",
-        "Click a corner and drag to size the image, or type a width and press Enter (Esc cancels)",
-        6000,
     )
 }
 #[pyfunction]

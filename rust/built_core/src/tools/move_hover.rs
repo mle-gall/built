@@ -275,11 +275,6 @@ impl GripTurn {
         rot.setattr("ref_point", &pos)?;
         rot.setattr("hover_point", pos)?;
         slf.borrow_mut().phase = Turn::Active(rot.unbind());
-        let message = py.import("built_core.i18n")?.call_method1(
-            "tr",
-            ("Rotate: move to turn, click or type the angle. Ctrl = copy",),
-        )?;
-        view.call_method1("flash_status", (message,))?;
         view.call_method0("update")?;
         Ok(true)
     }

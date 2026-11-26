@@ -39,10 +39,6 @@ fn link_document<'py>(
             .getattr("make_link")?
             .call((vp.getattr("scene")?, &p), Some(&kw))
     })?;
-    win.call_method0("statusBar")?.call_method1(
-        "showMessage",
-        (named(win, "Click to place {name}", "name", &p)?, 5000),
-    )?;
     let vec = py.import("built_core")?.getattr("Vec3")?;
     let kw = PyDict::new(py);
     kw.set_item("anchor", vec.call0()?)?;

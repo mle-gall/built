@@ -103,3 +103,15 @@ def test_hosted_placement_hint_on_transient_tool():
     from types import SimpleNamespace
     tool = SimpleNamespace(_wall_family=True)
     assert hint_for(None, tool) == "Hover a wall · Tab flips side · enter sill;offset · click to place"
+
+
+def test_sampling_material_uses_the_hint_and_keeps_notifications_quiet(native_window, monkeypatch):
+    win = native_window
+    notices = []
+    monkeypatch.setattr(win, "notify", lambda *args: notices.append(args))
+    try:
+        win._on_toggle_eyedropper(True)
+        assert "Click a face to sample its material" in win.statusBar().currentMessage()
+        assert notices == []
+    finally:
+        win._on_toggle_eyedropper(False)

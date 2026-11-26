@@ -10,7 +10,8 @@ const TOOLS: &[(&str, Phases)] = &[
     ]),
     ("change_axes", &[
         ("idle", "Click the new origin."),
-        ("started", "Click the red direction, then the green one."),
+        ("started", "Click along the new red axis"),
+        ("green", "Click to set the green direction"),
     ]),
     ("scale_manager", &[
         ("idle", "Type the X, Y, Z scale in the window; Enter or leaving the field applies it."),
@@ -90,6 +91,7 @@ const TOOLS: &[(&str, Phases)] = &[
         ("started", "Move, or type the distance and Enter. Double-click repeats the last."),
     ]),
     ("move", &[
+        ("turn", "Rotate: move to turn, click or type the angle. Ctrl = copy"),
         ("idle", "Click what to move (or select it first). Red + on a group = rotate it."),
         ("started", "Click the destination, or type the distance and Enter."),
     ]),
@@ -153,7 +155,7 @@ const TOOLS: &[(&str, Phases)] = &[
         ("idle", "Click where the copy goes. Arrows lock an axis."),
     ]),
     ("place_group", &[
-        ("idle", "Click where the component goes."),
+        ("idle", "Click to place the component (Esc cancels)"),
     ]),
     ("position_camera", &[
         ("idle", "Click where to stand, or drag toward what to look at. Type the eye height."),
@@ -191,6 +193,9 @@ fn phase_of(key: &str, tool: &Bound<PyAny>) -> PyResult<&'static str> {
     let started =
         |attr| -> PyResult<bool> { Ok(tool.getattr_opt(attr)?.is_some_and(|p| !p.is_none())) };
     Ok(match key {
+        "change_axes" if started("red_point")? => "green",
+        "move" if started("_grip_rot")? => "turn",
+        "followme" if started("_profile")? => "started",
         "rotate" if started("ref_point")? => "angle",
         "arc" if started("end_point")? => "bulge",
         "arc" if started("start_point")? => "end",
@@ -234,7 +239,11 @@ pub(crate) fn hint_for(
         return tr(py, hint);
     }
     if truth(tool,"_wall_family",false)? {return tr(py,"Hover a wall · Tab flips side · enter sill;offset · click to place");}
-    let key = key.unwrap_or_default();
+    let kind = tool.getattr_opt("kind")?.and_then(|v| v.extract::<String>().ok());
+    let key = key.or(kind.as_deref()).unwrap_or_default();
+    if key == "paint" && truth(tool, "sample_armed", false)? {
+        return tr(py, "Click a face to sample its material");
+    }
     let Some((_, phases)) = TOOLS.iter().find(|(k, _)| *k == key) else {
         return match tool.getattr_opt("name")?.filter(|v| !v.is_none()) {
             Some(v) if v.is_truthy()? => trf(

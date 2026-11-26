@@ -85,13 +85,11 @@ impl Tool for ChangeAxes {
                 }
                 let Some(o) = self.origin else {
                     self.origin = Some(g);
-                    host.call("axes_message", json!("red"));
                     return Reply::redraw();
                 };
                 let Some(r) = self.red else {
                     if len(sub(g, o)) >= 1e-6 {
                         self.red = Some(g);
-                        host.call("axes_message", json!("green"));
                     }
                     return Reply::redraw();
                 };

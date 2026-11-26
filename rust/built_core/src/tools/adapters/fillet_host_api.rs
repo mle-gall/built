@@ -435,7 +435,7 @@ fn host_announce_size<'py>(a: &Args<'py>) -> Reply<'py> {
     let module = imported(py, "tools.fillet_host")?;
     let tool = a.get_item(0)?;
     let viewport = a.get_item(1)?;
-    viewport.call_method1("flash_status", (module.call_method("tr", ("{m} {r} — click an edge.",), Some(&fields!(py; "m" => module.call_method1("tr", (tool.call_method0("_measure_label")?,))?, "r" => module.call_method1("fmt_len_fine", (tool.getattr("radius")?,))?)))?, 3000,))?;
+    viewport.call_method1("flash_status", (module.call_method("tr", ("{m} {r}",), Some(&fields!(py; "m" => module.call_method1("tr", (tool.call_method0("_measure_label")?,))?, "r" => module.call_method1("fmt_len_fine", (tool.getattr("radius")?,))?)))?, 3000,))?;
     Ok(none(py))
 }
 fn current_edges<'py>(a: &Args<'py>) -> Reply<'py> {

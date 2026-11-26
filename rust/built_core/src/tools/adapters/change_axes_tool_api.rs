@@ -14,7 +14,6 @@ fn host_axes_target<'py>(a: &Args<'py>) -> Reply<'py> {
 fn host_axes_message<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let key = a.get_item(2)?;
-    let labels: Obj<'py>;
     let vp = a.get_item(1)?;
     let tr = imported(py, "built_core.i18n")?.getattr("tr")?;
     if key.eq("collinear")? {
@@ -25,13 +24,10 @@ fn host_axes_message<'py>(a: &Args<'py>) -> Reply<'py> {
                 4000,
             ),
         )?;
-    } else {
-        if key.eq("done")? {
-            vp.call_method1("flash_status", (tr.call1(("Axes changed",))?, 2500))?;
-        } else {
-            labels = fields!(py; "empty" => "Select one group or component first", "red" => "Click along the new red axis", "green" => "Click to set the green direction").into_any();
-            vp.call_method1("flash_status", (tr.call1((labels.get_item(&key)?,))?,))?;
-        }
+    } else if key.eq("done")? {
+        vp.call_method1("flash_status", (tr.call1(("Axes changed",))?, 2500))?;
+    } else if key.eq("empty")? {
+        vp.call_method1("flash_status", (tr.call1(("Select one group or component first",))?,))?;
     }
     Ok(none(py))
 }

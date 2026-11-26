@@ -14,7 +14,7 @@ fn follow_me_host_init<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 pub(super) fn install(module: &Bound<PyModule>) -> PyResult<()> {
     let py = module.py();
-    module.add("_MESSAGES", fields!(py; "invalid" => "Follow Me: the selected edges must form one simple path", "drag" => "Follow Me: drag along the path (it highlights red) — click to finish, Esc to cancel; hold Alt over a face to follow its perimeter", "touch" => "Follow Me: touch the path edges to extrude along them").into_any())?;
+    module.add("_MESSAGES", fields!(py; "invalid" => "Follow Me: the selected edges must form one simple path", "touch" => "Follow Me needs at least one path edge.").into_any())?;
     module.add(
         "_FAILED",
         "Follow Me: could not sweep along that path (reversal or degenerate segment)",

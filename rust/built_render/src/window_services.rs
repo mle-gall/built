@@ -171,11 +171,6 @@ fn toggle_eyedropper(win: &Bound<'_, PyAny>, armed: bool) -> PyResult<()> {
         .setattr("sample_armed", armed)?;
     if armed {
         win.call_method1("_activate_tool", ("paint",))?;
-        let hint = py
-            .import("built_core.i18n")?
-            .call_method1("tr", ("Click a face to sample its material",))?;
-        win.getattr("viewport")?
-            .call_method1("flash_status", (hint,))?;
     }
     win.getattr("viewport")?
         .call_method0("_apply_tool_cursor")?;
