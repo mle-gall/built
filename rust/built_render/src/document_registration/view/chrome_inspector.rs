@@ -173,9 +173,12 @@ fn inspector<'py>(a: &Args<'py>) -> Reply<'py> {
     if section_key.starts_with("section:") || section_key.starts_with("sections:") {
         let section = core.call_method1("section_inspector", (&scene, &section_key))?;
         if !section.is_none() {
-            show_given(&view, &section)?;
             if !focused && !sel.is_empty() {
-                renderer.call_method1("ui_set_identity", (identity()?,))?;
+                let fields = identity()?;
+                show(&view, fields.get_item(0)?.get_item(1)?, section.get_item(1)?)?;
+                renderer.call_method1("ui_set_identity", (fields,))?;
+            } else {
+                show_given(&view, &section)?;
             }
             return Ok(none(py));
         }
