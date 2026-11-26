@@ -19,14 +19,14 @@ def test_shell_console_history_and_render_dock(tmp_path):
 from built_render import Host
 state = Host.state
 def panel_state(self):
-    return dict(state(self), utility=self.renderer.ui_area_rect("plugin_utility"))
+    return dict(state(self), utility=self.renderer.ui_area_rect("drawer"))
 Host.state = panel_state
 """)
     marker = tmp_path / "runs"
     script = tmp_path / "steps.txt"
     # Recalling and running the same line writes twice, through real input.
     script.write_text(f"""wait 800
-menu panel:render_blender
+click-command render
 wait 250
 menu panel:python_console
 wait 350
@@ -39,6 +39,10 @@ wait 350
 menu panel:python_console
 wait 300
 key enter cmd
+wait 300
+click-command drawer-close
+wait 250
+menu panel:python_console
 wait 300
 key up
 wait 100

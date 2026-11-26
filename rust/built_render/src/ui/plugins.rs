@@ -51,6 +51,7 @@ enum Widget {
         field: Field,
     },
     Button,
+    Chip { available: bool },
     Log {
         lines: Vec<String>,
     },
@@ -164,7 +165,7 @@ pub(super) struct Panels {
     pub(super) commands: Vec<crate::extension_menu::Row>,
     models: Vec<Panel>,
     dock: Option<String>,
-    utility: Option<String>,
+    pinned: Option<String>,
     focus_prompt: Option<String>,
     pub(super) showing: bool,
     drafts: HashMap<(String, String), String>,
@@ -202,7 +203,7 @@ impl Panels {
                     self.dock = Some(instance.into())
                 }
                 Slot::Utility => {
-                    self.utility = Some(instance.into());
+                    self.pinned = Some(instance.into());
                     self.focus_prompt = Some(instance.into());
                 }
             }
@@ -212,12 +213,12 @@ impl Panels {
         self.models.iter().filter(|p| p.slot == Slot::Destination).map(|p| (p.instance.as_str(), p.title.as_str()))
     }
     pub(super) fn dock_visible(&self, id: &str) -> bool { self.showing && self.dock.as_deref() == Some(id) }
-    pub(super) fn utility_visible(&self, id: &str) -> bool { self.utility.as_deref() == Some(id) }
+    pub(super) fn pinned_visible(&self, id: &str) -> bool { self.pinned.as_deref() == Some(id) }
     pub(super) fn available(&self) -> bool {
         !self.models.is_empty() || !self.commands.is_empty()
     }
-    pub(super) fn utility_open(&self) -> bool {
-        self.utility.is_some()
+    pub(super) fn has_pinned(&self) -> bool {
+        self.pinned.is_some()
     }
     pub(super) fn dock(&mut self, ui: &mut egui::Ui, actions: &mut Vec<String>) {
         let mut last_path: Option<&[String]> = None;
@@ -244,7 +245,7 @@ impl Panels {
         }
         let mut open = None;
         ui.horizontal_wrapped(|ui| {
-            for p in self.models.iter().filter(|p| p.slot != Slot::Destination) {
+            for p in self.models.iter().filter(|p| p.slot == Slot::Dock) {
                 if ui
                     .selectable_label(self.dock.as_ref() == Some(&p.instance), &p.title)
                     .clicked()
@@ -267,36 +268,12 @@ impl Panels {
             self.draw(ui, &id, actions)
         }
     }
-    /// The utility pane (Python console, Model Info…) in `bay`: the free
-    /// band between the rail and the dock, its bottom on the bottom bar's
-    /// gutter. The caller leaves the 8-pt gutters; the pane takes the dock's
-    /// glass, radius and margin (P3: it used to sit over the rail).
-    pub(super) fn utility(&mut self, ctx: &egui::Context, bay: Rect, actions: &mut Vec<String>) {
-        let Some(id) = self.utility.clone() else {
-            return;
-        };
-        egui::Area::new("plugin_utility".into())
-            .constrain(false)
-            .pivot(egui::Align2::LEFT_BOTTOM)
-            .fixed_pos(bay.left_bottom())
-            .order(egui::Order::Foreground)
-            .show(ctx, |ui| {
-                glass(Surface::Panel)
-                    .inner_margin(Margin::same(10))
-                    .show(ui, |ui| {
-                        let width = (bay.width() - 20.).max(120.);
-                        ui.set_width(width);
-                        egui::Resize::default()
-                            .id_salt("utility_height")
-                            .resizable([false, true])
-                            .default_width(width)
-                            .min_width(width)
-                            .max_width(width)
-                            .default_height(165.)
-                            .max_height((bay.height() * 0.65).max(120.))
-                            .show(ui, |ui| self.draw(ui, &id, actions));
-                    });
-            });
+    pub(super) fn registered(&self, plugin: &str) -> bool {
+        self.models.iter().any(|p| p.plugin == plugin)
+    }
+    pub(super) fn pinned(&mut self, ui: &mut egui::Ui, actions: &mut Vec<String>) {
+        let Some(id) = self.pinned.clone() else { return };
+        self.draw(ui, &id, actions);
     }
     pub(super) fn draw(&mut self, ui: &mut egui::Ui, id: &str, actions: &mut Vec<String>) {
         let Some(p) = self.models.iter().find(|p| p.instance == id) else {
@@ -320,6 +297,7 @@ impl Panels {
             .find(|i| i.primary)
             .or_else(|| buttons.next())
             .map(|i| &i.id);
+        let has_diagnostics = self.registered("solid_inspector");
         let mut control = |ui: &mut egui::Ui, item: &Item, primary: bool| {
             let response = ui
                 .push_id((id, &item.id), |ui| {
@@ -354,12 +332,25 @@ impl Panels {
                 actions.push(format!("plugin:{msg}"));
             }
         };
+        let mut open_tab = None;
         let mut close = false;
         if p.slot == Slot::Utility {
             ui.horizontal(|ui| {
-                kit::caption_plain(ui, &p.title);
+                let mut tabs: Vec<_> = self.models.iter().filter(|tab| tab.slot == Slot::Utility &&
+                    (tab.plugin != "model_info" || !has_diagnostics)).collect();
+                tabs.sort_by_key(|tab| match tab.plugin.as_str() {
+                    "render_blender" => 0, "python_console" => 1, "solid_inspector" => 2, _ => 3,
+                });
+                let labels: Vec<_> = tabs.iter().map(|tab| (tab.title.clone(), String::new(), true)).collect();
+                if let Some(at) = tabs.iter().position(|tab| tab.instance == id) {
+                    if let Some(pick) = kit::inline_underline_tabs(ui, &labels, at).filter(|pick| *pick != at) {
+                        open_tab = Some(tabs[pick].plugin.clone());
+                    }
+                }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if kit::quiet(ui, "Close").clicked() {
+                    let button = kit::quiet(ui, "Close");
+                    ui.data_mut(|d| d.insert_temp(egui::Id::new("drawer-close"), button.rect.center()));
+                    if button.clicked() {
                         close = true;
                     }
                     if console {
@@ -377,7 +368,7 @@ impl Panels {
             });
         }
         egui::ScrollArea::vertical().id_salt(id).show(ui, |ui| {
-            for section in &p.sections {
+            let mut draw_section = |ui: &mut egui::Ui, section: &Section| {
                 if !section.title.is_empty() && section.title != p.title {
                     kit::caption_plain(ui, &section.title);
                 }
@@ -400,10 +391,22 @@ impl Panels {
                         control(ui, &group[0], !console && primary_id == Some(&group[0].id));
                     }
                 }
+            };
+            if p.plugin == "render_blender" && ui.available_width() >= 560. {
+                ui.columns(2, |columns| {
+                    for section in &p.sections {
+                        let right = section.id == "preview_output" ||
+                            (section.id == "output" && p.sections.iter().all(|s| s.id != "preview_output" || s.items.is_empty()));
+                        draw_section(&mut columns[usize::from(right)], section);
+                    }
+                });
+            } else {
+                for section in &p.sections { draw_section(ui, section); }
             }
         });
+        if let Some(tab) = open_tab { actions.push(format!("drawer:{tab}")); }
         if close {
-            self.utility = None;
+            self.pinned = None;
             self.sequence += 1;
             let event = json!({"api":1,"plugin":p.plugin,"panel":p.panel,"instance":id,
                 "document":p.document,"revision":p.revision,"event_id":self.sequence,
@@ -425,6 +428,7 @@ fn draw_item(
 ) -> Event {
     let mut event = None;
     match &i.widget {
+        Widget::Chip { available } => kit::status_chip(ui, &i.label, if *available { ACCENT } else { WARN }),
         Widget::Button => {
             if kit::sheet_button(ui, &i.label, "", u8::from(primary)) {
                 event = Some(("invoke", Value::Null))
@@ -644,7 +648,7 @@ mod tests {
     }
 
     #[test]
-    fn the_utility_pane_fills_its_bay_and_never_reaches_the_rail() {
+    fn the_drawer_fills_its_bounds_and_never_reaches_the_rail() {
         let mut model = descriptor(
             json!({"kind":"field","id":"size","type":"number","value":1,"min":0,"max":10,"unit":"m"}),
         );
@@ -664,10 +668,10 @@ mod tests {
                     screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(w, h))),
                     ..Default::default()
                 };
-                let _ = ctx.run(raw, |ctx| panels.utility(ctx, bay, &mut Vec::new()));
+                let _ = ctx.run(raw, |ctx| kit::drawer(ctx, bay, |ui| panels.pinned(ui, &mut Vec::new())));
             }
             let r = ctx
-                .memory(|m| m.area_rect(egui::Id::new("plugin_utility")))
+                .memory(|m| m.area_rect(egui::Id::new("drawer")))
                 .unwrap();
             assert!(
                 (r.min.x - bay.min.x).abs() < 0.5,
@@ -681,6 +685,25 @@ mod tests {
             );
             assert!((r.max.y - bay.max.y).abs() < 0.5, "{w}: bottom {}", r.max.y);
         }
+    }
+
+    #[test]
+    fn operations_borrow_and_return_the_pinned_drawer() {
+        let mut panels = Panels::default();
+        let mut render = descriptor(json!({"kind":"log","id":"worker","lines":[]}));
+        render["slot"] = json!("utility");
+        panels.set(&render.to_string()).unwrap();
+        panels.open("doc1-demo");
+        for (soften, fillet, expected) in [
+            (false, false, DrawerMode::Pinned), (false, true, DrawerMode::Fillet),
+            (false, false, DrawerMode::Pinned), (true, false, DrawerMode::Soften),
+            (false, false, DrawerMode::Pinned),
+        ] {
+            assert_eq!(DrawerMode::resolve(soften, fillet, panels.has_pinned()), Some(expected));
+            assert!(panels.pinned_visible("doc1-demo"));
+        }
+        panels.pinned = None;
+        assert_eq!(DrawerMode::resolve(false, false, panels.has_pinned()), None);
     }
 
     #[test]

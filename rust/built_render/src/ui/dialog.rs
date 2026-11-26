@@ -68,6 +68,7 @@ pub struct Dialog {
 }
 
 impl Dialog {
+    pub(super) fn has_soften_preview(&self) -> bool { self.soften_preview.is_some() }
     pub(super) fn new(seq: String) -> Self {
         Dialog { prefix: format!("dlg:{seq}"), seq, title: String::new(), note: String::new(), width: 420.0, soften_preview: None, join_marks: None, fields: Vec::new(),
                  buttons: Vec::new(), page: 0, bufs: HashMap::new(), sent: HashMap::new(),
@@ -217,12 +218,36 @@ impl Ui {
         true
     }
 
+    pub(super) fn draw_soften_preview(&self, ctx: &egui::Context, bounds: Rect) {
+        if let Some(lines) = self.dialog.as_ref().and_then(|d| d.soften_preview.as_ref()) {
+            let paint = ctx.layer_painter(egui::LayerId::background()).with_clip_rect(bounds);
+            for &(a, b) in lines {
+                paint.line_segment([a.into(), b.into()], Stroke::new(2_f32, ACCENT));
+            }
+        }
+    }
+
+    pub(super) fn soften_fields(&mut self, ui: &mut egui::Ui) {
+        let Some(d) = self.dialog.as_mut() else { return };
+        super::kit::caption_plain(ui, &d.title);
+        fields(ui, d, &mut self.actions);
+        ui.horizontal(|ui| {
+            for (id, label, hint, role) in &d.buttons {
+                let label = if role & 127 == 1 { "Apply" } else { label };
+                if ui.add_enabled_ui(role & 128 == 0, |ui| sheet_button(ui, label, hint, role & 127)).inner {
+                    self.actions.push(d.act("b", id, None));
+                }
+            }
+        });
+    }
+
     pub(super) fn dialog_popup(&mut self, ctx: &egui::Context, screen: Rect) {
         let review = self.review;
         let left = if review { GUT } else { GUT + 72.0 + GUT };
         let right = if review { screen.max.x - GUT } else { self.free_right(ctx, screen) - GUT };
         let anchor = self.form_anchor(ctx, screen);
         let Some(d) = self.dialog.as_mut() else { return };
+        if d.has_soften_preview() { return; }
         let w = d.width.min((right - left).max(300.0)).min(screen.width() - 2.0 * GUT);
         let join = d.join_marks.is_some();
         let x = (if join { right - w } else { anchor.x - w / 2.0 }).clamp(GUT, (screen.max.x - GUT - w).max(GUT));
@@ -237,12 +262,7 @@ impl Ui {
             .order(egui::Order::Foreground)
             .show(ctx, |ui| {
                 let (all, _) = ui.allocate_exact_size(screen.size(), Sense::click_and_drag());
-                if let Some(lines) = &d.soften_preview {
-                    let painter = ui.painter().with_clip_rect(Rect::from_min_max(pos2(left, TOP_H), pos2(right, all.bottom())));
-                    for &(a, b) in lines {
-                        painter.line_segment([a.into(), b.into()], Stroke::new(2_f32, ACCENT));
-                    }
-                } else if let Some(marks) = &d.join_marks {
+                if let Some(marks) = &d.join_marks {
                     let paint = ui.painter().with_clip_rect(Rect::from_min_max(pos2(left, TOP_H), pos2(right, all.max.y)));
                     for &(reason, x, y) in marks {
                         let radius = if reason == 0 { 4.0 } else { 6.0 };

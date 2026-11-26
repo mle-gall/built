@@ -145,7 +145,7 @@ class PythonConsoleTool(Tool):
 
 
 class ConsolePanel(_ConsoleExecution):
-    id, title, slot = "console", "Python Console", "utility"
+    id, title, slot = "console", "Console", "utility"
 
     def __init__(self, app, invalidate):
         self._viewport = app.viewport

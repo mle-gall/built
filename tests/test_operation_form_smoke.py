@@ -42,6 +42,10 @@ def test_native_soften_and_export(tmp_path):
 key escape
 menu select_all
 menu soften
+wait 350
+key escape
+wait 250
+menu soften
 wait 400
 key enter
 wait 300
@@ -278,7 +282,7 @@ def test_native_location_coordinates_map_apply_and_cancel(tmp_path):
     steps = tmp_path / "commands"
     # The script can open Settings but cannot address its pages by id. At
     # 1000x920, Location & north follows Dimension style in the model sidebar.
-    steps.write_text("wait 600\nkey escape\nmenu prefs\nwait 350\nclick 116 535\nwait 150\n"
+    steps.write_text("wait 600\nkey escape\nmenu prefs\nwait 350\nclick 116 563\nwait 150\n"
                      "click 552 328\nwait 200\nclick 550 282\nkey a cmd\ntype 48.85\n"
                      "click 550 311\nkey a cmd\ntype 2.35\nclick 340 351\nwait 450\n"
                      "drag 590 585 625 585 left 7\nwait 250\nstate\nclick 492 747\nwait 250\n"
@@ -527,7 +531,7 @@ Host.state = state
 
 @pytest.mark.skipif(os.environ.get("BUILT_WINDOW_TESTS") != "1" or not BIN.exists(),
                     reason="requires a built window and BUILT_WINDOW_TESTS=1")
-def test_bevel_inspector_edit_apply_and_leave(tmp_path):
+def test_fillet_drawer_borrows_console_until_apply_or_cancel(tmp_path):
     from formats.igz import save_scene
     from tests.test_ifc_export import _tagged_wall_scene
 
@@ -545,11 +549,9 @@ def bevel_state(self):
 Host.state = bevel_state
 """)
     steps = tmp_path / "steps"
-    steps.write_text("wait 650\nkey escape\nmenu select_all\ntool fillet\nwait 500\nstate\n"
-                     "click 1079 466\nclick 980 490\nwait 400\nstate\n"
-                     "click 989 466\nclick 980 490\nwait 400\nstate\n"
-                     "click 1094 490\nwait 300\nstate\nclick 699 781\nwait 500\nstate\n"
-                     "click 751 781\nwait 300\nstate\nquit\n")
+    steps.write_text("wait 650\nkey escape\nmenu panel:python_console\nwait 300\nmenu select_all\ntool fillet\nwait 500\nstate\n"
+                     "key escape\nwait 250\nstate\nmenu select_all\ntool fillet\n"
+                     "wait 300\nkey enter\nwait 500\nstate\nquit\n")
     result = run([str(BIN), "--root", str(ROOT), "--venv", str(venv), "--new-instance",
                   "--size", "1280x800", "--script", str(steps), str(initial)],
                  env=dict(os.environ, BUILT_ANSWERS="cmd-d"), capture_output=True, text=True, timeout=60)
@@ -557,15 +559,13 @@ Host.state = bevel_state
     assert result.returncode == 0 and "Traceback" not in log, log
     states = [json.loads(line.removeprefix("[built] state ")) for line in log.splitlines()
               if line.startswith("[built] state ")]
-    start, corner, smooth, removed, applied, done = states[:6]
+    start, cancelled, applied = states[:3]
     assert start["curve"] == "steps" and start["picked"] > 0
-    assert isinstance(corner["curve"], list) and not any(p[2] for p in corner["curve"])
-    assert len(smooth["curve"]) == len(corner["curve"])+1 and sum(p[2] for p in smooth["curve"]) == 1
-    assert removed["curve"] == corner["curve"]
-    assert all(not s["sizing"] and s["picked"] == start["picked"] and s["revision"] == start["revision"]
-               for s in (corner,smooth,removed))
-    assert applied["revision"] == start["revision"]+1 and applied["faces"] > start["faces"]
-    assert done["tool"] != "FilletTool" and done["curve"] is None
+    assert start["input"]["drawer_operation"] and not start["input"]["drawer_pinned"]
+    assert cancelled["input"]["drawer_pinned"] and applied["input"]["drawer_pinned"]
+    assert cancelled["revision"] == start["revision"] and cancelled["tool"] != "FilletTool"
+    assert applied["revision"] == start["revision"] + 1 and applied["faces"] > start["faces"]
+    assert applied["tool"] != "FilletTool"
     assert all(not s["errors"] and not s["blocked_widgets"] for s in states)
 
 
@@ -622,7 +622,7 @@ def fixture_state(self):
                 camera_open=bool(cam), saved_shift=None if saved is None else saved.lens.get("shift_y"),
                 namespace="survey" in bim_registry.get(self.viewport.scene)["classification_systems"],
                 font=bool(getattr(self.view, "_font_done", None)), console=lines,
-                utility=self.renderer.ui_area_rect("plugin_utility"))
+                utility=self.renderer.ui_area_rect("drawer"))
 Host.menu, Host.state = fixture_menu, fixture_state
 """)
     steps = tmp_path / "steps"
@@ -658,12 +658,12 @@ type 40+2
 key enter cmd
 wait 350
 state
-click 897 591
+click-command drawer-close
 wait 220
 menu fixture-preview
 wait 500
 state
-click 897 591
+click-command drawer-close
 wait 280
 quit
 """)

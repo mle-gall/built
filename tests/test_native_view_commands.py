@@ -59,7 +59,7 @@ quit
     assert len(start["tab_rects"]) == 1
     # Every navigation tool on the top bar (UX pass 2, M04).
     assert start["cluster"] == [
-        "library", "orbit", "pan", "zoom", "zoom_window", "zoom_extents", "zoom_selection",
+        "render", "library", "orbit", "pan", "zoom", "zoom_window", "zoom_extents", "zoom_selection",
         "look_around", "walk", "position_camera", "xray", "hidden_geometry", "section_cuts",
     ]
     assert orbit["nav_mode"] == "orbit" and orbit["camera_eye"] != start["camera_eye"]
