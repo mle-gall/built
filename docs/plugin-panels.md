@@ -50,7 +50,7 @@ Use `utility` for a console or other wide output. Section IDs must be unique in 
 | Field with type `choice` | String value and an array of allowed strings in `options` | `commit` with the selected string |
 | Field with type `colour` | Three RGB bytes in an array | `commit` with three RGB bytes |
 | `button` | Label | `invoke` with null |
-| `list` or `table` | Column labels, rows with a unique string `key` and one string per column in `cells`, optional selected key in `selection` | `selection` with a row key |
+| `list` or `table` | Column labels, rows with a unique string `key` and one string per column in `cells`, optional selected key in `selection`. A row may add `actions` (`[id, label]` pairs, drawn as quiet buttons at its end) and `flag` (a warning dot: a conflict) | `selection` with a row key; `row_action` with `{"row": key, "action": id}` |
 | `log` | Plain-text `lines` array | Scrollable transcript |
 | `console` | String array `history` in submission order | `console_submit` with source text. Run or Ctrl/⌘-Enter submits. Up and Down recall history at the prompt boundary. |
 | `chip` | Status label and boolean `available` | Display only |

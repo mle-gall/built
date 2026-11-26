@@ -17,6 +17,9 @@ built_extension = BUILT_SUFFIX[1:]
 datas = [
     # Render with Blender (#181): the script Blender runs on the job.
     ('resources/blender/*.py',     'resources/blender'),
+    # The Built Link add-on: Open in Blender runs it, Install writes its zip.
+    ('integrations/blender/built_link/*.py', 'integrations/blender/built_link'),
+    ('integrations/blender/built_link/*.md', 'integrations/blender/built_link'),
     ('resources/icons/*.png',      'resources/icons'),
     ('resources/icons/*.ico',      'resources/icons'),
     ('resources/icons/mimetypes/*.ico', 'resources/icons/mimetypes'),
