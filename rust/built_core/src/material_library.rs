@@ -363,7 +363,7 @@ pub(crate) fn material_inspector(
     let strength = pbr["emission_strength"].as_f64().unwrap_or(0.);
     let mut emission: Vec<(String, String)> = vec![
         ("Emission".into(), field("color", "emission", &glow_hex)),
-        ("Emission strength".into(), field("edit", "emission_strength", &format!("{}", (strength * 1000.).round() / 1000.))),
+        ("Strength".into(), field("edit", "emission_strength", &format!("{}", (strength * 1000.).round() / 1000.))),
     ];
     let glow_map = pbr["emission_map"]["path"].as_str();
     if let Some(path) = glow_map {

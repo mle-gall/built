@@ -132,13 +132,13 @@ def test_the_editor_shows_emission_with_a_map_slot():
     _, sections = material_inspector(Material("Plain", (.5, .5, .5)), 0)
     rows = {label: value for _, items in sections for label, value in items}
     assert rows["Emission"].endswith("#000000") and "\x1dcolor\x1d" in rows["Emission"]
-    assert rows["Emission strength"].endswith("\x1d0")
+    assert rows["Strength"].endswith("\x1d0")
     actions = [label for title, items in sections if title == "Actions" for _, label in items]
     assert "Emission map…" in actions
     # Emission alone does not switch the PBR surface on.
     _, sections = material_inspector(Material("Glow", (.5, .5, .5), pbr={
         "emission": [1, 0, 0], "emission_strength": 2.0, "emission_map": {"path": "/x/glow.png"}}), 0)
     rows = {label: value for _, items in sections for label, value in items}
-    assert rows["Emission"].endswith("#ff0000") and rows["Emission strength"].endswith("\x1d2")
+    assert rows["Emission"].endswith("#ff0000") and rows["Strength"].endswith("\x1d2")
     assert rows["Emission map"] == "glow.png" and "Metallic" not in rows
     assert rows["PBR surface"].endswith("\x1d0")
