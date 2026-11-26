@@ -1182,6 +1182,23 @@ impl ComponentsProvider {
     }
 }
 
+#[pyclass(module = "built_render.wgpu_library", extends = LibraryProvider, dict)]
+pub struct FamiliesProvider;
+
+#[pymethods]
+impl FamiliesProvider {
+    #[new]
+    fn new() -> PyClassInitializer<Self> {
+        PyClassInitializer::from(LibraryProvider).add_subclass(FamiliesProvider)
+    }
+
+    #[classattr]
+    fn id() -> &'static str { "families" }
+
+    #[classattr]
+    fn label() -> &'static str { "Families" }
+}
+
 /// Coming: section outlines (steel shapes, extrusion and sweep profiles) to
 /// draw, extrude and run along a path.
 #[pyclass(module = "built_render.wgpu_library", extends = LibraryProvider, dict)]
@@ -1607,7 +1624,7 @@ impl LibrarySheet {
             if g.get_item("caption")?.is_truthy()? {
                 content.call_method("caption", (g.get_item("caption")?,), Some(&[("right", g.get_item("right")?)].into_py_dict(py)?))?;
             }
-            content.call_method("tiles", (g.get_item("tiles")?,), Some(&[("size", 96)].into_py_dict(py)?))?;
+            content.call_method("rows", (g.get_item("tiles")?,), Some(&[("thumbs", true)].into_py_dict(py)?))?;
         }
         if !has_target && out.get_item("type_actions")?.is_truthy()? {
             let lctx = ctx_of(py, &ctx.getattr("win")?, &view)?;
@@ -1781,7 +1798,7 @@ impl LibrarySheet {
                 }
                 if ok {
                     st.set_item("type", &arg)?;
-                    st.set_item("scope", "s:model")?;
+                    st.set_item("scope", if arg == "families" { "s:all" } else { "s:model" })?;
                     st.set_item("cursor", py.None())?;
                     _save_state(&st)?;
                 }
@@ -2353,11 +2370,13 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     sub.add_class::<LibraryProvider>()?;
     sub.add_class::<MaterialsProvider>()?;
     sub.add_class::<ComponentsProvider>()?;
+    sub.add_class::<FamiliesProvider>()?;
     sub.add_class::<ProfilesProvider>()?;
     sub.add_class::<LibrarySheet>()?;
     sub.add("PROVIDERS", vec![
         Bound::new(py, MaterialsProvider::new())?.into_any(),
         Bound::new(py, ComponentsProvider::new())?.into_any(),
+        Bound::new(py, FamiliesProvider::new())?.into_any(),
         Bound::new(py, ProfilesProvider::new())?.into_any(),
     ])?;
     for f in [

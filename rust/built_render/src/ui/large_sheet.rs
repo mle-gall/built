@@ -781,6 +781,7 @@ impl Draw<'_> {
         let (block, _) = ui.allocate_exact_size(vec2(w, h), Sense::hover());
         ui.painter().rect_filled(block, R_ROW, FIELD);
         let clip = ui.clip_rect();
+        let mut components = Vec::new();
         for (i, it) in b.items.iter().enumerate() {
             let r = Rect::from_min_size(block.min + vec2(0.0, i as f32 * rh), vec2(w, rh));
             let focused = self.st.focused.as_deref() == Some(it.id.as_str()) && !it.id.is_empty();
@@ -799,6 +800,7 @@ impl Draw<'_> {
                      else { state_of(&resp, false, true) };
             paint_state(ui, r.shrink2(vec2(0.0, 1.0)), st, R_ROW);
             let mut x = r.min.x + 8.0 + it.depth as f32 * 16.0;
+            if it.icon.starts_with("component:") && !self.icons.contains_key(&it.icon) { components.push(it.icon.as_str()); }
             if thumbs {
                 let t = Rect::from_min_size(pos2(x, r.center().y - 15.0), vec2(44.0, 30.0));
                 picture(ui, t, self.icons.get(&it.icon), &it.hex, 4);
@@ -845,6 +847,9 @@ impl Draw<'_> {
             }
             let resp = if it.tip.is_empty() { resp } else { resp.on_hover_text(&it.tip) };
             self.item_input(&resp, it);
+        }
+        if !components.is_empty() {
+            self.out.push(std::iter::once("component-previews").chain(components).collect::<Vec<_>>().join(&SEP.to_string()));
         }
         ui.add_space(SPACE_S);
     }

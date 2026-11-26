@@ -45,6 +45,8 @@ pub struct Item {
     pub base: Option<String>,
     #[serde(deserialize_with = "count")]
     pub uses: i64,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub defaults: Vec<(String, String, String)>,
     pub hex: Option<String>,
     pub thumb: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -89,9 +91,10 @@ pub const SEARCH_CAP: usize = 60;
 pub const ROW_CAP: usize = 600;
 
 /// What differs per resource type: (id, apply label, empty text).
-const TYPES: [(&str, &str, &str); 3] = [
+const TYPES: [(&str, &str, &str); 4] = [
     ("materials", "Paint with it", "No materials yet."),
     ("components", "Place a copy", "No components yet."),
+    ("families", "Place type", "Import a collection folder to browse its family types."),
     ("profiles", "Use", "Profiles are coming: section outlines — steel shapes, mouldings, gaskets — \
                          to extrude, or run along a path with Follow Me."),
 ];
@@ -195,6 +198,7 @@ pub fn filtered<'a>(items: impl IntoIterator<Item = &'a Item>, st: &Browse) -> V
 
 /// The items of one side row.
 pub fn in_scope<'a>(items: &'a [Item], scope: &str, recent: &[String]) -> Vec<&'a Item> {
+    if scope == "s:all" { return items.iter().collect(); }
     if scope == "s:recent" {
         let by_key: HashMap<&str, &Item> = items.iter().map(|e| (e.key.as_str(), e)).collect();
         return recent.iter().filter_map(|k| by_key.get(k.as_str()).copied()).collect();
@@ -237,6 +241,7 @@ pub fn side_rows(items: &[Item], st: &Browse) -> Vec<SideRow> {
             }
         }
     }
+    out.push(("s:all".into(), "All collections".into(), items.len(), 0, String::new(), None));
     let mut files: Vec<(String, usize)> = vec![];
     for e in items.iter().filter(|e| e.source == "linked") {
         let Some(f) = e.file.as_deref().filter(|f| !f.is_empty()) else { continue };
@@ -256,6 +261,7 @@ pub fn side_rows(items: &[Item], st: &Browse) -> Vec<SideRow> {
 }
 
 pub fn scope_title(scope: &str) -> String {
+    if scope == "s:all" { return "All collections".into(); }
     if let Some(path) = scope.strip_prefix("s:linked:") {
         return base_name(path);
     }
@@ -437,6 +443,8 @@ fn tile(t: &str, e: &Item, current: Option<&str>, thumbs: &mut Vec<String>) -> V
             s += &format!(" · used by {}", e.uses);
         }
         s
+    } else if t == "families" {
+        e.category.clone()
     } else if e.uses != 0 {
         format!("{} cop{}", e.uses, if e.uses != 1 { "ies" } else { "y" })
     } else {
@@ -457,6 +465,11 @@ fn detail(inp: &Input, e: &Item, thumbs: &mut Vec<String>) -> Vec<Value> {
         _ => String::new(),
     };
     out.push(block("heading", json!({"text": e.shown(), "right": where_})));
+    if inp.kind == "families" {
+        out.push(block("kv", json!({"rows": e.defaults})));
+        out.push(block("buttons", json!({"buttons": [verb("apply", "Place type", "↩", PRIMARY)], "align": "fill"})));
+        return out;
+    }
     if inp.kind == "components" {
         return out;
     }
@@ -556,7 +569,7 @@ pub fn sheet(inp: &Input) -> Value {
         let n = in_scope(&inp.items, &scope, &st.recent).len();
         let where_ = if scope.starts_with("c:bundled") { "Bundled" } else { "" };
         let sub = [where_.to_owned(), n.to_string()].into_iter().filter(|x| !x.is_empty()).collect::<Vec<_>>().join(" · ");
-        json!({"title": scope_title(&scope), "sub": sub, "empty": empty_text(t, &scope)})
+        json!({"title": scope_title(&scope), "sub": sub, "empty": if t == "families" { kind(t).2.into() } else { empty_text(t, &scope) }})
     };
     let current = inp.current.as_deref();
     let groups: Vec<Value> = groups.iter().filter(|g| !g.2.is_empty()).map(|(cap, sub, members)| json!({

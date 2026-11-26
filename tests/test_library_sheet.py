@@ -62,7 +62,7 @@ def act(win, verb, *args):
 
 
 def tiles(sh):
-    return [i for b in sh["content"]["blocks"] if b["kind"] == "tiles" for i in b["items"]]
+    return [i for b in sh["content"]["blocks"] if b["kind"] in ("rows", "tiles") for i in b["items"]]
 
 
 def detail(sh):
@@ -74,7 +74,7 @@ def test_browse_all_opens_the_sheet_on_the_models_materials(win):
     sh = frame(win)
     assert sh["id"] == "library"
     assert [(t["id"], t["on"], t["enabled"]) for t in sh["tabs"]] == [
-        ("materials", True, True), ("components", False, True)]
+        ("materials", True, True), ("components", False, True), ("families", False, True)]
     assert sh["search"]["placeholder"] == "Search all materials"
     side = [(s["id"], s["label"]) for s in sh["side"]]
     assert side[:4] == [("s:model", "In this model"), ("s:recent", "Recently used"), ("s:mine", "My library"),
@@ -84,7 +84,7 @@ def test_browse_all_opens_the_sheet_on_the_models_materials(win):
     t = tiles(sh)
     assert [x["label"] for x in t] == ["Beech", "Concrete"]
     assert t[0]["sub"] == "colour · used by 1" and t[0]["hex"]
-    assert next(b for b in sh["content"]["blocks"] if b["kind"] == "tiles")["size"] == 96
+    assert next(b for b in sh["content"]["blocks"] if b["kind"] == "rows")["tone"] == "thumbs"
     assert sh["focus"] == "m:Beech"                                   # its details on the right
     heading = next(b for b in detail(sh) if b["kind"] == "heading")
     assert heading["text"] == "Beech" and heading["right"] == "In this model"
