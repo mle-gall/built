@@ -26,11 +26,12 @@ const MINE_KEY: &str = "library/mine";
 const STRIP_MODEL: usize = 10;
 const STRIP_RECENT: usize = 5;
 /// PBR rows of the editor: (channel, label, map channel).
-const PBR_ROWS: [(&str, &str, &str); 4] = [
+const PBR_ROWS: [(&str, &str, &str); 5] = [
     ("metallic", "Metallic", "metallic_map"),
     ("roughness", "Roughness", "roughness_map"),
     ("normal_scale", "Normal", "normal_map"),
     ("ao_strength", "Occlusion", "ao_map"),
+    ("emission_strength", "Emission", "emission_map"),
 ];
 
 /// This submodule, through its attributes (tests replace `_pick_image`,
@@ -788,6 +789,9 @@ impl MaterialsProvider {
                         if !(pbr.is_truthy()? && pbr.contains(*scalar)?) {
                             kw.set_item(*scalar, 1.0)?; // a map with no strength would show nothing
                         }
+                        if *channel == "emission_map" && !(pbr.is_truthy()? && pbr.contains("emission")?) {
+                            kw.set_item("emission", [1.0, 1.0, 1.0])?; // the map's own colours
+                        }
                     }
                     core(ctx, "set_material_pbr", &kw)?;
                 }
@@ -909,6 +913,14 @@ impl MaterialsProvider {
                 return Err(pyo3::exceptions::PyValueError::new_err("A tile is larger than zero"));
             }
             core(ctx, "edit_material", &with_name(vec![("tile", PyList::new(py, [w, h])?.into_any())])?)?;
+        } else if field == "emission" {
+            let (r, g, b) = parse_hex(py, &text)?;
+            let kw = with_name(vec![("emission", PyList::new(py, [r, g, b])?.into_any())])?;
+            let strength = mat()?.getattr("pbr")?;
+            if r + g + b > 0.0 && !(strength.is_truthy()? && strength.call_method1("get", ("emission_strength", 0.0))?.extract::<f64>()? > 0.0) {
+                kw.set_item("emission_strength", 1.0)?; // a colour with no strength would show nothing
+            }
+            core(ctx, "set_material_pbr", &kw)?;
         } else if field == "pbr" || field.starts_with("percent_") {
             let values = py.import("built_core")?.call_method1("material_surface_input", (field, &text))?;
             let kw = with_name(vec![])?;

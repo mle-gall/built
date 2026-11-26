@@ -82,3 +82,48 @@ def test_a_real_blender_receives_the_model_and_sends_changes_back(tmp_path, monk
     names = [lt["name"] for lt in sc.plugin_data[PLUGIN]["lights"]]
     assert names == ["Bulb", "Studio key"]
     assert np.allclose(_matrix(leg), np.eye(4))
+
+
+def test_a_new_textured_material_from_blender_comes_back_and_renders(tmp_path, monkeypatch):
+    command = _blender()
+    if not command:
+        pytest.skip("no Blender on this machine")
+    monkeypatch.setattr(rb, "LINK_PORT", 0)
+    sc, h, seat, leg = _scene()
+    link, app = _drawer(sc, h)
+    pairing = link.start()
+    report = tmp_path / "report.json"
+    env = {**rb.clean_env(), "DRIVER_MODE": "newmaterial"}
+    proc = subprocess.Popen([*command, "-b", "--factory-startup", "--python", str(ROOT / "tests/blender_link_driver.py"),
+                             "--", str(ROOT / "integrations/blender"), pairing, "3", str(report)],
+                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env)
+    applied = False
+    end = time.monotonic() + 180
+    while proc.poll() is None and time.monotonic() < end:
+        link.tick()
+        if len(link.review) >= 1 and not applied:
+            rows = link.rows()
+            assert rows[0]["cells"][0] == "New material: Checker", rows
+            link.event("link_apply_all", "invoke", None)
+            applied = True
+        time.sleep(0.02)
+    if proc.poll() is None:
+        proc.kill()
+    out = proc.stdout.read().decode(errors="replace")
+    link.close()
+    got = json.loads(report.read_text())
+    assert "error" not in got, got.get("error")
+    assert got["new_changes"] == ["newmaterial:Checker"], out[-2000:]
+    assert got["sent"] == 1 and got["answered"] and applied
+    assert got["adopted"] == "Checker" and got["changes_after"] == []
+    m = sc.materials.get("Checker")
+    assert m is not None and Path(m.texture["path"]).is_file()
+    assert m.pbr["roughness"] == pytest.approx(0.3, abs=1e-4)
+    assert all(f.attrs.get("mat") == "Checker" for f in leg.mesh.faces)
+    # Built draws and exports it: its image goes out as the base colour.
+    from formats.gltf import save_glb
+    from formats.glb import parse_container
+    save_glb(sc, tmp_path / "check.glb")
+    js, _ = parse_container(tmp_path / "check.glb")
+    (mat,) = [m for m in js["materials"] if m["name"] == "Checker"]
+    assert "baseColorTexture" in mat["pbrMetallicRoughness"] and js["images"]

@@ -361,9 +361,30 @@ fn set_material_pbr<'py>(
                 PyString::new(py, &unknown[0]).repr()?
             )));
         }
+        // Emission on a material with no PBR surface yet keeps its finish's
+        // look: the finish's roughness and metallic come along.
+        let surface_before = pbr.keys().iter().any(|k| !k.to_string().starts_with("emission"));
+        let only_emission = channels.keys().iter().all(|k| k.to_string().starts_with("emission"));
+        if !surface_before && only_emission {
+            if let Some(f) = m.getattr_opt("finish")?.filter(|f| f.is_truthy().unwrap_or(false)) {
+                if let Some(x) = crate::material_finish::lookup(&f.extract::<String>()?) {
+                    pbr.set_item("roughness", x.pbr[0])?;
+                    pbr.set_item("metallic", x.pbr[1])?;
+                }
+            }
+        }
         for (key, value) in channels.iter() {
             if value.is_none() {
                 pbr.call_method1("pop", (key, py.None()))?;
+            } else if key.eq("emission")? {
+                let rgb = value
+                    .try_iter()?
+                    .map(|v| number(&v?).map(|x| x.clamp(0.0, 1.0)))
+                    .collect::<PyResult<Vec<_>>>()?;
+                if rgb.len() != 3 {
+                    return Err(PyValueError::new_err("emission is a colour: three numbers from 0 to 1"));
+                }
+                pbr.set_item(key, rgb)?;
             } else if maps.contains(&key)? {
                 let map = if value.is_instance_of::<PyString>() {
                     let t = PyDict::new(py);
@@ -375,7 +396,7 @@ fn set_material_pbr<'py>(
                 pbr.set_item(key, map)?;
             } else {
                 let v = number(&value)?;
-                let limit = if key.eq("normal_scale")? {
+                let limit = if key.eq("normal_scale")? || key.eq("emission_strength")? {
                     f64::INFINITY
                 } else {
                     1.0

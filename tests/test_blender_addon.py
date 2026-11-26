@@ -167,7 +167,7 @@ class FakeHost:
 
     def __init__(self):
         self.values, self.imported, self.removed, self.doc = {}, [], [], ("", "")
-        self.images, self.names, self.fps = {}, {}, {}
+        self.images, self.names, self.fps, self.adopted = {}, {}, {}, {}
 
     def document(self):
         return self.doc[0]
@@ -219,8 +219,16 @@ class FakeHost:
     def assign_ids(self):
         pass
 
-    def texture_bytes(self, key):
-        return self.images.get(key)
+    def image_bytes(self, key, field):
+        return self.images.get((key, field))
+
+    def adopt(self, name, built_name):
+        self.adopted[name] = built_name
+        value = self.values.pop("newmaterial:" + name)
+        self.values["material:" + built_name] = {k: v for k, v in value.items() if k not in ("name", "assign")}
+
+    def unsupported_materials(self):
+        return []
 
 
 def _linked():
@@ -254,14 +262,14 @@ def test_blender_changes_go_out_as_one_batch_with_image_bytes():
     c.handle({"type": "material", "name": "Oak", "value": oak})
     c.handle({"type": "chunk", "items": [{"uid": "a", "name": "Seat", "matrix": moved(1), "fp": "f"}]}, b"G")
     host.values["material:Oak"] = {**oak, "texture": {"name": "oiled.png", "crc": "bb"}}
-    host.images["material:Oak"] = b"\x89PNG-bytes"
+    host.images[("material:Oak", "texture")] = b"\x89PNG-bytes"
     host.values["transform:a"] = {"matrix": moved(1.1)}
     host.values["light:new1"] = {"kind": "point", "pos": [0, 0, 3], "power": 700.0}
     assert c.send() == 3
     (header, payload), = client.sent
     assert header["type"] == "changes" and payload == b"\x89PNG-bytes"
     keys = {i["key"]: i for i in header["items"]}
-    assert keys["material:Oak"]["image"] == {"offset": 0, "size": len(payload), "name": "oiled.png"}
+    assert keys["material:Oak"]["images"] == {"texture": {"offset": 0, "size": len(payload), "name": "oiled.png"}}
     assert keys["light:new1"]["base"] is None
     assert keys["transform:a"]["base"] == {"matrix": moved(1)}
     assert c.send() == 0                                    # nothing new
@@ -390,3 +398,239 @@ def test_open_in_blender_links_at_once_with_the_code_built_passes(monkeypatch):
     assert start() is None and calls == ["built:47815:ABCD-EFGH"]
     for name in ("built_link.ui", "built_link.blender_scene"):
         sys.modules.pop(name, None)
+
+
+# ---------------------------------------------------------------- simple PBR (mocked node graphs)
+
+class _Sock:
+    def __init__(self, name, value=None):
+        self.name, self.default_value, self.links = name, value, []
+
+    @property
+    def is_linked(self):
+        return bool(self.links)
+
+
+class _Inputs(list):
+    def get(self, name):
+        return next((s for s in self if s.name == name), None)
+
+    def __getitem__(self, k):
+        return self.get(k) if isinstance(k, str) else list.__getitem__(self, k)
+
+
+class _Node:
+    def __init__(self, type_, inputs=(), **attrs):
+        self.type = type_
+        self.inputs = _Inputs(_Sock(n, v) for n, v in inputs)
+        self.__dict__.update(attrs)
+
+
+def _link(src, out, dst):
+    dst.links.append(types.SimpleNamespace(from_node=src, from_socket=types.SimpleNamespace(name=out)))
+
+
+def _image(name):
+    return types.SimpleNamespace(name=name, filepath=f"//{name}")
+
+
+def _graph(**overrides):
+    bsdf = _Node("BSDF_PRINCIPLED", [("Base Color", (0.6, 0.4, 0.2, 1.0)), ("Metallic", 0.0), ("Roughness", 0.35),
+                                     ("Normal", None), ("Alpha", 1.0), ("Emission Color", (1.0, 1.0, 1.0, 1.0)),
+                                     ("Emission Strength", 0.0), ("Coat Weight", 0.0)])
+    out = _Node("OUTPUT_MATERIAL", [("Surface", None), ("Volume", None), ("Displacement", None)],
+                is_active_output=True)
+    _link(bsdf, "BSDF", out.inputs["Surface"])
+    nodes = [out, bsdf]
+    mat = types.SimpleNamespace(name="Oiled oak", use_nodes=True, node_tree=types.SimpleNamespace(nodes=nodes))
+    return mat, bsdf, out, nodes
+
+
+def _record(image):
+    return {"name": image.name, "crc": "c-" + image.name}
+
+
+def test_a_constant_principled_material_is_simple_pbr():
+    from built_link import pbr
+    mat, *_ = _graph()
+    value, images, reason = pbr.extract(mat, _record)
+    assert reason is None and images == {}
+    assert value["color"] == pytest.approx([0.6, 0.4, 0.2]) and value["roughness"] == 0.35
+    assert value["emission"] == [0, 0, 0] and value["emission_strength"] == 0     # strength 0: none
+
+
+def test_images_mapping_normal_map_alpha_and_emission_are_extracted():
+    from built_link import pbr
+    mat, bsdf, out, nodes = _graph()
+    uv = _Node("UVMAP")
+    mapping = _Node("MAPPING", [("Vector", None), ("Location", (0, 0, 0)), ("Rotation", (0, 0, math.radians(90))),
+                                ("Scale", (2.0, 4.0, 1.0))])
+    _link(uv, "UV", mapping.inputs["Vector"])
+    base = _Node("TEX_IMAGE", [("Vector", None)], image=_image("oak.png"), projection="FLAT")
+    _link(mapping, "Vector", base.inputs["Vector"])
+    _link(base, "Color", bsdf.inputs["Base Color"])
+    _link(base, "Alpha", bsdf.inputs["Alpha"])
+    rough = _Node("TEX_IMAGE", [("Vector", None)], image=_image("oak_r.png"), projection="FLAT")
+    _link(rough, "Color", bsdf.inputs["Roughness"])
+    nimg = _Node("TEX_IMAGE", [("Vector", None)], image=_image("oak_n.png"), projection="FLAT")
+    nmap = _Node("NORMAL_MAP", [("Strength", 0.7), ("Color", None)], space="TANGENT")
+    _link(nimg, "Color", nmap.inputs["Color"])
+    _link(nmap, "Normal", bsdf.inputs["Normal"])
+    bsdf.inputs["Emission Color"].default_value = (1.0, 0.5, 0.0, 1.0)
+    bsdf.inputs["Emission Strength"].default_value = 3.0
+    nodes.extend([uv, mapping, base, rough, nimg, nmap])
+    value, images, reason = pbr.extract(mat, _record)
+    assert reason is None
+    assert value["color"] is None and value["texture"] == {"name": "oak.png", "crc": "c-oak.png"}
+    assert value["tile"] == [0.5, 0.25] and value["rot"] == pytest.approx(90)
+    assert value["roughness_map"]["name"] == "oak_r.png" and value["roughness"] == 1.0
+    assert value["normal_map"]["name"] == "oak_n.png" and value["normal_scale"] == 0.7
+    assert value["opacity"] == 1.0
+    assert value["emission"] == [1.0, 0.5, 0.0] and value["emission_strength"] == 3.0
+    assert set(images) == {"texture", "roughness_map", "normal_map"}
+
+
+def test_occlusion_from_the_gltf_output_group():
+    from built_link import pbr
+    mat, bsdf, out, nodes = _graph()
+    ao = _Node("TEX_IMAGE", [("Vector", None)], image=_image("ao.png"), projection="FLAT")
+    group = _Node("GROUP", [("Occlusion", None)], node_tree=types.SimpleNamespace(name="glTF Material Output"))
+    _link(ao, "Color", group.inputs["Occlusion"])
+    nodes.extend([ao, group])
+    value, images, reason = pbr.extract(mat, _record)
+    assert reason is None and value["ao_map"]["name"] == "ao.png" and "ao_map" in images
+
+
+@pytest.mark.parametrize("case", ["mix", "noise", "group", "coat", "math_roughness", "alpha_map", "object_coords"])
+def test_anything_else_stays_in_blender(case):
+    from built_link import pbr
+    mat, bsdf, out, nodes = _graph()
+    if case == "mix":
+        mix = _Node("MIX_SHADER", [("Fac", 0.5), ("Shader", None)])
+        out.inputs["Surface"].links = []
+        _link(mix, "Shader", out.inputs["Surface"])
+        _link(bsdf, "BSDF", mix.inputs["Shader"])
+    elif case == "noise":
+        _link(_Node("TEX_NOISE"), "Color", bsdf.inputs["Base Color"])
+    elif case == "group":
+        _link(_Node("GROUP", node_tree=types.SimpleNamespace(name="Wood")), "Color", bsdf.inputs["Base Color"])
+    elif case == "coat":
+        _link(_Node("VALUE"), "Value", bsdf.inputs["Coat Weight"])
+    elif case == "math_roughness":
+        img = _Node("TEX_IMAGE", [("Vector", None)], image=_image("r.png"), projection="FLAT")
+        sep = _Node("SEPARATE_COLOR", [("Color", None)])
+        _link(img, "Color", sep.inputs["Color"])
+        _link(sep, "Green", bsdf.inputs["Roughness"])
+    elif case == "alpha_map":
+        _link(_Node("TEX_IMAGE", [("Vector", None)], image=_image("a.png"), projection="FLAT"), "Color",
+              bsdf.inputs["Alpha"])
+    elif case == "object_coords":
+        img = _Node("TEX_IMAGE", [("Vector", None)], image=_image("b.png"), projection="FLAT")
+        _link(_Node("TEX_COORD"), "Object", img.inputs["Vector"])
+        _link(img, "Color", bsdf.inputs["Base Color"])
+    value, images, reason = pbr.extract(mat, _record)
+    assert reason, case
+
+
+def test_lenient_reading_of_a_material_built_sent():
+    from built_link import pbr
+    mat, bsdf, out, nodes = _graph()
+    img = _Node("TEX_IMAGE", [("Vector", None)], image=_image("mr.png"), projection="FLAT")
+    sep = _Node("SEPARATE_COLOR", [("Color", None)])
+    _link(img, "Color", sep.inputs["Color"])
+    _link(sep, "Green", bsdf.inputs["Roughness"])
+    value, _, reason = pbr.extract(mat, _record, lenient=True)
+    assert reason and value["color"] == pytest.approx([0.6, 0.4, 0.2])
+
+
+class _Polys(list):
+    def foreach_get(self, attr, out):
+        for i, p in enumerate(self):
+            out[i] = p.material_index
+
+
+def _host_with(objects, materials):
+    """blender_scene.Host over a mocked bpy holding these objects."""
+    bpy, mathutils, _ = _fake_bpy()
+    coll = types.SimpleNamespace(all_objects=objects)
+    bpy.data = types.SimpleNamespace(collections={"Built": coll}, materials={m.name: m for m in materials})
+    bpy.path = types.SimpleNamespace(abspath=lambda p: p.lstrip("/"))
+    return bpy, mathutils
+
+
+class _Mat(dict):
+    """A material: custom properties as a dict, hashable as bpy's are."""
+    __hash__ = object.__hash__
+    __eq__ = object.__eq__
+
+    def __init__(self, mat):
+        super().__init__()
+        self.__dict__.update(mat.__dict__)
+
+
+def test_new_materials_map_to_placements_and_slots(monkeypatch):
+    new, *_ = _graph()
+    new = _Mat(new)
+    shader, sbsdf, sout, _ = _graph()
+    shader = _Mat(shader)
+    shader.name = "Glass shader"
+    sout.inputs["Surface"].links = []
+    _link(_Node("MIX_SHADER"), "Shader", sout.inputs["Surface"])
+    oak = _Mat(types.SimpleNamespace(name="Oak", use_nodes=False, node_tree=None))
+    oak["built_material"] = "Oak"
+
+    def obj(uid, slots, indices, origin):
+        o = {"built_uid": uid, "built_slots": "\x1f".join(origin)}
+        holder = types.SimpleNamespace(type="MESH", material_slots=[types.SimpleNamespace(material=m) for m in slots],
+                                       data=types.SimpleNamespace(polygons=_Polys(
+                                           types.SimpleNamespace(material_index=i) for i in indices)))
+
+        class O(dict):
+            pass
+        out = O(o)
+        out.__dict__.update(holder.__dict__)
+        return out
+    whole = obj("seat", [new], [0, 0, 0], ["Oak"])
+    slot = obj("leg", [oak, new], [0, 1, 1], ["Oak", "Steel"])
+    added = obj("rail", [oak, new], [0, 1], ["Oak"])           # a slot Built never had
+    kept = obj("panel", [shader], [0], ["Oak"])
+    bpy, mathutils = _host_with([whole, slot, added, kept], [new, shader, oak])
+    monkeypatch.setitem(sys.modules, "bpy", bpy)
+    monkeypatch.setitem(sys.modules, "mathutils", mathutils)
+    sys.modules.pop("built_link.blender_scene", None)
+    import built_link
+    monkeypatch.delattr(built_link, "blender_scene", raising=False)
+    blender_scene = importlib.import_module("built_link.blender_scene")
+    monkeypatch.setattr(blender_scene, "_image_crc", lambda image: "x")
+    host = blender_scene.Host()
+    found = host._new_materials()
+    assert [a["uid"] for a in found[new]] == ["seat", "leg", "rail"]
+    assert found[new][0] == {"uid": "seat", "from": "", "whole": True} or found[new][0]["whole"]
+    assert found[new][1] == {"uid": "leg", "from": "Steel", "whole": False}
+    assert found[new][2] == {"uid": "rail", "from": "", "whole": False}
+    record = host._new_material(new, found[new])
+    assert record["name"] == "Oiled oak" and record["assign_note"]
+    assert host._new_material(shader, found[shader]) == {"unsupported": "Node setup not supported"}
+    assert host.unsupported_materials() == [("Glass shader", "Node setup not supported")]
+    sys.modules.pop("built_link.blender_scene", None)
+
+
+def test_a_new_material_goes_out_and_becomes_a_built_material_once_applied():
+    c, host, client = _linked()
+    value = {"color": None, "texture": {"name": "oak.png", "crc": "aa"}, "roughness": 0.35, "name": "Oiled oak",
+             "assign": [{"uid": "seat", "from": "Oak", "whole": True}]}
+    host.values["newmaterial:Oiled oak"] = value
+    host.images[("newmaterial:Oiled oak", "texture")] = b"PNGDATA"
+    assert c.send() == 1
+    (header, payload), = client.sent
+    (item,) = header["items"]
+    assert item["kind"] == "newmaterial" and item["base"] is None
+    assert item["images"]["texture"]["size"] == 7 and payload == b"PNGDATA"
+    built = {"color": None, "texture": {"name": "oak.png", "crc": "aa"}, "roughness": 0.35}
+    c.handle({"type": "resolved", "key": "newmaterial:Oiled oak", "resolution": "applied",
+              "value": {**built, "name": "Oiled oak (Blender)"}})
+    assert host.adopted == {"Oiled oak": "Oiled oak (Blender)"}
+    assert c.changes()[0] == []                     # nothing new to send
+    host.values["material:Oiled oak (Blender)"]["roughness"] = 0.2
+    (edit,), _ = c.changes()
+    assert edit["key"] == "material:Oiled oak (Blender)" and edit["value"]["roughness"] == 0.2

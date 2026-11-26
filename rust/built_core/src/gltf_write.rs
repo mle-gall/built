@@ -181,7 +181,9 @@ impl<'py> Writer<'py> {
             mr.set_item("baseColorFactor", factor)?;
         }
         let finish = get(info, "finish")?;
-        let recipe = get(info, "pbr")?;
+        let pbr = get(info, "pbr")?;
+        // Emission alone is not a PBR surface: the finish still applies.
+        let recipe = if has_surface(&pbr)? { pbr.clone() } else { py.None().into_bound(py) };
         if !recipe.is_none() {
             let factor = py.get_type::<PyList>().call1((info.get_item("color")?,))?;
             factor.call_method1("append", (1.,))?;
@@ -241,6 +243,9 @@ impl<'py> Writer<'py> {
                 mat.set_item("extensions", ext)?;
             }
         }
+        if !pbr.is_none() {
+            self.emission(&mat, &pbr, embed)?;
+        }
         let opacity = get(info, "opacity")?;
         if !opacity.is_none() {
             let factor = mr.call_method1("setdefault", ("baseColorFactor", [1., 1., 1., 1.]))?;
@@ -264,6 +269,42 @@ impl<'py> Writer<'py> {
             mat.set_item("extras", extras)?;
         }
         self.materials.append(mat)
+    }
+    /// glTF's emissive: `emissiveFactor` (0–1), `emissiveTexture` and
+    /// `KHR_materials_emissive_strength` for a strength other than 1.
+    fn emission(&mut self, mat: &Dict<'py>, recipe: &Obj<'py>, embed: bool) -> PyResult<()> {
+        let py = mat.py();
+        let colour = recipe.call_method1("get", ("emission",))?;
+        let strength: f64 = match recipe.call_method1("get", ("emission_strength",))? {
+            s if s.is_none() => 1.0,
+            s => s.extract()?,
+        };
+        let map = recipe.call_method1("get", ("emission_map",))?;
+        let factor: [f64; 3] = if colour.is_none() {
+            if map.is_truthy()? { [1.0; 3] } else { [0.0; 3] }
+        } else {
+            let v: Vec<f64> = colour.extract()?;
+            [v.first().copied().unwrap_or(0.), v.get(1).copied().unwrap_or(0.), v.get(2).copied().unwrap_or(0.)]
+        };
+        if strength <= 0.0 || factor.iter().all(|c| *c <= 0.0) {
+            return Ok(());
+        }
+        mat.set_item("emissiveFactor", factor.map(|c| c.clamp(0.0, 1.0)).to_vec())?;
+        if embed && map.is_truthy()? {
+            if let Some(i) = self.texture(&map.call_method1("get", ("path",))?)? {
+                mat.set_item("emissiveTexture", record!(py;"index"=>i))?;
+            }
+        }
+        if (strength - 1.0).abs() > 1e-9 {
+            let ext = match mat.get_item("extensions")? {
+                Some(e) => e.cast_into::<PyDict>()?,
+                None => PyDict::new(py),
+            };
+            ext.set_item("KHR_materials_emissive_strength", record!(py;"emissiveStrength"=>strength))?;
+            mat.set_item("extensions", ext)?;
+            self.extensions.insert("KHR_materials_emissive_strength".into());
+        }
+        Ok(())
     }
     fn primitives(
         &mut self,
@@ -602,6 +643,18 @@ impl<'py> Hierarchy<'py> {
             .call_method1("_resolve_finishes", (scene, &h.materials))?;
         Ok((h.materials.into_any(), h.meshes.into_any(), roots))
     }
+}
+/// A PBR recipe with surface channels (not only emission).
+pub(crate) fn has_surface(recipe: &Obj<'_>) -> PyResult<bool> {
+    if recipe.is_none() || !recipe.is_truthy()? {
+        return Ok(false);
+    }
+    for k in recipe.try_iter()? {
+        if !k?.extract::<String>()?.starts_with("emission") {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 fn emit<'py>(part: &Obj<'py>, nodes: &List<'py>, mesh_ids: &Dict<'py>) -> PyResult<usize> {
     let py = part.py();

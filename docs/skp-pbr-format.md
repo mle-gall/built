@@ -114,7 +114,11 @@ The Rust material reader populates the fields defined in `core/materials.py`.
 | a PBR material with every channel off | no `pbr` (an empty recipe would render with the glTF defaults, i.e. fully metallic) |
 | a map whose image is missing from the ZIP | that map and its scalar are dropped |
 
-`orm_map` never comes out of a `.skp`. Map images are written into the same
+`orm_map` never comes out of a `.skp`, nor does emission: neither the
+`pbrMR` block nor the classic `<mat:material>` attributes carry an emissive
+colour, strength or map (none of the library's 290 materials or the 286
+scanned files has one), so a `.skp` material reads with no `emission` keys:
+black and 0. Map images are written into the same
 per-file texture cache folder as the base image (`_texture_dir`). A
 different image that collides with an existing name gets the material id as
 a prefix.

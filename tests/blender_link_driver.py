@@ -9,6 +9,7 @@ answers. Background Blender has no event loop, so the driver ticks the
 controller itself. Writes a JSON report.
 """
 import json
+import os
 import sys
 import time
 
@@ -55,6 +56,30 @@ try:
     report["document"] = bpy.context.scene.get("built_document")
     report["changes_before_edit"] = len(c.changes()[0])
 
+    if os.environ.get("DRIVER_MODE") == "newmaterial":
+        # A Principled material with a base colour image (never saved: the
+        # add-on packs it) and a roughness value, on the Leg placement.
+        image = bpy.data.images.new("checker", 8, 8)
+        image.pixels = [v for i in range(64) for v in ((0.9, 0.2, 0.1, 1.0) if (i + i // 8) % 2 else (0.1, 0.2, 0.9, 1.0))]
+        mat = bpy.data.materials.new("Checker")
+        mat.use_nodes = True
+        tree = mat.node_tree
+        bsdf = next(n for n in tree.nodes if n.type == "BSDF_PRINCIPLED")
+        tex = tree.nodes.new("ShaderNodeTexImage")
+        tex.image = image
+        tree.links.new(tex.outputs["Color"], bsdf.inputs["Base Color"])
+        bsdf.inputs["Roughness"].default_value = 0.3
+        leg = next(o for o in roots.values() if o.name.startswith("Leg"))
+        leg.data.materials.clear()
+        leg.data.materials.append(mat)
+        bpy.context.view_layer.update()
+        report["new_changes"] = [i["key"] for i in c.changes()[0]]
+        report["sent"] = c.send()
+        report["answered"] = pump(lambda c: not c.sync.sent, timeout=60)
+        report["adopted"] = mat.get("built_material")
+        report["changes_after"] = [i["key"] for i in c.changes()[0]]
+        c.unlink()
+        raise SystemExit
     seat = next(o for o in roots.values() if o.name.startswith("Seat"))
     seat.location.x += 0.5
     oak = next(m for m in bpy.data.materials if m.get("built_material") == "Oak")
@@ -72,6 +97,8 @@ try:
     report["changes_after"] = [i["key"] for i in c.changes()[0]]
     report["seat_x"] = seat.matrix_world.translation.x
     c.unlink()
+except SystemExit:
+    pass
 except Exception as exc:  # report, do not hang Blender
     import traceback
     report["error"] = traceback.format_exc()

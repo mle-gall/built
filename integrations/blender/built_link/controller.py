@@ -13,6 +13,8 @@ from . import sync as sync_mod
 from . import wire
 from .client import Client
 
+IMAGE_FIELDS = ("texture", "normal_map", "roughness_map", "metallic_map", "ao_map", "emission_map")
+
 
 class Controller:
     def __init__(self, host, client=None):
@@ -136,7 +138,14 @@ class Controller:
                     self.sync.forget(key)
         elif kind == "resolved":
             key, how = header["key"], header.get("resolution")
-            if how == "kept_built" and header.get("value") is not None:
+            if key.startswith("newmaterial:") and how == "applied" and (header.get("value") or {}).get("name"):
+                # Built made it its own: from now on it is a Built material.
+                value = dict(header["value"])
+                built = value.pop("name")
+                self.host.adopt(key.split(":", 1)[1], built)
+                self.sync.forget(key)
+                self.sync.accepted("material:" + built, value, self.host.record("material:" + built))
+            elif how == "kept_built" and header.get("value") is not None:
                 self._apply(key, header["value"], force=True)
             else:
                 self.sync.resolved(key, how, header.get("value"), self.host.record(key))
@@ -157,13 +166,16 @@ class Controller:
             return 0
         payload = bytearray()
         for item in items:
-            if item["kind"] != "material":
+            if item["kind"] not in ("material", "newmaterial") or item.get("unsupported"):
                 continue
-            new, old = item["value"].get("texture"), (item["base"] or {}).get("texture")
-            if new and not sync_mod.same(new, old):
-                data = self.host.texture_bytes(item["key"])
+            for field in IMAGE_FIELDS:
+                new, old = item["value"].get(field), (item["base"] or {}).get(field)
+                if not new or (old and new.get("crc") == old.get("crc")):
+                    continue
+                data = self.host.image_bytes(item["key"], field)
                 if data:
-                    item["image"] = {"offset": len(payload), "size": len(data), "name": new.get("name", "image.png")}
+                    item.setdefault("images", {})[field] = {
+                        "offset": len(payload), "size": len(data), "name": new.get("name") or field + ".png"}
                     payload.extend(data)
         if not self.client.send({"type": "changes", "items": items}, bytes(payload)):
             return 0

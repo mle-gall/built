@@ -17,9 +17,10 @@ import zlib
 import bpy
 from mathutils import Matrix
 
-from . import convert
+from . import convert, pbr
 
 MODEL = "Built"
+SEP = "\x1f"
 LIGHTS = "Built lights"
 CAMERAS = "Built cameras"
 
@@ -83,6 +84,29 @@ def _image_bytes(image):
         with open(path, "rb") as fh:
             return fh.read()
     return None
+
+
+def _image_data(image):
+    """The image's bytes; an image never saved is packed first (as PNG)."""
+    data = _image_bytes(image)
+    if data is None and image.packed_file is None:
+        try:
+            image.pack()
+        except RuntimeError:
+            return None
+        data = _image_bytes(image)
+    return data
+
+
+def _material_indices(mesh):
+    polys = mesh.polygons
+    try:
+        import array
+        out = array.array("i", [0]) * len(polys)
+        polys.foreach_get("material_index", out)
+        return list(out)
+    except (AttributeError, TypeError):
+        return [p.material_index for p in polys]
 
 
 def _image_crc(image):
@@ -153,6 +177,15 @@ class Host:
             if o.name not in coll.objects and not o.users_collection:
                 coll.objects.link(o)
         self._share_materials(new, before_materials)
+        for m in bpy.data.materials:
+            if m not in before_materials and not m.get("built_material"):
+                m["built_paint"] = True       # Built's own unnamed paint, not a new material
+        for o in new:
+            if o.type == "MESH":
+                # Which Built material each slot started as: a slot that
+                # later wears a Blender material maps back to those faces.
+                o["built_slots"] = SEP.join((slot.material.get("built_material", "") if slot.material else "")
+                                            for slot in o.material_slots)
         by_uid = {o.get("built_uid"): o for o in new if o.parent is None}
         old = self.roots()
         for it in items:
@@ -223,6 +256,10 @@ class Host:
                 key = "material:" + name
                 records[key] = self._material(m)
                 labels[key] = name
+        for m, assign in self._new_materials().items():
+            key = "newmaterial:" + m.name
+            records[key] = self._new_material(m, assign)
+            labels[key] = m.name
         for o in bpy.context.scene.objects:
             if o.type == "LIGHT":
                 key = "light:" + o.get("built_light", "new-" + o.name)
@@ -244,6 +281,10 @@ class Host:
         if kind == "material":
             m = self._find_material(name)
             return self._material(m) if m else None
+        if kind == "newmaterial":
+            m = bpy.data.materials.get(name)
+            assign = self._new_materials().get(m) if m is not None else None
+            return self._new_material(m, assign) if assign else None
         if kind == "light":
             o = self._find("built_light", name)
             return self._light(o) if o else None
@@ -258,22 +299,67 @@ class Host:
     def _find_material(self, name):
         return next((m for m in bpy.data.materials if m.get("built_material") == name), None)
 
+    def _image_record(self, image):
+        name = os.path.basename(bpy.path.abspath(image.filepath)) if image.filepath else ""
+        return {"name": name or image.name, "crc": _image_crc(image)}
+
     def _material(self, m):
-        bsdf = _bsdf(m)
-        out = {"color": None, "roughness": 1.0, "metallic": 0.0, "texture": None}
-        if bsdf is None:
-            return out
-        image = _image_of(m)
-        base = bsdf.inputs["Base Color"]
-        if image is None and not base.is_linked:
-            out["color"] = [float(c) for c in base.default_value[:3]]
-        for k, socket in (("roughness", "Roughness"), ("metallic", "Metallic")):
-            s = bsdf.inputs.get(socket)
-            if s is not None and not s.is_linked:
-                out[k] = float(s.default_value)
-        if image is not None:
-            out["texture"] = {"name": os.path.basename(image.filepath) or image.name, "crc": _image_crc(image)}
-        return out
+        """A material Built sent, read back in the link's terms (what the
+        importer's graph hides, such as packed maps, reads as nothing)."""
+        value, _, _ = pbr.extract(m, self._image_record, lenient=True)
+        value.pop("rot", None)
+        return value
+
+    def _new_materials(self):
+        """Materials Built does not know on Built's objects, with where
+        they sit: ``{material: [{"uid", "from", "whole"}]}``. ``from`` is
+        the Built material the slot started as; ``whole`` when the
+        material covers the object."""
+        coll = bpy.data.collections.get(MODEL)
+        found = {}
+        if coll is None:
+            return found
+        for o in coll.all_objects:
+            if o.type != "MESH" or "built_uid" not in o or not o.material_slots:
+                continue
+            slots = o.get("built_slots", "").split(SEP) if o.get("built_slots") else []
+            indices = _material_indices(o.data)
+            for i, slot in enumerate(o.material_slots):
+                m = slot.material
+                if m is None or m.get("built_material") or m.get("built_paint"):
+                    continue
+                used = sum(1 for x in indices if x == i)
+                if not used and len(o.material_slots) > 1:
+                    continue
+                whole = used == len(indices) or len(o.material_slots) == 1
+                found.setdefault(m, []).append({"uid": o["built_uid"], "from": slots[i] if i < len(slots) else "",
+                                                "whole": whole})
+        return found
+
+    def _new_material(self, m, assign):
+        value, _, reason = pbr.extract(m, self._image_record)
+        if reason:
+            return {"unsupported": reason}
+        value["name"] = m.name
+        value["assign"] = assign
+        if any(not a["whole"] and not a["from"] for a in assign):
+            value["assign_note"] = "per-face use goes on the whole placement"
+        return value
+
+    def unsupported_materials(self):
+        """(name, reason) of the materials that stay in Blender."""
+        out = []
+        for m in self._new_materials():
+            _, _, reason = pbr.extract(m, self._image_record)
+            if reason:
+                out.append((m.name, reason))
+        return sorted(out)
+
+    def adopt(self, name, built_name):
+        """Blender's material ``name`` is now Built's ``built_name``."""
+        m = bpy.data.materials.get(name)
+        if m is not None:
+            m["built_material"] = built_name
 
     def _light(self, o):
         d = o.data
@@ -286,10 +372,14 @@ class Host:
         fov = convert.vertical_fov(d.sensor_fit, d.angle_x, d.angle_y, w, h)
         return convert.camera_value(_rows(o), o.get("built_distance", 10.0), fov, d.type != "ORTHO")
 
-    def texture_bytes(self, key):
-        m = self._find_material(key.split(":", 1)[1])
-        image = _image_of(m) if m else None
-        return _image_bytes(image) if image else None
+    def image_bytes(self, key, field):
+        kind, name = key.split(":", 1)
+        m = self._find_material(name) if kind == "material" else bpy.data.materials.get(name)
+        if m is None:
+            return None
+        _, images, _ = pbr.extract(m, self._image_record, lenient=True)
+        image = images.get(field)
+        return _image_data(image) if image is not None else None
 
     # ------------------------------------------------------------ apply Built's values
 
@@ -319,6 +409,21 @@ class Host:
             s = bsdf.inputs.get(socket)
             if s is not None and not s.is_linked and value.get(k) is not None:
                 s.default_value = float(value[k])
+        alpha = bsdf.inputs.get("Alpha")
+        if alpha is not None and not alpha.is_linked and value.get("opacity") is not None:
+            alpha.default_value = float(value["opacity"])
+        glow = bsdf.inputs.get("Emission Color") or bsdf.inputs.get("Emission")
+        power = bsdf.inputs.get("Emission Strength")
+        if power is not None and not power.is_linked and value.get("emission_strength") is not None:
+            power.default_value = float(value["emission_strength"])
+            if glow is not None and not glow.is_linked and value["emission_strength"] > 0:
+                glow.default_value = (*value.get("emission", (0.0, 0.0, 0.0))[:3], 1.0)
+        normal = bsdf.inputs.get("Normal")
+        if normal is not None and normal.is_linked and value.get("normal_scale") is not None:
+            node = normal.links[0].from_node
+            strength = node.inputs.get("Strength") if node.type == "NORMAL_MAP" else None
+            if strength is not None and not strength.is_linked:
+                strength.default_value = float(value["normal_scale"])
         tex = value.get("texture")
         image = _image_of(m)
         if tex and image is not None and tex.get("path") and os.path.isfile(tex["path"]) \

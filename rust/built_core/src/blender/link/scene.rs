@@ -354,9 +354,27 @@ fn get_f64(o: &Obj<'_>, k: &str, default: f64) -> PyResult<f64> {
     }
 }
 
-/// A material as Blender sees it after import: base colour (null over an
-/// image), roughness, metallic and the image's name and CRC.
-fn material_value<'py>(py: Python<'py>, m: &Obj<'py>) -> PyResult<Bound<'py, PyDict>> {
+/// The link's image record: file name, CRC and path.
+fn image_record<'py>(py: Python<'py>, path: &Obj<'py>) -> PyResult<Obj<'py>> {
+    if !path.is_truthy()? {
+        return Ok(py.None().into_bound(py));
+    }
+    let p: PathBuf = path.extract()?;
+    let t = PyDict::new(py);
+    t.set_item("name", p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default())?;
+    t.set_item("crc", file_crc(&p))?;
+    t.set_item("path", p.to_string_lossy())?;
+    Ok(t.into_any())
+}
+
+/// The maps a material's PBR recipe may name, in the link's value.
+pub const MAPS: [&str; 5] = ["normal_map", "roughness_map", "metallic_map", "ao_map", "emission_map"];
+
+/// A material as the link carries it: base colour (null over an image),
+/// image and tile, roughness, metallic, opacity, the PBR maps with normal
+/// scale, and emission (linear colour, strength, map). Absent channels
+/// read as their defaults, so the value is the same whatever was stored.
+pub fn material_value<'py>(py: Python<'py>, m: &Obj<'py>) -> PyResult<Bound<'py, PyDict>> {
     let out = PyDict::new(py);
     let tex = m.getattr("texture")?;
     let image = if tex.is_truthy()? { tex.call_method1("get", ("path",))? } else { py.None().into_bound(py) };
@@ -368,8 +386,9 @@ fn material_value<'py>(py: Python<'py>, m: &Obj<'py>) -> PyResult<Bound<'py, PyD
         out.set_item("color", c)?;
     }
     let pbr = m.getattr("pbr")?;
+    let surface = crate::gltf_write::has_surface(&pbr)?;
     let finish = m.getattr_opt("finish")?.filter(|f| f.is_truthy().unwrap_or(false));
-    let (rough, metal) = if pbr.is_truthy()? {
+    let (rough, metal) = if surface {
         (get_f64(&pbr, "roughness", 1.)?, get_f64(&pbr, "metallic", 0.)?)
     } else if let Some(f) = finish {
         let id: String = f.extract()?;
@@ -382,16 +401,25 @@ fn material_value<'py>(py: Python<'py>, m: &Obj<'py>) -> PyResult<Bound<'py, PyD
     };
     out.set_item("roughness", rough)?;
     out.set_item("metallic", metal)?;
+    out.set_item("texture", image_record(py, &image)?)?;
     if image.is_truthy()? {
-        let p: PathBuf = image.extract()?;
-        let t = PyDict::new(py);
-        t.set_item("name", p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default())?;
-        t.set_item("crc", file_crc(&p))?;
-        t.set_item("path", p.to_string_lossy())?;
-        out.set_item("texture", t)?;
+        out.set_item("tile", vec![get_f64(&tex, "sw", 1.)?, get_f64(&tex, "sh", get_f64(&tex, "sw", 1.)?)?])?;
     } else {
-        out.set_item("texture", py.None())?;
+        out.set_item("tile", py.None())?;
     }
+    let opacity = m.getattr("opacity")?;
+    out.set_item("opacity", if opacity.is_none() { 1.0 } else { opacity.extract::<f64>()? })?;
+    let empty = PyDict::new(py).into_any();
+    let recipe = if pbr.is_truthy()? { pbr.clone() } else { empty };
+    for k in MAPS {
+        let map = recipe.call_method1("get", (k,))?;
+        let path = if map.is_truthy()? { map.call_method1("get", ("path",))? } else { py.None().into_bound(py) };
+        out.set_item(k, image_record(py, &path)?)?;
+    }
+    out.set_item("normal_scale", get_f64(&recipe, "normal_scale", 1.)?)?;
+    let glow = recipe.call_method1("get", ("emission",))?;
+    out.set_item("emission", if glow.is_none() { vec![0.0; 3] } else { glow.extract::<Vec<f64>>()? })?;
+    out.set_item("emission_strength", get_f64(&recipe, "emission_strength", 0.)?)?;
     Ok(out)
 }
 
@@ -559,19 +587,23 @@ fn value_of<'py>(item: &Obj<'py>, k: &str) -> PyResult<Obj<'py>> {
 }
 
 /// Build the History step that applies accepted Blender changes: one
-/// compound command (one undo entry). Returns `(command or None, applied
-/// keys, {key: why it could not apply})`.
+/// compound command (one undo entry). `textures` names the image files
+/// Blender sent, by item key then field (`texture`, `normal_map`...).
+/// Returns `(command or None, applied keys, {key: why it could not
+/// apply}, {new material key: {"name": Built's name, "note"?}})`.
 #[pyfunction]
 #[pyo3(signature=(scene, items, plugin, textures=None))]
 pub fn link_apply<'py>(
     scene: &Obj<'py>,
     items: &Obj<'py>,
     plugin: &str,
-    textures: Option<HashMap<String, PathBuf>>,
-) -> PyResult<(Obj<'py>, Vec<String>, Bound<'py, PyDict>)> {
+    textures: Option<HashMap<String, HashMap<String, PathBuf>>>,
+) -> PyResult<(Obj<'py>, Vec<String>, Bound<'py, PyDict>, Bound<'py, PyDict>)> {
     let py = scene.py();
     let textures = textures.unwrap_or_default();
     let failed = PyDict::new(py);
+    let created = PyDict::new(py);
+    let mut taken: HashSet<String> = HashSet::new();
     let mut applied = Vec::new();
     let mut steps: Vec<Obj<'py>> = Vec::new();
     let groups: HashMap<String, Obj<'py>> = scene
@@ -609,51 +641,65 @@ pub fn link_apply<'py>(
                     if m.is_none() {
                         return Err(PyValueError::new_err("Built has no material by this name"));
                     }
-                    let changes = PyDict::new(py);
-                    let pbr = match m.getattr("pbr")? {
-                        p if p.is_truthy()? => py.get_type::<PyDict>().call1((p,))?.cast_into::<PyDict>()?,
-                        _ => PyDict::new(py),
+                    let files = textures.get(&key).cloned().unwrap_or_default();
+                    if let Some(new) = changed_material(py, &m, &item.get_item("value")?, &files)? {
+                        steps.push(history(py, "RestampMaterialCommand", (name, new))?);
+                    }
+                }
+                "newmaterial" => {
+                    let v = item.get_item("value")?;
+                    let wanted: String = match v.call_method1("get", ("name",))? {
+                        n if n.is_truthy()? => n.extract()?,
+                        _ => name.to_owned(),
                     };
-                    let mut pbr_changed = false;
-                    for k in ["roughness", "metallic"] {
-                        let v = value_of(&item, k)?;
-                        if !v.is_none() {
-                            pbr.set_item(k, v.extract::<f64>()?.clamp(0., 1.))?;
-                            pbr_changed = true;
-                        }
-                    }
-                    if pbr_changed {
-                        changes.set_item("pbr", &pbr)?;
-                    }
-                    let tex = value_of(&item, "texture")?;
-                    let has_new_image = !tex.is_none() && textures.contains_key(&key);
-                    if has_new_image {
-                        let old = m.getattr("texture")?;
-                        let size = |k: &str| -> PyResult<f64> {
-                            if old.is_truthy()? { get_f64(&old, k, 1.) } else { Ok(1.) }
+                    let built_name = fresh_material_name(&mats, &wanted, &taken)?;
+                    taken.insert(built_name.clone());
+                    let files = textures.get(&key).cloned().unwrap_or_default();
+                    let blank = py.import("built_core.materials")?.getattr("Material")?.call1((&built_name,))?;
+                    let m = changed_material(py, &blank, &v, &files)?.unwrap_or(blank);
+                    steps.push(history(py, "SetFaceMaterialTagCommand", (PyList::empty(py), &built_name, &m))?);
+                    let mut whole_placements = 0;
+                    for a in v.call_method1("get", ("assign", PyList::empty(py)))?.try_iter()? {
+                        let a = a?;
+                        let uid: String = a.get_item("uid")?.extract()?;
+                        let from: String = a.call_method1("get", ("from", ""))?.extract::<Option<String>>()?.unwrap_or_default();
+                        let whole = a.call_method1("get", ("whole", false))?.is_truthy()?;
+                        let (mesh, group) = if uid == LOOSE {
+                            (scene.getattr("loose_mesh")?, None)
+                        } else {
+                            match find_placement(scene, &uid)? {
+                                Some(g) => (g.getattr("mesh")?, Some(g)),
+                                None => continue,
+                            }
                         };
-                        let t = PyDict::new(py);
-                        t.set_item("path", textures[&key].to_string_lossy())?;
-                        t.set_item("sw", size("sw")?)?;
-                        t.set_item("sh", size("sh")?)?;
-                        changes.set_item("texture", t)?;
-                        if !pbr_changed && m.getattr("pbr")?.is_none() {
-                            changes.set_item("color", py.None())?;
+                        let faces = PyList::empty(py);
+                        for f in mesh.getattr("faces")?.try_iter()? {
+                            let f = f?;
+                            let worn = f.getattr("attrs")?.call_method1("get", ("mat",))?;
+                            let wears: String = worn.extract::<Option<String>>().ok().flatten().unwrap_or_default();
+                            if whole || (!from.is_empty() && wears == from) {
+                                faces.append(f)?;
+                            }
+                        }
+                        let paint = |mesh: &Obj<'py>, faces: &Bound<'py, PyList>, seed: Obj<'py>, group: Obj<'py>| {
+                            py.import("built_core")?.call_method1("build_paint", (
+                                mesh, faces, seed, group, false, false,
+                                m.getattr("color")?, m.getattr("texture")?, m.getattr("opacity")?, &m, py.None(),
+                            ))
+                        };
+                        if !faces.is_empty() {
+                            steps.push(paint(&mesh, &faces, faces.get_item(0)?, py.None().into_bound(py))?);
+                        } else if let Some(g) = group {
+                            steps.push(paint(&py.None().into_bound(py), &PyList::empty(py), py.None().into_bound(py), g)?);
+                            whole_placements += 1;
                         }
                     }
-                    let color = value_of(&item, "color")?;
-                    if !color.is_none() && !has_new_image {
-                        let c = floats(&color)?;
-                        if c.len() < 3 {
-                            return Err(PyValueError::new_err("bad colour"));
-                        }
-                        changes.set_item("color", (c[0].clamp(0., 1.), c[1].clamp(0., 1.), c[2].clamp(0., 1.)))?;
+                    let info = PyDict::new(py);
+                    info.set_item("name", &built_name)?;
+                    if whole_placements > 0 {
+                        info.set_item("note", "Painted on whole placements: Blender's per-face use could not be matched")?;
                     }
-                    if changes.is_empty() {
-                        return Ok(());
-                    }
-                    let new = py.import("dataclasses")?.call_method("replace", (&m,), Some(&changes))?;
-                    steps.push(history(py, "RestampMaterialCommand", (name, new))?);
+                    created.set_item(&key, info)?;
                 }
                 "light" => {
                     if state.is_none() {
@@ -736,7 +782,159 @@ pub fn link_apply<'py>(
         1 => steps.pop().unwrap(),
         _ => history(py, "CompoundCommand", (PyList::new(py, steps)?,))?,
     };
-    Ok((command, applied, failed))
+    Ok((command, applied, failed, created))
+}
+
+/// A placement at any depth, by uid.
+fn find_placement<'py>(scene: &Obj<'py>, uid: &str) -> PyResult<Option<Obj<'py>>> {
+    let mut stack: Vec<Obj<'py>> = scene.getattr("groups")?.try_iter()?.collect::<PyResult<_>>()?;
+    while let Some(g) = stack.pop() {
+        if g.getattr("uid")?.extract::<String>()? == uid {
+            return Ok(Some(g));
+        }
+        stack.extend(g.getattr("children")?.try_iter()?.collect::<PyResult<Vec<_>>>()?);
+    }
+    Ok(None)
+}
+
+/// `wanted`, or `wanted (Blender)`, `wanted (Blender) 2`... when Built
+/// already has a material by that name.
+fn fresh_material_name(mats: &Obj<'_>, wanted: &str, taken: &HashSet<String>) -> PyResult<String> {
+    let free = |n: &str| -> PyResult<bool> {
+        Ok(!taken.contains(n) && (mats.is_none() || mats.call_method1("get", (n,))?.is_none()))
+    };
+    let wanted = if wanted.trim().is_empty() { "Blender material" } else { wanted.trim() };
+    if free(wanted)? {
+        return Ok(wanted.to_owned());
+    }
+    let base = format!("{wanted} (Blender)");
+    let mut name = base.clone();
+    let mut n = 2;
+    while !free(&name)? {
+        name = format!("{base} {n}");
+        n += 1;
+    }
+    Ok(name)
+}
+
+fn json_eq(a: &Obj<'_>, b: &Obj<'_>) -> PyResult<bool> {
+    let dumps = a.py().import("json")?.getattr("dumps")?;
+    Ok(dumps.call1((a,))?.eq(dumps.call1((b,))?)?)
+}
+
+/// The material with what Blender's `value` changes (fields equal to
+/// Built's current value are left as they are), or None when nothing does.
+/// `files` are the images Blender sent, by field.
+fn changed_material<'py>(py: Python<'py>, m: &Obj<'py>, value: &Obj<'py>, files: &HashMap<String, PathBuf>) -> PyResult<Option<Obj<'py>>> {
+    let now = material_value(py, m)?;
+    let field = |k: &str| -> PyResult<Option<Obj<'py>>> {
+        if !value.call_method1("__contains__", (k,))?.is_truthy()? {
+            return Ok(None);
+        }
+        let v = value.get_item(k)?;
+        let cur = now.get_item(k)?.unwrap_or_else(|| py.None().into_bound(py));
+        Ok(if json_eq(&v, &cur)? { None } else { Some(v) })
+    };
+    let changes = PyDict::new(py);
+    let pbr = match m.getattr("pbr")? {
+        p if p.is_truthy()? => py.get_type::<PyDict>().call1((p,))?.cast_into::<PyDict>()?,
+        _ => PyDict::new(py),
+    };
+    let mut pbr_changed = false;
+    for k in ["roughness", "metallic"] {
+        if let Some(v) = field(k)?.filter(|v| !v.is_none()) {
+            pbr.set_item(k, v.extract::<f64>()?.clamp(0., 1.))?;
+            pbr_changed = true;
+        }
+    }
+    if let Some(v) = field("normal_scale")?.filter(|v| !v.is_none()) {
+        pbr.set_item("normal_scale", v.extract::<f64>()?.max(0.))?;
+        pbr_changed = true;
+    }
+    if let Some(v) = field("emission_strength")?.filter(|v| !v.is_none()) {
+        pbr.set_item("emission_strength", v.extract::<f64>()?.max(0.))?;
+        pbr_changed = true;
+    }
+    if let Some(v) = field("emission")? {
+        let rgb: Vec<f64> = if v.is_none() { vec![0.; 3] } else { floats(&v)? };
+        if rgb.len() < 3 || rgb.iter().all(|c| *c <= 0.) {
+            pbr.call_method1("pop", ("emission", py.None()))?;
+        } else {
+            pbr.set_item("emission", rgb[..3].iter().map(|c| c.clamp(0., 1.)).collect::<Vec<_>>())?;
+        }
+        pbr_changed = true;
+    }
+    for k in MAPS {
+        if let Some(file) = files.get(k) {
+            let d = PyDict::new(py);
+            d.set_item("path", file.to_string_lossy())?;
+            pbr.set_item(k, d)?;
+            pbr_changed = true;
+        } else if let Some(v) = field(k)? {
+            if v.is_none() {
+                pbr.call_method1("pop", (k, py.None()))?;
+                pbr_changed = true;
+            } else if let Some(path) = v.call_method1("get", ("path",)).ok().filter(|p| p.is_truthy().unwrap_or(false)) {
+                let d = PyDict::new(py);
+                d.set_item("path", path)?;
+                pbr.set_item(k, d)?;
+                pbr_changed = true;
+            }
+        }
+    }
+    if pbr_changed {
+        changes.set_item("pbr", if pbr.is_empty() { py.None().into_bound(py) } else { pbr.into_any() })?;
+    }
+    let old_tex = m.getattr("texture")?;
+    let tile = value.call_method1("get", ("tile",))?;
+    let size = |i: usize, k: &str| -> PyResult<f64> {
+        if !tile.is_none() {
+            if let Ok(v) = tile.get_item(i).and_then(|v| v.extract::<f64>()) {
+                if v > 0. {
+                    return Ok(v);
+                }
+            }
+        }
+        if old_tex.is_truthy()? { get_f64(&old_tex, k, 1.) } else { Ok(1.) }
+    };
+    let new_image = files.get("texture");
+    if let Some(file) = new_image {
+        let t = PyDict::new(py);
+        if old_tex.is_truthy()? {
+            t.update(old_tex.cast::<pyo3::types::PyMapping>()?)?;
+        }
+        t.set_item("path", file.to_string_lossy())?;
+        t.set_item("sw", size(0, "sw")?)?;
+        t.set_item("sh", size(1, "sh")?)?;
+        changes.set_item("texture", t)?;
+        changes.set_item("color", py.None())?;
+    } else if old_tex.is_truthy()? {
+        if let Some(t) = field("tile")?.filter(|t| !t.is_none()) {
+            let d = py.get_type::<PyDict>().call1((&old_tex,))?;
+            d.set_item("sw", t.get_item(0)?)?;
+            d.set_item("sh", t.get_item(1)?)?;
+            changes.set_item("texture", d)?;
+        }
+    }
+    let color = field("color")?.filter(|c| !c.is_none());
+    if let (Some(c), None) = (color, new_image) {
+        let c = floats(&c)?;
+        if c.len() < 3 {
+            return Err(PyValueError::new_err("bad colour"));
+        }
+        changes.set_item("color", (c[0].clamp(0., 1.), c[1].clamp(0., 1.), c[2].clamp(0., 1.)))?;
+        if old_tex.is_truthy()? && value.call_method1("get", ("texture",))?.is_none() {
+            changes.set_item("texture", py.None())?; // back to a colour base
+        }
+    }
+    if let Some(o) = field("opacity")?.filter(|o| !o.is_none()) {
+        let o = o.extract::<f64>()?.clamp(0., 1.);
+        changes.set_item("opacity", if o >= 0.999 { None } else { Some(o) })?;
+    }
+    if changes.is_empty() {
+        return Ok(None);
+    }
+    Ok(Some(py.import("dataclasses")?.call_method("replace", (m,), Some(&changes))?))
 }
 
 #[pyfunction]

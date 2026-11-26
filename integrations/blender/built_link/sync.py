@@ -5,7 +5,9 @@ Values are plain dicts in Built's terms, named by key:
 ``transform:<uid>`` ``{"matrix": [16 floats, column-major]}``,
 ``material:<name>`` ``{"color", "roughness", "metallic", "texture"}``,
 ``light:<id>`` ``{"kind", "pos", "dir", "color", "power", "angle", "name", "on"}``,
-``camera:<name>`` ``{"eye", "target", "up", "fov_deg", "perspective"}``.
+``camera:<name>`` ``{"eye", "target", "up", "fov_deg", "perspective"}``,
+``newmaterial:<Blender name>``: a simple PBR material Built does not have
+yet (the material fields plus ``name`` and ``assign``, where it sits).
 
 For each key the add-on keeps Built's value (``base``) and what Blender
 reads back right after applying it (``local``). A change is a record that
@@ -14,7 +16,7 @@ changed fields replaced, and names ``base`` so Built can tell when both
 apps changed the same thing. Float noise from Blender's single precision
 never counts as a change. No Blender import: tested on its own.
 """
-KINDS = ("transform", "material", "light", "camera")
+KINDS = ("transform", "material", "newmaterial", "light", "camera")
 TOLERANCE = 1e-4
 
 

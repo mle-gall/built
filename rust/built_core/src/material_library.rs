@@ -315,7 +315,8 @@ pub(crate) fn material_inspector(
         field("color", "color", &hex),
     ));
     let pbr = &data["pbr"];
-    let enabled = pbr.as_object().is_some_and(|m| !m.is_empty());
+    // Emission alone does not turn the PBR surface on.
+    let enabled = pbr.as_object().is_some_and(|m| m.keys().any(|k| !k.starts_with("emission")));
     let mut surface = vec![("PBR surface".into(), switch("pbr", "Off|On", enabled))];
     let mut maps = vec![];
     if enabled {
@@ -351,6 +352,28 @@ pub(crate) fn material_inspector(
         }
     }
     let opacity = (data["opacity"].as_f64().unwrap_or(1.) * 100.).round();
+    // Emission: linear RGB × strength, an optional map (tiled as the base).
+    let glow: Vec<f64> = pbr["emission"].as_array().map_or(vec![0.; 3], |a| a.iter().map(|v| v.as_f64().unwrap_or(0.)).collect());
+    let glow_hex = format!(
+        "#{:02x}{:02x}{:02x}",
+        (glow.first().copied().unwrap_or(0.).clamp(0., 1.) * 255.).round() as u8,
+        (glow.get(1).copied().unwrap_or(0.).clamp(0., 1.) * 255.).round() as u8,
+        (glow.get(2).copied().unwrap_or(0.).clamp(0., 1.) * 255.).round() as u8
+    );
+    let strength = pbr["emission_strength"].as_f64().unwrap_or(0.);
+    let mut emission: Vec<(String, String)> = vec![
+        ("Emission".into(), field("color", "emission", &glow_hex)),
+        ("Emission strength".into(), field("edit", "emission_strength", &format!("{}", (strength * 1000.).round() / 1000.))),
+    ];
+    let glow_map = pbr["emission_map"]["path"].as_str();
+    if let Some(path) = glow_map {
+        emission.push(("Emission map".into(), path.rsplit(['/', '\\']).next().unwrap_or(path).into()));
+    }
+    maps.push(if glow_map.is_some() {
+        (format!("lib:unmap:{key}:emission_map"), "Clear emission map".into())
+    } else {
+        (format!("lib:map:{key}:emission_map"), "Emission map…".into())
+    });
     use crate::material_finish::{guess_finish, lookup, FINISHES};
     let tr = mat.py().import("built_core.i18n")?.getattr("tr")?;
     let filename = image.and_then(|p| p.rsplit(['/', '\\']).next());
@@ -372,23 +395,22 @@ pub(crate) fn material_inspector(
     if !maps.is_empty() {
         sections.push(("Actions".into(), maps));
     }
-    sections.push((
-        "Look".into(),
-        vec![
-            (
-                "Opacity".into(),
-                field("slider", "opacity", &format!("{opacity}\u{1d}100")),
-            ),
-            (
-                "Finish".into(),
-                field("picker", "finish", &json!((selected, options)).to_string()),
-            ),
-            (
-                "Used by".into(),
-                format!("{uses} object{}", if uses == 1 { "" } else { "s" }),
-            ),
-        ],
+    let mut look = vec![
+        (
+            "Opacity".into(),
+            field("slider", "opacity", &format!("{opacity}\u{1d}100")),
+        ),
+        (
+            "Finish".into(),
+            field("picker", "finish", &json!((selected, options)).to_string()),
+        ),
+    ];
+    look.extend(emission);
+    look.push((
+        "Used by".into(),
+        format!("{uses} object{}", if uses == 1 { "" } else { "s" }),
     ));
+    sections.push(("Look".into(), look));
     sections.push((
         "Actions".into(),
         vec![

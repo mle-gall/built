@@ -146,7 +146,13 @@ impl Review {
             .iter()
             .map(|i| {
                 let (field, built, blender) = describe(i);
-                let label = if field.is_empty() { i.label.clone() } else { format!("{} · {field}", i.label) };
+                let label = if i.kind == "newmaterial" {
+                    format!("New material: {}", i.label)
+                } else if field.is_empty() {
+                    i.label.clone()
+                } else {
+                    format!("{} · {field}", i.label)
+                };
                 json!({"key": i.key, "kind": i.kind, "label": label, "built": built, "blender": blender,
                        "conflict": i.conflict, "unsupported": i.unsupported})
             })
@@ -183,9 +189,65 @@ fn angle_between(a: &[[f64; 3]; 3], b: &[[f64; 3]; 3]) -> f64 {
 }
 
 /// What changed in one item, as (field, Built's text, Blender's text).
+fn hex(v: &Value) -> String {
+    format!("#{:02X}{:02X}{:02X}", (num(v, 0).clamp(0., 1.) * 255.).round() as u8,
+            (num(v, 1).clamp(0., 1.) * 255.).round() as u8, (num(v, 2).clamp(0., 1.) * 255.).round() as u8)
+}
+
+/// One material field as a short text.
+fn show_field(k: &str, v: &Value) -> String {
+    match (k, v) {
+        ("color" | "emission", Value::Array(_)) => hex(v),
+        ("tile", Value::Array(_)) => format!("{:.2} × {:.2} m", num(v, 0), num(v, 1)),
+        (_, Value::Object(t)) => t.get("name").and_then(Value::as_str).unwrap_or("image").to_owned(),
+        (_, Value::Number(n)) => format!("{:.2}", n.as_f64().unwrap_or(0.)),
+        _ => "—".into(),
+    }
+}
+
+const MATERIAL_FIELDS: [(&str, &str); 14] = [
+    ("color", "Colour"), ("texture", "Image"), ("tile", "Tile"), ("roughness", "Roughness"),
+    ("metallic", "Metallic"), ("opacity", "Opacity"), ("normal_map", "Normal map"),
+    ("normal_scale", "Normal strength"), ("roughness_map", "Roughness map"), ("metallic_map", "Metallic map"),
+    ("ao_map", "Occlusion map"), ("emission", "Emission"), ("emission_strength", "Emission strength"),
+    ("emission_map", "Emission map"),
+];
+
+/// A new material from Blender in a few words: its base and what it adds.
+fn summary(v: &Value) -> String {
+    let mut parts = Vec::new();
+    match (v.get("texture"), v.get("color")) {
+        (Some(t @ Value::Object(_)), _) => parts.push(show_field("texture", t)),
+        (_, Some(c @ Value::Array(_))) => parts.push(hex(c)),
+        _ => {}
+    }
+    parts.push(format!("roughness {:.2}", v.get("roughness").and_then(Value::as_f64).unwrap_or(1.)));
+    if v.get("metallic").and_then(Value::as_f64).unwrap_or(0.) > 0. {
+        parts.push(format!("metallic {:.2}", v.get("metallic").and_then(Value::as_f64).unwrap_or(0.)));
+    }
+    let maps = ["normal_map", "roughness_map", "metallic_map", "ao_map", "emission_map"]
+        .iter()
+        .filter(|k| v.get(**k).is_some_and(Value::is_object))
+        .count();
+    if maps > 0 {
+        parts.push(format!("{maps} map{}", if maps == 1 { "" } else { "s" }));
+    }
+    if v.get("emission_strength").and_then(Value::as_f64).unwrap_or(0.) > 0. {
+        parts.push("emissive".into());
+    }
+    parts.join(" · ")
+}
+
 pub fn describe(i: &Item) -> (String, String, String) {
     if let Some(why) = &i.unsupported {
         return (String::new(), "—".into(), why.clone());
+    }
+    if i.kind == "newmaterial" {
+        let mut text = summary(&i.value);
+        if let Some(note) = i.value.get("assign_note").and_then(Value::as_str) {
+            text = format!("{text} ({note})");
+        }
+        return (String::new(), "—".into(), text);
     }
     let dash = || "—".to_string();
     match i.kind.as_str() {
@@ -230,21 +292,17 @@ pub fn describe(i: &Item) -> (String, String, String) {
         "material" => {
             let mut fields = Vec::new();
             let (mut b, mut x) = (Vec::new(), Vec::new());
-            for (k, label) in [("color", "Colour"), ("roughness", "Roughness"), ("metallic", "Metallic"), ("texture", "Image")] {
-                let (v0, v1) = (i.built.get(k).unwrap_or(&Value::Null), i.value.get(k).unwrap_or(&Value::Null));
-                if same(v0, v1) {
+            for (k, label) in MATERIAL_FIELDS {
+                let Some(v1) = i.value.get(k) else { continue };
+                let v0 = i.built.get(k).unwrap_or(&Value::Null);
+                let image = |v: &Value| v.get("crc").cloned().unwrap_or(Value::Null);
+                let unchanged = if v0.is_object() || v1.is_object() { image(v0) == image(v1) && v0.is_null() == v1.is_null() } else { same(v0, v1) };
+                if unchanged {
                     continue;
                 }
                 fields.push(label);
-                let show = |v: &Value| match (k, v) {
-                    ("color", Value::Array(_)) => format!("#{:02X}{:02X}{:02X}", (num(v, 0).clamp(0., 1.) * 255.).round() as u8,
-                                                          (num(v, 1).clamp(0., 1.) * 255.).round() as u8, (num(v, 2).clamp(0., 1.) * 255.).round() as u8),
-                    ("texture", Value::Object(t)) => t.get("name").and_then(Value::as_str).unwrap_or("image").to_owned(),
-                    (_, Value::Number(n)) => format!("{:.2}", n.as_f64().unwrap_or(0.)),
-                    _ => "—".into(),
-                };
-                b.push(show(v0));
-                x.push(show(v1));
+                b.push(show_field(k, v0));
+                x.push(show_field(k, v1));
             }
             (fields.join(", "), b.join(", "), x.join(", "))
         }
@@ -368,6 +426,29 @@ mod tests {
         assert_eq!(r.len(), 2);
         assert_eq!(r.take(None).len(), 2);
         assert_eq!(r.len(), 0);
+    }
+
+    #[test]
+    fn new_materials_and_pbr_fields_read_plainly() {
+        let mut r = Review::default();
+        r.receive(&[
+            json!({"key": "newmaterial:Oiled oak", "kind": "newmaterial", "label": "Oiled oak", "base": null,
+                   "value": {"texture": {"name": "oak.png", "crc": "aa"}, "color": null, "roughness": 0.4,
+                             "normal_map": {"name": "oak_n.png", "crc": "bb"}, "emission_strength": 0.0,
+                             "assign_note": "on whole placements"}}),
+            json!({"key": "newmaterial:Glass shader", "kind": "newmaterial", "label": "Glass shader", "base": null,
+                   "value": {}, "unsupported": "Node setup not supported"}),
+            json!({"key": "material:Oak", "kind": "material", "label": "Oak",
+                   "base": {"emission": [0, 0, 0], "emission_strength": 0.0, "normal_map": null},
+                   "value": {"emission": [1, 0.5, 0], "emission_strength": 2.0, "normal_map": {"name": "n.png", "crc": "cc"}}}),
+        ], &current(&[("material:Oak", json!({"emission": [0, 0, 0], "emission_strength": 0.0, "normal_map": null}))]));
+        let rows = r.rows();
+        assert_eq!(rows[0]["label"], "New material: Oiled oak");
+        assert_eq!(rows[0]["blender"], "oak.png · roughness 0.40 · 1 map (on whole placements)");
+        assert_eq!(rows[1]["label"], "New material: Glass shader");
+        assert_eq!(rows[1]["blender"], "Node setup not supported");
+        assert_eq!(rows[2]["label"], "Oak · Normal map, Emission, Emission strength");
+        assert_eq!(rows[2]["blender"], "n.png, #FF8000, 2.00");
     }
 
     #[test]

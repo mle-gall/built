@@ -397,15 +397,19 @@ class BlenderLink:
     def receive(self, items, payload):
         textures = rb.work_base().parent / "Blender textures"
         for it in items:
-            image = it.pop("image", None)
-            if image and it.get("kind") == "material":
+            images = it.pop("images", None) or {}
+            if it.get("kind") not in ("material", "newmaterial"):
+                continue
+            for field, image in images.items():
                 data = payload[image["offset"]:image["offset"] + image["size"]]
-                if len(data) == image["size"]:
-                    textures.mkdir(parents=True, exist_ok=True)
-                    safe = "".join(c if c.isalnum() or c in "-_." else "_" for c in image.get("name", "image.png"))
-                    path = textures / f"{(it.get('value') or {}).get('texture', {}).get('crc', 'image')}-{safe}"
-                    path.write_bytes(data)
-                    self.textures[it["key"]] = str(path)
+                if len(data) != image["size"]:
+                    continue
+                textures.mkdir(parents=True, exist_ok=True)
+                safe = "".join(c if c.isalnum() or c in "-_." else "_" for c in image.get("name", "image.png"))
+                crc = ((it.get("value") or {}).get(field) or {}).get("crc") or "image"
+                path = textures / f"{crc}-{safe}"
+                path.write_bytes(data)
+                self.textures.setdefault(it["key"], {})[field] = str(path)
         current = rb.link_values(self.app.scene, self.app.key, [it["key"] for it in items if "key" in it])
         got = self.review.receive(items, current)
         for key in got["same"]:
@@ -446,7 +450,7 @@ class BlenderLink:
         items = self.review.take([k for k in keys if k in self.review.keys()])
         if how in ("apply", "take"):
             textures = {k: p for k, p in self.textures.items() if any(i["key"] == k for i in items)}
-            command, applied, failed = rb.link_apply(self.app.scene, items, self.app.key, textures)
+            command, applied, failed, created = rb.link_apply(self.app.scene, items, self.app.key, textures)
             if command is not None:
                 vp = self.app.viewport
                 vp.history.execute(command)
@@ -454,10 +458,20 @@ class BlenderLink:
                 if callable(notify):
                     notify()
                 vp.update()
-            now = rb.link_values(self.app.scene, self.app.key, applied) if applied else {}
+            names = {k: "material:" + c["name"] for k, c in created.items()}
+            now = rb.link_values(self.app.scene, self.app.key, [names.get(k, k) for k in applied]) if applied else {}
+            notes = []
             for key in applied:
-                self.answer(key, "applied", now.get(key))
+                value = now.get(names.get(key, key))
+                if key in created:
+                    # Blender's material is Built's now, under this name.
+                    value = dict(value or {}, name=created[key]["name"])
+                    if created[key].get("note"):
+                        notes.append(f'{created[key]["name"]}: {created[key]["note"]}')
+                self.answer(key, "applied", value)
                 self.textures.pop(key, None)
+            if notes:
+                self.notice = "; ".join(notes)
             for key, why in failed.items():
                 self.answer(key, "failed", None, why)
             if failed:

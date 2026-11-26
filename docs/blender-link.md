@@ -73,6 +73,39 @@ Blender (`BUILT_BLENDER_TESTS=1`, slow).
   `kept_built` with Built's value, or `failed` with the reason) so Blender
   neither proposes it again nor loses its own value silently.
 
+## Materials
+
+A material's value carries every field of Built's PBR contract
+(`docs/materials.md`): base colour or image with its tile, roughness,
+metallic, opacity, normal, roughness, metallic, occlusion and emission maps
+(name and CRC; the image travels as a file), normal strength and emission
+(colour and strength). Edits to a Built material in Blender update it.
+
+A material made in Blender comes to Built when it is **simple PBR**
+(`built_link/pbr.py`): a Principled BSDF straight on the Material
+Output's Surface, each input a constant or an Image Texture (through UV
+Map, Texture Coordinate's UV and Mapping: scale and rotation), normals
+through a tangent Normal Map, occlusion from the glTF Material Output
+group. Base Color, Metallic, Roughness, Normal, Alpha (a constant, or the
+base image's alpha), Emission Color and Strength are read; any other
+input driven by nodes, a node group, a procedural texture or a mix shader
+makes it stay in Blender: the add-on's panel lists it with the reason and
+Built's drawer shows an informational row (Dismiss only).
+
+It arrives as "New material: <name>" (Apply / Ignore). Applying, in one
+undo step, creates the material (`<name> (Blender)` when Built has one by
+that name) and paints:
+
+- the whole mesh of a placement whose object wears it on every face;
+- otherwise the faces that wore the Built material its slot started as
+  (the add-on records each imported object's slots in `built_slots`);
+- otherwise (a slot Built never had) the placement as a whole, and the
+  row and drawer say so.
+
+A shared definition's faces change for every copy, as in Blender. Then
+Blender's material is marked as Built's, and later edits update it.
+Mapping scale becomes the tile (one UV unit taken as one metre).
+
 ## Install
 
 Install Blender add-on… writes `built_link.zip` beside Built's render
@@ -85,5 +118,6 @@ Install from Disk…
 - A classic group (no matrix of its own) reports an identity transform:
   a move in Blender applies, but Built cannot tell a later Built move of
   the same group from no change, so it is not shown as a conflict.
-- Only library materials come back (base colour, roughness, metallic,
-  base colour image). Materials made in Blender stay in Blender.
+- Materials made in Blender come back only when they are simple PBR
+  (see Materials); the rest stay in Blender.
+- Emission travels both ways but Built's viewport does not draw it yet.

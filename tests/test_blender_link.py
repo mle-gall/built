@@ -269,7 +269,7 @@ def test_a_transform_applies_as_one_undo_step():
     before = _matrix(seat)
     c, s = math.cos(0.4), math.sin(0.4)
     new = np.array([[c, -s, 0, 3], [s, c, 0, 1], [0, 0, 1, 0.5], [0, 0, 0, 1]]) @ np.diag([1, 1.5, 1, 1])
-    cmd, applied, failed = rb.link_apply(sc, [{"key": "transform:" + seat.uid, "value": {"matrix": _flat(new)}}], PLUGIN)
+    cmd, applied, failed, _ = rb.link_apply(sc, [{"key": "transform:" + seat.uid, "value": {"matrix": _flat(new)}}], PLUGIN)
     assert applied == ["transform:" + seat.uid] and not failed
     depth = len(h.undo_stack)
     h.execute(cmd)
@@ -283,7 +283,7 @@ def test_locked_mirrored_or_missing_placements_are_refused_per_item():
     sc, h, seat, leg = _scene()
     C.run(h, "lock", placements=[leg.uid])
     mirror = _flat(np.diag([-1, 1, 1, 1]))
-    cmd, applied, failed = rb.link_apply(sc, [
+    cmd, applied, failed, _ = rb.link_apply(sc, [
         {"key": "transform:" + leg.uid, "value": {"matrix": _flat(np.eye(4))}},
         {"key": "transform:" + seat.uid, "value": {"matrix": mirror}},
         {"key": "transform:nope", "value": {"matrix": _flat(np.eye(4))}}], PLUGIN)
@@ -299,7 +299,7 @@ def test_a_material_takes_colour_roughness_metallic_and_an_image(tmp_path):
     v = rb.link_values(sc, PLUGIN, ["material:Oak"])["material:Oak"]
     assert v == {"color": [0.5, 0.3, 0.1], "roughness": 1.0, "metallic": 0.0, "texture": None} or \
         v["color"] == pytest.approx([0.5, 0.3, 0.1])
-    cmd, applied, _ = rb.link_apply(sc, [{"key": "material:Oak", "value": {
+    cmd, applied, _, _ = rb.link_apply(sc, [{"key": "material:Oak", "value": {
         "color": [0.6, 0.4, 0.2], "roughness": 0.35, "metallic": 0.1, "texture": None}}], PLUGIN)
     h.execute(cmd)
     m = sc.materials.get("Oak")
@@ -309,9 +309,9 @@ def test_a_material_takes_colour_roughness_metallic_and_an_image(tmp_path):
     # An image from Blender, written by the drawer as a file.
     png = tmp_path / "oiled.png"
     png.write_bytes(_png(4, 4, (120, 80, 40)))
-    cmd, applied, _ = rb.link_apply(sc, [{"key": "material:Oak", "value": {
+    cmd, applied, _, _ = rb.link_apply(sc, [{"key": "material:Oak", "value": {
         "color": None, "roughness": 0.35, "metallic": 0.1, "texture": {"name": "oiled.png", "crc": "x"}}}],
-        PLUGIN, {"material:Oak": png})
+        PLUGIN, {"material:Oak": {"texture": png}})
     h.execute(cmd)
     tex = rb.link_values(sc, PLUGIN, ["material:Oak"])["material:Oak"]["texture"]
     assert tex["name"] == "oiled.png" and tex["path"] == str(png)
@@ -326,7 +326,7 @@ def test_lights_from_blender_join_the_render_lights():
     h.execute(SetPluginDataCommand(PLUGIN, {"ambience": "night", "lights": [
         {"kind": "point", "pos": [0, 0, 2], "power": 400, "id": "l1", "name": "Bulb"}]}))
     assert rb.link_values(sc, PLUGIN, ["light:l1"])["light:l1"]["power"] == 400
-    cmd, applied, failed = rb.link_apply(sc, [
+    cmd, applied, failed, _ = rb.link_apply(sc, [
         {"key": "light:l1", "value": {"kind": "point", "pos": [0, 0, 2.5], "power": 600.0, "color": [1, 0.9, 0.8]}},
         {"key": "light:new7", "value": {"kind": "spot", "pos": [1, 1, 3], "dir": [0, 0, -1], "power": 900.0,
                                         "angle": 40.0, "color": [1, 1, 1], "name": "Studio key"}},
@@ -346,13 +346,13 @@ def test_cameras_become_scenes_or_move_an_existing_one():
     sc, h, seat, leg = _scene()
     front = {"eye": [0.0, -8.0, 1.6], "target": [0.0, 0.0, 1.0], "up": [0.0, 0.0, 1.0], "fov_deg": 40.0,
              "perspective": True}
-    cmd, applied, _ = rb.link_apply(sc, [{"key": "camera:Front", "value": front}], PLUGIN)
+    cmd, applied, _, _ = rb.link_apply(sc, [{"key": "camera:Front", "value": front}], PLUGIN)
     h.execute(cmd)
     assert [v.name for v in sc.saved_views] == ["Front"]
     got = rb.link_values(sc, PLUGIN, ["camera:Front"])["camera:Front"]
     assert got["eye"] == pytest.approx(front["eye"], abs=1e-6) and got["fov_deg"] == pytest.approx(40)
     moved = {**front, "eye": [2.0, -8.0, 1.6]}
-    cmd, applied, _ = rb.link_apply(sc, [{"key": "camera:Front", "value": moved}], PLUGIN)
+    cmd, applied, _, _ = rb.link_apply(sc, [{"key": "camera:Front", "value": moved}], PLUGIN)
     h.execute(cmd)
     assert len(sc.saved_views) == 1
     assert rb.link_values(sc, PLUGIN, ["camera:Front"])["camera:Front"]["eye"] == pytest.approx(moved["eye"], abs=1e-6)
@@ -366,7 +366,7 @@ def test_a_mixed_batch_is_one_undo_step():
     sc, h, seat, leg = _scene()
     C.run(h, "create_material", color=[0.5, 0.3, 0.1], name="Oak")
     depth = len(h.undo_stack)
-    cmd, applied, failed = rb.link_apply(sc, [
+    cmd, applied, failed, _ = rb.link_apply(sc, [
         {"key": "transform:" + seat.uid, "value": {"matrix": _flat(np.eye(4))}},
         {"key": "material:Oak", "value": {"roughness": 0.2}},
         {"key": "light:a", "value": {"kind": "point", "pos": [0, 0, 3], "power": 100.0}},
@@ -557,3 +557,94 @@ def test_install_add_on_writes_an_installable_zip(tmp_path, monkeypatch):
         assert "built_link/__init__.py" in names and "built_link/launch.py" in names
         assert all(n.startswith("built_link/") and n.endswith((".py", ".md")) for n in names)
         assert "bl_info" in z.read("built_link/__init__.py").decode()
+
+
+# ---------------------------------------------------------------- new materials from Blender
+
+def _new_value(**kw):
+    value = {"name": "Oiled oak", "color": None, "texture": {"name": "oiled.png", "crc": "x"}, "tile": [0.5, 0.5],
+             "roughness": 0.35, "metallic": 0.0, "opacity": 1.0, "normal_map": None, "normal_scale": 1.0,
+             "roughness_map": None, "metallic_map": None, "ao_map": None, "emission": [0, 0, 0],
+             "emission_strength": 0.0, "emission_map": None}
+    value.update(kw)
+    return value
+
+
+def test_a_new_material_is_created_and_painted_in_one_undo_step(tmp_path):
+    sc, h, seat, leg = _scene()
+    C.run(h, "create_material", color=[0.5, 0.3, 0.1], name="Oak")
+    C.run(h, "paint_material", mesh=leg.uid, faces=[str(f.key) for f in leg.mesh.faces], material="Oak")
+    png = tmp_path / "oiled.png"
+    png.write_bytes(_png(4, 4, (120, 80, 40)))
+    key = "newmaterial:Oiled oak"
+    value = _new_value(assign=[{"uid": leg.uid, "from": "Oak", "whole": False},
+                               {"uid": seat.uid, "from": "", "whole": True}])
+    depth = len(h.undo_stack)
+    cmd, applied, failed, created = rb.link_apply(sc, [{"key": key, "value": value}], PLUGIN,
+                                                  {key: {"texture": png}})
+    assert applied == [key] and not failed and created[key] == {"name": "Oiled oak"}
+    h.execute(cmd)
+    assert len(h.undo_stack) == depth + 1
+    m = sc.materials.get("Oiled oak")
+    assert m.texture["path"] == str(png) and (m.texture["sw"], m.texture["sh"]) == (0.5, 0.5)
+    assert m.pbr["roughness"] == pytest.approx(0.35)
+    assert all(f.attrs.get("mat") == "Oiled oak" for f in leg.mesh.faces)      # the faces that wore Oak
+    assert all(f.attrs.get("mat") == "Oiled oak" for f in seat.mesh.faces)     # the whole object
+    assert rb.link_values(sc, PLUGIN, ["material:Oiled oak"])["material:Oiled oak"]["texture"]["path"] == str(png)
+    h.undo()
+    assert sc.materials.get("Oiled oak") is None
+    assert all(f.attrs.get("mat") == "Oak" for f in leg.mesh.faces)
+
+
+def test_a_taken_name_gets_a_suffix_and_unmatched_faces_paint_the_placement(tmp_path):
+    sc, h, seat, leg = _scene()
+    C.run(h, "create_material", color=[0.5, 0.3, 0.1], name="Oiled oak")
+    key = "newmaterial:Oiled oak"
+    value = _new_value(texture=None, color=[0.2, 0.6, 0.2], tile=None,
+                       assign=[{"uid": leg.uid, "from": "", "whole": False}])
+    cmd, applied, failed, created = rb.link_apply(sc, [{"key": key, "value": value}], PLUGIN)
+    h.execute(cmd)
+    name = created[key]["name"]
+    assert name == "Oiled oak (Blender)" and "whole placements" in created[key]["note"]
+    assert leg.material and leg.material.get("mat") == name
+    assert tuple(sc.materials.get(name).color) == pytest.approx((0.2, 0.6, 0.2))
+
+
+def test_emission_and_maps_travel_on_material_edits(tmp_path):
+    sc, h, seat, leg = _scene()
+    C.run(h, "create_material", color=[0.5, 0.3, 0.1], name="Oak")
+    now = rb.link_values(sc, PLUGIN, ["material:Oak"])["material:Oak"]
+    assert now["emission"] == [0, 0, 0] and now["emission_strength"] == 0 and now["normal_map"] is None
+    normal = tmp_path / "n.png"
+    normal.write_bytes(_png(2, 2, (128, 128, 255)))
+    value = {**now, "emission": [1.0, 0.5, 0.0], "emission_strength": 2.0,
+             "normal_map": {"name": "n.png", "crc": "y"}, "normal_scale": 0.6}
+    cmd, applied, failed, _ = rb.link_apply(sc, [{"key": "material:Oak", "value": value}], PLUGIN,
+                                            {"material:Oak": {"normal_map": normal}})
+    h.execute(cmd)
+    pbr = sc.materials.get("Oak").pbr
+    assert pbr["emission"] == [1.0, 0.5, 0.0] and pbr["emission_strength"] == 2.0
+    assert pbr["normal_map"]["path"] == str(normal) and pbr["normal_scale"] == 0.6
+    back = rb.link_values(sc, PLUGIN, ["material:Oak"])["material:Oak"]
+    assert back["emission"] == [1.0, 0.5, 0.0] and back["normal_map"]["name"] == "n.png"
+    assert back["color"] == pytest.approx([0.5, 0.3, 0.1])       # untouched fields stay
+
+
+def test_the_drawer_lists_and_applies_a_new_material(linked, tmp_path):
+    t = linked
+    _wait(lambda: f"transform:{t.seat.uid}" in t.ctl.sync.local, step=t.pump)
+    t.host.values["newmaterial:Oiled oak"] = _new_value(texture=None, color=[0.2, 0.6, 0.2], tile=None,
+                                                        assign=[{"uid": t.seat.uid, "from": "", "whole": True}])
+    t.host.values["newmaterial:Glass shader"] = {"unsupported": "Node setup not supported"}
+    t.host.names.update({"newmaterial:Oiled oak": "Oiled oak", "newmaterial:Glass shader": "Glass shader"})
+    assert t.ctl.send() == 2
+    _wait(lambda: len(t.link.review) == 2, step=t.pump)
+    rows = {r["key"]: r for r in t.link.rows()}
+    assert rows["newmaterial:Oiled oak"]["cells"][0] == "New material: Oiled oak"
+    assert [a[0] for a in rows["newmaterial:Oiled oak"]["actions"]] == ["apply", "ignore"]
+    assert rows["newmaterial:Glass shader"]["cells"][2] == "Node setup not supported"
+    assert [a[0] for a in rows["newmaterial:Glass shader"]["actions"]] == ["ignore"]      # no Apply
+    depth = len(t.h.undo_stack)
+    t.link.event("link_apply_all", "invoke", None)
+    assert len(t.h.undo_stack) == depth + 1 and t.sc.materials.get("Oiled oak") is not None
+    _wait(lambda: t.host.adopted.get("Oiled oak") == "Oiled oak", step=t.pump)

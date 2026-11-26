@@ -23,8 +23,10 @@ def _prefs():
 
 
 def _kinds(wm):
-    return tuple(k for k, on in (("material", wm.built_send_materials), ("light", wm.built_send_lights),
-                                 ("camera", wm.built_send_cameras), ("transform", wm.built_send_transforms)) if on)
+    pairs = (("material", wm.built_send_materials), ("newmaterial", wm.built_send_materials),
+             ("light", wm.built_send_lights), ("camera", wm.built_send_cameras),
+             ("transform", wm.built_send_transforms))
+    return tuple(k for k, on in pairs if on)
 
 
 def _tick():
@@ -158,6 +160,13 @@ class VIEW3D_PT_built_link(bpy.types.Panel):
             row.operator(BUILT_OT_send.bl_idname, text=label)
             box.prop(wm, "built_auto_send")
         box.label(text="Built reviews each change before applying it")
+        if c.state == "linked":
+            kept = c.host.unsupported_materials()
+            if kept:
+                stay = layout.box()
+                stay.label(text="Stays in Blender")
+                for name, reason in kept:
+                    stay.label(text=f"{name}: {reason}", icon="MATERIAL")
 
 
 class BuiltLinkPreferences(bpy.types.AddonPreferences):

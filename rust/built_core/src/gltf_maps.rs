@@ -102,6 +102,22 @@ pub(crate) fn gltf_import_recipe<'py>(
             recipe.set_item("ao_map", path_record(py, &ao)?)?
         }
     }
+    // Emission: factor × texture × KHR_materials_emissive_strength.
+    let emissive = path(mat, "emissiveTexture")?;
+    let factor = mat.call_method1("get", ("emissiveFactor",))?;
+    let rgb: Option<Vec<f64>> = if factor.is_none() { None } else { factor.extract().ok() };
+    let lit = rgb.as_ref().is_some_and(|v| v.iter().any(|c| *c > 0.0));
+    if lit || (emissive.is_truthy()? && factor.is_none()) {
+        recipe.set_item("emission", rgb.filter(|_| lit).unwrap_or_else(|| vec![1.0; 3]))?;
+        let strength = mat
+            .call_method1("get", ("extensions", PyDict::new(py)))?
+            .call_method1("get", ("KHR_materials_emissive_strength", PyDict::new(py)))?
+            .call_method1("get", ("emissiveStrength", 1.0))?;
+        recipe.set_item("emission_strength", strength)?;
+        if emissive.is_truthy()? {
+            recipe.set_item("emission_map", path_record(py, &emissive)?)?;
+        }
+    }
     let normal = path(mat, "normalTexture")?;
     if normal.is_truthy()? {
         recipe.set_item("normal_map", path_record(py, &normal)?)?;
