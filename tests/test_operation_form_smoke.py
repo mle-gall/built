@@ -550,6 +550,9 @@ Host.state = bevel_state
 """)
     steps = tmp_path / "steps"
     steps.write_text("wait 650\nkey escape\nmenu panel:python_console\nwait 300\nmenu select_all\ntool fillet\nwait 500\nstate\n"
+                     "click 265 672\nclick 171 700\nwait 300\nstate\n"
+                     "click 178 647\nclick 171 674\nwait 300\nstate\n"
+                     "click 257 674\nwait 300\nstate\n"
                      "key escape\nwait 250\nstate\nmenu select_all\ntool fillet\n"
                      "wait 300\nkey enter\nwait 500\nstate\nquit\n")
     result = run([str(BIN), "--root", str(ROOT), "--venv", str(venv), "--new-instance",
@@ -559,7 +562,11 @@ Host.state = bevel_state
     assert result.returncode == 0 and "Traceback" not in log, log
     states = [json.loads(line.removeprefix("[built] state ")) for line in log.splitlines()
               if line.startswith("[built] state ")]
-    start, cancelled, applied = states[:3]
+    start, corner, smooth, removed, cancelled, applied = states[:6]
+    assert isinstance(corner["curve"], list) and not any(point[2] for point in corner["curve"])
+    assert len(smooth["curve"]) == len(corner["curve"]) + 1 and sum(point[2] for point in smooth["curve"]) == 1
+    assert removed["curve"] == corner["curve"]
+    assert all(state["revision"] == start["revision"] for state in (corner, smooth, removed))
     assert start["curve"] == "steps" and start["picked"] > 0
     assert start["input"]["drawer_operation"] and not start["input"]["drawer_pinned"]
     assert cancelled["input"]["drawer_pinned"] and applied["input"]["drawer_pinned"]

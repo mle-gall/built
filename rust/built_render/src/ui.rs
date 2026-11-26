@@ -2954,6 +2954,9 @@ impl Ui {
         let left = if self.review { GUT } else { GUT + self.rail_w + GUT };
         let right = if self.review { screen.max.x - GUT } else { self.free_right(ctx, screen) - GUT };
         let bottom = if self.review { screen.max.y - GUT } else { screen.max.y - BOT_H - GUT };
+        let bottom = if !self.review && self.drawer_mode().is_some() {
+            ctx.memory(|m| m.area_rect("drawer".into())).map_or(bottom, |r| bottom.min(r.top() - GUT))
+        } else { bottom };
         let free = Rect::from_min_max(pos2(left, TOP_H + GUT), pos2(right, bottom));
         let (back, live) = self.cursor.place(free, vec2(170.0, 30.0));
         let pill = |id: &str, r: Rect, caption: &str, value: &str, typing: bool, committed: bool| {
