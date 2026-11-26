@@ -313,25 +313,28 @@ mod tests {
     }
 }
 
-/// Whether this GPU resolves a multisampled pass that also keeps its samples.
-/// The faces' pass does both: the edges go on drawing into the samples, and
-/// ambient occlusion reads the faces' colours from the resolve. A device that
-/// only resolves when the samples are discarded leaves that resolve empty.
+/// Whether this GPU hands on the colours of a multisampled pass that also
+/// keeps its samples, the way a frame with ambient occlusion needs them: the
+/// faces' pass resolves into the display view of an sRGB frame while the
+/// edges go on drawing into the samples, and ambient occlusion reads the
+/// faces' colours from a copy of that frame, in the same command buffer.
 /// `None` when no device can be had.
 #[pyo3::pyfunction]
 pub fn store_and_resolve_probe() -> Option<bool> {
     let instance = crate::backend::instance();
     let adapter = pollster::block_on(instance.request_adapter(&Default::default()))?;
     let (device, queue) = pollster::block_on(adapter.request_device(&Default::default(), None)).ok()?;
-    let texture = |samples| device.create_texture(&wgpu::TextureDescriptor {
+    let (frame_format, display) = (wgpu::TextureFormat::Bgra8UnormSrgb, wgpu::TextureFormat::Bgra8Unorm);
+    let texture = |samples, format, views: &[wgpu::TextureFormat], usage| device.create_texture(&wgpu::TextureDescriptor {
         label: Some("resolve probe"),
         size: wgpu::Extent3d { width: 64, height: 64, depth_or_array_layers: 1 },
         mip_level_count: 1, sample_count: samples, dimension: wgpu::TextureDimension::D2,
-        format: wgpu::TextureFormat::Rgba8Unorm,
-        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
-        view_formats: &[],
+        format, usage, view_formats: views,
     });
-    let (samples, resolved) = (texture(4), texture(1));
+    let attach = wgpu::TextureUsages::RENDER_ATTACHMENT;
+    let samples = texture(4, display, &[], attach);
+    let frame = texture(1, frame_format, &[display], attach | wgpu::TextureUsages::COPY_SRC | wgpu::TextureUsages::TEXTURE_BINDING);
+    let copy = texture(1, frame_format, &[], wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::COPY_SRC | wgpu::TextureUsages::TEXTURE_BINDING);
     let read = device.create_buffer(&wgpu::BufferDescriptor { label: None, size: 256 * 64,
         usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ, mapped_at_creation: false });
     let mut encoder = device.create_command_encoder(&Default::default());
@@ -339,23 +342,25 @@ pub fn store_and_resolve_probe() -> Option<bool> {
         label: Some("resolve probe"),
         color_attachments: &[Some(wgpu::RenderPassColorAttachment {
             view: &samples.create_view(&Default::default()),
-            resolve_target: Some(&resolved.create_view(&Default::default())),
+            resolve_target: Some(&frame.create_view(&wgpu::TextureViewDescriptor { format: Some(display), ..Default::default() })),
             ops: wgpu::Operations { load: wgpu::LoadOp::Clear(wgpu::Color { r: 1., g: 0.5, b: 0., a: 1. }),
                 store: wgpu::StoreOp::Store },
         })],
         depth_stencil_attachment: None, timestamp_writes: None, occlusion_query_set: None,
     }));
-    encoder.copy_texture_to_buffer(resolved.as_image_copy(),
+    encoder.copy_texture_to_texture(frame.as_image_copy(), copy.as_image_copy(), frame.size());
+    encoder.copy_texture_to_buffer(copy.as_image_copy(),
         wgpu::TexelCopyBufferInfo { buffer: &read,
             layout: wgpu::TexelCopyBufferLayout { bytes_per_row: Some(256), ..Default::default() } },
-        resolved.size());
+        copy.size());
     queue.submit(Some(encoder.finish()));
     let (tx, rx) = std::sync::mpsc::channel();
     read.slice(..).map_async(wgpu::MapMode::Read, move |r| { let _ = tx.send(r); });
     device.poll(wgpu::Maintain::Wait);
     rx.recv().ok()?.ok()?;
     let data = read.slice(..).get_mapped_range();
-    Some(data.chunks_exact(256).all(|row| row.chunks_exact(4).all(|p| p[0] == 255 && (126..=129).contains(&p[1]) && p[2] == 0)))
+    // Blue, green, red: the cleared colour, written through the display view.
+    Some(data.chunks_exact(256).all(|row| row.chunks_exact(4).all(|p| p[0] == 0 && (126..=129).contains(&p[1]) && p[2] == 255)))
 }
 
 fn geometry_stages(edge_only: Option<bool>) -> &'static [bool] {

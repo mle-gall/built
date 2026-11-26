@@ -126,6 +126,12 @@ jobs:
         if: runner.os != 'Windows'
         run: |
           python -m venv .venv
+          # A new environment each run: its interpreter must not look newer
+          # than crates compiled against the same one in an earlier run.
+          touch -h -t 200001010000 .venv/bin/python* .venv/pyvenv.cfg
+          if [[ "${{ steps.target.outputs.cache-hit }}" == true ]]; then
+            export CARGO_LOG=cargo::core::compiler::fingerprint=info    # say why, if anything compiles
+          fi
           .venv/bin/python -m pip install -r requirements.txt pillow pymupdf ifctester
           if [[ "$RUNNER_OS" == macOS ]]; then
             test "$(uname -m)" = arm64
