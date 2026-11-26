@@ -94,9 +94,12 @@ impl CatalogueSession {
             .call_method1("dumps", (base.call_method0("wire")?,))?
             .extract::<String>()?;
         let lang = i18n.call_method0("current_language")?.extract::<String>()?;
+        let local_rows = base.getattr_opt("_library_rows")?.map(|rows| -> PyResult<usize> {
+            Ok(rows.cast::<crate::library_host::LibraryRows>()?.borrow().groups.iter().map(|group| group.len()).sum())
+        }).transpose()?;
         let data = self
             .model
-            .sheet(&wire, &lang, query, &i18n.getattr("tr")?)?;
+            .sheet(&wire, &lang, query, &i18n.getattr("tr")?, local_rows)?;
         let spec = py
             .import("built_render.chrome_sheet")?
             .call_method1("Spec", (json.call_method1("loads", (data,))?,))?;

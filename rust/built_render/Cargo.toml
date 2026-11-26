@@ -35,7 +35,7 @@ extension-module = ["pyo3/extension-module"]
 # serde: also the large sheet's spec (ui/large_sheet.rs), JSON from Python.
 [dependencies.serde]
 version = "1"
-features = ["derive"]
+features = ["derive", "rc"]
 
 [dependencies.serde_json]
 version = "1"

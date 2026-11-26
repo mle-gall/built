@@ -1474,6 +1474,65 @@ fn item_of<'py>(view: &Bound<'py, PyAny>, key: &Bound<'py, PyAny>) -> PyResult<B
 
 // ---- the sheet --------------------------------------------------------------------------
 
+fn component_blocks<'py>(py: Python<'py>, item: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+    let item = serde_json::from_str(&dumps(py, item)?).map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+    let input = crate::library_view::Input { kind: "components".into(), ..Default::default() };
+    let blocks = crate::library_view::detail(&input, &item, &mut Vec::new());
+    loads(py, &s(py, &serde_json::Value::Array(blocks).to_string()))
+}
+
+#[pyclass]
+struct ComponentItems(std::sync::Arc<[crate::library_view::Item]>);
+
+fn component_parts<'py>(st: &Bound<'py, PyAny>, items: &Bound<'py, PyAny>, browse: &Bound<'py, PyDict>)
+    -> PyResult<(Bound<'py, PyAny>, Bound<'py, PyAny>)>
+{
+    let py = st.py();
+    // _items replaces this tuple when document data or the available actions change.
+    let generation = st.get_item("component_selection_rows")?;
+    let snapshot = st.call_method1("get", ("native_component_items",))?;
+    let catalogue = if !snapshot.is_none() && snapshot.get_item(0)?.is(&generation) {
+        snapshot.get_item(1)?
+    } else {
+        let entries = serde_json::from_str(&dumps(py, items)?)
+            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+        let catalogue = Bound::new(py, ComponentItems(entries))?.into_any();
+        st.set_item("native_component_items", (&generation, &catalogue))?;
+        catalogue
+    };
+    let filters = browse.copy()?;
+    filters.del_item("cursor")?;
+    let cached = st.call_method1("get", ("native_components",))?;
+    if !cached.is_none() && cached.get_item(0)?.is(&catalogue) && cached.get_item(1)?.eq(&filters)? {
+        let parts = cached.get_item(2)?.cast_into::<PyDict>()?.copy()?;
+        let rows = cached.get_item(3)?;
+        if let Some(cursor) = st.get_item("cursor")?.extract::<Option<String>>()? {
+            if rows.cast::<LibraryRows>()?.borrow().groups.iter().flat_map(|group| group.iter()).any(|it| it.id == cursor) {
+                parts.set_item("cursor", &cursor)?;
+                parts.set_item("detail", component_blocks(py, &st.get_item("items")?.get_item(&cursor)?)?)?;
+            }
+        }
+        return Ok((parts.into_any(), rows));
+    }
+    let input = crate::library_view::Input {
+        kind: "components".into(), items: catalogue.cast::<ComponentItems>()?.borrow().0.clone(),
+        st: serde_json::from_str(&dumps(py, browse.as_any())?).map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?,
+        ..Default::default()
+    };
+    let mut groups = Vec::new();
+    let parts = crate::library_view::sheet_rows(&input, Some(&mut groups));
+    let parts = loads(py, &s(py, &parts.to_string()))?;
+    let rows = Bound::new(py, LibraryRows { groups })?.into_any();
+    st.set_item("native_components", (&catalogue, &filters, &parts, &rows))?;
+    Ok((parts, rows))
+}
+
+/// Native row storage shared between the view cache and the live renderer.
+#[pyclass]
+pub(crate) struct LibraryRows {
+    pub groups: crate::library_view::RowGroups,
+}
+
 /// The Library on the large sheet: types as tabs, scopes and categories on
 /// the side (linked files' materials read-only), 96-pt tiles, the focused
 /// item's details and model usage on the right. With a paint target it is
@@ -1581,12 +1640,16 @@ impl LibrarySheet {
         let lctx = ctx_of(py, &ctx.getattr("win")?, view)?;
         let scene = lctx.getattr("scene")?;
         let components = st.get_item("type")?.eq("components")?;
-        let generation = (scene.as_ptr() as usize, scene.getattr("content_version")?, st.get_item("mine_rev")?);
+        let generation = (scene.as_ptr() as usize, scene.getattr("content_version")?, st.get_item("mine_rev")?, collections::REVISION.load(std::sync::atomic::Ordering::Relaxed));
         let revision = scene.getattr("version")?;
         // A selection edit only changes which component rows offer Replace.
         if components {
             let cache = st.call_method1("get", ("component_selection_rows",))?;
-            if !cache.is_none() && cache.get_item(0)?.eq(&generation)? && !cache.get_item(1)?.eq(&revision)? {
+            if !cache.is_none() && cache.get_item(0)?.eq(&generation)? {
+                if cache.get_item(1)?.eq(&revision)? {
+                    st.set_item("items", cache.get_item(4)?)?;
+                    return Ok((cache.get_item(2)?, cache.get_item(3)?.cast_into::<PyDict>()?));
+                }
                 let items = cache.get_item(2)?;
                 let selected = selected_definitions(&scene)?;
                 for item in items.try_iter()? {
@@ -1604,8 +1667,8 @@ impl LibrarySheet {
                     }
                 }
                 let counts = cache.get_item(3)?.cast_into::<PyDict>()?;
-                st.set_item("component_selection_rows", (&generation, &revision, &items, &counts))?;
-                st.set_item("items", by_key(&items)?)?;
+                st.set_item("component_selection_rows", (&generation, &revision, &items, &counts, cache.get_item(4)?))?;
+                st.set_item("items", cache.get_item(4)?)?;
                 return Ok((items,counts));
             }
         }
@@ -1629,8 +1692,9 @@ impl LibrarySheet {
                 active = items;
             }
         }
-        if components { st.set_item("component_selection_rows", (generation, revision, &active, &counts))?; }
-        st.set_item("items", by_key(&active)?)?;
+        let indexed = by_key(&active)?;
+        if components { st.set_item("component_selection_rows", (generation, revision, &active, &counts, &indexed))?; }
+        st.set_item("items", indexed)?;
         Ok((active, counts))
     }
 
@@ -1677,13 +1741,25 @@ impl LibrarySheet {
         let got = if materials { Some(survey(&scene, Some(history))?) } else { None };
         spec.set_item("model_uses", match &got { Some(g) => py.import("builtins")?.getattr("dict")?.call1((g.get_item(0)?,))?, None => PyDict::new(py).into_any() })?;
         spec.set_item("unnamed", match &got { Some(g) => g.get_item(1)?.len()?, None => 0 })?;
-        let out = loads(py, &render(py)?.call_method1("library_sheet", (dumps(py, spec.as_any())?,))?)?;
-        if prov_id != "families" {
-            for path in out.get_item("thumbs")?.try_iter()? { thumb(&view, &path?)?; }
-        } else if let Some(key) = out.get_item("cursor")?.extract::<Option<String>>()? {
-            let focused = st.get_item("items")?.get_item(key)?;
-            thumb(&view, &focused.get_item("thumb")?)?;
+        let native = view.getattr("renderer")?.is_instance_of::<crate::Renderer>();
+        let native_components = native && prov_id == "components" && !has_target && !st.get_item("scope")?.eq("s:online")?;
+        let mut native_rows = None;
+        let out = if native_components {
+            let (parts, rows) = component_parts(&st, &items, browse_d.cast::<PyDict>()?)?;
+            native_rows = Some(rows);
+            parts
+        } else {
+            loads(py, &render(py)?.call_method1("library_sheet", (dumps(py, spec.as_any())?,))?)?
+        };
+        if !native {
+            if prov_id != "families" {
+                for path in out.get_item("thumbs")?.try_iter()? { thumb(&view, &path?)?; }
+            } else if let Some(key) = out.get_item("cursor")?.extract::<Option<String>>()? {
+                let focused = st.get_item("items")?.get_item(key)?;
+                thumb(&view, &focused.get_item("thumb")?)?;
+            }
         }
+        if let Some(rows) = &native_rows { sheet.setattr("_library_rows", rows)?; }
         st.set_item("scope", out.get_item("scope")?)?;
         let searching = out.get_item("searching")?.is_truthy()?;
         let online = out.get_item("online")?.is_truthy()?;
@@ -1724,7 +1800,7 @@ impl LibrarySheet {
             let status = collections::status();
             if !status.is_empty() { content.call_method1("caption", (status,))?; }
         }
-        for g in out.get_item("groups")?.try_iter()? {
+        for (index, g) in out.get_item("groups")?.try_iter()?.enumerate() {
             let g = g?;
             if g.get_item("caption")?.is_truthy()? {
                 content.call_method("caption", (g.get_item("caption")?,), Some(&[("right", g.get_item("right")?)].into_py_dict(py)?))?;
@@ -1733,7 +1809,9 @@ impl LibrarySheet {
             if has_target {
                 content.call_method("tiles", (items,), Some(&[("size", 96)].into_py_dict(py)?))?;
             } else {
-                content.call_method("rows", (items,), Some(&[("thumbs", true)].into_py_dict(py)?))?;
+                let kwargs = [("thumbs", true)].into_py_dict(py)?;
+                if native_components { kwargs.set_item("id", format!("library-group:{index}"))?; }
+                content.call_method("rows", (items,), Some(&kwargs))?;
             }
         }
         for collection in &collections {
@@ -1782,8 +1860,34 @@ impl LibrarySheet {
         if catalogue.is_none() {
             Ok(sheet)
         } else {
-            catalogue.call_method1("build", (&sheet, st.get_item("filter")?))
+            let result = catalogue.call_method1("build", (&sheet, st.get_item("filter")?))?;
+            if let Some(rows) = native_rows { result.setattr("_library_rows", rows)?; }
+            Ok(result)
         }
+    }
+
+    fn focus_component(slf: &Bound<'_, Self>, ctx: &Bound<'_, PyAny>, sheet: &Bound<'_, PyAny>, key: &str) -> PyResult<()> {
+        let py = slf.py();
+        let view = slf.getattr("view")?;
+        let st = _state(&view)?;
+        let Some(item) = st.get_item("items")?.cast::<PyDict>()?.get_item(key)? else { return Ok(()) };
+        let catalogue = slf.getattr("catalogue")?;
+        if !catalogue.is_none() { catalogue.call_method1("act", ("focus", vec![key]))?; }
+        st.set_item("cursor", key)?;
+        let detail = sheet.call_method("detail", (), Some(&[("width", 340)].into_py_dict(py)?))?;
+        detail.setattr("blocks", component_blocks(py, &item)?)?;
+        slf.call_method1("_component_detail", (&detail, provider(py, "components")?, ctx, &item))?;
+        sheet.call_method1("focus", (key,))?;
+        let pane = detail.call_method0("wire")?;
+        if sheet.is_instance_of::<crate::sheet_runtime::Spec>() {
+            sheet.getattr("spec")?.set_item("detail", &pane)?;
+        }
+        let pane = serde_json::from_str(&dumps(py, &pane)?)
+            .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+        if let Some(ui) = &mut view.getattr("renderer")?.cast::<crate::Renderer>()?.borrow_mut().ui {
+            ui.update_library_detail(pane);
+        }
+        Ok(())
     }
 
     fn _component_detail(slf: &Bound<'_, Self>, d: &Bound<'_, PyAny>, prov: &Bound<'_, PyAny>, ctx: &Bound<'_, PyAny>, e: &Bound<'_, PyAny>) -> PyResult<()> {
@@ -2509,7 +2613,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     verbs_map.set_item("-", "")?;
     sub.add("VERBS", verbs_map)?;
     sub.add("RECENT_MAX", RECENT_MAX)?;
-    sub.add("ROW_CAP", 600)?;
+    sub.add("ROW_CAP", 600)?; // compatibility with plugins using the former display limit
     sub.add("THUMB_PX", THUMB_PX)?;
     sub.add("STRIP_MODEL", STRIP_MODEL)?;
     sub.add("STRIP_RECENT", STRIP_RECENT)?;

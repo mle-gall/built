@@ -87,8 +87,7 @@ pub const VERBS: [(&str, &str); 12] = [("apply", "Use"), ("edit", "Edit in the i
     ("select", "Select uses"), ("replace", "Replace selection with this"), ("keepfile", "Keep in file"),
     ("unkeepfile", "Stop keeping in file"), ("delete", "Delete…"), ("-", "")];
 /// A search lists at most this many items per group (the category shows them all).
-pub const SEARCH_CAP: usize = 60;
-pub const ROW_CAP: usize = 600;
+
 
 /// What differs per resource type: (id, apply label, empty text).
 const TYPES: [(&str, &str, &str); 4] = [
@@ -302,7 +301,7 @@ pub fn groups_for<'a>(items: &'a [Item], st: &Browse) -> Vec<(String, String, Ve
             for cat in categories(&group) {
                 let members = sorted(group.iter().copied().filter(|e| e.category == cat).collect(), &st.sort, &st.recent);
                 let cap = if cat.is_empty() { title.to_owned() } else { format!("{title} · {cat}") };
-                out.push((cap, members.len().to_string(), members.into_iter().take(SEARCH_CAP).collect()));
+                out.push((cap, members.len().to_string(), members));
             }
         }
         let linked: Vec<&Item> = found.iter().copied().filter(|e| e.source == "linked").collect();
@@ -311,7 +310,7 @@ pub fn groups_for<'a>(items: &'a [Item], st: &Browse) -> Vec<(String, String, Ve
             let members = sorted(linked.iter().copied().filter(|e| e.file.as_deref().unwrap_or("") == path).collect(),
                                  &st.sort, &st.recent);
             out.push((format!("{} · read-only", path.rsplit('/').next().unwrap_or("")), members.len().to_string(),
-                      members.into_iter().take(SEARCH_CAP).collect()));
+                      members));
         }
         return out;
     }
@@ -323,10 +322,9 @@ pub fn groups_for<'a>(items: &'a [Item], st: &Browse) -> Vec<(String, String, Ve
         let cats = categories(&members);
         if cats.len() > 1 || cats.first().is_some_and(|c| !c.is_empty()) {
             return cats.into_iter().map(|c| (c.to_owned(), String::new(),
-                members.iter().copied().filter(|e| e.category == c).take(ROW_CAP).collect())).collect();
+                members.iter().copied().filter(|e| e.category == c).collect())).collect();
         }
     }
-    if scope != "s:all" && !scope.starts_with("s:collection:") { members.truncate(ROW_CAP); }
     vec![(String::new(), String::new(), members)]
 }
 
@@ -417,7 +415,7 @@ fn objects(n: i64) -> String {
 pub struct Input {
     #[serde(rename = "type")]
     pub kind: String,
-    pub items: Vec<Item>,
+    pub items: std::sync::Arc<[Item]>,
     pub st: Browse,
     /// The Paint tool's current material.
     pub current: Option<String>,
@@ -427,12 +425,14 @@ pub struct Input {
     pub unnamed: usize,
 }
 
-fn tile(t: &str, e: &Item, current: Option<&str>, thumbs: &mut Vec<String>) -> Value {
-    let labels: HashMap<String, String> = verbs_of(t).into_iter().collect();
-    let mut menu: Vec<Value> = e.verbs.iter().map(|v| if v == "-" { json!(["-", ""]) } else {
-        json!([v, labels.get(v).cloned().unwrap_or_else(|| v.clone())])
+type SheetItem = crate::ui::large_sheet::Item;
+pub(crate) type RowGroups = Vec<std::sync::Arc<[SheetItem]>>;
+
+fn tile(t: &str, e: &Item, current: Option<&str>, thumbs: &mut Vec<String>, labels: &HashMap<String, String>) -> SheetItem {
+    let mut menu: Vec<_> = e.verbs.iter().map(|v| if v == "-" { (v.clone(), String::new()) } else {
+        (v.clone(), labels.get(v).cloned().unwrap_or_else(|| v.clone()))
     }).collect();
-    while menu.last().is_some_and(|m| m[0] == "-") {
+    while menu.last().is_some_and(|m| m.0 == "-") {
         menu.pop();
     }
     let mut shown = e.shown().to_owned();
@@ -455,11 +455,15 @@ fn tile(t: &str, e: &Item, current: Option<&str>, thumbs: &mut Vec<String>) -> V
         String::new()
     };
     let host = e.defaults.iter().find(|r| r.0 == "Host").map(|r| &r.1);
-    prune(json!({"id": e.key, "right":host, "kind": if matches!(t, "components" | "families") { "placeable" } else { "" }, "label": shown, "sub": sub, "icon": icon(e, thumbs), "hex": e.hex.clone().unwrap_or_default(),
-                 "menu": menu, "on": current.is_some_and(|c| c == e.name), "tip": e.name}))
+    SheetItem {
+        id: e.key.clone(), right: host.cloned().unwrap_or_default(), label: shown, sub,
+        kind: if matches!(t, "components" | "families") { "placeable".into() } else { String::new() },
+        icon: icon(e, thumbs), hex: e.hex.clone().unwrap_or_default(), menu,
+        on: current.is_some_and(|c| c == e.name), tip: e.name.clone(), fold: -1, ..Default::default()
+    }
 }
 
-fn detail(inp: &Input, e: &Item, thumbs: &mut Vec<String>) -> Vec<Value> {
+pub(crate) fn detail(inp: &Input, e: &Item, thumbs: &mut Vec<String>) -> Vec<Value> {
     let mut out = vec![block("picture", json!({"icon": icon(e, thumbs), "hex": e.hex.clone().unwrap_or_default(),
                                                "size": 180.0}))];
     let where_ = match e.source.as_str() {
@@ -536,7 +540,9 @@ fn empty_text(t: &str, scope: &str) -> String {
 }
 
 /// The sheet's pieces for the Materials or Components tab.
-pub fn sheet(inp: &Input) -> Value {
+pub fn sheet(inp: &Input) -> Value { sheet_rows(inp, None) }
+
+pub(crate) fn sheet_rows(inp: &Input, mut native: Option<&mut RowGroups>) -> Value {
     let st = &inp.st;
     let t = inp.kind.as_str();
     let mut thumbs = vec![];
@@ -580,9 +586,18 @@ pub fn sheet(inp: &Input) -> Value {
         json!({"title": scope_title(&scope), "sub": sub, "empty": if t == "families" { kind(t).2.into() } else { empty_text(t, &scope) }})
     };
     let current = inp.current.as_deref();
-    let groups: Vec<Value> = groups.iter().filter(|g| !g.2.is_empty()).map(|(cap, sub, members)| json!({
-        "caption": cap, "right": sub, "tiles": members.iter().map(|e| tile(t, e, current, &mut thumbs)).collect::<Vec<_>>()
-    })).collect();
+    let labels = verbs_of(t).into_iter().collect();
+    let groups: Vec<Value> = groups.iter().filter(|g| !g.2.is_empty()).map(|(cap, sub, members)| {
+        let tiles = members.iter().map(|e| tile(t, e, current, &mut thumbs, &labels));
+        let wire = if let Some(rows) = native.as_deref_mut() {
+            rows.push(tiles.collect());
+            Vec::new()
+        } else {
+            tiles.map(|it| prune(json!({"id": it.id, "right": it.right, "kind": it.kind, "label": it.label,
+                "sub": it.sub, "icon": it.icon, "hex": it.hex, "menu": it.menu, "on": it.on, "tip": it.tip}))).collect()
+        };
+        json!({"caption": cap, "right": sub, "tiles": wire})
+    }).collect();
     let keys: HashSet<&str> = shown.iter().map(|e| e.key.as_str()).collect();
     let cursor = match &st.cursor {
         Some(c) if keys.contains(c.as_str()) => Some(c.clone()),
@@ -729,7 +744,7 @@ mod tests {
 
     #[test]
     fn the_sheet_parts_read() {
-        let inp = Input { kind: "materials".into(), items: vec![it("m:a", "Alpha", "model", "", 2)],
+        let inp = Input { kind: "materials".into(), items: vec![it("m:a", "Alpha", "model", "", 2)].into(),
                           current: Some("Alpha".into()), ..Default::default() };
         let v = sheet(&inp);
         assert_eq!(v["cursor"], "m:a");

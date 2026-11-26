@@ -222,12 +222,14 @@ impl ComponentCatalogue {
         photos
     }
 
+    #[pyo3(signature=(base, lang, query, tr, local_rows=None))]
     fn sheet(
         &mut self,
         base: &str,
         lang: &str,
         query: &str,
         tr: &Bound<'_, PyAny>,
+        local_rows: Option<usize>,
     ) -> PyResult<String> {
         let t = |s: &str| tr.call1((s,))?.extract::<String>();
         let mut s: Value =
@@ -301,11 +303,11 @@ impl ComponentCatalogue {
         } else {
             Vec::new()
         };
-        let local_count: usize = blocks
+        let local_count = local_rows.unwrap_or_else(|| blocks
             .iter()
             .filter_map(|b| b["items"].as_array())
             .map(Vec::len)
-            .sum();
+            .sum());
         if !tiles.is_empty() {
             if searching {
                 blocks.push(json!({"kind":"caption","text":t("Component library")?,"right":rows.len().to_string()}));

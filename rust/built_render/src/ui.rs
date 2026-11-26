@@ -12,6 +12,7 @@ use egui::{pos2, vec2, Color32, CornerRadius, Margin, Pos2, Rect, Sense, Stroke,
 /// The chrome's modal forms (rust/built_render/src/forms_host.rs).
 pub mod dialog;
 pub mod operation_form;
+mod library_previews;
 /// Sheets, a workspace of the window (sheet_workspace).
 mod sheets;
 mod activity;
