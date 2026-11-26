@@ -418,6 +418,9 @@ def test_family_collection_import_reopen_and_partial_report(win, tmp_path, monke
 
 @pytest.mark.parametrize(("category", "class_name"), [("Doors", "IfcDoor"), ("Windows", "IfcWindow")])
 def test_family_placement_keeps_type_and_records_wall_in_one_undo(win, tmp_path, monkeypatch, category, class_name):
+    from built_core import Matrix4
+    from built_core.group import Group
+    from tests.test_ifc_vocabulary_relationships import mesh_at
     from tests.test_rfa_import import payload
     from core.bim_registry import get
     from built_core.command_protocol import run
@@ -435,12 +438,106 @@ def test_family_placement_keeps_type_and_records_wall_in_one_undo(win, tmp_path,
     assert align and group.ifc["class"] == class_name and group.name == "Empty"
     history = win.viewport.history
     scene = win.viewport.scene
+    group.ifc["psets"][".rfa parameters"]["Opening Width"] = {"kind": "length", "value": .8}
+    wall = Group(mesh_at(0), "Wall")
+    wall.xform = Matrix4()
+    wall.xform.scale(1, 1, 2)
+    wall.ifc = {"class": "IfcWall"}
+    scene.groups.append(wall)
     previous = list(scene.groups)
     result = run(history, "place_group", template=group.uid, _pending=group,
-                 basis=[[1, 0, 0], [0, 1, 0], [0, 0, 1]], offset=[2, 0, 1],
-                 wall_host={"uid": "wall", "sill": 1, "offset": 0, "flipped": False})
+                 basis=[[1, 0, 0], [0, 1, 0], [0, 0, 1]], offset=[.2, -.6, .1],
+                 wall_host={"uid": wall.uid, "sill": .1, "offset": 0, "flipped": False})
     assert result["ok"] and scene.groups[-1] is group
-    assert group.ext["wall_host"]["uid"] == "wall"
+    assert group.ext["wall_host"]["uid"] == wall.uid
+    left, _, right, _ = wall.ifc["openings"][0]["wall_rect"]
+    assert 2 * (right - left) == pytest.approx(.8)
     assert get(scene)["types"][group.ifc["type"]]["ifc_class"] == class_name
     history.undo()
     assert list(scene.groups) == previous and "family:test" not in get(scene)["types"]
+
+
+def test_hosted_window_through_cut_history_and_ifc(win, tmp_path):
+    from built_core import Matrix4, Vec3
+    from built_core.group import Group
+    from built_core.command_protocol import run
+    from core.bim import face_set_volume
+    from formats.ifc import save_ifc
+    from tests.test_geometry_arrays import CUBE
+    pytest.importorskip("ifcopenshell")
+    import ifcopenshell.geom
+    import numpy as np
+
+    scene, history = win.viewport.scene, win.viewport.history
+    wall = Group(name="Wall")
+    for loop in CUBE:
+        wall.mesh.add_face([Vec3(8*x, .25*y, 3*z) for x, y, z in loop])
+    wall.ifc = {"class": "IfcWall"}
+    wall.xform = Matrix4()
+    sibling = Group(wall.mesh, "Another wall")
+    sibling.xform = Matrix4()
+    sibling.xform.translate(0, 5, 0)
+    scene.groups.extend([wall, sibling])
+    original = wall.mesh
+
+    def place(label, x, sill):
+        g = Group(name=label)
+        g.ifc = {"class": "Ifc" + label}
+        g.ext = {"library_host": "wall"}
+        g.xform = Matrix4()
+        for loop in CUBE:
+            g.mesh.add_face([Vec3(u, .12*v, z) for u, v, z in loop])
+        ring = [[x, 0, sill], [x+1, 0, sill], [x+1, 0, sill+1], [x, 0, sill+1]]
+        result = run(history, "place_group", template=g.uid, _pending=g,
+                     basis=[[1,0,0],[0,1,0],[0,0,1]], offset=[x,0,sill],
+                     wall_host=dict(uid=wall.uid, outline=ring, normal=[0,-1,0],
+                                    initial_offset=0, offset=0, sill=sill, flipped=False))
+        assert result["ok"], result
+        return g
+
+    window = place("Window", 2, 1)
+    assert wall.mesh is not original and sibling.mesh is original
+    assert sum(len(f.holes) for f in wall.mesh.faces) == 2
+    assert len(wall.mesh.faces) == 10
+    assert face_set_volume(wall.mesh.faces) == pytest.approx(5.75)
+    history.undo()
+    assert wall.mesh is original and window not in scene.groups
+    history.redo()
+    door = place("Door", 5, 0)
+    assert face_set_volume(wall.mesh.faces) == pytest.approx(5.5)
+    for dx in (3.1, -2.5):
+        mesh = wall.mesh
+        assert not run(history, "move_placements", placements=[window.uid], delta=[dx,0,0])["ok"]
+        assert wall.mesh is mesh and window.xform.data()[12] == pytest.approx(2)
+    assert run(history, "move_placements", placements=[window.uid], delta=[1,.03,.2])["ok"]
+    assert window.ext["wall_host"]["offset"] == pytest.approx(.03)
+    assert window.ext["wall_host"]["sill"] == pytest.approx(1.2)
+    assert run(history, "set_opening_position", placement=window.uid, sill=1.4, offset=.07)["ok"]
+    assert window.ext["wall_host"]["sill"] == pytest.approx(1.4)
+    history.undo()
+    assert window.ext["wall_host"]["offset"] == pytest.approx(.03)
+    assert run(history, "set_group_scale", placement=window.uid, factors=[1.2,1,1.1])["ok"]
+    assert face_set_volume(wall.mesh.faces) == pytest.approx(6 - .25*(1.2*1.1 + 1))
+    history.undo()
+    assert run(history, "flip_selection", placements=[window.uid], center=[3,.03,1.2], axis=[0,1,0], copy=False)["ok"]
+    assert window.ext["wall_host"]["flipped"] and len(wall.ifc["openings"]) == 2
+    history.undo()
+    path = tmp_path / "openings.ifc"
+    assert not save_ifc(scene, path).problems
+    model = ifcopenshell.open(str(path))
+    assert [len(model.by_type(c)) for c in ("IfcOpeningElement", "IfcRelVoidsElement", "IfcRelFillsElement")] == [2,2,2]
+    settings = ifcopenshell.geom.settings()
+    for opening in model.by_type("IfcOpeningElement"):
+        assert opening.VoidsElements[0].RelatingBuildingElement.is_a("IfcWall")
+        filling = opening.HasFillings[0].RelatedBuildingElement
+        solid = ifcopenshell.geom.create_shape(settings, opening)
+        xyz = np.array(solid.geometry.verts).reshape(-1, 3)
+        expected = [3,0,1.2] if filling.is_a("IfcWindow") else [5,0,0]
+        assert xyz.min(axis=0) == pytest.approx(expected)
+        assert np.ptp(xyz, axis=0) == pytest.approx([1,.25,1])
+    history.undo()
+    assert window.ext["wall_host"]["sill"] == pytest.approx(1)
+    assert run(history, "delete_placements", placements=[door.uid])["ok"]
+    assert len(wall.ifc["openings"]) == 1 and len(wall.mesh.faces) == 10
+    history.undo()
+    assert len(wall.ifc["openings"]) == 2 and door in scene.groups
