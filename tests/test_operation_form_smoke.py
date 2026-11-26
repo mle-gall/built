@@ -550,8 +550,8 @@ Host.state = bevel_state
     steps.write_text("wait 650\nkey escape\nmenu select_all\ntool fillet\nwait 500\nstate\n"
                      "click 1115 466\nclick 1016 490\nwait 400\nstate\n"
                      "click 1025 466\nclick 1016 490\nwait 400\nstate\n"
-                     "click 1130 490\nwait 300\nstate\nclick 700 781\nwait 500\nstate\n"
-                     "click 752 781\nwait 300\nstate\nquit\n")
+                     "click 1130 490\nwait 300\nstate\nclick 627 781\nwait 500\nstate\n"
+                     "click 679 781\nwait 300\nstate\nquit\n")
     result = run([str(BIN), "--root", str(ROOT), "--venv", str(venv), "--new-instance",
                   "--size", "1280x800", "--script", str(steps), str(initial)],
                  env=dict(os.environ, BUILT_ANSWERS="cmd-d"), capture_output=True, text=True, timeout=60)

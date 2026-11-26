@@ -375,13 +375,13 @@ fn open_path<'py>(py: Python<'py>, win: &Any<'py>, path: &Any<'py>) -> PyResult<
     if win.getattr("_closed")?.is_truthy()? {
         return Ok(b(py, false));
     }
-    if !path.call_method0("exists")?.is_truthy()? {
-        crate::start_host::missing_file(win, &path)?;
-        return Ok(b(py, false));
-    }
     let opener = win.getattr("file_openers")?.call_method1("get", (&suffix,))?;
     if !opener.is_none() {
         return Ok(b(py, opener.call1((&path,))?.is_truthy()?));
+    }
+    if !path.call_method0("exists")?.is_truthy()? {
+        crate::start_host::missing_file(win, &path)?;
+        return Ok(b(py, false));
     }
     if !win.getattr("_workspace")?.is_none() && !win.call_method0("leave_workspace")?.is_truthy()? {
         return Ok(b(py, false));
