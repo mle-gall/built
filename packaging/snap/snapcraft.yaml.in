@@ -44,10 +44,10 @@ description: |
 
   Built is a GPL-3.0-or-later fork of IngeTrazo.
 license: GPL-3.0-or-later
-website: https://github.com/mle-gall/ingetrazo
-contact: https://github.com/mle-gall/ingetrazo/issues
-source-code: https://github.com/mle-gall/ingetrazo
-issues: https://github.com/mle-gall/ingetrazo/issues
+website: https://github.com/mle-gall/built
+contact: https://github.com/mle-gall/built/issues
+source-code: https://github.com/mle-gall/built
+issues: https://github.com/mle-gall/built/issues
 grade: stable
 confinement: strict
 

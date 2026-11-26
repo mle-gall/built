@@ -163,7 +163,7 @@ fn build_entries() -> Vec<MenuEntry> {
     }
     add("plugins_folder", "Plugins", "Open extensions folder", "", Handler::PluginsFolder);
     add("develop_plugin", "Plugins", "Develop an extension…", "",
-        Handler::Web("https://github.com/ingelibre/ingetrazo/blob/main/docs/plugins.md"));
+        Handler::Web("https://github.com/mle-gall/built/blob/main/docs/plugins.md"));
     for (group, id, label, _, _) in crate::commands::view_commands() {
         let path = match group {
             "Style" => "Camera ▸ Style",
