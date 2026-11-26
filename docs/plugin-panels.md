@@ -1,6 +1,6 @@
 # Plugin panels
 
-Built draws plugin panels with egui. Select **Plugins** in the right dock to open a panel. A dock panel replaces the project tree. A utility panel opens above the bottom bar and has a resize handle and Close button. The Console and Blender render preview use utility panels. Blender lights and the Levels extension use dock panels. The AI assistant and the MCP bridge are not panels: their requests are tasks in the Tasks destination and their settings live in Settings › AI.
+Built draws plugin panels with egui. Select **Plugins** in the right dock to open a panel. A dock panel replaces the project tree. Utility panels share tabs in the bottom drawer. Render, Console and Diagnostics use this slot. A modelling operation can borrow the drawer until Apply or Cancel. Closing Render hides the preview while its job continues. The AI assistant and MCP bridge send requests to the Tasks destination. Their settings live in Settings › AI.
 
 ## Register a panel
 
@@ -53,6 +53,7 @@ Use `utility` for a console or other wide output. Section IDs must be unique in 
 | `list` or `table` | Column labels, rows with a unique string `key` and one string per column in `cells`, optional selected key in `selection` | `selection` with a row key |
 | `log` | Plain-text `lines` array | Scrollable transcript |
 | `console` | String array `history` in submission order | `console_submit` with source text. Run or Ctrl/⌘-Enter submits. Up and Down recall history at the prompt boundary. |
+| `chip` | Status label and boolean `available` | Display only |
 | `progress` | Label and `fraction` between 0 and 1, or null during indeterminate work | Display only |
 | `image` | Local `path` to a completed RGB or RGBA PNG | Fit and actual-size preview |
 

@@ -87,7 +87,8 @@ def win(native_host):
 
 
 def _cells(panel):
-    return [row["cells"] for row in panel.sections()[0]["items"][0]["rows"]]
+    table = next(item for item in panel.sections()[0]["items"] if item["id"] == "objects")
+    return [row["cells"] for row in table["rows"]]
 
 
 def test_dialog_rows_and_highlight(win):
@@ -918,3 +919,22 @@ def test_failed_custom_repair_restores_every_mesh_and_can_be_retried():
     assert cmd.done["stray"] == 2
     cmd.undo(scene)
     assert [len(mesh.edges) for mesh in meshes] == [1, 1]
+
+
+def test_model_info_and_selection_health_open_the_same_drawer(win, monkeypatch):
+    from built_core.plugin_panels import open_panel
+    from tests.test_render_lights import attach_render_surface
+
+    view = attach_render_surface(win, monkeypatch)
+    group = Group(Mesh(), name="Bench")
+    _box(group.mesh)
+    win.viewport.scene.groups.append(group)
+    win.viewport.scene.select([group])
+    assert open_panel(win, "model_info")
+    binding = next(b for b in view._plugin_bindings.values() if b.key == "solid_inspector")
+    view.renderer.ui_plugin_open.assert_called_with(binding.instance)
+    assert binding.model.report_view == "Geometry"
+    assert open_panel(win, "selection_health")
+    view.renderer.ui_plugin_open.assert_called_with(binding.instance)
+    assert binding.model.report_view == "Objects"
+    assert binding.model._selected_row()["group"] is group
