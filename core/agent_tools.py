@@ -378,3 +378,31 @@ for _name, _desc, _fields, _required in (
 ):
     BUILTIN_TOOLS.append(dict(name=_name, description=_desc, mutates=True,
                               inputSchema=dict(type="object", properties=_fields, required=_required)))
+
+#: Agent tasks: each request is a task in the document's Tasks list. Edits
+#: made while a task is open are attributed to it, so the user reviews,
+#: accepts or reverts them together.
+_STATE = {"enum": ["working", "waiting", "question", "done"]}
+TASK_TOOLS = ("task_create", "task_update", "task_list", "task_get")
+BUILTIN_TOOLS.extend([
+    dict(name="task_create", mutates=False,
+         description="Open a task for one request before editing: a short title, the request in "
+                     "full, optionally pinned to the current selection. Edits that follow belong to it "
+                     "until it is done. Returns its guid.",
+         inputSchema=dict(type="object", properties={
+             "title": _TEXT, "description": _TEXT, "pin": {"type": "boolean"}}, required=["title"])),
+    dict(name="task_update", mutates=False,
+         description="Report on a task: 'working' with a progress note, 'waiting' when the user must act, "
+                     "'question' with the question to answer, or 'done' with a summary. Done settles a "
+                     "task without edits; with edits it waits for the user's review. Also resumes a task "
+                     "the user replied to or asked changes on.",
+         inputSchema=dict(type="object", properties={
+             "guid": _TEXT, "state": _STATE, "message": _TEXT}, required=["guid", "state"])),
+    dict(name="task_list", mutates=False,
+         description="The document's open tasks, newest first (settled ones with settled=true): state, "
+                     "request, the elements changed and the conversation, including the user's replies.",
+         inputSchema=dict(type="object", properties={"settled": {"type": "boolean"}})),
+    dict(name="task_get", mutates=False,
+         description="One task as a BCF 3.0 topic with its state, changes, comments and viewpoint.",
+         inputSchema=dict(type="object", properties={"guid": _TEXT}, required=["guid"])),
+])

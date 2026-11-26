@@ -35,6 +35,7 @@ pub fn register_shell(m: &Bound<'_, PyModule>) -> PyResult<()> {
     crate::inspector_host::register(m)?;
     crate::shell_events::register(m)?;
     crate::deliveries_host::register(m)?;
+    crate::tasks_host::register(m)?;
     crate::sheet_runtime::register(m)?;
     m.add_function(wrap_pyfunction!(crate::plugin_panels::install_plugin_panels, m)?)?;
     crate::dialogs_host::register(m)?;

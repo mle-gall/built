@@ -497,7 +497,35 @@ fn ai<'py>(py: Python<'py>, env: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyLi
         options.append((&k, info.get_item(&k)?.get_item(0)?))?;
     }
     let provider = binding("ia/proveedor", "auto")?.with("options", options.into_any().unbind());
-    pref_page(py, env, "ai", vec![provider, binding("ia/modelo", "")?, binding("ia/api_key", "")?, binding("ia/ollama_url", "http://localhost:11434")?])
+    let groups = pref_page(py, env, "ai", vec![provider, binding("ia/modelo", "")?, binding("ia/api_key", "")?, binding("ia/ollama_url", "http://localhost:11434")?])?;
+    // Model access: whether external agents (MCP) may edit the model in
+    // front. Off for every model until turned on.
+    let get = func(py, |py, a| {
+        let scene = a.get_item(0)?.getattr("scene")?;
+        obj(py, !scene.is_none() && crate::tasks_host::access(&scene))
+    })?;
+    let put = func(py, |py, a| {
+        let (env, value) = (a.get_item(0)?, a.get_item(1)?);
+        crate::tasks_host::set_agent_access(&env.getattr("win")?, value.is_truthy()?)?;
+        Ok(none(py))
+    })?;
+    let enabled = func(py, |py, a| obj(py, !a.get_item(0)?.getattr("scene")?.is_none()))?;
+    let rows = PyList::new(py, [row(py, "agent_access", "check", &tr(py, "Allow agents to edit this model")?, Some(get), Some(put), &[
+        ("tip", obj(py, tr(py, "Claude Code, Codex or T3 Code connected over MCP can read and edit this model; each request becomes a task to review.")?)?),
+        ("words", obj(py, "mcp bridge agent claude codex t3 permission")?),
+        ("enabled", enabled),
+    ])?])?;
+    groups.append(PyTuple::new(py, [s(py, "access"), s(py, &tr(py, "Model access")?), rows.into_any()])?)?;
+    Ok(groups)
+}
+
+/// The Connect an agent… form: which client to show the setup for.
+pub fn ai_connect_rows<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
+    let clients = py.import("plugins.ai_bridge")?.getattr("CLIENTS")?;
+    PyList::new(py, [row(py, "ia/connect_client", "choice", &tr(py, "Client")?,
+        Some(key_get(py, "ia/connect_client", obj(py, "Claude Code")?, Kind::Str)?),
+        Some(key_set(py, "ia/connect_client", Kind::Str)?),
+        &[("options", clients.unbind())])?])
 }
 
 fn autosave_put(py: Python<'_>, which: &'static str) -> Res {

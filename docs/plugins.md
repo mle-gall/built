@@ -387,9 +387,9 @@ chrome_dialogs` (`ask_later`, `notify`, `Job` for long work in the top bar).
 - Model Info presents geometry, materials, layers and BIM statistics in a read-only utility panel.
 - Python Console executes commands with document history and undo.
 - Solid Inspector shows watertightness problems, highlights their edges in the viewport and repairs selected meshes in one undo step.
-- AI Assistant uses a native dock panel for chat, provider settings and background requests.
+- The AI Assistant answers requests made in the Tasks destination (or ⌘K › Ask an agent…): each request is a task, its edits are attributed to it, and its provider settings are in Settings › AI.
 - Render with Blender uses a dock for lights and camera controls and a utility panel for its image preview.
-- AI Bridge runs document commands on the native host thread. On macOS and Linux, its Start bridge button opens a private Unix socket for the current profile. The listener stops when the window closes.
+- AI Bridge runs document commands on the native host thread. Settings › AI › Allow agents to edit this model (off for every model) opens a private Unix socket for the current profile on macOS and Linux; turning it off, or closing the window, stops it. Agent requests and edits are tasks (task_create, task_update, task_list, task_get).
 
 ## Roadmap
 

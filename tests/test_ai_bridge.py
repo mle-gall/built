@@ -57,6 +57,7 @@ def test_bridge_runs_python_transactionally(native_host, monkeypatch):
     win = native_host.window
     vp = win.viewport
     bridge = _Bridge(vp)
+    vp.scene._agent_access = True   # Settings › AI › Allow agents to edit this model
     bridge.start()
     assert bridge.port
 
@@ -119,6 +120,7 @@ def test_a_sheet_made_through_the_bridge_is_one_undoable_step(native_host, monke
     edges = len(vp.scene.mesh.edges)
     sheets = len(vp.scene.compositions)
     bridge = _Bridge(vp)
+    vp.scene._agent_access = True   # Settings › AI › Allow agents to edit this model
     bridge.start()
     add = ("from built_core.composition import Composicion\n"
            "c = Composicion(name='A1')\n"
@@ -153,6 +155,7 @@ def test_a_dialog_opened_by_the_agent_is_cancelled_not_waited_for(native_host, m
     monkeypatch.setattr(chrome_dialogs, "async_host", lambda parent: native_host.window)
     monkeypatch.setenv("BUILT_AI_PORT", "0")
     bridge = _Bridge(native_host.viewport)
+    native_host.viewport.scene._agent_access = True
     try:
         bridge.start()
         reply = _ask(bridge, "run_python", {"code": (
@@ -173,6 +176,7 @@ def test_a_call_arriving_inside_a_running_one_is_refused(native_host):
     from plugins.ai_bridge import _Bridge
     win = native_host.window
     bridge = _Bridge(win.viewport)
+    win.viewport.scene._agent_access = True
     bridge._busy = True
     job = {"req": {"id": 7, "tool": "query_model"}, "done": _t.Event(),
            "reply": None}
@@ -359,6 +363,7 @@ def test_a_web_page_cannot_run_code_through_the_bridge(native_host, monkeypatch)
     win = native_host.window
     vp = win.viewport
     bridge = _Bridge(vp)
+    vp.scene._agent_access = True   # Settings › AI › Allow agents to edit this model
     bridge.start()
     edges0 = len(vp.scene.mesh.edges)
     body = (json.dumps({"id": 1, "tool": "run_python", "args": {"code": (

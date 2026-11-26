@@ -148,6 +148,7 @@ def test_bridge_record_round_trip(native_host, monkeypatch):
     monkeypatch.setenv('BUILT_AI_PORT', '0')
     win = native_host.window
     bridge = _Bridge(win.viewport)
+    win.viewport.scene._agent_access = True
     try:
         g = Group(Mesh(), 'Agent target')
         win.viewport.scene.groups.append(g)

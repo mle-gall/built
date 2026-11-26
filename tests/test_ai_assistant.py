@@ -311,7 +311,9 @@ def test_assistant_loop_executes_recipes_transactionally(native_host, monkeypatc
 
     win = native_host.window
     vp = win.viewport
-    panel = win._panel_factories["ai_assistant"](ExtensionApp(win, "ai_assistant"), vp.update)
+    # Not a plugin panel any more (its requests are tasks); the engine is the same.
+    from plugins.ai_assistant import create_panel
+    panel = create_panel(ExtensionApp(win, "ai_assistant"), vp.update)
     panel.event("provider", "commit", "ollama")
     panel.event("shots", "commit", False)
     edges0 = len(vp.scene.mesh.edges)

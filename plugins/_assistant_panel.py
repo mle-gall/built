@@ -35,6 +35,8 @@ class AssistantPanel:
         self.images = TemporaryDirectory(prefix="built-assistant-")
         self.attachment = self.last_photo = None
         self.generation, self.busy = 0, False
+        #: The task this conversation answers (Tasks destination), if any.
+        self.task, self._task_error, self._task_reply = None, False, ""
         self.inbox = Queue()
         self.timer = app.window._host.timers.timer(self._poll, 100, True)
         on_document_close(app, self.close)
@@ -256,6 +258,8 @@ class AssistantPanel:
             return
         if kind == "chat":
             handle_reply(self, result, MAX_ROUNDS, self.shots)
+            if not self.busy:
+                self._settle_task()
         elif not result["ok"]:
             self._append(self._bad_key_hint(self._config()[0], result["error"]) or result["error"], "error")
         elif kind == "models":
@@ -277,6 +281,51 @@ class AssistantPanel:
     def _append(self, text, role):
         self.lines.extend([f"{role} · {text}"])
         self.lines = self.lines[-200:]
+        if self.task and text:
+            import built_render
+            win = self.app.window
+            if role == "ai":
+                prose = _prose(text)
+                if prose:
+                    self._task_reply = prose
+                    built_render.task_comment(win, self.task, prose, TASK_AGENT)
+            elif role in ("error", "err"):
+                self._task_error = True
+                built_render.task_report(win, self.task, "waiting", text, TASK_AGENT)
+
+    # ---- tasks ------------------------------------------------------------------
+    def run_task(self, guid, text):
+        """Answer `text` for task `guid`: a new request, a reply or a
+        request for changes on it. The conversation goes on from there."""
+        if self.busy:
+            self._stop()
+        self.task, self._task_error, self._task_reply = guid, False, ""
+        self.prompt = text
+        self.event("send", "invoke", None)
+        if not self.busy and not self._task_error:
+            self._settle_task()
+
+    def _settle_task(self):
+        """The loop ended: done (or to review) unless it stopped on an error."""
+        if not self.task or self._task_error:
+            return
+        import built_render
+        try:
+            built_render.task_finish(self.app.window, self.task, self._task_reply, TASK_AGENT)
+        except ValueError:
+            pass
+
+    def _run_recipe(self, code):
+        """One recipe, attributed to the task it answers."""
+        if not self.task:
+            return ai.run_transactional(self._viewport, code, self._scope)
+        import built_render
+        win = self.app.window
+        marker = built_render.task_edit_begin(win)
+        try:
+            return ai.run_transactional(self._viewport, code, self._scope)
+        finally:
+            built_render.task_edit_end(win, self.task, marker)
 
     def _small_model_hint(self, model):
         return tr("Try a larger local model for code generation.")
@@ -294,3 +343,25 @@ class AssistantPanel:
 
 
 create_panel = AssistantPanel
+
+#: The assistant's name on its tasks (tasks_host.rs ASSISTANT).
+TASK_AGENT = "Built-in assistant"
+
+
+def _prose(text):
+    """A reply without its code: what the task's conversation shows."""
+    import re
+    return re.sub(r"```.*?(```|$)", "", text, flags=re.S).strip()
+
+
+def task_follow_up(win, guid, text):
+    """Tasks hands the assistant a request, a reply or changes to make:
+    the document's assistant (one per open document) takes it."""
+    scene = win.viewport.scene
+    panel = getattr(scene, "_task_assistant", None)
+    if panel is None or panel.scene is not scene:
+        from views.extension_api import ExtensionApp
+        panel = AssistantPanel(ExtensionApp(win, "ai_assistant"), win.viewport.update)
+        scene._task_assistant = panel
+    panel.run_task(guid, text)
+    return panel

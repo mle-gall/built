@@ -57,6 +57,7 @@ mod rail;
 mod value_field;
 mod site_map;
 mod view_overlay;
+mod tasks;
 use tokens::*;
 use kit::*;
 
@@ -201,6 +202,8 @@ pub struct Ui {
     /// The dock's width (points): dragged on its left edge, kept by Python.
     dock_w: f32,
     destination: Destination,
+    /// The Tasks destination's composer, answers and pins (ui/tasks.rs).
+    tasks: tasks::TaskPane,
     fix_rows: bool,
     fix_rule: Option<(String, String)>,
     /// The pointer shape the chrome asks for ("" or "resize_h").
@@ -404,6 +407,7 @@ impl Ui {
             link_banner: String::new(),
             dock_w: DOCK_W,
             destination: Destination::Project,
+            tasks: Default::default(),
             fix_rows: false,
             fix_rule: None,
             plugins: Default::default(),
@@ -1938,10 +1942,7 @@ impl Ui {
                     ui.spacing_mut().item_spacing = vec2(0.0, 0.0);
                     match &self.destination {
                         Destination::Tasks => {
-                            kit::inspector_title(ui, "Tasks", "");
-                            ui.add_space(SPACE_M);
-                            kit::empty_state(ui, "No agent tasks yet");
-                            kit::caption_plain(ui, "Agent reviews and questions appear here.");
+                            Self::tasks_destination(ui, &self.panels.data["tasks"], &mut self.tasks, &mut cmds);
                             return;
                         }
                         Destination::Deliveries => {
@@ -2965,6 +2966,7 @@ impl Ui {
                     self.panels.frame_guide(ctx, screen);
                 }
                 if !sheet_up { self.cursor_value(ctx, screen); }
+                if !self.review && !sheet_up { self.task_pins(ctx, screen); }
                 self.view_overlay(ctx);
             }
             self.bar_menu(ctx);
@@ -4088,7 +4090,7 @@ fn destination_round_trip_preserves_project_state_and_width() {
     let column_rect = |ui: &Ui| ui.ctx.memory(|m| m.area_rect(egui::Id::new("column")).unwrap());
     let width = column_rect(&ui).width();
     ui.show_destination("tasks");
-    assert!(frame(&mut ui).contains_key("No agent tasks yet"));
+    assert!(frame(&mut ui).contains_key("No tasks yet"));
     assert_eq!(column_rect(&ui).width(), width);
     ui.show_destination("deliveries");
     frame(&mut ui);
@@ -4107,6 +4109,58 @@ fn destination_round_trip_preserves_project_state_and_width() {
     ui.show_destination("project");
     assert!(frame(&mut ui).contains_key("Ceiling"));
     assert_eq!(column_rect(&ui).width(), width);
+}
+
+#[test]
+fn tasks_destination_groups_tasks_by_what_they_need_and_queues_their_verbs() {
+    let Some(mut ui) = test_chrome() else { return };
+    ui.ctx = test_context();
+    ui.set_tree(tag_rows(&["Walls"]), 0);
+    let frame = |ui: &mut Ui| {
+        for _ in 0..3 { tree_frame(ui, vec![]); }
+        tree_frame(ui, vec![])
+    };
+    ui.show_destination("tasks");
+    let empty = frame(&mut ui);
+    assert!(empty.contains_key("No tasks yet") && empty.contains_key("New task"), "{:?}", empty.keys());
+    let row = |guid: &str, title: &str, label: &str, tone: &str, count: u32| serde_json::json!({
+        "guid": guid, "title": title, "agent": "Codex", "label": label, "tone": tone, "count": count});
+    ui.panels.set("tasks", serde_json::json!({
+        "unresolved": 2, "selected": "t1", "empty": false, "access": true, "selection": 0,
+        "agents": ["Built-in assistant", "Codex"],
+        "groups": [
+            {"name": "Needs attention", "rows": [row("t1", "Align the backrest slats", "To review", "warn", 3), row("t2", "Check clearance", "Question", "warn", 0)]},
+            {"name": "In progress", "rows": [row("t3", "Check sheet callouts", "Working", "dim", 0)]},
+            {"name": "Settled", "rows": [row("t4", "Name the groups", "Done", "ok", 1)]},
+        ],
+        "detail": {"guid": "t1", "title": "Align the backrest slats", "description": "Into plane with the frame", "agent": "Codex",
+                   "label": "To review", "tone": "warn", "summary": "Moved three slats.", "question": "",
+                   "changes": [{"key": "u1", "label": "Backrest slat 01", "change": "Changed"}], "comments": [],
+                   "can_accept": true, "can_request": true, "can_revert": true, "can_reply": false},
+    }));
+    let f = frame(&mut ui);
+    for text in ["2 need attention", "Needs attention", "In progress", "Settled · 1", "To review", "Question", "Working",
+                 "Codex · 3 changes", "Backrest slat 01", "Accept changes", "Request changes…", "Revert task", "Show in Project", "+ New task"] {
+        assert!(f.contains_key(text), "{text} missing: {:?}", f.keys());
+    }
+    assert!(!f.contains_key("Name the groups"), "settled tasks fold away");
+    ui.take_actions();
+    tree_click(&mut ui, f["Accept changes"], egui::PointerButton::Primary);
+    assert_eq!(ui.take_actions(), ["task:accept:t1"]);
+    tree_click(&mut ui, f["Check clearance"], egui::PointerButton::Primary);
+    assert_eq!(ui.take_actions(), ["task:select:t2"]);
+    tree_click(&mut ui, f["Backrest slat 01"], egui::PointerButton::Primary);
+    assert_eq!(ui.take_actions(), ["task:element:t1\u{1f}u1"]);
+    // Request changes… opens a reply on the same task.
+    tree_click(&mut ui, f["Request changes…"], egui::PointerButton::Primary);
+    assert!(frame(&mut ui).contains_key("Cancel"));
+    // A question takes a reply instead of review buttons.
+    let mut data = ui.panels.data["tasks"].clone();
+    data["detail"] = serde_json::json!({"guid": "t2", "title": "Check clearance", "agent": "Claude Code", "label": "Question",
+        "tone": "warn", "question": "From the backrest or the rear posts?", "changes": [], "comments": [], "can_reply": true});
+    ui.panels.set("tasks", data);
+    let q = frame(&mut ui);
+    assert!(q.contains_key("From the backrest or the rear posts?") && q.contains_key("Send") && !q.contains_key("Accept changes"));
 }
 
 #[test]

@@ -102,6 +102,9 @@ pub struct SettingsSheet {
 
 type Slf<'py> = Bound<'py, SettingsSheet>;
 
+/// Settings › AI shows how to connect an agent.
+static AI_CONNECT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 fn win<'py>(slf: &Slf<'py>) -> PyResult<Bound<'py, PyAny>> {
     slf.getattr("_win")
 }
@@ -297,6 +300,9 @@ impl SettingsSheet {
             let form = slf.call_method1("_form", (envb, rows, &gid))?;
             c.call_method("fields", (form,), Some(&[("id", &gid)].into_py_dict(py)?))?;
         }
+        if sid == "ai" {
+            Self::model_access(slf, &c, envb)?;
+        }
         if sid == "ndof" {
             let verb = chrome(py)?.getattr("verb")?;
             let buttons = vec![
@@ -306,6 +312,47 @@ impl SettingsSheet {
             ];
             c.call_method("buttons", (buttons,), Some(&[("align", "left")].into_py_dict(py)?))?;
         }
+        Ok(())
+    }
+
+    /// Under the Model access switch: who is connected, and how to connect
+    /// an agent (the command for its terminal, with Copy).
+    fn model_access(slf: &Slf<'_>, c: &Bound<'_, PyAny>, envb: &Bound<'_, PyAny>) -> PyResult<()> {
+        let py = slf.py();
+        let w = envb.getattr("win")?;
+        let scene = envb.getattr("scene")?;
+        let on = !scene.is_none() && crate::tasks_host::access(&scene);
+        let clients = crate::tasks_host::clients(&w)?;
+        let (status, tone) = match (on, clients.len()) {
+            (false, _) => (tr(py, "Off · agents cannot read or edit this model")?, "faint"),
+            (true, 0) => (tr(py, "Active · no agent connected yet")?, "dim"),
+            (true, 1) => (tr(py, "Active · 1 connected client")?, "ok"),
+            (true, n) => (trf(py, "Active · {n} connected clients", &[("n", n.into_pyobject(py)?.into_any())])?, "ok"),
+        };
+        c.call_method1("text", (status, tone))?;
+        if on && !clients.is_empty() {
+            c.call_method1("kv", (PyList::new(py, [(tr(py, "Connected clients")?, clients.join(", "))])?,))?;
+        }
+        c.call_method1("text", (tr(py, "Turning this off stops external edits to this model. Their tasks stay in Tasks.")?,))?;
+        let verb = chrome(py)?.getattr("verb")?;
+        let open = AI_CONNECT.load(std::sync::atomic::Ordering::Relaxed);
+        if !open {
+            c.call_method("buttons", (vec![verb.call1(("ai_connect", tr(py, "Connect an agent…")?))?],), Some(&[("align", "left")].into_py_dict(py)?))?;
+            return Ok(());
+        }
+        c.call_method1("caption", (tr(py, "Connect an agent")?,))?;
+        let rows = crate::settings_rows::ai_connect_rows(py)?;
+        let form = slf.call_method1("_form", (envb, &rows, "connect"))?;
+        c.call_method("fields", (form,), Some(&[("id", "connect")].into_py_dict(py)?))?;
+        let client: String = envb.getattr("st")?.call_method1("value", ("ia/connect_client", "Claude Code"))?.str()?.to_string();
+        let (command, hint): (String, String) = py.import("plugins.ai_bridge")?.call_method1("setup_command", (&client,))?.extract()?;
+        c.call_method1("text", (hint,))?;
+        c.call_method1("code", (command,))?;
+        let kw = [("quiet", true)].into_py_dict(py)?;
+        c.call_method("buttons", (vec![
+            verb.call1(("ai_copy", tr(py, "Copy setup")?))?,
+            verb.call(("ai_connect_close", tr(py, "Close")?), Some(&kw))?,
+        ],), Some(&[("align", "left")].into_py_dict(py)?))?;
         Ok(())
     }
 
@@ -926,6 +973,13 @@ impl SettingsSheet {
                     slf.call_method1("site_action", (ctx, &arg))?;
                 } else if arg.starts_with("kb_") {
                     slf.call_method1("_kb_verb", (&arg,))?;
+                } else if arg == "ai_connect" || arg == "ai_connect_close" {
+                    AI_CONNECT.store(arg == "ai_connect", std::sync::atomic::Ordering::Relaxed);
+                } else if arg == "ai_copy" {
+                    let client: String = py.import("built_core.settings")?.call_method0("settings")?.call_method1("value", ("ia/connect_client", "Claude Code"))?.str()?.to_string();
+                    let (command, _): (String, String) = py.import("plugins.ai_bridge")?.call_method1("setup_command", (&client,))?.extract()?;
+                    let copied = crate::report_sheets::copy_text(py, &command)?;
+                    note(slf, &tr(py, if copied { "Setup copied" } else { "Could not reach the clipboard" })?, if copied { "ok" } else { "error" })?;
                 } else if arg.starts_with("ndof_") {
                     slf.call_method1("_ndof_verb", (&arg,))?;
                 } else if arg == "restore" {

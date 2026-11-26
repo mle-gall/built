@@ -63,7 +63,16 @@ INSTRUCTIONS = (
     "lo que escribas aparece en la pantalla del usuario y entra en su "
     "historial de deshacer.\n" + REFERENCE + "\nEmpieza por query_model "
     "para ver qué hay, construye con run_python y MIRA el resultado con "
-    "screenshot.")
+    "screenshot.\n"
+    "Every request is a task in Built's Tasks list: call task_create before "
+    "editing, task_update(state='question', message=...) when you need an "
+    "answer, and task_update(state='done', message=summary) when finished; "
+    "the user then reviews, accepts or reverts your changes. task_list shows "
+    "the requests waiting for you and the user's replies.")
+
+#: The MCP client's name from ``initialize`` (Claude Code, Codex…): Built
+#: shows it on the tasks this connection opens.
+_client = ""
 
 
 _sock: socket.socket | None = None
@@ -79,7 +88,7 @@ def _bridge(tool: str, args: dict) -> dict:
         _req_id += 1
         try:
             _sock.sendall((json.dumps(
-                {"id": _req_id, "tool": tool, "args": args}) + "\n").encode())
+                {"id": _req_id, "tool": tool, "args": args, "client": _client}) + "\n").encode())
             buf = b""
             while b"\n" not in buf:
                 chunk = _sock.recv(65536)
@@ -108,11 +117,11 @@ def _call(name: str, args: dict) -> dict:
     except OSError as exc:
         if native_private_transport():
             return _tool_result(
-                f"Cannot reach Built's private AI bridge ({exc}). Open Plugins > AI Bridge (MCP), "
-                "start the bridge, and use the same settings profile.", is_error=True)
+                f"Cannot reach Built ({exc}). In Built, open the model and turn on Settings > AI > "
+                "Allow agents to edit this model; use the same settings profile.", is_error=True)
         return _tool_result(
             "Cannot reach Built's AI bridge on %s:%d (%s). "
-            "In Built: the AI tab of the side tray > Start bridge (or Extensions > AI Bridge (MCP))."
+            "In Built: Settings > AI > Allow agents to edit this model."
             % (HOST, PORT, exc), is_error=True)
     if not reply.get("ok"):
         return _tool_result(str(reply.get("error")), is_error=True)
@@ -142,11 +151,22 @@ def _call(name: str, args: dict) -> dict:
     return _tool_result(json.dumps(result, indent=2, ensure_ascii=False))
 
 
+def _client_label(name: str) -> str:
+    """The name a person knows: clients report ids like ``claude-code``."""
+    known = {"claude-code": "Claude Code", "codex": "Codex", "codex-mcp-client": "Codex",
+             "t3-code": "T3 Code", "t3code": "T3 Code", "claude-ai": "Claude"}
+    key = name.strip().lower()
+    return known.get(key, name.strip()[:60])
+
+
 def handle(msg: dict) -> dict | None:
     """One JSON-RPC message → the reply dict (None for notifications)."""
     method = msg.get("method")
     msg_id = msg.get("id")
     if method == "initialize":
+        global _client
+        info = (msg.get("params") or {}).get("clientInfo") or {}
+        _client = _client_label(str(info.get("name") or ""))
         return {"jsonrpc": "2.0", "id": msg_id, "result": {
             "protocolVersion": PROTOCOL,
             "capabilities": {"tools": {}},

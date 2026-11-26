@@ -210,6 +210,11 @@ impl Pane {
         Pane::add(slf, "text", vec![("text", text), ("tone", tone.unwrap_or_else(|| s(py, "")))])
     }
 
+    /// Text to copy as it stands (a command): monospace in a well.
+    fn code<'py>(slf: &Bound<'py, Self>, text: Bound<'py, PyAny>) -> PyResult<Bound<'py, Self>> {
+        Pane::add(slf, "code", vec![("text", text)])
+    }
+
     fn separator<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, Self>> {
         Pane::add(slf, "separator", vec![])
     }

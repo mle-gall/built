@@ -1,6 +1,6 @@
 {
   "ai": [
-    ["connection", "Connection", [
+    ["connection", "Built-in assistant", [
       {"id": "ia/proveedor", "kind": "choice", "label": "Provider"},
       {"id": "ia/modelo", "kind": "edit", "label": "Model"},
       {"id": "ia/api_key", "kind": "edit", "label": "API key", "password": true},

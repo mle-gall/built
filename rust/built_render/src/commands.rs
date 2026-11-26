@@ -69,6 +69,7 @@ const COMMANDS: &[Command] = &[
     command("sidebar_project", "Project", "", &["Ctrl+Alt+1"], "Sidebar", Chrome).on(RegistryOnly),
     command("sidebar_tasks", "Tasks", "", &["Ctrl+Alt+2"], "Sidebar", Chrome).on(RegistryOnly),
     command("sidebar_deliveries", "Deliveries", "", &["Ctrl+Alt+3"], "Sidebar", Chrome).on(RegistryOnly),
+    command("ask_agent", "Ask an agent…", "", &["Ctrl+Shift+A"], "Sidebar", Chrome).on(RegistryOnly),
     command("orbit", "Orbit", "orbit", &["O"], "nav", Nav).on(NavigationBar),
     command("pan", "Pan", "pan", &["H"], "nav", Nav).on(NavigationBar),
     command("zoom", "Zoom", "zoom", &["Z"], "nav", Nav).on(NavigationBar),
@@ -279,6 +280,11 @@ pub fn run_view_command(win: &Bound<'_, PyAny>, id: &str, on: bool) -> PyResult<
             win.py().None().into_bound(win.py())
         }
         Method(method) => win.call_method0(method)?,
+        Chrome if id == "ask_agent" => {
+            let view = crate::dialogs_host::view_of(win.py(), win);
+            view.getattr("renderer")?.call_method0("ui_compose_task")?;
+            view.call_method0("update")?
+        }
         Chrome if id.starts_with("sidebar_") => {
             let view = crate::dialogs_host::view_of(win.py(), win);
             view.getattr("renderer")?.call_method1("ui_show_destination", (&id[8..],))?;
@@ -683,6 +689,7 @@ pub fn command_description(label: &str, key: &str) -> Option<&'static str> {
         _ => match key {
             "view:sidebar_project" => "Browse the Project tree and inspect the selection.",
             "view:sidebar_tasks" => "Open agent reviews and questions.",
+            "view:ask_agent" => "Send a request to the built-in assistant or a connected agent; it becomes a task to review.",
             "view:sidebar_deliveries" | "menu:delivery_export" => "Check and run the model’s saved deliveries.",
             "menu:about" => "The version, the authors and the licence of Built.",
             "menu:animation_settings" => "Set the travel and pause times for saved scenes.",
