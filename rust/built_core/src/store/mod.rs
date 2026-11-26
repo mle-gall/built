@@ -52,6 +52,7 @@ pub(crate) use drawing_face::Outline;
 pub(crate) mod drawing_plane;
 pub(crate) mod drawing_edges;
 pub mod edit;
+pub(crate) mod edge_index;
 pub(crate) mod geometry;
 mod frame;
 pub mod explode;

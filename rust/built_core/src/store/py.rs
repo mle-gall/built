@@ -86,6 +86,9 @@ pub struct PyMeshStore {
     /// order per call once tombstones or a relink made it non-trivial.
     /// Every mutation bumps the revision, so a stale entry is never read.
     cache: Mutex<[Option<OrderCache>; 3]>,
+    /// The edges' BVH for the edges near the cursor (`nearest_edges`),
+    /// brought up to the current state on use.
+    edge_index: Mutex<Option<Arc<super::edge_index::EdgeIndex>>>,
 }
 
 /// An occurrence uses the same keys and generation floors as its definition.
@@ -194,7 +197,7 @@ impl PyMeshStore {
     }
 
     fn wrap(inner: Store) -> Self {
-        Self { inner, cache: Mutex::new(Default::default()) }
+        Self { inner, cache: Mutex::new(Default::default()), edge_index: Mutex::new(None) }
     }
 
     fn order_of(&self, k: Kind) -> (Arc<Vec<u32>>, Arc<Vec<u32>>) {
@@ -740,15 +743,24 @@ impl PyMeshStore {
     fn nearest_edges(&self, py: Python<'_>, matrix: [f64;16], width: f64, height: f64,
                      x: f64, y: f64, radius: f64) -> Vec<(usize,f64,f64)> {
         let camera = crate::pick::Projector::new(&matrix, width, height);
-        let st = &self.inner;
-        let edges = self.order_of(Kind::Edge).0;
+        let dense = self.order_of(Kind::Edge).1;
         py.detach(|| {
-            let projected = edges.iter().map(|&edge| {
-                let [a,b] = st.state.ends.get(edge as usize).map(|v|
-                    camera.px(*st.state.vpos.get(v as usize)));
-                (a,b)
-            });
-            crate::pick::nearest_projected(projected, x, y, radius)
+            let index = {
+                let mut slot = self.edge_index.lock().unwrap();
+                let index = match slot.as_ref() {
+                    Some(index) => index.refresh(&self.inner),
+                    None => Arc::new(super::edge_index::EdgeIndex::build(&self.inner)),
+                };
+                *slot = Some(index.clone());
+                index
+            };
+            let mut hits: Vec<(usize, f64, f64)> = index
+                .near(&self.inner, &camera, &matrix, width, height, x, y, radius)
+                .into_iter()
+                .map(|(e, d, t)| (dense[e as usize] as usize, d, t))
+                .collect();
+            hits.sort_by(|p, q| p.1.total_cmp(&q.1).then(p.0.cmp(&q.0)));
+            hits
         })
     }
 
@@ -3524,6 +3536,7 @@ impl PyMeshStore {
         self.inner = source.inner.clone();
         self.inner.state = state;
         *self.cache.lock().unwrap() = Default::default();
+        *self.edge_index.lock().unwrap() = None;
         Ok(())
     }
 
