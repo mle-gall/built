@@ -681,7 +681,7 @@ impl ExtensionsSheet {
     }
 }
 
-/// Help ▸ About, Window ▸ Extensions, the inspector's Cut list…: the sheet
+/// Help ▸ About, Extensions ▸ Extension Manager…, the inspector's Cut list…: the sheet
 /// `sid` on the window.
 #[pyfunction]
 fn show_report_sheet<'py>(py: Python<'py>, win: &Bound<'py, PyAny>, sid: &str) -> PyResult<Bound<'py, PyAny>> {

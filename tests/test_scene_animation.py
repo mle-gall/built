@@ -705,11 +705,13 @@ def test_invalid_transition_can_be_disabled_without_losing_saved_time():
     assert model.values() == dict(enabled=False, transition=2.345, pause=0.075)
 
 
-def test_the_video_is_in_file_export_and_in_the_animation_menu():
+def test_the_video_has_one_home_in_file_export():
     from built_render import command_registry
     paths = {menu_id: path for _, path, _, _, _, menu_id in command_registry([], [])}
     assert paths["export:video"] == "File ▸ Export"
-    assert paths["animation_video"] == "Camera ▸ Animation"
+    # One home per command (docs/menus.md): the Animation menu no longer
+    # repeats it.
+    assert "animation_video" not in paths
 
 
 def _without_multimedia(monkeypatch):

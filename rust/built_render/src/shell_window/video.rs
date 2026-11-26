@@ -298,7 +298,7 @@ pub(crate) fn run_export(window: &Obj) -> PyResult<()> {
             "{label}\n{}",
             translate(
                 py,
-                "The times are those of Camera ▸ Animation ▸ Animation Settings…"
+                "The times are those of View ▸ Animation ▸ Animation Settings…"
             )?
         ),
     )?;

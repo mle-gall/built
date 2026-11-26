@@ -69,7 +69,7 @@ const COMMANDS: &[Command] = &[
     command("sidebar_project", "Project", "", &["Ctrl+Alt+1"], "Sidebar", Chrome).on(RegistryOnly),
     command("sidebar_tasks", "Tasks", "", &["Ctrl+Alt+2"], "Sidebar", Chrome).on(RegistryOnly),
     command("sidebar_deliveries", "Deliveries", "", &["Ctrl+Alt+3"], "Sidebar", Chrome).on(RegistryOnly),
-    command("ask_agent", "Ask an agent…", "", &["Ctrl+Shift+A"], "Sidebar", Chrome).on(RegistryOnly),
+    command("ask_agent", "Ask an Agent…", "", &["Ctrl+Shift+A"], "Sidebar", Chrome).on(RegistryOnly),
     command("orbit", "Orbit", "orbit", &["O"], "nav", Nav).on(NavigationBar),
     command("pan", "Pan", "pan", &["H"], "nav", Nav).on(NavigationBar),
     command("zoom", "Zoom", "zoom", &["Z"], "nav", Nav).on(NavigationBar),
@@ -81,10 +81,10 @@ const COMMANDS: &[Command] = &[
     command("position_camera", "Position Camera", "position_camera", &[], "walkthrough", Tool).on(NavigationBar),
     command("xray", "X-ray", "xray", &["Alt+X"], "toggle", Xray).on(DisplayBar),
     command("axes", "Axes", "", &["Alt+A"], "toggle", Flag("_set_scene_visibility", "show_axes")),
-    command("back_edges", "Back edges", "back_edges", &["K"], "toggle", Flag("_set_style_field", "back_edges")),
-    command("hidden_geometry", "Hidden geometry", "hidden_geometry", &[], "toggle", Flag("_set_hidden_view", "show_hidden_geometry")).on(DisplayBar),
+    command("back_edges", "Back Edges", "back_edges", &["K"], "toggle", Flag("_set_style_field", "back_edges")),
+    command("hidden_geometry", "Hidden Geometry", "hidden_geometry", &[], "toggle", Flag("_set_hidden_view", "show_hidden_geometry")).on(DisplayBar),
     command("shadows", "Shadows", "shadows", &[], "toggle", Shadows),
-    command("section_cuts", "Section cuts", "section_cut", &[], "toggle", Flag("_set_scene_visibility", "show_section_cuts")).on(DisplayBar),
+    command("section_cuts", "Section Cuts", "section_cut", &[], "toggle", Flag("_set_scene_visibility", "show_section_cuts")).on(DisplayBar),
     // Views in shortcut order (UX pass 1, M05).
     command("view_top", "Top", "view_top", &["Ctrl+1"], "Views", View("top")),
     command("view_front", "Front", "view_front", &["Ctrl+2"], "Views", View("front")),
@@ -93,7 +93,7 @@ const COMMANDS: &[Command] = &[
     command("view_back", "Back", "view_back", &["Ctrl+5"], "Views", View("back")),
     command("view_left", "Left", "view_left", &["Ctrl+6"], "Views", View("left")),
     command("view_bottom", "Bottom", "view_bottom", &["Ctrl+7"], "Views", View("bottom")),
-    command("camera", "Camera inspector…", "", &[], "Views", Chrome),
+    command("camera", "Camera Inspector…", "", &[], "Views", Chrome),
     command("projection_perspective", "Perspective", "proj_perspective", &[], "Projection", Projection("perspective")),
     command("projection_parallel", "Parallel Projection", "proj_parallel", &[], "Projection", Projection("parallel")),
     command("projection_two_point", "Two-Point Perspective", "proj_two_point", &[], "Projection", Projection("two_point")),
@@ -103,16 +103,23 @@ const COMMANDS: &[Command] = &[
     command("style_hidden_line", "Hidden line", "", &[], "Style", Style),
     command("style_monochrome", "Monochrome", "", &[], "Style", Style),
     command("style_wireframe", "Wireframe", "", &[], "Style", Style),
-    command("style_xray", "X-ray", "", &[], "Style", Style).on(RegistryOnly),
+    command("style_xray", "X-ray Style", "", &[], "Style", Style).on(RegistryOnly),
     command("section_planes", "Section Planes", "", &[], "Sections", Flag("_set_scene_visibility", "show_section_planes")),
     command("section_fill", "Section Fill", "", &[], "Sections", Flag("_set_style_field", "section_fill")),
-    command("organise-scenes", "Organise scenes", "", &[], "Scenes", Chrome).on(RegistryOnly),
-    command("form-style", "Edit style…", "", &[], "Settings", Chrome),
-    command("recent-activity", "Recent activity", "", &[], "Activity", Chrome),
-    command("form-shadows", "Shadows and sun…", "", &[], "Settings", Chrome),
+    command("organise-scenes", "Organise Scenes", "", &[], "Scenes", Chrome).on(RegistryOnly),
+    command("form-style", "Edit Style…", "", &[], "Settings", Chrome),
+    command("recent-activity", "Recent Activity", "", &[], "Activity", Chrome),
+    command("form-shadows", "Shadows and Sun…", "", &[], "Settings", Chrome),
 ];
 
 impl Command {
+    /// The display style a Style command picks, by its name in
+    /// `built_core.style`. The X-ray style's command is called "X-ray
+    /// Style" so that it does not share a name with the X-ray toggle.
+    fn style_name(&self) -> &'static str {
+        if self.id == "style_xray" { "X-ray" } else { self.label }
+    }
+
     fn state(
         &self,
         active: &str,
@@ -124,7 +131,7 @@ impl Command {
         let checked = match self.target {
             Nav | Tool => active == self.id,
             Projection(mode) => mode == projection,
-            Style => self.label == style,
+            Style => self.style_name() == style,
             Flag(_, field) => flags.contains(field),
             Xray | Shadows => flags.contains(self.id),
             _ => return (-1, self.id != "zoom_selection" || selection),
@@ -268,7 +275,7 @@ pub fn run_view_command(win: &Bound<'_, PyAny>, id: &str, on: bool) -> PyResult<
             let preset = win
                 .py()
                 .import("built_core.style")?
-                .call_method1("style_by_name", (c.label,))?;
+                .call_method1("style_by_name", (c.style_name(),))?;
             win.call_method1("_apply_display_style", (preset,))?
         }
         Xray => win.call_method0("_toggle_xray")?,
@@ -405,6 +412,15 @@ mod tests {
     }
 
     #[test]
+    fn style_commands_pick_their_style_by_its_name() {
+        // The style is looked up by name: renaming a command must not lose it.
+        let names: Vec<_> = COMMANDS.iter().filter(|c| matches!(c.target, Style)).map(Command::style_name).collect();
+        assert_eq!(names, ["Default", "Architectural", "Shaded", "Hidden line", "Monochrome", "Wireframe", "X-ray"]);
+        let xray = COMMANDS.iter().find(|c| c.id == "style_xray").unwrap();
+        assert_eq!(xray.state("", "", "X-ray", &HashSet::new(), false).0, 1);
+    }
+
+    #[test]
     fn gizmo_drags_parse_only_finite_pairs() {
         assert_eq!(parse_drag("4,-2.5"), Some((4., -2.5)));
         assert_eq!(parse_drag("4"), None);
@@ -534,14 +550,14 @@ pub fn command_registry(
     }
     // Keep standard commands available to hosts without a system menu bar.
     if menu.iter().all(|r| r.0.starts_with("extension:")) {
-        for (id, label, key) in [
-            ("about", "About Built", ""),
-            ("cutlist", "Cut list", ""),
-            ("extensions", "Extension Manager", ""),
-            ("prefs", "Settings…", "Ctrl+,"),
-            ("units", "Units…", UNITS_SHORTCUT),
+        for (id, path, label, key) in [
+            ("about", "Built", "About Built", ""),
+            ("prefs", "Built", "Settings…", "Ctrl+,"),
+            ("cutlist", "Model", "Cut List…", ""),
+            ("units", "Model", "Units…", UNITS_SHORTCUT),
+            ("extensions", crate::desktop_menu_model::EXTENSIONS_MENU, "Extension Manager…", ""),
         ] {
-            menu.push((id.into(), "Window".into(), label.into(), key.into()));
+            menu.push((id.into(), path.into(), label.into(), key.into()));
         }
         for (id, label, key) in [
             ("save", "Save", "Ctrl+S"),
@@ -677,15 +693,15 @@ pub fn command_description(label: &str, key: &str) -> Option<&'static str> {
     Some(match label {
         "Components" => "Browse component definitions and place a copy in the model.",
         "Materials" => "Browse the materials available to apply to faces.",
-        "Cut list" => "Review part dimensions, quantities and cutting requirements.",
+        "Cut list" | "Cut List" => "Review part dimensions, quantities and cutting requirements.",
         "Export" => "Choose a format and scope for a one-off export.",
         "Hide Rest of Model" => "Hide geometry outside the component being edited.",
         "Hide Similar Components" => "Hide other instances of the component being edited.",
         "Home" | "Start Page" => "Open the start page to create a project or reopen a recent one.",
         "List" => "Show saved scenes in a compact list.",
         "Thumbnails" => "Show saved scenes with preview images.",
-        "Save a Copy as Built (.igz)" => "Write a copy of this project in the Built file format.",
-        "Terrain profile" => "Inspect ground elevations along a path through the model.",
+        "Save a Copy as .igz (IngeTrazo)" => "Write a copy of this model in the legacy .igz format, for IngeTrazo.",
+        "Terrain profile" | "Terrain Profile of Selection" => "Inspect ground elevations along a path through the model.",
         _ => match key {
             "view:sidebar_project" => "Browse the Project tree and inspect the selection.",
             "view:sidebar_tasks" => "Open agent reviews and questions.",
@@ -693,7 +709,6 @@ pub fn command_description(label: &str, key: &str) -> Option<&'static str> {
             "view:sidebar_deliveries" | "menu:delivery_export" => "Check and run the model’s saved deliveries.",
             "menu:about" => "The version, the authors and the licence of Built.",
             "menu:animation_settings" => "Set the travel and pause times for saved scenes.",
-            "menu:animation_video" => "Export a movie of the saved scenes.",
             "menu:bridge" => "Join two faces, a face and a line, or two lines with the faces between them.",
             "menu:clear_texture_cache" => "Delete the images extracted from imported .skp files.",
             "menu:convert_path" => "Turn the selected paths into edges of the model; a closed path becomes a face, ready to push up.",
@@ -704,13 +719,19 @@ pub fn command_description(label: &str, key: &str) -> Option<&'static str> {
             "menu:develop_plugin" => "Open the developer guide for writing a Built extension.",
             "menu:documentation" => "Open the Built documentation in the web browser.",
             "menu:explode_group" => "Break the selected groups apart, back into the geometry around them.",
-            "menu:export:dae" => "Bring in a COLLADA model with its materials and textures.",
+            "menu:export:dae" => "Save the model as COLLADA with its materials and textures.",
             "menu:export:dxf" => "Save the view on screen as a 2D line drawing for CAD, with the hidden lines removed.",
             "menu:export:glb" => "Export the model as glTF or binary GLB.",
             "menu:export:ifc" => "Save the model as IFC for BIM software, with what the BIM panel tagged.",
-            "menu:export:obj" => "Bring in a Wavefront OBJ model with its materials.",
+            "menu:export:obj" => "Save the model as Wavefront OBJ with its materials.",
             "menu:export:stl" => "Save the model as an STL mesh for 3D printing.",
-            "menu:export:video" => "Save the scenes as a video: the camera glides from one to the next, with the times of Camera ▸ Animation.",
+            "menu:export:video" => "Save the scenes as a video: the camera glides from one to the next, with the times of View ▸ Animation.",
+            "menu:new_project" => "Create a .builtproject that links models and keeps their project structure together.",
+            "menu:export_image" => "Save the view on screen as a picture.",
+            "menu:export_view_svg" => "Save the view on screen as an SVG line drawing.",
+            "menu:export_igz" => "Write a copy of this model in the legacy .igz format, for IngeTrazo.",
+            "menu:hide_rest" => "Hide the rest of the model while a group is edited, or show it again.",
+            "menu:hide_similar" => "Hide the other copies of the component being edited.",
             "menu:extensions" => "Install, enable and update extensions.",
             "menu:get_models" => "Free websites with models and textures that open in Built.",
             "menu:heal_overlaps" => "Remove the faces left lying over their own subdivisions after drawing or erasing.",
@@ -748,7 +769,7 @@ pub fn command_description(label: &str, key: &str) -> Option<&'static str> {
             "menu:rest_intensity" => "Set how faint the rest of the model appears while editing a component.",
             "menu:rest_normal" => "While a group is edited, the rest of the model shows as usual.",
             "menu:reverse_faces" => "Swap the front and back sides of the selected faces.",
-            "menu:review" => "Open the model for review.",
+            "menu:review" => "Hide the panels to review the model; the same command shows them again.",
             "menu:scene_add" => "Save the current view and layer visibility",
             "menu:scene_delete" => "Delete the selected scenes",
             "menu:scene_duplicate" => "Make a copy of the selected scene",
@@ -802,7 +823,7 @@ pub fn command_description(label: &str, key: &str) -> Option<&'static str> {
             "view:style_monochrome" => "Every face in the front or back colour, without materials.",
             "view:style_shaded" => "Faces in their colours, without textures.",
             "view:style_wireframe" => "Only the edges: the faces are not drawn.",
-            "view:style_xray" => "See-through faces, so the edges behind them show.",
+            "view:style_xray" => "The X-ray display style: see-through faces, so the edges behind them show.",
             "view:view_back" => "Look at the model from the back.",
             "view:view_bottom" => "Look straight up at the model from below.",
             "view:view_front" => "Look at the model from the front.",

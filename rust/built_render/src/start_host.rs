@@ -993,7 +993,8 @@ fn new_model(win: &Bound<'_, PyAny>, ask_units: bool) -> PyResult<()> {
     Ok(())
 }
 
-fn new_project(win: &Bound<'_, PyAny>) -> PyResult<()> {
+/// File ▸ New Project… and the start page's "New project…".
+pub(crate) fn new_project(win: &Bound<'_, PyAny>) -> PyResult<()> {
     let py = win.py();
     let dialogs = py.import("built_render.shell_files")?.getattr("ShellFileDialog")?;
     let name = dialogs.call_method1("getSaveFileName", (win, "New project", "", "Built project (*.builtproject)"))?.get_item(0)?;
