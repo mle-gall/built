@@ -366,7 +366,7 @@ impl ShellWindow {
         let vp = slf.getattr("viewport")?;
         vp.call_method1("set_active_tool", (&tool,))?;
         let display = vp.getattr("keys_stand_in")?;
-        display.getattr("tools")?.call_method0("pick_up")?;
+        display.getattr("tools")?.call_method0("sync")?;
         display.call_method1("set_scene", (vp.getattr("scene")?,))?;
         display.call_method0("update")?;
         for (k, a) in actions.cast::<PyDict>()?.iter() {
