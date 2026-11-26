@@ -39,7 +39,7 @@ pub const GROUPS: &[(&str, &[Row])] = &[
     (
         "File",
         &[
-            Row::Command("new", "New", Some("super+KeyN")),
+            Row::Command("new", "New model", Some("super+KeyN")),
             Row::Command("new_window", "New Window", Some("super+shift+KeyN")),
             Row::Command("open", "Open…", Some("super+KeyO")),
             Row::Recent,

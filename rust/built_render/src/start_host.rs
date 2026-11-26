@@ -236,6 +236,8 @@ impl Page {
             p.focused = false;
         }
         sheet.bind(py).setattr("focus", py.None())?;
+        sheet.bind(py).setattr("unit", py.None())?;
+        sheet.bind(py).setattr("filter", "")?;
         slf.borrow_mut().asked = monotonic(py)?;
         slf.borrow_mut().docs_sig = docs_sig(&win)?.into_any().unbind();
         slf.call_method0("load")?;
@@ -323,12 +325,8 @@ impl Page {
         if !last.is_empty() && !paths.contains(&last) {
             paths.push(last);
         }
-        let mut todo = Vec::new();
-        for p in paths {
-            if _cached(py, &p)?.is_none() {
-                todo.push(p);
-            }
-        }
+        // Keep cached previews visible while refreshing file and dependency state.
+        let todo = paths;
         let loader = slf.borrow().loader.clone_ref(py);
         if todo.is_empty() || (!loader.is_none(py) && loader.bind(py).call_method0("is_alive")?.is_truthy()?) {
             return Ok(());
@@ -412,12 +410,13 @@ pub struct StartSheet {
     page: Py<PyAny>,
     focus: Py<PyAny>,
     filter: String,
-    cont_path: String,
+    projects_tab: bool,
+    unit: Option<usize>,
 }
 
 impl StartSheet {
     fn make(py: Python<'_>, page: &Bound<'_, PyAny>) -> PyResult<PyClassInitializer<Self>> {
-        Ok(PyClassInitializer::from(crate::sheet_runtime::Provider).add_subclass(StartSheet { page: page.clone().unbind(), focus: py.None(), filter: String::new(), cont_path: String::new() }))
+        Ok(PyClassInitializer::from(crate::sheet_runtime::Provider).add_subclass(StartSheet { page: page.clone().unbind(), focus: py.None(), filter: String::new(), projects_tab:false, unit:None }))
     }
 }
 
@@ -461,7 +460,6 @@ impl StartSheet {
         let text = py.import("built_render")?.call_method1("start_sheet", (state(slf, can_return(&win))?,))?;
         let spec = py.import("json")?.call_method1("loads", (text,))?;
         slf.setattr("focus", spec.get_item("focus")?)?;
-        slf.setattr("cont_path", spec.call_method1("pop", ("cont_path",))?)?;
         let icons = spec.call_method1("pop", ("icons",))?;
         let sheet = cs(py)?.getattr("Spec")?.call1((&spec,))?;
         let pictures = locked(py, || {
@@ -488,10 +486,20 @@ impl StartSheet {
         let arg = args.first().cloned().unwrap_or_default();
         match verb {
             "search" => slf.borrow_mut().filter = arg,
-            "focus" => slf.setattr("focus", &arg)?,
+            "tab" => {
+                slf.borrow_mut().projects_tab = arg == "projects";
+                slf.setattr("focus", py.None())?;
+                slf.borrow_mut().unit = None;
+            }
+            "focus" => {
+                if !slf.getattr("focus")?.eq(&arg)? { slf.borrow_mut().unit = None; }
+                slf.setattr("focus", &arg)?;
+            }
+            "v" if arg == "units" => {
+                slf.borrow_mut().unit = args.get(1).and_then(|v| v.parse().ok()).filter(|i| *i < 4);
+            }
             "open" => slf.call_method1("activate", (&win, &arg)).map(|_| ())?,
             "menu" if args.len() > 1 => slf.call_method1("item_verb", (&win, &args[1], &arg)).map(|_| ())?,
-            "headmenu" if arg == "template" && args.len() > 1 => from_template(&win, &args[1])?,
             "verb" => {
                 if matches!(arg.as_str(), "open" | "finder" | "locate" | "forget" | "pin") {
                     let focus = slf.getattr("focus")?;
@@ -518,20 +526,17 @@ impl StartSheet {
         if rid == "cont" {
             action(py, win, "continue")?;
         } else if kind == "tpl" {
-            from_template(win, rest)?;
+            create_template(win, rest, self.unit)?;
         } else if kind == "file" || kind == "proj" {
-            start(py)?.call_method1("open_recent", (win, rest))?;
+            let gone = _cached(py, rest)?.call_method1("get", ("exists",)).ok().is_some_and(|v| v.extract::<bool>().ok() == Some(false));
+            start(py)?.call_method1("open_recent", (win, rest, gone))?;
         }
         Ok(())
     }
 
     fn item_verb(slf: &Bound<'_, Self>, win: &Bound<'_, PyAny>, verb: &str, rid: &str) -> PyResult<()> {
         let py = slf.py();
-        let (mut kind, mut path) = rid.split_once(':').map(|(a, b)| (a.to_owned(), b.to_owned())).unwrap_or((rid.to_owned(), String::new()));
-        if rid == "cont" {
-            kind = "file".into();
-            path = slf.borrow().cont_path.clone();
-        }
+        let (kind, path) = rid.split_once(':').unwrap_or((rid, ""));
         if verb == "open" {
             return slf.call_method1("activate", (win, rid)).map(|_| ());
         }
@@ -544,7 +549,7 @@ impl StartSheet {
             "locate" => {
                 start(py)?.call_method1("open_recent", (win, &path, true))?;
             }
-            "finder" => reveal(py, &path)?,
+            "finder" => reveal(py, path)?,
             _ => {}
         }
         Ok(())
@@ -576,19 +581,6 @@ fn state(sheet: &Bound<'_, StartSheet>, back: bool) -> PyResult<String> {
     let json = py.import("json")?;
     let meta = store(py)?.call_method1("value", ("home/meta", "{}"))?;
     let meta = json.call_method1("loads", (meta,)).ok().filter(|m| m.is_instance_of::<PyDict>()).unwrap_or_else(|| PyDict::new(py).into_any());
-    let open_doc = PyDict::new(py);
-    if back {
-        let doc = win.getattr("_doc").unwrap_or_else(|_| py.None().into_bound(py));
-        let path = if doc.is_none() { None } else { opt(&doc, "path") };
-        // As the recents hold it (resolved): one row, one picture.
-        let resolved = match path {
-            Some(p) => py.import("pathlib")?.getattr("Path")?.call1((p,))?.call_method0("resolve")?.str()?.to_string(),
-            None => String::new(),
-        };
-        open_doc.set_item("path", resolved)?;
-        let name = if !doc.is_none() && doc.hasattr("display_name")? { doc.call_method0("display_name")? } else { s(py, "Untitled") };
-        open_doc.set_item("name", name)?;
-    }
     let cache_view = locked(py, || {
         let out = PyDict::new(py);
         for (p, c) in cache(py)?.iter() {
@@ -597,8 +589,11 @@ fn state(sheet: &Bound<'_, StartSheet>, back: bool) -> PyResult<String> {
             let d = PyDict::new(py);
             d.set_item("exists", get("exists")?)?;
             d.set_item("mtime", get("mtime")?)?;
+            d.set_item("bytes", get("bytes")?)?;
+            d.set_item("units", get("units")?)?;
             d.set_item("thumb", if thumb.is_truthy()? { thumb.get_item(0)? } else { s(py, "") })?;
             d.set_item("files", get("files")?)?;
+            d.set_item("missing_members", get("missing_members")?.extract::<Vec<String>>().unwrap_or_default())?;
             d.set_item("links", get("links")?)?;
             d.set_item("autosave_newer", get("autosave_newer")?.is_truthy()?)?;
             out.set_item(p, d)?;
@@ -610,14 +605,19 @@ fn state(sheet: &Bound<'_, StartSheet>, back: bool) -> PyResult<String> {
     d.set_item("filter", &sheet.borrow().filter)?;
     d.set_item("focus", sheet.getattr("focus")?)?;
     d.set_item("back", back)?;
-    d.set_item("open_doc", open_doc)?;
     d.set_item("last", last_file(py)?)?;
     d.set_item("files", rec.call_method1("entries", ("files",))?)?;
     d.set_item("projects", rec.call_method1("entries", ("projects",))?)?;
     d.set_item("cache", cache_view)?;
     d.set_item("meta", meta)?;
     d.set_item("pending", if pending.is_truthy()? { pending.getattr("job")?.getattr("label")? } else { s(py, "") })?;
-    d.set_item("engine", footer(py))?;
+    d.set_item("projects_tab", sheet.borrow().projects_tab)?;
+    d.set_item("usual_units", py.import("built_core.units")?.call_method0("new_document_units")?.get_item("length")?)?;
+    let draft = match sheet.borrow().unit {
+        Some(i) => crate::start_view::UNIT_CODES[i].into(),
+        None => String::new(),
+    };
+    d.set_item("draft_units", draft)?;
     d.set_item("home", py.import("pathlib")?.getattr("Path")?.call_method0("home")?.str()?)?;
     let time = py.import("time")?;
     d.set_item("now", time.call_method0("time")?)?;
@@ -657,14 +657,6 @@ fn last_file_py(py: Python<'_>) -> PyResult<String> {
     last_file(py)
 }
 
-fn footer(py: Python<'_>) -> String {
-    let text = || -> PyResult<String> {
-        let engine: String = py.import("core._native")?.call_method0("engine")?.extract()?;
-        Ok(format!("Engine: {engine} · Renderer: wgpu (native app)"))
-    };
-    text().unwrap_or_default()
-}
-
 // ---- what a document says about itself (noted on open, save, start) ------------------
 
 /// Remember what the start page shows of a document while it is open: its
@@ -688,6 +680,7 @@ fn note(win: &Bound<'_, PyAny>, path: &Bound<'_, PyAny>, doc: Option<Bound<'_, P
                 data.set_item("project", pathlib.call1((proj_path,))?.getattr("stem")?)?;
             }
         }
+        data.set_item("units", py.import("built_core.units")?.call_method1("model_units_of", (&scene,))?.get_item("length")?)?;
         data.set_item("links", py.import("built_core.links")?.call_method1("sources", (&scene,))?.len()?)?;
         if let Some(name) = opt(&doc, "import_name").filter(|n| n.is_truthy().unwrap_or(false)) {
             let suffix: String = pathlib.call1((name.str()?,))?.getattr("suffix")?.extract()?;
@@ -775,23 +768,30 @@ fn _load_one<'py>(py: Python<'py>, path: &str) -> PyResult<Bound<'py, PyDict>> {
     let entry = PyDict::new(py);
     entry.set_item("exists", true)?;
     entry.set_item("mtime", st.getattr("st_mtime")?)?;
+    entry.set_item("bytes", st.getattr("st_size")?)?;
     entry.set_item("key", (st.getattr("st_mtime_ns")?, st.getattr("st_size")?))?;
     let suffix: String = p.getattr("suffix")?.extract::<String>()?.to_lowercase();
     if suffix == ".builtproject" || suffix == ".igzproj" {
         // Read-only: listing a project never converts it.
         let files = py.import("built_core").and_then(|c| c.call_method1("project_members", (&p,))).and_then(|rows| {
             let out = PyList::empty(py);
+            let missing = PyList::empty(py);
             for r in rows.try_iter()? {
-                out.append(py.import("builtins")?.getattr("tuple")?.call1((r?,))?)?;
+                let r = r?;
+                let member: String = r.get_item(0)?.extract()?;
+                if !std::path::Path::new(&member).is_file() { missing.append(member)?; }
+                out.append(py.import("builtins")?.getattr("tuple")?.call1((r,))?)?;
             }
+            entry.set_item("missing_members", missing)?;
             Ok(out.into_any())
         });
         entry.set_item("files", files.unwrap_or_else(|_| py.None().into_bound(py)))?; // unreadable: said on its card
         return Ok(entry);
     }
     entry.set_item("thumb", _thumbnail(py, &p, &st)?)?;
-    let links = py.import("built_core").and_then(|m| m.call_method1("scan_document_links", (&p,)));
-    entry.set_item("links", links.unwrap_or_else(|_| PyList::empty(py).into_any()))?; // the preview only loses its links
+    if let Ok(summary) = py.import("built_core")?.call_method1("start_document_summary", (&p,)) {
+        entry.call_method1("update", (summary,))?;
+    }
     let newer = (|| -> PyResult<bool> {
         let slot = py.import("built_core.autosave")?.call_method1("pending", (&p,))?;
         if slot.is_none() {
@@ -896,7 +896,14 @@ fn action(py: Python<'_>, win: &Bound<'_, PyAny>, arg: &str) -> PyResult<()> {
             module.call_method1("new_model", (win,))?;
         }
         "project" => new_project(win)?,
-        "openfile" => open_dialog(win)?,
+        "units" => {
+            if let Ok(index) = rest.parse::<usize>() {
+                if let Some(chosen) = unit_profile(py, index)? {
+                    crate::settings_rows::live::apply_document_units(win, &chosen)?;
+                }
+            }
+        }
+        "openfile" => open_dialog(win, p.getattr("sheet")?.getattr("projects_tab")?.is_truthy()?)?,
         "open" if !rest.is_empty() => {
             module.call_method1("open_recent", (win, rest))?;
         }
@@ -979,12 +986,10 @@ fn action_py(py: Python<'_>, win: &Bound<'_, PyAny>, arg: &str) -> PyResult<()> 
 
 #[pyfunction]
 #[pyo3(signature = (win, ask_units=true))]
-fn new_model(py: Python<'_>, win: &Bound<'_, PyAny>, ask_units: bool) -> PyResult<()> {
+fn new_model(win: &Bound<'_, PyAny>, ask_units: bool) -> PyResult<()> {
     win.call_method0("_on_new")?;
     hide(win)?;
-    if ask_units {
-        py.import("built_render.units_question")?.call_method1("offer_at_start", (win,))?;
-    }
+    let _ = ask_units; // Retained for callers using the legacy keyword.
     Ok(())
 }
 
@@ -1012,11 +1017,12 @@ fn new_project(win: &Bound<'_, PyAny>) -> PyResult<()> {
     hide(win)
 }
 
-fn open_dialog(win: &Bound<'_, PyAny>) -> PyResult<()> {
+fn open_dialog(win: &Bound<'_, PyAny>, projects: bool) -> PyResult<()> {
     let py = win.py();
     let suffix: String = py.import("built_core.formats.built")?.getattr("BUILT_SUFFIX")?.extract()?;
     let dialogs = py.import("built_render.shell_files")?.getattr("ShellFileDialog")?;
-    let name = dialogs.call_method1("getOpenFileName", (win, "Open", "", format!("Documents (*{suffix} *.igz *.builtproject *.igzproj)")))?.get_item(0)?;
+    let filter = if projects { "Built project (*.builtproject *.igzproj)".into() } else { format!("Documents (*{suffix} *.igz *.builtproject *.igzproj)") };
+    let name = dialogs.call_method1("getOpenFileName", (win, "Open", "", filter))?.get_item(0)?;
     if name.is_truthy()? {
         start(py)?.call_method1("open_recent", (win, name))?;
     }
@@ -1111,6 +1117,15 @@ fn open_recent(py: Python<'_>, win: &Bound<'_, PyAny>, path: &Bound<'_, PyAny>, 
 }
 
 fn from_template(win: &Bound<'_, PyAny>, tid: &str) -> PyResult<()> {
+    create_template(win, tid, None)
+}
+
+fn unit_profile(py: Python<'_>, index: usize) -> PyResult<Option<Bound<'_, PyAny>>> {
+    let keys = ["metric", "centimetric", "millimetric", "imperial"];
+    keys.get(index).map(|key| py.import("built_core.units")?.getattr("PROFILES")?.get_item(*key)).transpose()
+}
+
+fn create_template(win: &Bound<'_, PyAny>, tid: &str, unit: Option<usize>) -> PyResult<()> {
     let py = win.py();
     let mut found = None;
     for t in start(py)?.getattr("TEMPLATES")?.try_iter()? {
@@ -1122,7 +1137,8 @@ fn from_template(win: &Bound<'_, PyAny>, tid: &str) -> PyResult<()> {
     }
     let Some(t) = found else { return Ok(()) };
     let (nodes, active, units) = (t.get_item(3)?, t.get_item(4)?, t.get_item(5)?);
-    start(py)?.getattr("new_model")?.call((win,), Some(&[("ask_units", units.is_none())].into_py_dict(py)?))?;
+    start(py)?.getattr("new_model")?.call((win,), Some(&[("ask_units", false)].into_py_dict(py)?))?;
+    let units = match unit { Some(i) => unit_profile(py, i)?.unwrap_or(units), None => units };
     if nodes.is_none() && units.is_none() {
         return Ok(());
     }

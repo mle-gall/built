@@ -107,7 +107,7 @@ pub struct HeadMenu { pub id: String, pub label: String, pub options: Vec<Verb>,
 
 #[derive(Deserialize, Default, Clone, Debug, PartialEq)]
 #[serde(default)]
-pub struct Footer { pub links: Vec<Verb>, pub hint: String }
+pub struct Footer { pub links: Vec<Verb>, pub hint: String, pub action: Option<Verb> }
 
 #[derive(Deserialize, Default, Clone, Debug, PartialEq)]
 #[serde(default)]
@@ -220,7 +220,7 @@ impl LargeSheet {
 
     /// A new spec from Python; `None` closes. Returns whether it opened now.
     pub fn set(&mut self, spec: Option<Spec>) -> bool {
-        let Some(mut spec) = spec else {
+        let Some(spec) = spec else {
             self.open = false;
             self.menu = None;
             self.head_menu = None;
@@ -231,19 +231,6 @@ impl LargeSheet {
         }
         if !spec.content.blocks.iter().any(|b| matches!(b.tone.as_str(), "catalog" | "components")) {
             self.visible_previews.clear();
-        }
-        if spec.id == "start" {
-            let template = spec.focus.as_deref().is_some_and(|id| id.starts_with("tpl:"));
-            if let Some(new) = spec.verbs.iter_mut().find(|verb| verb.id == "new") {
-                new.role = u8::from(!template);
-            }
-            for button in spec.detail.iter_mut().flat_map(|pane| &mut pane.blocks)
-                .flat_map(|block| &mut block.buttons)
-            {
-                if button.role == 1 {
-                    button.role = u8::from(template && button.id == "open");
-                }
-            }
         }
         let opening = !self.open || self.spec.as_ref().is_none_or(|s| s.id != spec.id);
         if opening {
@@ -264,6 +251,7 @@ impl LargeSheet {
             if opening || s.force { self.search_reported = self.search.clone(); }
         }
         if opening || spec.force_focus {
+            self.focused = None;
             if let Some(f) = &spec.focus {
                 self.focused = Some(f.clone()).filter(|f| !f.is_empty());
                 self.scroll_to = true;
@@ -809,7 +797,7 @@ impl Draw<'_> {
             let mut x = r.min.x + 8.0 + it.depth as f32 * 16.0;
             if it.icon.starts_with("component:") && !self.icons.contains_key(&it.icon) { components.push(it.icon.as_str()); }
             if it.id.starts_with("family:") && !self.icons.contains_key(&it.icon) { families.push(it.id.as_str()); }
-            if thumbs {
+            if thumbs && (b.tone != "start-list" || !it.icon.is_empty()) {
                 let t = Rect::from_min_size(pos2(x, r.center().y - 15.0), vec2(44.0, 30.0));
                 picture(ui, t, self.icons.get(&it.icon), &it.hex, 4);
                 x += 54.0;
@@ -960,12 +948,13 @@ impl Ui {
                 if self.lsheet.spec.as_ref().is_some_and(|s| s.search.is_some()) { self.lsheet.focus_search = true; }
                 true
             }
+            "Enter" if self.lsheet.id() == "start" && (in_search || self.lsheet.choice_open() || self.lsheet.menu.is_some() || self.lsheet.head_menu.is_some()) => forward(self),
             "Enter" if in_field && self.lsheet.spec.as_ref().is_some_and(|spec| !spec.default_verb.is_empty()) => {
                 if mods & (2 | 8) == 0 && self.lsheet.forms.values().any(|d| d.multiline_focused(focused)) {
                     return forward(self);
                 }
                 if let Some(spec) = &self.lsheet.spec {
-                    if let Some(verb) = spec.verbs.iter().find(|v| v.enabled && v.id == spec.default_verb) {
+                    if let Some(verb) = spec.verbs.iter().chain(spec.footer.iter().filter_map(|f| f.action.as_ref())).find(|v| v.enabled && v.id == spec.default_verb) {
                         self.actions.push(self.lsheet.act("verb", &[&verb.id]));
                     }
                 }
@@ -977,7 +966,7 @@ impl Ui {
                     let a = self.lsheet.act("open", &[&id]);
                     self.actions.push(a);
                 } else if let Some(spec) = &self.lsheet.spec {
-                    if let Some(verb) = spec.verbs.iter().find(|v| v.enabled && v.id == spec.default_verb) {
+                    if let Some(verb) = spec.verbs.iter().chain(spec.footer.iter().filter_map(|f| f.action.as_ref())).find(|v| v.enabled && v.id == spec.default_verb) {
                         self.actions.push(self.lsheet.act("verb", &[&verb.id]));
                     }
                 }
@@ -1059,7 +1048,14 @@ impl Ui {
                 if scrim.clicked() { st.menu = None; st.head_menu = None; }
                 let side_width = if spec.side.is_empty() { 0.0 } else if spec.side_width > 0.0 { spec.side_width } else { 216.0 };
                 let detail_width = spec.detail.as_ref().map_or(0.0, |d| if d.width > 0.0 { d.width } else { 340.0 });
-                let frame = sheet_frame(ui, sheet, side_width, detail_width, spec.footer.is_some());
+                let frame = if spec.id == "start" {
+                    let mut frame = sheet_frame(ui, sheet, sheet.width() * 0.36, 0., spec.footer.is_some());
+                    frame.detail = Some(frame.content);
+                    frame.content = frame.side.take().unwrap();
+                    frame
+                } else {
+                    sheet_frame(ui, sheet, side_width, detail_width, spec.footer.is_some())
+                };
                 Self::lsheet_header(ui, &spec, st, frame.header, &mut out);
                 if let (Some(f), Some(rect)) = (&spec.footer, frame.footer) {
                     Self::lsheet_footer(ui, f, rect, &mut out);
@@ -1073,6 +1069,10 @@ impl Ui {
                     let inner = frame.content.shrink(SPACE_M);
                     ui.scope_builder(egui::UiBuilder::new().max_rect(inner).layout(egui::Layout::top_down(egui::Align::Min)), |ui| {
                         ui.spacing_mut().item_spacing = vec2(0.0, 0.0);
+                        if let Some(search) = spec.search.as_ref().filter(|_| spec.id == "start") {
+                            Self::lsheet_search(ui, d.st, search, inner.width());
+                            ui.add_space(SPACE_S);
+                        }
                         if !spec.content.title.is_empty() {
                             let (r, _) = ui.allocate_exact_size(vec2(inner.width(), ROW_H), Sense::hover());
                             let t = ui.painter().layout_no_wrap(spec.content.title.clone(), title_font(), INK);
@@ -1224,7 +1224,7 @@ impl Ui {
                 }
                 ui.add_space(SPACE_S);
             }
-            for v in &spec.verbs {
+            for v in spec.verbs.iter().filter(|_| spec.id != "start") {
                 if button(ui, v, None) { out.push(format!("verb{SEP}{}", v.id)); }
             }
             for m in spec.menus.iter().filter(|m| m.left) {
@@ -1245,29 +1245,14 @@ impl Ui {
                     ui.painter().line_segment([c + vec2(-k, k), c + vec2(k, -k)], pen);
                     if resp.on_hover_text("Close (esc)").clicked() { out.push("close".into()); }
                 }
-                if let Some(s) = &spec.search {
+                if spec.id == "start" {
+                    for v in spec.verbs.iter().rev() {
+                        if button(ui, v, None) { out.push(format!("verb{SEP}{}", v.id)); }
+                    }
+                }
+                if let Some(s) = spec.search.as_ref().filter(|_| spec.id != "start") {
                     let sw = (inner.width() * 0.30).clamp(200.0, 320.0);
-                    let (fr, _) = ui.allocate_exact_size(vec2(sw, CONTROL_H), Sense::hover());
-                    let focused = ui.memory(|m| m.has_focus(search_id()));
-                    ui.painter().rect_filled(fr, CornerRadius::same(R_CONTROL), FIELD);
-                    ui.painter().rect_stroke(fr, CornerRadius::same(R_CONTROL),
-                                             Stroke::new(1.0_f32, if focused { ACCENT } else { EDGE }), egui::StrokeKind::Inside);
-                    // The magnifier.
-                    let mc = pos2(fr.min.x + 14.0, fr.center().y - 1.0);
-                    ui.painter().circle_stroke(mc, 4.0, Stroke::new(1.2_f32, FAINT));
-                    ui.painter().line_segment([mc + vec2(3.0, 3.0), mc + vec2(6.0, 6.0)], Stroke::new(1.2_f32, FAINT));
-                    let text_r = Rect::from_min_max(pos2(fr.min.x + 24.0, fr.min.y), pos2(fr.max.x - 6.0, fr.max.y));
-                    let edit = egui::TextEdit::singleline(&mut st.search).id(search_id()).frame(false).font(body())
-                        .hint_text(egui::RichText::new(&s.placeholder).color(FAINT)).margin(Margin::symmetric(4, 6))
-                        .desired_width(text_r.width() - 8.0);
-                    let resp = ui.put(text_r, edit);
-                    if st.focus_search {
-                        resp.request_focus();
-                        st.focus_search = false;
-                    }
-                    if !s.key.is_empty() && st.search.is_empty() && !focused {
-                        ui.painter().text(pos2(fr.max.x - 8.0, fr.center().y), egui::Align2::RIGHT_CENTER, &s.key, meta(), FAINT);
-                    }
+                    Self::lsheet_search(ui, st, s, sw);
                 }
                 if spec.search.is_some() { ui.add_space(SPACE_XS); }
                 for m in spec.menus.iter().rev().filter(|m| !m.left) {
@@ -1278,6 +1263,30 @@ impl Ui {
                 }
             });
         });
+    }
+
+    fn lsheet_search(ui: &mut egui::Ui, st: &mut LargeSheet, s: &Search, sw: f32) {
+        let (fr, _) = ui.allocate_exact_size(vec2(sw, CONTROL_H), Sense::hover());
+        let focused = ui.memory(|m| m.has_focus(search_id()));
+        ui.painter().rect_filled(fr, CornerRadius::same(R_CONTROL), FIELD);
+        ui.painter().rect_stroke(fr, CornerRadius::same(R_CONTROL),
+                                 Stroke::new(1.0_f32, if focused { ACCENT } else { EDGE }), egui::StrokeKind::Inside);
+        // The magnifier.
+        let mc = pos2(fr.min.x + 14.0, fr.center().y - 1.0);
+        ui.painter().circle_stroke(mc, 4.0, Stroke::new(1.2_f32, FAINT));
+        ui.painter().line_segment([mc + vec2(3.0, 3.0), mc + vec2(6.0, 6.0)], Stroke::new(1.2_f32, FAINT));
+        let text_r = Rect::from_min_max(pos2(fr.min.x + 24.0, fr.min.y), pos2(fr.max.x - 6.0, fr.max.y));
+        let edit = egui::TextEdit::singleline(&mut st.search).id(search_id()).frame(false).font(body())
+            .hint_text(egui::RichText::new(&s.placeholder).color(FAINT)).margin(Margin::symmetric(4, 6))
+            .desired_width(text_r.width() - 8.0);
+        let resp = ui.put(text_r, edit);
+        if st.focus_search {
+            resp.request_focus();
+            st.focus_search = false;
+        }
+        if !s.key.is_empty() && st.search.is_empty() && !focused {
+            ui.painter().text(pos2(fr.max.x - 8.0, fr.center().y), egui::Align2::RIGHT_CENTER, &s.key, meta(), FAINT);
+        }
     }
 
     fn lsheet_footer(ui: &mut egui::Ui, f: &Footer, fr: Rect, out: &mut Vec<String>) {
@@ -1292,7 +1301,11 @@ impl Ui {
                 ui.painter().galley(pos2(r.min.x, r.center().y - g.size().y / 2.0), g, ink);
                 if resp.clicked() { out.push(format!("verb{SEP}{}", l.id)); }
             }
-            if !f.hint.is_empty() {
+            if let Some(action) = &f.action {
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if button(ui, action, None) { out.push(format!("verb{SEP}{}", action.id)); }
+                });
+            } else if !f.hint.is_empty() {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     ui.label(egui::RichText::new(&f.hint).font(meta()).color(FAINT));
                 });
@@ -1402,21 +1415,6 @@ mod tests {
         let available = Rect::from_min_max(pos2(0., TOP_H), screen.max);
         let sheet = sheet_bounds(available, 1100., 1.);
         assert_eq!(sheet.size(), vec2(1100., 760.));
-    }
-
-    #[test]
-    fn start_promotes_only_the_action_for_the_current_selection() {
-        let mut sheet = LargeSheet::default();
-        for (focus, header, detail) in [("tpl:blank", 0, 1), ("continue", 1, 0), ("", 1, 0)] {
-            let mut spec: Spec = serde_json::from_str(r#"{"id":"start",
-                "verbs":[{"id":"new","role":1}],
-                "detail":{"blocks":[{"kind":"buttons","buttons":[{"id":"open","role":1}]}]}}"#).unwrap();
-            spec.focus = Some(focus.to_owned());
-            sheet.set(Some(spec));
-            let drawn = sheet.spec.as_ref().unwrap();
-            assert_eq!(drawn.verbs[0].role, header);
-            assert_eq!(drawn.detail.as_ref().unwrap().blocks[0].buttons[0].role, detail);
-        }
     }
 
     #[test]

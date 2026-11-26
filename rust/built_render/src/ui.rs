@@ -1393,6 +1393,12 @@ impl Ui {
                     ui.spacing_mut().interact_size.y = 28.0;
                     ui.horizontal(|ui| {
                         ui.spacing_mut().item_spacing = vec2(SPACE_XS, 0.0);
+                        ui.allocate_ui_with_layout(vec2(68., CONTROL_H), egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                            let choices = ["m", "cm", "mm", "ft-in"];
+                            if let (Some(i), _) = kit::select(ui, "document-units", &self.units, &choices) {
+                                clicked = Some(format!("start:units{}{}", crate::start_host::SEP, i));
+                            }
+                        });
                         let icon = self.groups.iter().flatten().find(|t| t.id == self.active).and_then(|t| t.icon.clone())
                             .or_else(|| self.icons.get(&self.active).cloned());
                         if let Some(tex) = icon {
@@ -1521,11 +1527,11 @@ impl Ui {
                                     }
                                 }
                                 ui.add_space(SPACE_XS);
-                                if menu_row(ui, &(String::new(), "New project".into(), "⌘N".into(), "check".into(), -1, true)) {
+                                if menu_row(ui, &(String::new(), "New model".into(), "⌘N".into(), "check".into(), -1, true)) {
                                     clicked = Some("proj:new".into());
                                 }
                                 if let Some(i) = docs.iter().position(|d| d.1) {
-                                    if menu_row(ui, &(String::new(), "Close project".into(), "⌘W".into(), "check".into(), -1, true)) {
+                                    if menu_row(ui, &(String::new(), "Close model".into(), "⌘W".into(), "check".into(), -1, true)) {
                                         clicked = Some(format!("proj:close:{i}"));
                                     }
                                 }
