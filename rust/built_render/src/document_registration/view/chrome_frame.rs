@@ -79,6 +79,12 @@ fn attach<'py>(a: &Args<'py>) -> Reply<'py> {
             renderer.call_method1("ui_set_dock_width", (width,))?;
         }
     }
+    // The columns the user last chose come back with the dock.
+    if own(&view, "_ui_lens")?.is_none() {
+        let (lens, mask) = stored_columns(py)?;
+        view.setattr("_ui_lens", lens)?;
+        view.setattr("_ui_columns", mask)?;
+    }
     view.setattr("_ui_tools_sent", false)?;
     view.setattr("_ui_attached", true)?;
     let source = view.getattr("source_viewport")?;
@@ -94,26 +100,13 @@ fn lens_of<'py>(view: &Obj<'py>) -> Reply<'py> {
         None => 0.into_bound_py_any(view.py())?,
     })
 }
-fn wide<'py>(py: Python<'py>, lens: &Obj<'py>) -> PyResult<bool> {
-    ui(py)?.getattr("WIDE_LENSES")?.contains(lens)
-}
-
-/// The dock width for lens `lens`: the user's width for Filing; for the
-/// wide sets the width last dragged there, at least `WIDE_DOCK` and never
-/// narrower than the user's own.
+/// The dock's width: the one the user set by dragging its inner edge. The
+/// tree's column presets (`lens`) never change it.
 pub(super) fn dock_width<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let store = settings(a.get_item(1)?)?;
     let own = number(&store.call_method1("value", ("ui/dock_width", 300.0))?, true)?.unwrap_or(300.0);
-    if !wide(py, &a.get_item(0)?)? {
-        return own.into_bound_py_any(py);
-    }
-    let wide_dock = ui(py)?.getattr("WIDE_DOCK")?;
-    let wide = match number(&store.call_method1("value", ("ui/dock_width_wide", &wide_dock))?, true)? {
-        Some(wide) => wide,
-        None => wide_dock.extract()?,
-    };
-    own.max(wide).into_bound_py_any(py)
+    own.into_bound_py_any(py)
 }
 
 fn apply_dock_width<'py>(a: &Args<'py>) -> Reply<'py> {
@@ -127,19 +120,44 @@ fn apply_dock_width<'py>(a: &Args<'py>) -> Reply<'py> {
     Ok(none(py))
 }
 
-/// The grip let go (or double-clicked): keep the width for the column set
-/// it was dragged in, so Filing comes back to the user's width.
+/// The grip let go (or double-clicked): keep the width, per user.
 fn keep_dock_width<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let (view, arg) = (a.get_item(0)?, a.get_item(1)?);
+    let arg = a.get_item(1)?;
     let store = settings(a.get_item(2)?)?;
     let given = if arg.is_truthy()? { arg } else { 300.into_bound_py_any(py)? };
     let Some(width) = number(&given, false)? else {
         return Ok(none(py));
     };
-    let lens = if view.is_none() { 0.into_bound_py_any(py)? } else { lens_of(&view)? };
-    store.call_method1("setValue", (if wide(py, &lens)? { "ui/dock_width_wide" } else { "ui/dock_width" }, width))?;
+    store.call_method1("setValue", ("ui/dock_width", width))?;
     Ok(none(py))
+}
+
+/// The tree's columns as last chosen ("preset" or "preset:mask"), per user.
+fn stored_columns<'py>(py: Python<'py>) -> PyResult<(i64, Option<i64>)> {
+    let stored = settings(none(py))?.call_method1("value", ("ui/dock_columns", ""))?;
+    let text = if stored.is_none() { String::new() } else { stored.str()?.extract::<String>()? };
+    let (lens, mask) = text.split_once(':').map_or((text.as_str(), None), |(lens, mask)| (lens, Some(mask)));
+    let lens = lens.trim().parse::<i64>().ok().filter(|lens| (0..=2).contains(lens)).unwrap_or(0);
+    Ok((lens, mask.and_then(|mask| mask.trim().parse::<i64>().ok()).filter(|mask| (0..=0xffff).contains(mask))))
+}
+
+/// Keep the columns the dock reported: the preset and, when the user
+/// changed its columns, their mask.
+pub(super) fn keep_columns(view: &Obj<'_>) -> PyResult<()> {
+    let py = view.py();
+    // Only a dock on screen speaks for the user.
+    if !truthy(view, "_ui_attached")? {
+        return Ok(());
+    }
+    let lens: i64 = lens_of(view)?.extract().unwrap_or(0);
+    let mask = own(view, "_ui_columns")?.filter(|mask| !mask.is_none());
+    let text = match mask {
+        Some(mask) => format!("{lens}:{}", mask.str()?.extract::<String>()?),
+        None => lens.to_string(),
+    };
+    settings(none(py))?.call_method1("setValue", ("ui/dock_columns", text))?;
+    Ok(())
 }
 
 /// Once the window has built its tool actions (after the first view).

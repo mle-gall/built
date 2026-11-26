@@ -83,8 +83,40 @@ pub(super) fn reveal_offset(
     Some((index as f32 * pitch - (height - pitch) * 0.5).max(0.0))
 }
 
+/// A row of the document rather than of the model's content: saved
+/// scenes, sheets and project files. They follow the model under a divider.
+pub(super) fn document_row(row: &Node) -> bool {
+    matches!(
+        row.key.split_once(':').map(|(kind, _)| kind),
+        Some("saved-scenes" | "saved-scene" | "sheet-pages" | "sheet-page" | "sheet-frame" | "project-files" | "project-file")
+    )
+}
+
+/// The glyph (`kit::row_glyph`) that tells this row's kind apart.
+pub(super) fn row_kind(row: &Node) -> &'static str {
+    match row.key.split_once(':').map_or("", |(kind, _)| kind) {
+        "preview-tag" => "tag",
+        "preview-folder" => "folder",
+        "geometry" => "loose",
+        "sections" | "section" => "section",
+        "saved-scenes" | "saved-scene" => "scene",
+        "sheet-pages" | "sheet-page" | "sheet-frame" => "sheet",
+        _ => match row.icon.as_str() {
+            "component" => "component",
+            "section" => "section",
+            "image" => "image",
+            "link" => "link",
+            "folder" => "folder",
+            _ => "group",
+        },
+    }
+}
+
 fn category(row: &Node) -> u8 {
-    if row.key == "geometry:loose" {
+    if document_row(row) {
+        // Scenes and sheets stay after the model's rows under every sort.
+        6
+    } else if row.key == "geometry:loose" {
         0
     } else if row.icon == "folder" || row.key.starts_with("n:folder:") {
         1
@@ -139,6 +171,29 @@ mod tests {
             eye,
             lock,
             ..Default::default()
+        }
+    }
+
+    #[test]
+    fn each_kind_of_row_has_its_own_glyph_and_document_rows_come_last() {
+        let kinds: Vec<_> = ["preview-tag:a", "preview-folder:f", "geometry:loose", "sections:all", "saved-scenes:all",
+                             "sheet-pages:all", "i:group"].iter().map(|key| row_kind(&node(key, "", 0, 1, 0))).collect();
+        assert_eq!(kinds, ["tag", "folder", "loose", "section", "scene", "sheet", "group"]);
+        let mut distinct = kinds.clone();
+        distinct.sort();
+        distinct.dedup();
+        assert_eq!(distinct.len(), kinds.len());
+        let mut component = node("i:c", "", 0, 1, 0);
+        component.icon = "component".into();
+        assert_eq!(row_kind(&component), "component");
+        // Scenes and sheets follow the model's rows under every sort, so one divider separates them.
+        let rows = [node("saved-scenes:all", "A scenes", 0, 1, 0), node("preview-tag:z", "Zinc", 0, 1, 0),
+                    node("sheet-pages:all", "B sheets", 0, 1, 0), node("preview-tag:a", "Alu", 0, 1, 0)];
+        for sort in [Sort::Name, Sort::NameDescending, Sort::Visible, Sort::Locked] {
+            let order = sort.order(&rows);
+            let first_document = order.iter().position(|&i| document_row(&rows[i])).unwrap();
+            assert!(order[first_document..].iter().all(|&i| document_row(&rows[i])), "{order:?}");
+            assert_eq!(first_document, 2);
         }
     }
 

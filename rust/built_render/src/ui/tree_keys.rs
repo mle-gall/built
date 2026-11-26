@@ -1,5 +1,5 @@
 //! Keys for the focused occurrence or section row in the Project tree.
-use super::{Column, Lens};
+use super::Column;
 
 impl Column {
     pub(super) fn rename_request(&self, selected: bool) -> String {
@@ -17,10 +17,8 @@ impl Column {
             return false;
         };
         (name == "Escape" || self.nodes.iter().any(|n| &n.key == key))
-            && (self.lens == Lens::Filing
-                || (self.lens == Lens::Drawing
-                    && key.starts_with("preview-tag:")
-                    && matches!(name, "Delete" | "Backspace")))
+            // A focused tag only takes the keys that delete it.
+            && (!key.starts_with("preview-tag:") || matches!(name, "Delete" | "Backspace"))
             && self.mode.is_empty()
             && self.renaming.is_none()
             && self.row_menu.is_none()
@@ -52,7 +50,7 @@ impl Column {
         let node = &self.nodes[self.ordered[pos]];
         let plane = key.starts_with("section:");
         match name {
-            "Delete" | "Backspace" if self.lens == Lens::Drawing => {
+            "Delete" | "Backspace" if key.starts_with("preview-tag:") => {
                 Some(format!("tree:deletetag\u{1f}{key}"))
             }
             "Delete" | "Backspace" if plane || node.local_placement => {

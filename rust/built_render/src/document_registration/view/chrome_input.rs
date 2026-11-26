@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! The chrome's input (`views.wgpu_ui`): keys, the wheel and the pointer
 //! offered to egui before the tools; and the module itself, built here.
-use super::chrome_frame::{own, render, truthy, ui};
+use super::chrome_frame::{render, truthy, ui};
 use super::*;
 
 fn input<'py>(py: Python<'py>, name: &str) -> Reply<'py> {
@@ -52,7 +52,8 @@ pub(super) fn opens_commands<'py>(a: &Args<'py>) -> Reply<'py> {
 pub(super) fn problem_key<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let (view, event) = (a.get_item(0)?, a.get_item(1)?);
-    let export = own(&view, "_ui_lens")?.is_some_and(|lens| lens.eq(2).unwrap_or(false));
+    // The keys step through the export checks while the dock shows them.
+    let export = super::chrome_tree::wants_readiness(&view)?;
     if !export || !event.call_method0("modifiers")?.bitand(input(py, "ControlModifier")?)?.is_truthy()? {
         return 0.into_bound_py_any(py);
     }
@@ -339,8 +340,6 @@ pub(super) fn install_module(module: &Bound<PyModule>) -> PyResult<()> {
     modules::import_names(module, "plugins._widget_language", &[("FONT", "FONT")])?;
     // Drawing and Export have room for previews and a readiness checklist,
     // and reserve room for their columns.
-    module.add("WIDE_DOCK", 430.0)?;
-    module.add("WIDE_LENSES", (1, 2))?;
     // Window buttons' room at the top left (mac_glass: 14 + three buttons).
     module.add("LIGHTS_ROOM", 86.0)?;
     // The docked top bar (ui.rs TOP_H): its empty parts move the window.

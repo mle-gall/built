@@ -1980,8 +1980,9 @@ fn set_mode(view: &Bound<'_, PyAny>, win: &Bound<'_, PyAny>, mode: &str) -> PyRe
     }
     let mut mode = mode;
     if mode == "problems" || mode == "deliveries" {
+        // The Export columns: a preset of the same tree, at the same width.
         view.setattr("_ui_lens", 2)?;
-        ui(py)?.call_method1("apply_dock_width", (view,))?;
+        view.setattr("_ui_columns", py.None())?;
         mode = "";
     }
     view.setattr("_ui_mode", mode)?;

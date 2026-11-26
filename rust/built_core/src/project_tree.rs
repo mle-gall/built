@@ -229,7 +229,8 @@ fn loose(scene: &Bound<'_, PyAny>, depth: usize, query: &str) -> PyResult<Option
         faces + edges,
         selected,
     );
-    r.0[3] = format!("{faces} faces · {edges} edges");
+    let count = |n: usize, one: &str, many: &str| format!("{n} {}", if n == 1 { one } else { many });
+    r.0[3] = format!("{} · {}", count(faces, "face", "faces"), count(edges, "edge", "edges"));
     r.1[5] = i64::from(loose_visible(&mesh)?);
     r.1[6] = i64::from(
         scene

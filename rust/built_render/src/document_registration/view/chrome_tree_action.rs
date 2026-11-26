@@ -141,7 +141,7 @@ fn chip<'py>(win: &Obj<'py>, view: &Obj<'py>, action: &str) -> PyResult<()> {
         module.call_method1("_measure", (view, win))?;
         view.setattr("_ui_tree_sig", py.None())?;
     } else if key == "solidrepair" || key.starts_with("solidfault:") {
-        let active = key.starts_with("solidfault:active/") && own(view, "_ui_lens")?.is_some_and(|lens| lens.eq(2).unwrap_or(false));
+        let active = key.starts_with("solidfault:active/");
         if !active && groups.len() != 1 {
             return Ok(());
         }
@@ -847,6 +847,9 @@ impl<'a, 'py> Row<'a, 'py> {
             let [targets, patch] = unpack::<2>(&loads(py, &rk)?)?;
             let value = py.import("json")?.call_method1("dumps", (patch,))?;
             let result = self.core("edit_tag", fields!(py; "tags" => targets, "field" => "style", "value" => value))?;
+            // The inspector applies each edit at once: answered either way, it
+            // drops its pending edit and shows what the document holds.
+            self.renderer()?.call_method1("ui_drawing_applied", (&self.verb, ""))?;
             if result.is_none() {
                 return Ok(());
             }
@@ -858,13 +861,29 @@ impl<'a, 'py> Row<'a, 'py> {
                     return self.flash(reason.str()?.to_str()?);
                 }
             }
-            self.renderer()?.call_method1("ui_drawing_applied", (&self.verb, ""))?;
             self.rebuild()?;
             self.changed()?;
         } else if self.is(&["lens"]) {
+            // A column preset: the same rows and the same dock width.
             let lens = py.get_type::<pyo3::types::PyInt>().call1((if rk.is_empty() { 0.into_bound_py_any(py)? } else { rk.as_str().into_bound_py_any(py)? },))?;
             view.setattr("_ui_lens", lens)?;
-            module.call_method1("apply_dock_width", (view,))?;
+            view.setattr("_ui_columns", py.None())?;
+            super::chrome_frame::keep_columns(view)?;
+            self.rebuild()?;
+        } else if self.is(&["columns"]) {
+            // The user's own choice of columns, as the dock's mask.
+            let mask = py.get_type::<pyo3::types::PyInt>().call1((if rk.is_empty() { 0.into_bound_py_any(py)? } else { rk.as_str().into_bound_py_any(py)? },))?;
+            view.setattr("_ui_columns", mask)?;
+            super::chrome_frame::keep_columns(view)?;
+            self.rebuild()?;
+        } else if self.is(&["readiness"]) {
+            // The dock shows the export checks (or stopped showing them).
+            let asked = rk == "1";
+            view.setattr("_ui_readiness", asked)?;
+            if !asked && self.renderer()?.hasattr("ui_panel_set")? {
+                self.renderer()?.call_method1("ui_panel_set", ("readiness", "null"))?;
+            }
+            view.setattr("_ui_insp_sig", py.None())?;
             self.rebuild()?;
         } else if self.is(&["print", "color", "linetype", "weight", "hatch"]) && named.is_some() && !self.linked {
             let tag = self.data.get_item("recipes")?.get_item(named.as_deref())?.call_method1("get", ("tag",))?;

@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! Join the retained record/IDS/solid check results to the selected delivery.
 //! Count distinct placements rather than checks so two defects never double-count a wall.
-use crate::project_tree::{row, Row};
+//! The report annotates the Project tree's rows (their Readiness cell) and
+//! feeds the Fix checklist; it never adds, removes or reorders a row.
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use serde_json::{json, Value};
@@ -16,9 +17,7 @@ pub(crate) fn export_readiness(
     records: &Bound<'_, PyDict>,
     preferred: &str,
     rules: &Bound<'_, PyAny>,
-    expanded: HashSet<String>,
-    rows: Vec<Row>,
-) -> PyResult<(Vec<Row>, String)> {
+) -> PyResult<String> {
     let deliveries: Vec<(String, String)> = records
         .iter()
         .map(|(k, v)| Ok((k.extract()?, v.get_item("name")?.extract()?)))
@@ -129,9 +128,37 @@ pub(crate) fn export_readiness(
             eligible.insert(g.as_ptr() as usize, g);
         }
     }
-    let mut direct_checks = BTreeMap::<String, Failures>::new();
+    // The rows a placement counts under: its node and the nodes above it,
+    // or its tag (and the "Not filed" row) when it is not filed.
+    let rows_of = |group: &Bound<'_, PyAny>| -> PyResult<Vec<String>> {
+        let node: Option<String> = membership
+            .call_method1("get", (group.as_ptr() as usize,))?
+            .extract()?;
+        let mut rows = vec!["*".to_owned()];
+        let mut k = node;
+        if k.is_none() {
+            let tag = group
+                .getattr("layer")?
+                .extract::<Option<String>>()?
+                .unwrap_or_else(|| "Layer 0".into());
+            rows.push(format!("preview-tag:{tag}"));
+            rows.push("n:".into());
+        }
+        while let Some(key) = k {
+            rows.push(format!("n:{key}"));
+            k = by_node.get_item(key)?.get_item("parent")?.extract()?;
+        }
+        Ok(rows)
+    };
+    let mut in_scope = HashMap::<String, usize>::new();
+    for group in eligible.values() {
+        for key in rows_of(group)? {
+            *in_scope.entry(key).or_default() += 1;
+        }
+    }
     let mut checks = BTreeMap::<String, Failures>::new();
     let mut blockers = HashMap::<String, HashSet<usize>>::new();
+    let mut items = BTreeMap::<String, usize>::new();
     for rule in rules.try_iter()? {
         let r = rule?;
         let severity: String = r.get_item(0)?.extract()?;
@@ -206,21 +233,10 @@ pub(crate) fn export_readiness(
                 .getattr("name")?
                 .extract::<Option<String>>()?
                 .unwrap_or_else(|| "Group".into());
-            let node: Option<String> = membership.call_method1("get", (id,))?.extract()?;
-            let mut parents = vec!["*".to_owned()];
-            let mut k = node;
-            if k.is_none() {
-                let tag = owner
-                    .getattr("layer")?
-                    .extract::<Option<String>>()?
-                    .unwrap_or_else(|| "Layer 0".into());
-                parents.push(format!("preview-tag:{tag}"));
-                parents.push("n:".into());
-            }
-            while let Some(key) = k {
-                parents.push(format!("n:{key}"));
-                k = by_node.get_item(key)?.get_item("parent")?.extract()?;
-            }
+            let parents = rows_of(&owner)?;
+            // The placement's own row, by the tree's row id.
+            let row_id: String = tree.call_method1("row_id", (&owner,))?.extract()?;
+            *items.entry(row_id).or_default() += 1;
             let mut fix = String::new();
             if code == "status" && !obj.getattr("locked")?.is_truthy()? {
                 let rec = obj.getattr("ifc")?;
@@ -233,15 +249,6 @@ pub(crate) fn export_readiness(
             }
             let rule_key = format!("{code}/{fix}");
             let element = json!({"name":name,"path":path,"fix":fix,"visible":!obj.getattr("hidden")?.is_truthy()?});
-            if let Some(key) = parents.get(1) {
-                direct_checks
-                    .entry(key.clone())
-                    .or_default()
-                    .entry(rule_key.clone())
-                    .or_insert_with(|| (label.clone(), Vec::new()))
-                    .1
-                    .push(element.clone());
-            }
             for key in parents {
                 blockers.entry(key.clone()).or_default().insert(id);
                 checks
@@ -258,66 +265,12 @@ pub(crate) fn export_readiness(
     notes.dedup();
     let blocked = blockers.get("*").map_or(0, HashSet::len);
     let total = eligible.len();
-    let mut result = Vec::new();
-    let mut in_catalog = false;
-    for (text, mut flags) in rows {
-        let key = text[0].clone();
-        if flags[0] == 0 {
-            in_catalog = key.starts_with("n:");
-        }
-        if in_catalog && matches!(flags[4], 1..=4) {
-            continue;
-        }
-        if (flags[4] == 0 && key.starts_with("n:")) || key.starts_with("preview-tag:") {
-            flags[2] = blockers.get(&key).map_or(0, HashSet::len) as i64;
-            let depth = flags[0] as usize;
-            let open = flags[8] != 0 || expanded.contains(&key);
-            flags[8] = open as i64;
-            if flags[2] > 0 {
-                flags[7] = 1;
-            }
-            result.push((text, flags));
-            if open {
-                if let Some(rules) = direct_checks.get(&key) {
-                    for (id, (label, items)) in rules {
-                        let check = format!("check:{}", json!([key, id]));
-                        let open = expanded.contains(&check);
-                        let mut head = row(
-                            check,
-                            format!("{label} ({})", items.len()),
-                            "",
-                            "",
-                            depth + 1,
-                            9,
-                            items.len(),
-                            0,
-                        );
-                        head.1[7] = 1;
-                        head.1[8] = open as i64;
-                        result.push(head);
-                        if open {
-                            for item in items {
-                                let mut placement = row(
-                                    format!("exportitem:{}", item["path"]),
-                                    item["name"].as_str().unwrap_or("Group").into(),
-                                    "",
-                                    "group",
-                                    depth + 2,
-                                    10,
-                                    0,
-                                    0,
-                                );
-                                if let Some(visible) = item["visible"].as_bool() { placement.1[5] = i64::from(visible); }
-                                result.push(placement);
-                            }
-                        }
-                    }
-                }
-            }
-        } else {
-            result.push((text, flags));
-        }
-    }
-    let report = json!({"choices":deliveries,"active":active,"ready":total-blocked,"total":total,"checks":checks,"notes":notes});
-    Ok((result, report.to_string()))
+    // Per row: placements to fix and placements in the delivery's scope.
+    let rows: BTreeMap<&String, [usize; 2]> = in_scope
+        .iter()
+        .map(|(key, count)| (key, [blockers.get(key).map_or(0, HashSet::len), *count]))
+        .collect();
+    let report = json!({"choices":deliveries,"active":active,"scope":scope,"ready":total-blocked,"total":total,
+        "rows":rows,"items":items,"checks":checks,"notes":notes});
+    Ok(report.to_string())
 }

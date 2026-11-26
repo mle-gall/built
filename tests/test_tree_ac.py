@@ -227,7 +227,7 @@ def settings(tmp_path):
     st.sync()
 
 
-def test_drawing_and_export_widen_the_dock_and_filing_keeps_the_users_width(ui, settings):
+def test_the_dock_keeps_the_users_width_under_every_column_preset(ui, settings):
     scene, win, view, rows, act = ui
     settings.setValue("ui/dock_width", 320.0)
     seen = []
@@ -235,26 +235,43 @@ def test_drawing_and_export_widen_the_dock_and_filing_keeps_the_users_width(ui, 
     for lens in (1, 2, 0):
         view._ui_lens = lens
         wu.apply_dock_width(view, settings)
-    assert seen == [wu.WIDE_DOCK, wu.WIDE_DOCK, 320.0]
-    # A width dragged in Drawing is kept for Drawing only.
+    assert seen == [320.0, 320.0, 320.0]
+    # A width dragged with the Drawing columns showing is the one width.
     view._ui_lens = 1
     wu.keep_dock_width(view, "430", settings)
-    assert float(settings.value("ui/dock_width")) == 320.0
-    assert wu.dock_width(1, settings) == 430.0 and wu.dock_width(0, settings) == 320.0
-    # Never narrower than the user's own width.
-    settings.setValue("ui/dock_width", 480.0)
-    assert wu.dock_width(1, settings) == 480.0
+    assert float(settings.value("ui/dock_width")) == 430.0
+    assert [wu.dock_width(lens, settings) for lens in (0, 1, 2)] == [430.0, 430.0, 430.0]
 
 
-def test_lens_action_sends_the_width(ui, monkeypatch):
+def test_a_column_preset_changes_no_row_and_no_width(ui):
     scene, win, view, rows, act = ui
     seen = []
     view.renderer.ui_set_dock_width = seen.append
-    monkeypatch.setattr(wu, "dock_width", lambda lens, settings=None: 390.0 if lens == 1 else 300.0)
-    act("lens", "1")
-    act("lens", "0")
-    assert seen == [390.0, 300.0]
-    assert view.renderer.calls["ui_set_lens"] == (0,)
+    act("toggle", "n:" + _key(view, "Paths"))
+    filing = view.renderer.calls["ui_set_tree"][0]
+    for lens in ("1", "2", "0"):
+        act("lens", lens)
+        assert view.renderer.calls["ui_set_tree"][0] == filing
+        assert view.renderer.calls["ui_set_columns"] == (int(lens), None)
+    assert seen == []
+    # The user's own choice of columns goes back to the dock with the preset.
+    act("columns", "37")
+    assert view.renderer.calls["ui_set_columns"] == (0, 37)
+    act("lens", "2")
+    assert view.renderer.calls["ui_set_columns"] == (2, None)
+
+
+def test_the_inspector_of_a_selection_is_the_same_under_every_column_preset(ui):
+    scene, win, view, rows, act = ui
+    act("node", "n:" + _key(view, "Paths"))
+    seen = []
+    for lens in ("0", "1", "2", "0"):
+        act("lens", lens)
+        view._ui_insp_sig = None
+        wu._inspector(view, win)
+        seen.append((view.renderer.calls["ui_set_inspector"], view.renderer.calls.get("ui_set_identity")))
+    assert "Node" in dict(seen[0][0][1])
+    assert seen[1] == seen[0] and seen[2] == seen[0] and seen[3] == seen[0]
 
 
 def test_drawing_cells_carry_colour_line_weight_print(ui):
