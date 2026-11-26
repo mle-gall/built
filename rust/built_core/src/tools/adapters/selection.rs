@@ -3,12 +3,35 @@
 use super::*;
 use pyo3::exceptions::{PyAttributeError, PyKeyError, PyRuntimeError, PyTypeError, PyValueError};
 
+/// The elements at `indices` (of `kind`, the active mesh's) the user may
+/// select. Many of them are asked of the store in one pass
+/// (`selectable_mask`): `entity_selectable` one by one was most of a
+/// window selection over a big mesh.
 fn visible_elements<'py>(
     indices: Obj<'py>,
     elements: Obj<'py>,
     selectable: &Obj<'py>,
+    scene: &Obj<'py>,
+    store: &Obj<'py>,
+    kind: &str,
 ) -> PyResult<Bound<'py, PyList>> {
-    let result = PyList::empty(indices.py());
+    let py = indices.py();
+    let result = PyList::empty(py);
+    let at: Vec<usize> = indices.extract()?;
+    if at.len() > 256 {
+        let all: Vec<u128> = store.call_method1("keys", (kind,))?.extract()?;
+        if at.iter().all(|&i| i < all.len()) {
+            let keys: Vec<u128> = at.iter().map(|&i| all[i]).collect();
+            if let Some(mask) = crate::model::scene_api::selectable_mask(scene, kind, keys)? {
+                for (i, ok) in at.into_iter().zip(mask) {
+                    if ok {
+                        result.append(elements.get_item(i)?)?;
+                    }
+                }
+                return Ok(result);
+            }
+        }
+    }
     for index in indices.try_iter()? {
         let element = elements.get_item(index?)?;
         if selectable.call1((&element,))?.is_truthy()? {
@@ -49,8 +72,8 @@ fn box_loose_arrays<'py>(a: &Args<'py>) -> Reply<'py> {
     let [edges, faces] = unpack::<2>(&masks)?;
     let selectable = scene.getattr("entity_selectable")?;
     (
-        visible_elements(edges, mesh.getattr("edges")?, &selectable)?,
-        visible_elements(faces, mesh.getattr("faces")?, &selectable)?,
+        visible_elements(edges, mesh.getattr("edges")?, &selectable, &scene, &store, "edge")?,
+        visible_elements(faces, mesh.getattr("faces")?, &selectable, &scene, &store, "face")?,
     )
         .into_bound_py_any(py)
 }
@@ -158,15 +181,24 @@ fn box_group_fast<'py>(a: &Args<'py>) -> Reply<'py> {
     }
 }
 
+/// Loose meshes past this many faces are box-tested by the store itself.
+const LARGE_MESH_FACES: usize = 20_000;
+
 fn box_select<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let module = imported(py, "tools.select_host")?;
     let [vp, rect, crossing, mode] = unpack::<4>(a.as_any())?;
     let scene = vp.getattr("scene")?;
     let picked = PyList::empty(py);
-    let mut fast = module.call_method1("_box_loose_fast", (&vp, &rect, &crossing))?;
+    // A big mesh goes straight to the store's own box test (one native
+    // pass over its live topology): the pick-index path builds that index
+    // face by face on first use and walks every hit edge and its faces,
+    // seconds for a window over a 200k-face mesh.
+    let large = scene.getattr_opt("mesh")?.map(|m| m.getattr("faces").and_then(|f| f.len())).transpose()?.unwrap_or(0) > LARGE_MESH_FACES;
+    let order = if large { ["_box_loose_arrays", "_box_loose_fast"] } else { ["_box_loose_fast", "_box_loose_arrays"] };
+    let mut fast = module.call_method1(order[0], (&vp, &rect, &crossing))?;
     if fast.is_none() {
-        fast = module.call_method1("_box_loose_arrays", (&vp, &rect, &crossing))?;
+        fast = module.call_method1(order[1], (&vp, &rect, &crossing))?;
     }
     let records = |loose: bool| {
         module.call_method(
