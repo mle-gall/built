@@ -7,6 +7,7 @@
 //! control and never a fill.
 mod bevel_curve;
 pub use bevel_curve::CurveEditor;
+pub mod view_gizmo;
 use super::tokens::*;
 use egui::{pos2, vec2, Color32, CornerRadius, Pos2, Rect, Sense, Stroke};
 

@@ -8,7 +8,9 @@ struct Out { @builtin(position) position: vec4f, @location(0) y: f32 }
 @fragment fn fs(i: Out) -> @location(0) vec4f {
  if style.background.a < 0. { return vec4f(0.); }
  var c = style.background.rgb;
- if style.background.a > 0.5 {
+ // ground.a: a parallel view along an axis (an elevation, a plan) draws on
+ // the flat background, as a drawing does (UX pass 2, M32).
+ if style.background.a > 0.5 && style.ground.a < 0.5 {
   let hy = style.sky.a;
   let sh = mix(style.sky.rgb,vec3f(1),0.55);
   let gh = mix(style.ground.rgb,vec3f(1),0.30);

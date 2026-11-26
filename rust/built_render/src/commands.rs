@@ -22,6 +22,8 @@ use Target::*;
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Surface {
     ViewMenu,
+    /// The top bar's navigation cluster (M04): camera tools, then the
+    /// eye-level tools after a divider.
     NavigationBar,
     DisplayBar,
     RegistryOnly,
@@ -66,13 +68,13 @@ impl Command {
 const COMMANDS: &[Command] = &[
     command("orbit", "Orbit", "orbit", &["O"], "nav", Nav).on(NavigationBar),
     command("pan", "Pan", "pan", &["H"], "nav", Nav).on(NavigationBar),
-    command("zoom", "Zoom", "zoom", &["Z"], "nav", Nav),
-    command("zoom_window", "Zoom Window", "zoom_window", &[], "nav", Nav),
+    command("zoom", "Zoom", "zoom", &["Z"], "nav", Nav).on(NavigationBar),
+    command("zoom_window", "Zoom Window", "zoom_window", &[], "nav", Nav).on(NavigationBar),
     command("zoom_extents", "Zoom Extents", "zoom_extents", &["Shift+Z", "F2"], "nav", Method("_on_zoom_extents")).on(NavigationBar),
-    command("zoom_selection", "Zoom Selection", "zoom_selection", &["Ctrl+Alt+Z"], "nav", Method("_on_zoom_selection")),
-    command("look_around", "Look Around", "look_around", &[], "walkthrough", Tool),
-    command("walk", "Walk", "walk", &[], "walkthrough", Tool),
-    command("position_camera", "Position Camera", "position_camera", &[], "walkthrough", Tool),
+    command("zoom_selection", "Zoom Selection", "zoom_selection", &["Ctrl+Alt+Z"], "nav", Method("_on_zoom_selection")).on(NavigationBar),
+    command("look_around", "Look Around", "look_around", &[], "walkthrough", Tool).on(NavigationBar),
+    command("walk", "Walk", "walk", &[], "walkthrough", Tool).on(NavigationBar),
+    command("position_camera", "Position Camera", "position_camera", &[], "walkthrough", Tool).on(NavigationBar),
     command("xray", "X-ray", "xray", &["Alt+X"], "toggle", Xray).on(DisplayBar),
     command("axes", "Axes", "", &["Alt+A"], "toggle", Flag("_set_scene_visibility", "show_axes")),
     command("back_edges", "Back edges", "back_edges", &["K"], "toggle", Flag("_set_style_field", "back_edges")),
@@ -155,7 +157,8 @@ pub fn command_chrome(
 ) -> (Vec<Vec<crate::ui::Item>>, Menu) {
     let (active, projection, style, flags, selection) = snapshot;
     let translate = |s: &str| labels.get(s).cloned().unwrap_or_else(|| s.to_owned());
-    let mut cluster = vec![Vec::new(); 2];
+    // Navigation, eye-level tools, display toggles.
+    let mut cluster = vec![Vec::new(); 3];
     let mut menu: Menu = Vec::new();
     for c in COMMANDS {
         let (checked, enabled) = c.state(&active, &projection, &style, &flags, selection);
@@ -165,13 +168,16 @@ pub fn command_chrome(
             .unwrap_or((c.shortcuts.first().copied().unwrap_or(""), true));
         let label = translate(c.label);
         let cluster_group = match c.surface {
+            NavigationBar if c.group == "walkthrough" => Some(1),
             NavigationBar => Some(0),
-            DisplayBar => Some(1),
+            DisplayBar => Some(2),
             RegistryOnly => continue,
             Surface::ViewMenu => None,
         };
         let tip = if cluster_group.is_some() && !shortcut.is_empty() {
             format!("{label}    {shortcut}")
+        } else if cluster_group.is_some() {
+            label.clone()
         } else {
             shortcut.to_owned()
         };
@@ -210,6 +216,9 @@ pub fn activate_view_command(
     id: &str,
     snapshot: Snapshot,
 ) -> PyResult<bool> {
+    if let Some(drag) = id.strip_prefix(GIZMO_ORBIT) {
+        return gizmo_orbit(win, drag);
+    }
     let Some(c) = COMMANDS.iter().find(|c| c.id == id) else {
         return Ok(false);
     };
@@ -255,6 +264,11 @@ pub fn run_view_command(win: &Bound<'_, PyAny>, id: &str, on: bool) -> PyResult<
         Xray => win.call_method0("_toggle_xray")?,
         Shadows => win.call_method1("_on_toggle_shadows", (on,))?,
         Flag(method, field) => win.call_method1(method, (field, on))?,
+        // Zoom extents and fit selection ease into place (M03 item 5).
+        Method(method) if c.group == "nav" => {
+            crate::native_view_actions::glide_after(win, |_| win.call_method0(method).map(drop))?;
+            win.py().None().into_bound(win.py())
+        }
         Method(method) => win.call_method0(method)?,
         Chrome if id == "recent-activity" => {
             let view = win.getattr("_doc")?.getattr("stand_in")?;
@@ -266,6 +280,34 @@ pub fn run_view_command(win: &Bound<'_, PyAny>, id: &str, on: bool) -> PyResult<
             calls::run_action(win, id, &view)?
         }
     };
+    Ok(true)
+}
+
+/// The axis gizmo's drag: `gizmo_orbit:dx,dy` in logical pixels orbits the
+/// active view as a drag in the model does (UX pass 2, M03).
+pub const GIZMO_ORBIT: &str = "gizmo_orbit:";
+
+fn parse_drag(drag: &str) -> Option<(f64, f64)> {
+    let (dx, dy) = drag.split_once(',')?;
+    let (dx, dy) = (dx.trim().parse::<f64>().ok()?, dy.trim().parse::<f64>().ok()?);
+    (dx.is_finite() && dy.is_finite()).then_some((dx, dy))
+}
+
+fn gizmo_orbit(win: &Bound<'_, PyAny>, drag: &str) -> PyResult<bool> {
+    let Some((dx, mut dy)) = parse_drag(drag) else { return Ok(false) };
+    let vp = win.call_method0("_active_view")?;
+    if vp
+        .getattr_opt("_invert_orbit_y")?
+        .is_some_and(|v| v.is_truthy().unwrap_or(false))
+    {
+        dy = -dy;
+    }
+    if let Some(player) = win.getattr_opt("scene_player")?.filter(|p| !p.is_none()) {
+        player.call_method0("cancel")?;
+    }
+    let height = vp.call_method0("height")?;
+    vp.getattr("camera")?.call_method1("orbit", (dx, dy, height))?;
+    vp.call_method0("update")?;
     Ok(true)
 }
 
@@ -308,8 +350,9 @@ mod tests {
             command_chrome(Default::default(), Default::default(), Default::default());
         let ids =
             |items: &[crate::ui::Item]| items.iter().map(|row| row.0.clone()).collect::<Vec<_>>();
-        assert_eq!(ids(&bar[0]), ["orbit", "pan", "zoom_extents"]);
-        assert_eq!(ids(&bar[1]), ["xray", "hidden_geometry", "section_cuts"]);
+        assert_eq!(ids(&bar[0]), ["orbit", "pan", "zoom", "zoom_window", "zoom_extents", "zoom_selection"]);
+        assert_eq!(ids(&bar[1]), ["look_around", "walk", "position_camera"]);
+        assert_eq!(ids(&bar[2]), ["xray", "hidden_geometry", "section_cuts"]);
         let all: Vec<_> = bar
             .iter()
             .flatten()
@@ -320,10 +363,33 @@ mod tests {
             all.iter().map(|item| &item.0).collect::<HashSet<_>>().len(),
             all.len()
         );
-        assert!(menu
+        // The View menu no longer repeats the navigation row (M04).
+        assert!(!menu
             .iter()
-            .any(|(title, rows)| title == "Walkthrough" && ids(rows).contains(&"walk".into())));
+            .any(|(title, _)| title == "Navigation" || title == "Walkthrough"));
         assert_eq!(view_shortcut("Alt+X"), Some("xray"));
+    }
+
+    #[test]
+    fn every_navigation_tool_is_on_the_bar_with_a_named_tooltip() {
+        let (bar, _) = command_chrome(Default::default(), Default::default(), Default::default());
+        let nav: Vec<_> = bar[0].iter().chain(&bar[1]).collect();
+        assert_eq!(nav.len(), 9);
+        for item in nav {
+            assert!(!item.3.is_empty(), "{} has an icon", item.0);
+            assert!(item.2.starts_with(&item.1), "{} tooltip {:?} names it", item.0, item.2);
+        }
+        let zoom = bar[0].iter().find(|i| i.0 == "zoom").unwrap();
+        assert_eq!(zoom.2, "Zoom    Z");
+        assert_eq!(bar[1][1].2, "Walk");
+    }
+
+    #[test]
+    fn gizmo_drags_parse_only_finite_pairs() {
+        assert_eq!(parse_drag("4,-2.5"), Some((4., -2.5)));
+        assert_eq!(parse_drag("4"), None);
+        assert_eq!(parse_drag("nan,1"), None);
+        assert_eq!(parse_drag("a,b"), None);
     }
 
     #[test]

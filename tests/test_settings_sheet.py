@@ -114,10 +114,10 @@ def test_side_picks_a_section(win):
     frame(win)
     sheet = act(win, "side", "navigation")
     assert sheet["content"]["title"] == "Navigation"
-    assert captions(sheet) == ["Mouse", "Trackpad", "Tools"]
+    assert captions(sheet) == ["Mouse", "Trackpad", "Views", "Tools"]
     got = fields(sheet)
     assert {"invert_wheel", "invert_orbit", "look_sens", "trackpad_slide",
-            "cursor_style"} <= set(got)
+            "cursor_style", "auto_perspective"} <= set(got)
     assert {"touch_slide", "trackpad_inertia", "pinch_sensitivity"} <= set(got)
     # Field ids are unique in the whole sheet.
     ids = [r[0] for b in sheet["content"]["blocks"] if b["kind"] == "fields" for r in b["fields"]]

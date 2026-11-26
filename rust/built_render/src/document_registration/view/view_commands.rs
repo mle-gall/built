@@ -89,7 +89,25 @@ fn sync<'py>(a: &Args<'py>) -> Reply<'py> {
             .call_method1("ui_set_cluster", (&cluster, &menu))?;
         view.setattr("_ui_cluster_sig", &sig)?;
     }
+    view_state(&view, &win)?;
     Ok(none(py))
+}
+
+/// The axis gizmo follows the active camera every frame (UX pass 2, M03).
+fn view_state<'py>(view: &Obj<'py>, win: &Obj<'py>) -> PyResult<()> {
+    let py = view.py();
+    let camera = win.call_method0("_active_view")?.getattr("camera")?;
+    let (yaw, pitch): (f64, f64) = (camera.getattr("yaw")?.extract()?, camera.getattr("pitch")?.extract()?);
+    let projection: String = camera.call_method0("projection_mode")?.extract()?;
+    let style = win.call_method0("active_style")?;
+    let style: String = if style.is_none() { String::new() } else {
+        style.getattr_opt("name")?.map(|n| n.extract()).transpose()?.unwrap_or_default()
+    };
+    let aligned = crate::ui::kit::view_gizmo::aligned_view(yaw, pitch);
+    let tr = |s: &str| crate::settings_rows::tr(py, s).unwrap_or_else(|_| s.to_owned());
+    let label = crate::ui::kit::view_gizmo::view_label(aligned, &projection, &style, tr);
+    view.getattr("renderer")?.call_method1("ui_set_view_state", (yaw, pitch, label))?;
+    Ok(())
 }
 
 fn run<'py>(a: &Args<'py>) -> Reply<'py> {

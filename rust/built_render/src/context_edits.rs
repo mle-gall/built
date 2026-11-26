@@ -175,11 +175,15 @@ fn face_camera(
         normal.call_method0("z")?.extract()?,
     );
     let cam = vp.getattr("camera")?;
+    let before: (f64, f64) = (cam.getattr("yaw")?.extract()?, cam.getattr("pitch")?.extract()?);
     cam.setattr("target", point)?;
     cam.setattr("pitch", z.clamp(-1., 1.).asin())?;
     if x.abs() > 1e-9 || y.abs() > 1e-9 {
         cam.setattr("yaw", y.atan2(x))?;
     }
+    // Looking square at a face is an aligned view: auto perspective (M03).
+    let auto = crate::native_view_actions::auto_perspective(vp.py())?;
+    cam.call_method1("align_current", (before.0, before.1, auto))?;
     Ok(())
 }
 

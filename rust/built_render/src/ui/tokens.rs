@@ -71,6 +71,30 @@ palette! {
     IMAGE_BACK = Color32::from_rgba_premultiplied(0, 0, 0, 120);
     BRIGHT = Color32::WHITE;
     SWATCH_FALLBACK = Color32::GRAY;
+    // The model's axes, as the drawing axes paint them (axes.wgsl): the
+    // view gizmo and anything else that names X, Y or Z by colour.
+    AXIS_X = Color32::from_rgb(219, 56, 69);
+    AXIS_Y = Color32::from_rgb(41, 158, 92);
+    AXIS_Z = Color32::from_rgb(51, 102, 199);
+    // The view gizmo's hover disc: a dark wash that shows on a white sky
+    // and on a dark background alike.
+    GIZMO_DISC = Color32::from_black_alpha(36);
+}
+
+#[cfg(test)]
+mod axis_tests {
+    /// The gizmo's axes match the drawing axes the model shows.
+    #[test]
+    fn axis_tokens_match_the_drawing_axes() {
+        let shader = include_str!("../axes.wgsl");
+        for (token, rgb) in [(super::AXIS_X, "0.86,0.22,0.27"), (super::AXIS_Y, "0.16,0.62,0.36"), (super::AXIS_Z, "0.20,0.40,0.78")] {
+            assert!(shader.contains(&format!("vec3f({rgb})")), "{rgb}");
+            let c: Vec<f32> = rgb.split(',').map(|v| v.parse().unwrap()).collect();
+            for (have, want) in [token.r(), token.g(), token.b()].into_iter().zip(c) {
+                assert!((have as f32 - want * 255.).abs() <= 1.0, "{token:?}");
+            }
+        }
+    }
 }
 
 /// The sheet shows the blurred scene with neutral colour and no panel rim.

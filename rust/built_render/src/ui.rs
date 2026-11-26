@@ -54,6 +54,7 @@ mod rail;
 /// The value field on the geometry and its readback after Enter (B1).
 mod value_field;
 mod site_map;
+mod view_overlay;
 use tokens::*;
 use kit::*;
 
@@ -203,6 +204,8 @@ pub struct Ui {
     ctx_menu: Option<context_menu::Menu>,
     /// The large sheet (ui/large_sheet.rs): over everything under the top bar.
     lsheet: large_sheet::LargeSheet,
+    /// The axis gizmo and view label (ui/view_overlay.rs).
+    gizmo: view_overlay::Overlay,
 }
 
 /// A sheet: title, body, tone (question, info, warning, error) and its
@@ -363,6 +366,7 @@ impl Ui {
             cmd_scroll: false,
             menu: None,
             view_anchor: Rect::NOTHING,
+            gizmo: Default::default(),
             top_groups: Vec::new(),
             cluster_buttons: Vec::new(),
             top_right_w: 0.0,
@@ -1115,6 +1119,7 @@ impl Ui {
         // A choice or colour picker can extend beyond its parent panel.
         // Its next outside click dismisses it before the model takes input.
         self.gallery.is_some() || self.menu_hits.len() > 1 || self.menu_hits.iter().any(|r| r.contains(pos)) || self.font_picker.is_some() || self.egui_popup_open() || self.hit.iter().any(|r| r.contains(pos))
+            || self.gizmo.takes(pos)
             || self.ctx.layer_id_at(pos).is_some_and(|layer| self.panels.popup_layers.contains(&layer.id))
     }
     /// Is (x, y) on the interactive chrome (a right-click there is the
@@ -1330,7 +1335,8 @@ impl Ui {
         self.top_groups = groups;
         if let Some((kind, r)) = open {
             if kind == "view" {
-                self.view_open = !self.view_open;
+                self.view_open = !self.view_open || self.gizmo.views_only;
+                self.gizmo.views_only = false;
                 if self.view_open && self.form.take().is_some() { self.actions.push("form:close".into()); }
                 self.view_anchor = r;
                 self.menu = None;
@@ -1605,10 +1611,14 @@ impl Ui {
                 glass(Surface::Raised).inner_margin(Margin::same(6)).show(ui, |ui| {
                     ui.set_width(236.0);
                     ui.spacing_mut().item_spacing = vec2(SPACE_XS, SPACE_XS);
-                    let review = (String::new(), "Review — hide the panels".to_owned(), String::new(), "check".to_owned(),
-                                  if self.review { 1 } else { 0 }, true);
-                    if menu_row(ui, &review) { toggle_review = true; }
-                    ui.add_space(SPACE_XS);
+                    // From the view label: the views, projection and style only.
+                    let views_only = self.gizmo.views_only;
+                    if !views_only {
+                        let review = (String::new(), "Review — hide the panels".to_owned(), String::new(), "check".to_owned(),
+                                      if self.review { 1 } else { 0 }, true);
+                        if menu_row(ui, &review) { toggle_review = true; }
+                        ui.add_space(SPACE_XS);
+                    }
                     // Down to the bottom bar (M05). The area remembers last
                     // frame's size, so give the scroll its room explicitly or
                     // it stays at the first frame's default height.
@@ -1617,7 +1627,8 @@ impl Ui {
                     ui.scope_builder(egui::UiBuilder::new().max_rect(at), |ui| egui::ScrollArea::vertical().id_salt("view command groups")
                         .max_height(room)
                         .show(ui, |ui| {
-                            for (si, (title, items)) in self.view_menu.iter().enumerate() {
+                            let groups = self.view_menu.iter().filter(|(_, items)| !views_only || view_overlay::views_section(items));
+                            for (si, (title, items)) in groups.enumerate() {
                                 if si > 0 { ui.add_space(SPACE_XS); }
                                 caption_at(ui, title, 12.0);
                                 let icons_only = items.iter().all(|i| self.icons.contains_key(&i.3));
@@ -2796,6 +2807,7 @@ impl Ui {
                     self.panels.frame_guide(ctx, screen);
                 }
                 if !sheet_up { self.cursor_value(ctx, screen); }
+                self.view_overlay(ctx);
             }
             self.bar_menu(ctx);
             self.view_popup(ctx);

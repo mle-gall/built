@@ -1,4 +1,5 @@
 //! Plugin-facing camera controls. The existing live-camera kernels handle poses and matrices.
+use super::auto_perspective::{self as auto, Projection, Stash};
 use super::camera_live as live;
 use crate::math::{xyz, Matrix4, Vec3};
 use crate::navigation as nav;
@@ -494,6 +495,9 @@ impl OrbitCamera {
         Ok(())
     }
     fn orbit(s: &Camera<'_>, dx_pixels: f64, dy_pixels: f64, viewport_h: f64) -> PyResult<()> {
+        if dx_pixels != 0. || dy_pixels != 0. {
+            leave_aligned(s)?;
+        }
         let (y, p) = nav::orbit_angles(
             number(s, "yaw")?,
             number(s, "pitch")?,
@@ -623,10 +627,12 @@ impl OrbitCamera {
         s.setattr("aspect", w.max(1.) / h.max(1.))
     }
     fn toggle_projection(s: &Camera<'_>) -> PyResult<()> {
+        forget_alignment(s)?;
         s.setattr("perspective", !s.getattr("perspective")?.is_truthy()?)?;
         s.setattr("two_point", false)
     }
     fn toggle_two_point(s: &Camera<'_>) -> PyResult<()> {
+        forget_alignment(s)?;
         let on = !s.getattr("two_point")?.is_truthy()?;
         s.setattr("two_point", on)?;
         if on {
@@ -643,10 +649,12 @@ impl OrbitCamera {
             "perspective"
         })
     }
+    /// The user's choice of projection: an aligned view no longer returns
+    /// to an earlier one.
     fn set_projection(s: &Camera<'_>, mode: &str) -> PyResult<()> {
-        if matches!(mode, "parallel" | "perspective" | "two_point") {
-            s.setattr("perspective", mode != "parallel")?;
-            s.setattr("two_point", mode == "two_point")?;
+        if let Some(p) = Projection::parse(mode) {
+            forget_alignment(s)?;
+            show(s, p)?;
         }
         Ok(())
     }
@@ -723,6 +731,84 @@ impl OrbitCamera {
     fn snap_iso(s: &Camera<'_>) -> PyResult<()> {
         live::camera_snap_iso(s)
     }
+    /// A standard view by name. With `auto` (Settings > Navigation > Auto
+    /// perspective) a direction shows in parallel until the next orbit;
+    /// Isometric keeps, or returns to, the user's own projection.
+    #[pyo3(signature=(name, auto=true))]
+    fn align_to(s: &Camera<'_>, name: &str, auto: bool) -> PyResult<()> {
+        if name == "iso" {
+            leave_aligned(s)?;
+            return live::camera_snap_iso(s);
+        }
+        let Some(to) = preset(name) else { return Ok(()) };
+        let from = (number(s, "yaw")?, number(s, "pitch")?);
+        s.setattr("yaw", to.0)?;
+        s.setattr("pitch", to.1)?;
+        aligned(s, auto, from, to)
+    }
+    /// The camera was just pointed along a face or plane from (`yaw0`,
+    /// `pitch0`): the same projection rule as a standard view.
+    #[pyo3(signature=(yaw0, pitch0, auto=true))]
+    fn align_current(s: &Camera<'_>, yaw0: f64, pitch0: f64, auto: bool) -> PyResult<()> {
+        let to = (number(s, "yaw")?, number(s, "pitch")?);
+        aligned(s, auto, (yaw0, pitch0), to)
+    }
+    /// The projection an orbit would return to, or None.
+    fn auto_projection_before(s: &Camera<'_>) -> PyResult<Option<&'static str>> {
+        Ok(held_stash(s)?.map(|st| st.before.name()))
+    }
+}
+fn projection_now(s: &Camera<'_>) -> PyResult<Projection> {
+    Ok(if !s.getattr("perspective")?.is_truthy()? {
+        Projection::Parallel
+    } else if s.getattr("two_point")?.is_truthy()? {
+        Projection::TwoPoint
+    } else {
+        Projection::Perspective
+    })
+}
+fn show(s: &Camera<'_>, p: Projection) -> PyResult<()> {
+    s.setattr("perspective", p != Projection::Parallel)?;
+    s.setattr("two_point", p == Projection::TwoPoint)
+}
+const STASH: &str = "_auto_projection";
+fn read_stash(s: &Camera<'_>) -> PyResult<Option<Stash>> {
+    let attrs = s.getattr("__dict__")?.cast_into::<PyDict>()?;
+    let Some(v) = attrs.get_item(STASH)?.filter(|v| !v.is_none()) else { return Ok(None) };
+    let (name, yaw, pitch): (String, f64, f64) = v.extract()?;
+    Ok(Projection::parse(&name).map(|before| Stash { before, yaw, pitch }))
+}
+fn write_stash(s: &Camera<'_>, stash: Option<Stash>) -> PyResult<()> {
+    let attrs = s.getattr("__dict__")?.cast_into::<PyDict>()?;
+    match stash {
+        Some(st) => attrs.set_item(STASH, (st.before.name(), st.yaw, st.pitch)),
+        None if attrs.contains(STASH)? => attrs.del_item(STASH),
+        None => Ok(()),
+    }
+}
+fn held_stash(s: &Camera<'_>) -> PyResult<Option<Stash>> {
+    Ok(auto::held(read_stash(s)?, projection_now(s)?, number(s, "yaw")?, number(s, "pitch")?))
+}
+fn forget_alignment(s: &Camera<'_>) -> PyResult<()> {
+    write_stash(s, None)
+}
+fn aligned(s: &Camera<'_>, on: bool, from: (f64, f64), to: (f64, f64)) -> PyResult<()> {
+    let (shown, stash) = auto::align(projection_now(s)?, read_stash(s)?, on, from, to);
+    show(s, shown)?;
+    write_stash(s, stash)
+}
+/// The first orbit away from an aligned view brings the projection back.
+fn leave_aligned(s: &Camera<'_>) -> PyResult<()> {
+    let stash = read_stash(s)?;
+    if stash.is_none() {
+        return Ok(());
+    }
+    let restore = auto::leave(stash, projection_now(s)?, number(s, "yaw")?, number(s, "pitch")?);
+    write_stash(s, None)?;
+    if let Some(p) = restore {
+        show(s, p)?;
+    }
+    Ok(())
 }
 fn fitted(s: &Camera<'_>) -> PyResult<Option<(f64, f64)>> {
     if s.getattr("_depth_range")?.is_none() {

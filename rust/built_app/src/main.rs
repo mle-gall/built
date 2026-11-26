@@ -1349,6 +1349,8 @@ fn main() {
         }
     };
     if args.gallery { std::env::set_var("BUILT_GALLERY", "1"); }
+    // A scripted run is deterministic: camera moves jump instead of gliding.
+    if args.script.is_some() { std::env::set_var("BUILT_SCRIPTED", "1"); }
     // One shell per user profile; a private BUILT_INSTANCE_SOCKET opts a
     // test run in whatever its profile.
     #[cfg(any(unix, windows))]

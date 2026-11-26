@@ -39,6 +39,9 @@
       {"id": "touch_slide", "kind": "choice", "label": "Touchscreen one-finger slide", "options": [["orbit", "Orbit"], ["pan", "Pan"], ["select", "Select"]], "default": "orbit"},
       {"id": "pinch_sensitivity", "kind": "slider", "label": "Pinch sensitivity", "words": "zoom", "lo": 10, "hi": 300, "default": 100, "suffix": "%"}
     ]],
+    ["views", "Views", [
+      {"id": "auto_perspective", "kind": "check", "label": "Auto perspective", "default": true, "tip": "Top, Front and the other standard views show in parallel projection; the first orbit away returns to the projection you had.", "words": "parallel orthographic ortho projection gizmo"}
+    ]],
     ["tools", "Tools", [
       {"id": "cursor_style", "kind": "choice", "label": "Tool cursor", "options": [["tool", "The tool's icon"], ["crosshair", "Crosshair"], ["arrow", "Arrow"]], "default": "tool"}
     ]]
