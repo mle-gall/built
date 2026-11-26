@@ -38,7 +38,7 @@ def test_about_and_clipboard(monkeypatch, native_host, pasteboard):
     sheet = About()
     spec = build(sheet, ctx)
     assert spec.get("detail") is None
-    for label in ("GPL-3.0-or-later", "Marco Sumari Tellez", "Civil Engineer", "Pedro Caeiro"):
+    for label in ("GPL-3.0-or-later", "Maxence Le Gall", "Marco Sumari Tellez", "Pedro Caeiro"):
         assert label in str(spec["content"])
     sheet.act(ctx, "verb", ["copy"])
     for field in ("Built ", "Engine:", "Renderer:", "Commit:", "Language:"):
