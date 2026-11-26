@@ -331,7 +331,7 @@ fn material_columns<'py>(
 /// frame of its own, appended there as `(origin, box, wide)`.
 #[pyfunction]
 #[pyo3(signature = (mesh, paint = None, texture_ids = None, face_overrides = None, billboard = None, origins = None,
-    previous_origin = None, focus = None, matrix = None))]
+    previous_origin = None, focus = None, matrix = None, hidden_tags = None, element_tags = None))]
 #[allow(clippy::too_many_arguments)]
 fn source_arrays<'py>(
     py: Python<'py>,
@@ -344,6 +344,8 @@ fn source_arrays<'py>(
     previous_origin: Option<[f64; 3]>,
     focus: Option<Obj<'py>>,
     matrix: Option<Obj<'py>>,
+    hidden_tags: Option<Bound<'py, pyo3::types::PySet>>,
+    element_tags: Option<Bound<'py, pyo3::types::PySet>>,
 ) -> PyResult<Bound<'py, PyTuple>> {
     let np = py.import("numpy")?;
     let overrides = face_overrides.filter(|o| o.is_truthy().unwrap_or(false));
@@ -354,6 +356,7 @@ fn source_arrays<'py>(
     let own = mesh.getattr("__dict__")?.cast_into::<PyDict>()?;
     let source = own.get_item("_deferred_source")?.filter(|s| !s.is_none());
     let stored = mesh.get_type().name()? == "StoreMesh";
+    let mut stored_edge_layers = None;
     let (pos, corners, sizes, counts, edges, flags, table, attr) = match &source {
         // A file's own arrays: one coordinate per face or edge corner.
         Some(source) => {
@@ -371,12 +374,62 @@ fn source_arrays<'py>(
         None if stored => {
             let arrays = own.get_item("_store")?.ok_or_else(|| PyTypeError::new_err("a store mesh has a store"))?.call_method0("arrays")?;
             let field = |key: &str| arrays.get_item(key);
+            if hidden_tags.as_ref().is_some_and(|tags| !tags.is_empty()) {
+                stored_edge_layers = Some(field("layer")?);
+            }
             let columns = py.import("built_core")?.getattr("store_views")?.call_method1("attr_columns", (mesh, overrides.as_ref()))?;
             (field("pos")?, field("corners")?, field("ring_sizes")?, field("ring_counts")?, field("edges")?,
              field("flags")?.bitand(7)?, columns.get_item(0)?, columns.get_item(1)?)
         }
         None => return Err(PyTypeError::new_err("a resident prototype is a store mesh or a deferred one")),
     };
+    // Filter tagged faces before triangulation. Every pass, including Reveal
+    // Hidden Geometry, then reads the same triangles. Explicit edges have
+    // independent tags; retain their suppression even when a ring shares one.
+    let (mut corners, mut sizes, mut counts, mut attr, mut flags) = (corners, sizes, counts, attr, flags);
+    if let Some(used) = element_tags {
+        for row in table.try_iter()? {
+            let tag = row?.call_method1("get", ("layer",))?;
+            if !tag.is_none() { used.add(tag)?; }
+        }
+        let names = match &source {
+            Some(s) => s.get_item("meta")?.call_method1("get", ("edge_layers",))?,
+            None => mesh.getattr("_store")?.call_method0("layer_names")?,
+        };
+        if !names.is_none() { used.call_method1("update", (names,))?; }
+    }
+    if let Some(tags) = hidden_tags.filter(|tags| !tags.is_empty()) {
+        let mut allowed = vec![true]; // attribute -1 is untagged
+        for row in table.try_iter()? {
+            let tag = row?.call_method1("get", ("layer",))?;
+            allowed.push(!tags.contains(tag)?);
+        }
+        if allowed.contains(&false) {
+            let keep = Array1::from(allowed).into_pyarray(py).get_item(np.call_method1("asarray", (&attr, "int64"))?.add(1)?)?;
+            let rings = np.call_method1("repeat", (&keep, &counts))?;
+            corners = corners.get_item(np.call_method1("repeat", (&rings, &sizes))?)?;
+            sizes = sizes.get_item(rings)?;
+            counts = counts.get_item(&keep)?;
+            attr = attr.get_item(keep)?;
+        }
+        let (names, ids) = match &source {
+            Some(s) => (s.get_item("meta")?.call_method1("get", ("edge_layers",))?, s.call_method1("get", ("layers",))?),
+            None => {
+                let store = mesh.getattr("_store")?;
+                (store.call_method0("layer_names")?, stored_edge_layers.expect("read with store arrays above"))
+            }
+        };
+        if !ids.is_none() && names.is_truthy()? {
+            let mut mask = vec![0u8];
+            for name in names.try_iter()? {
+                mask.push(if tags.contains(name?)? { 8 } else { 0 });
+            }
+            if mask.contains(&8) {
+                let indices = np.call_method1("asarray", (ids, "int64"))?.add(1)?;
+                flags = flags.bitor(Array1::from(mask).into_pyarray(py).get_item(indices)?)?;
+            }
+        }
+    }
     let mut points = Points::read(&pos)?;
     let mut corners = integers(&corners)?;
     let sizes = integers(&sizes)?;
@@ -426,7 +479,7 @@ fn source_arrays<'py>(
     }
     // IGZ source streams can repeat a coordinate for each face/edge. Soft fan
     // adjacency requires common vertex IDs; weld only prototypes that need it.
-    if flags.iter().any(|f| f & 1 != 0) {
+    if flags.iter().any(|f| f & 9 != 0) {
         let remap = py.import("built_core")?.call_method1("pack_weld", (points.single().into_pyarray(py),))?;
         let remap = integers(&remap)?;
         let through = |index: i64| -> PyResult<i64> {

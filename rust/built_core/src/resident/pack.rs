@@ -461,6 +461,18 @@ pub fn pbr_entry<'py>(py: Python<'py>, base: &Obj<'py>, recipe: &Obj<'py>) -> Re
     py.import("built_core")?.getattr("PbrEntry")?.call1((images, flip, factors, radiance, surface))
 }
 
+pub(super) fn invisible_tags<'py>(py: Python<'py>, scene: &Obj<'py>) -> PyResult<Bound<'py, PySet>> {
+    let visible = py.import("built_core")?.getattr("tag_edits")?.getattr("effective_visible")?;
+    let hidden = PySet::empty(py)?;
+    for layer in scene.getattr("layers")?.try_iter()? {
+        let layer = layer?;
+        if !visible.call1((scene, &layer))?.is_truthy()? {
+            hidden.add(layer.getattr("key")?)?;
+        }
+    }
+    Ok(hidden)
+}
+
 /// The resident scene of `scene`.
 ///
 /// `baked_paints` (id(group) -> paint) bakes those groups with that paint
@@ -471,7 +483,7 @@ pub fn pbr_entry<'py>(py: Python<'py>, base: &Obj<'py>, recipe: &Obj<'py>) -> Re
 /// walking the document.
 #[pyfunction]
 #[pyo3(signature = (scene, view_tint = None, *, face_overrides = None, texture_images = true, baked_paints = None,
-    progress = None, previous_origin = None, previous_pack = None, focus = None, roots = None))]
+    progress = None, previous_origin = None, previous_pack = None, focus = None, roots = None, hidden_tags = None))]
 #[allow(clippy::too_many_arguments)]
 pub fn pack_scene<'py>(
     py: Python<'py>,
@@ -485,7 +497,10 @@ pub fn pack_scene<'py>(
     previous_pack: Option<Obj<'py>>,
     focus: Option<Obj<'py>>,
     roots: Option<Obj<'py>>,
+    hidden_tags: Option<Bound<'py, PySet>>,
 ) -> PyResult<Bound<'py, PackedScene>> {
+    let hidden_tags = match hidden_tags { Some(tags) => tags, None => invisible_tags(py, scene)? };
+    let element_tags = PySet::empty(py)?;
     let packing = "Packing geometry for the GPU…";
     let (view_tint, face_overrides, baked_paints, progress, previous_pack, focus, roots) = (
         view_tint.filter(|v| v.is_truthy().unwrap_or(false)),
@@ -608,7 +623,7 @@ pub fn pack_scene<'py>(
             };
             let arrays = py.import("built_core")?.call_method1(
                 "source_arrays",
-                (&mesh, &baked, &texture_ids, face_overrides.as_ref(), &billboard, &coordinates, anchor, focus.as_ref(), world),
+                (&mesh, &baked, &texture_ids, face_overrides.as_ref(), &billboard, &coordinates, anchor, focus.as_ref(), world, &hidden_tags, &element_tags),
             )?;
             let last = coordinates.get_item(coordinates.len() - 1)?;
             if last.get_item(2)?.is_truthy()? && focus.is_some() {
@@ -695,7 +710,7 @@ pub fn pack_scene<'py>(
         (Some(focus), true) => py.get_type::<PyTuple>().call1((focus,))?.unbind(),
         _ => py.None(),
     };
-    Bound::new(
+    let packed = Bound::new(
         py,
         PackedScene::assembled(
             py,
@@ -711,7 +726,9 @@ pub fn pack_scene<'py>(
             occurrence_keys.into_any().unbind(),
             mesh_codes.into_any().unbind(),
         )?,
-    )
+    )?;
+    packed.setattr("_element_tags", element_tags)?;
+    Ok(packed)
 }
 
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {

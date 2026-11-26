@@ -191,7 +191,7 @@ fn prepare(
     let mut edges: Vec<_> = edge_list
         .into_iter()
         .zip(edge_flags)
-        .filter(|(_, flags)| retain_hidden || flags & 3 == 0)
+        .filter(|(_, flags)| flags & 8 == 0 && (retain_hidden || flags & 3 == 0))
         .collect();
     let visible_edges = edges.iter().filter(|(_, flags)| flags & 3 == 0).count();
     if visible_edges < edges.len() {

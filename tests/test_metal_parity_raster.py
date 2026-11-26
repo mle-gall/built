@@ -859,3 +859,54 @@ def test_emission_is_added_in_linear_light_with_a_tiled_map(native, tmp_path):
     # Linear red 0.25 displays as sRGB 137. Green is masked by the image.
     np.testing.assert_allclose(capture(native)[32, 32, :3], [137, 0, 0], atol=2)
     assert native.pick(32, 32) == 0
+
+
+@pytest.mark.parametrize("grouped", [False, True])
+def test_filtered_face_has_no_colour_depth_or_reveal_geometry(native, grouped):
+    from built_core import Vec3, pack_scene
+    from built_core.layers import Layer
+    from built_core.group import Group
+    scene = Scene()
+    mesh = scene.mesh
+    if grouped:
+        group = Group(name="Visible group")
+        scene.layers.append(Layer("Assembly"))
+        group.layer = "Assembly"
+        scene.groups.append(group)
+        mesh = group.mesh
+    scene.layers.append(Layer("Off", visible=False))
+    for x, tag in [(-.8, "Off"), (.1, "Layer 0")]:
+        face = mesh.add_face([Vec3(x + u, v, 0) for u, v in
+                              ((0., -.6), (.7, -.6), (.7, .6), (0., .6))])
+        face.attrs.update(layer=tag, color=(1., 0., 0.))
+    for edge in mesh.edges:
+        if edge.v0.position_tuple()[0] < 0:
+            edge.layer = "Off"
+    native.set_style(dict(sky=False, edges=True, profiles=False, show_hidden_geometry=True))
+    pack = pack_scene(scene)
+    assert sum(pack.commands["count"]) == 6
+    assert sum(pack.edge_commands["count"]) == 8
+    assert not pack.hidden_commands["count"].any()
+    assert not pack.hidden_edge_commands["count"].any()
+    pack.upload(native)
+    pixels = capture(native)
+    np.testing.assert_array_equal(pixels[32, 16], pixels[32, 2])
+    assert pixels[32, 48, 0] > 180
+    assert native.pick(16, 32) == -1
+    assert native.pick(48, 32) >= 0
+
+    # Compare the shadow and AO depth inputs against the same scene containing
+    # only the visible face. A stale caster can survive a correct colour pass.
+    from built_core import Matrix4
+    light = Matrix4()
+    light.ortho(-2, 2, -2, 2, -3, 3)
+    light.rotate(30, 0, 1, 0)
+    native.set_style(dict(shadows=True, shadow_matrix=light.data(), sun_direction=(-.5, 0, .866),
+                          ground_shadows=True, ambient_occlusion=True))
+    filtered = capture(native)
+    reference = Scene()
+    clean = reference.mesh.add_face([Vec3(x, y, 0) for x, y in
+                                     ((.1, -.6), (.8, -.6), (.8, .6), (.1, .6))])
+    clean.attrs["color"] = (1., 0., 0.)
+    pack_scene(reference).upload(native)
+    np.testing.assert_array_equal(filtered, capture(native))

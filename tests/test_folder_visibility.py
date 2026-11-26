@@ -164,3 +164,25 @@ def test_linked_tags_keep_folder_flags_separate(tmp_path):
     assert tag.visible and not built_core.tag_edits.effective_visible(scene, tag)
     scene.folder_visibility[tag.folder] = True
     assert built_core.tag_edits.effective_visible(scene, tag)
+
+
+def test_visibility_change_rebakes_a_face_tag_added_after_upload():
+    from built_core import InstanceUpdates, pack_scene, Vec3
+    from built_core.scene import Scene
+
+    scene = Scene()
+    scene.layers.append(L.Layer("Trim"))
+    mesh = scene.mesh
+    face = mesh.add_face([Vec3(0, 0, 0), Vec3(1, 0, 0), Vec3(0, 1, 0)])
+    updates = InstanceUpdates(scene, pack_scene(scene))
+    face.attrs["layer"] = "Trim"
+    mesh.move_vertex(mesh.vertices[0], Vec3(0, 0, .1))
+    updates.apply(*updates.diff(scene))
+    scene.layers[-1].visible = False
+    assert updates.diff(scene) is None
+    hidden = pack_scene(scene)
+    assert not hidden.commands["count"].any()
+    # The three independent, untagged edges remain visible and pickable.
+    assert sum(hidden.edge_commands["count"]) == 6
+    scene.layers[-1].visible = True
+    assert sum(pack_scene(scene).commands["count"]) == 3

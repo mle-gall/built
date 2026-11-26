@@ -450,6 +450,7 @@ impl InstanceUpdates {
         let s = slf.as_any();
         let np = py.import("numpy")?;
         s.setattr("scene", scene)?;
+        s.setattr("_hidden_tags", super::pack::invisible_tags(py, scene)?)?;
         s.setattr("packed", packed)?;
         // id(mesh) -> {code: (baked paint, billboard)}: every resident
         // prototype a mesh has. One mesh may be drawn plain, under an
@@ -787,6 +788,17 @@ impl InstanceUpdates {
         let packed = s.getattr("packed")?;
         if !scene.is(&s.getattr("scene")?) {
             return nothing();
+        }
+        let hidden = super::pack::invisible_tags(py, scene)?;
+        let old_hidden = s.getattr("_hidden_tags")?;
+        if !hidden.eq(&old_hidden)? {
+            let toggled = hidden.call_method1("symmetric_difference", (old_hidden,))?;
+            if let Some(used) = packed.getattr_opt("_element_tags")? {
+                if !used.call_method1("isdisjoint", (toggled,))?.is_truthy()? {
+                    return nothing(); // A prototype's triangles or edges need a new bake.
+                }
+            }
+            s.setattr("_hidden_tags", hidden)?;
         }
         // A model far from the origin (site coordinates) is packed rebased:
         // its rows are written in the view frame, each through its
@@ -1319,9 +1331,13 @@ impl InstanceUpdates {
             let stage = py.import("built_core.scene")?.getattr("Scene")?.call((), Some(&kw))?;
             let kw = PyDict::new(py);
             kw.set_item("baked_paints", &paints)?;
+            kw.set_item("hidden_tags", s.getattr("_hidden_tags")?)?;
             // Each prototype in the frame it is drawn in (its rows say so).
             kw.set_item("previous_pack", &packed)?;
             let baked = core(py)?.getattr("pack_scene")?.call((stage,), Some(&kw))?;
+            if let (Some(used), Some(added)) = (packed.getattr_opt("_element_tags")?, baked.getattr_opt("_element_tags")?) {
+                used.call_method1("update", (added,))?;
+            }
             let baked_origins = baked.getattr("prototype_origins")?;
             let baked_row = PyDict::new(py);
             for (row, group) in baked.getattr("groups")?.try_iter()?.enumerate() {
