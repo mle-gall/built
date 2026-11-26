@@ -123,7 +123,7 @@ impl Sheets {
             ui.label(egui::RichText::new("Sheets").font(title()).color(INK));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 let cur = s.list.iter().position(|r| r.2);
-                let dots = (String::new(), "⋯".to_owned(), "This sheet: rename, duplicate, move, delete, classic editor".to_owned(), String::new(), -1i8, cur.is_some());
+                let dots = (String::new(), "⋯".to_owned(), "This sheet: rename, duplicate, move, delete".to_owned(), String::new(), -1i8, cur.is_some());
                 let before = ui.cursor();
                 if item_button(ui, &dots, None) {
                     if let Some(i) = cur { s.row_menu = Some((i, pos2(before.max.x - 180.0, before.min.y + 30.0))); }
@@ -424,9 +424,6 @@ impl Ui {
                     let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 7.0), Sense::hover());
                     ui.painter().hline(r.x_range().shrink(6.0), r.center().y, Stroke::new(1.0_f32, EDGE));
                     if menu_row(ui, &row("del", "Delete…", n > 1)) { clicked = Some(format!("del{SEP}{i}")); }
-                    let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 7.0), Sense::hover());
-                    ui.painter().hline(r.x_range().shrink(6.0), r.center().y, Stroke::new(1.0_f32, EDGE));
-                    if menu_row(ui, &row("classic", "Open in classic sheet editor…", true)) { clicked = Some("classic".into()); }
                 });
             });
         if rename {
@@ -716,6 +713,23 @@ mod tests {
         s.edits.insert("text".into(), "x".into());
         s.set_inspector("Model view".into(), vec![]);
         assert!(s.edits.is_empty());
+    }
+
+    #[test]
+    fn sheet_menu_offers_the_current_page_operations() {
+        let Some(mut chrome) = super::super::test_chrome() else { return };
+        chrome.sheets.row_menu = Some((0, pos2(40., 40.)));
+        let ctx = chrome.ctx.clone();
+        let frame = |chrome: &mut Ui| ctx.run(Default::default(), |ctx| chrome.sheets_row_menu(ctx));
+        let _ = frame(&mut chrome);
+        let labels: Vec<_> = frame(&mut chrome).shapes.into_iter().filter_map(|shape| {
+            if let egui::Shape::Text(text) = shape.shape {
+                Some(text.galley.text().to_owned())
+            } else {
+                None
+            }
+        }).collect();
+        assert_eq!(labels, ["Rename…", "Duplicate", "Move earlier", "Move later", "Delete…"]);
     }
 
     #[test]

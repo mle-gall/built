@@ -40,8 +40,7 @@
       {"id": "pinch_sensitivity", "kind": "slider", "label": "Pinch sensitivity", "words": "zoom", "lo": 10, "hi": 300, "default": 100, "suffix": "%"}
     ]],
     ["tools", "Tools", [
-      {"id": "cursor_style", "kind": "choice", "label": "Tool cursor", "options": [["tool", "The tool's icon"], ["crosshair", "Crosshair"], ["arrow", "Arrow"]], "default": "tool"},
-      {"id": "ask_section", "kind": "check", "label": "Ask for a name and symbol when placing a section plane", "default": true}
+      {"id": "cursor_style", "kind": "choice", "label": "Tool cursor", "options": [["tool", "The tool's icon"], ["crosshair", "Crosshair"], ["arrow", "Arrow"]], "default": "tool"}
     ]]
   ],
   "display": [

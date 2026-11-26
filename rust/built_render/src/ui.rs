@@ -650,6 +650,12 @@ impl Ui {
         self.ctx.memory_mut(|m| m.stop_text_input());
         self.sheet = Some(Sheet { title, body, tone, buttons });
     }
+    pub fn organise_scenes(&mut self) {
+        let anchor = self.ctx.pointer_latest_pos().unwrap_or(self.ctx.screen_rect().center());
+        self.menu = Some(("scenes".into(), Rect::from_center_size(anchor, Vec2::ZERO)));
+        self.scene_browser.open_management = true;
+    }
+
     pub fn extension_menu(&mut self, rows: Vec<crate::extension_menu::Row>) { self.plugins.commands = rows; }
     pub fn plugin_panel(&mut self, raw: &str) -> Result<(), String> { self.plugins.set(raw) }
     pub fn plugin_open(&mut self, id: &str) { self.plugins.open(id); }
@@ -2271,7 +2277,17 @@ impl Ui {
                             let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 22.0), Sense::hover());
                             let mut right = r.max.x - 8.0;
                             if let Some((summary, _)) = &selection {
-                                let g = ui.painter().layout_no_wrap(summary.clone(), meta(), FAINT);
+                                let measure = match col.inspector_title.as_str() {
+                                    "Edge" => Some("Length"),
+                                    "Face" => Some("Area"),
+                                    _ => None,
+                                };
+                                let subtitle = col.inspector.iter()
+                                    .filter(|(section, _)| section == "Geometry")
+                                    .flat_map(|(_, rows)| rows)
+                                    .find(|(label, _)| Some(label.as_str()) == measure)
+                                    .map_or(summary, |(_, value)| value);
+                                let g = ui.painter().layout_no_wrap(subtitle.clone(), meta(), FAINT);
                                 right -= g.size().x;
                                 ui.painter().galley(pos2(right, r.center().y - g.size().y / 2.0), g, FAINT);
                                 right -= 10.0;

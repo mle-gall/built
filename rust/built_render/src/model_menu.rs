@@ -171,7 +171,7 @@ fn build_entries() -> Vec<MenuEntry> {
             "Views" if id.starts_with("view_") => "Camera ▸ Standard Views",
             "walkthrough" => "Camera ▸ Walkthrough",
             "Sections" => "Camera ▸ Sections",
-            "Settings" => continue,
+            "Settings" | "Scenes" => continue,
             _ => "Camera",
         };
         if !matches!(id, "zoom_extents" | "view_top" | "view_front" | "view_right" | "view_iso") {

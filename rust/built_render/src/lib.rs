@@ -2921,6 +2921,9 @@ impl Renderer {
     fn ui_open_commands(&mut self, text: String, scope: String) {
         if let Some(ui) = self.ui.as_mut() { ui.start_commands(text, scope); }
     }
+    fn ui_organise_scenes(&mut self) {
+        if let Some(ui) = self.ui.as_mut() { ui.organise_scenes(); }
+    }
     fn ui_set_command_details(&mut self, details: Vec<(String, bool, bool)>) {
         if let Some(ui) = self.ui.as_mut() { ui.command_details(details); }
     }

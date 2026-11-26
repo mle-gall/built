@@ -14,7 +14,7 @@ pub struct SearchItem {
 }
 
 fn words(text: &str) -> impl Iterator<Item = &str> {
-    text.split(|c: char| c.is_whitespace() || matches!(c, '-' | '_' | '/' | '▸'))
+    text.split(|c: char| !c.is_alphanumeric())
         .filter(|s| !s.is_empty())
 }
 
@@ -202,25 +202,17 @@ impl SearchItem {
         let mut used = vec![None; self.words.len()];
         let mut score = 1000;
         for (qi, q) in terms.iter().enumerate() {
-            let shortest = terms[qi + 1..].iter().any(|term| term.starts_with(q));
-            let mut best: Option<usize> = None;
-            for (i, w) in self.words.iter().enumerate() {
-                if used[i].is_some() || !w.starts_with(q) {
-                    continue;
-                }
-                if best.is_none_or(|j| {
-                    if shortest {
-                        w.len() < self.words[j].len()
-                    } else {
-                        j < self.main
-                    }
-                }) {
-                    best = Some(i);
-                }
-            }
-            if let Some(i) = best {
+            let best = self.words.iter().enumerate()
+                .filter(|(i, word)| used[*i].is_none() && word.starts_with(q))
+                .map(|(i, word)| {
+                    let points = if word == q { 30 } else { 9 }
+                        + i64::from(i >= self.main);
+                    (points, std::cmp::Reverse(word.len()), std::cmp::Reverse(i))
+                })
+                .max();
+            if let Some((points, _, std::cmp::Reverse(i))) = best {
                 used[i] = Some(qi);
-                score += if i >= self.main { 10 } else { 9 };
+                score += points;
                 continue;
             }
             if q.is_empty() {
@@ -261,15 +253,16 @@ pub fn rank_commands(
     let mut matches = Vec::new();
     for (order, (aliases, recent)) in entries.iter().enumerate() {
         let mut best = None;
-        for item in aliases {
+        for (alias, item) in aliases.iter().enumerate() {
             let item = item.get();
             if let Some(score) = item.score(&terms) {
-                if best.is_none_or(|(s, _, _)| score > s) {
-                    best = Some((score, item.name_len, item.total_len));
-                }
+                // Break equal prefix matches in favour of a source label or tool id.
+                let score = score * 2 + i64::from(alias > 0 && !terms.is_empty());
+                let lengths = std::cmp::Reverse((item.name_len, item.total_len));
+                best = best.max(Some((score, lengths)));
             }
         }
-        if let Some((score, size, total)) = best {
+        if let Some((score, std::cmp::Reverse((size, total)))) = best {
             matches.push((score, size, total, *recent, order));
         }
     }

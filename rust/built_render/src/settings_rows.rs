@@ -684,7 +684,7 @@ fn navigation<'py>(py: Python<'py>, env: &Bound<'py, PyAny>) -> PyResult<Bound<'
             let v = gkey_value(&a.get_item(0)?, "cursor_style", &s(py, "tool"), Kind::Str)?;
             Ok(v.bind(py).call_method0("lower")?.unbind())
         })?, applier(py, "apply_cursor_style")?),
-        Binding::new("ask_section", key_get(py, "section/ask_name", obj(py, "1")?, Kind::Bool)?, key_set(py, "section/ask_name", Kind::Bool)?),
+
     ];
     pref_page(py, env, "navigation", rows)
 }
@@ -1095,12 +1095,16 @@ fn location<'py>(py: Python<'py>, env: &Bound<'py, PyAny>) -> PyResult<Bound<'py
 }
 
 /// `[(group id, caption, [Row])]` of a section (not Keyboard).
+pub const NDOF_SUPPORTED: bool = cfg!(any(target_os = "linux", target_os = "windows"));
+
 pub fn section_groups<'py>(py: Python<'py>, env: &Bound<'py, PyAny>, section: &str) -> PyResult<Bound<'py, PyList>> {
     match section {
         "ai" => ai(py, env),
         "general" => general(py, env),
         "navigation" => navigation(py, env),
         "display" => display(py, env),
+        "registry" => Ok(PyList::empty(py)),
+        "ndof" if !NDOF_SUPPORTED => Ok(PyList::empty(py)),
         "ndof" => ndof(py, env),
         "import" => import(py, env),
         "units" => _units(env),

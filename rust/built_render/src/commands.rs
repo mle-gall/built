@@ -99,6 +99,7 @@ const COMMANDS: &[Command] = &[
     command("style_xray", "X-ray", "", &[], "Style", Style).on(RegistryOnly),
     command("section_planes", "Section Planes", "", &[], "Sections", Flag("_set_scene_visibility", "show_section_planes")),
     command("section_fill", "Section Fill", "", &[], "Sections", Flag("_set_style_field", "section_fill")),
+    command("organise-scenes", "Organise scenes", "", &[], "Scenes", Chrome).on(RegistryOnly),
     command("form-style", "Edit style…", "", &[], "Settings", Chrome),
     command("form-shadows", "Shadows and sun…", "", &[], "Settings", Chrome),
 ];
@@ -664,6 +665,7 @@ pub fn command_description(label: &str, key: &str) -> Option<&'static str> {
             "tool:texture_position" => "Place and size the texture on a face.",
             "view:axes" => "Show or hide the model’s drawing axes. Inference along the axes stays active.",
             "view:back_edges" => "Draw the edges hidden behind faces as dashed lines.",
+            "view:organise-scenes" => "Manage folders and file saved scenes.",
             "view:camera" => "Edit the projection, lens and position of the camera.",
             "view:form-shadows" => "Set the sun position and shadow appearance.",
             "view:form-style" => "Edit the current model display style.",

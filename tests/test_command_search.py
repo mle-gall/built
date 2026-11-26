@@ -89,6 +89,28 @@ def test_recent_ones_lead_only_with_one_letter_or_none():
         assert _rank(query, *labels, recent={"Cutter": 2})[0] == first
 
 
+def test_file_extension_and_exact_import_group_beat_fuzzy_label_hits():
+    family = "Fichier ▸ Import ▸ Revit family (.rfa)…"
+    assert _rank("rfa", "Édition ▸ Inverser les faces", family)[0] == family
+    assert _rank("import", "Vider le cache des textures importées…", family)[0] == family
+
+
+def test_french_palette_indexes_source_labels_and_scene_menu(tmp_path):
+    from built_render import Host
+    from built_core import NativeSettings, i18n
+    profile = str(tmp_path / "profile")
+    NativeSettings(profile).setValue("language", "fr")
+    original = i18n.current_language()
+    host = Host(0, 900, 600, 1., settings=profile)
+    try:
+        for term, key in (("sect", "tool:section"), ("organise", "view:organise-scenes"),
+                          ("edit style", "view:form-style"), ("shadows and sun", "view:form-shadows")):
+            assert cs.search(host.window, term)[0].key == key
+    finally:
+        host.close()
+        i18n.set_language(original)
+
+
 def test_damerau_levenshtein():
     assert ss.damerau_levenshtein("abc", "abc") == 0
     assert ss.damerau_levenshtein("abc", "acb") == 1      # a swap
@@ -120,7 +142,7 @@ def test_model_search_lists_menu_commands_and_tools_and_prioritizes_recent_actio
     assert rows == [("Frobnicate the walls", "", "", True)]
     wgpu_ui.command_action(win.view, win, "cmdrun", "0")
     action.run.assert_called_once()
-    assert query(win)[0][0][0] == "Frobnicate the walls"
+    assert [row[0] for row in query(win)[0]] == ["Frobnicate the walls"]
     action.remove()
     assert query(win, "frobnic")[0] == []
 

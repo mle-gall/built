@@ -8,6 +8,7 @@ through the viewport (the same live path the Camera menu uses).
 from __future__ import annotations
 
 
+import sys
 import pytest
 from built_core import NativeSettings
 
@@ -142,6 +143,10 @@ def test_the_3d_mouse_page_shows_the_device_live(native_host, monkeypatch):
     sheet = chrome_sheet.current(win)
     context = chrome_sheet.Ctx(win, None)
     sheet.build(context)
+    if sys.platform not in {"linux", "win32"}:
+        assert sheet._device is None and sheet._readings is None
+        chrome_sheet.close(win)
+        return
     readings = sheet._readings
     dev.raw.emit((12, -340, 0, 0, 0, 7))
     dev.motion.emit(NdofSample(forward=0.97), 0.01)

@@ -38,10 +38,6 @@ fn on_click<'py>(a: &Args<'py>) -> Reply<'py> {
     {
         return Ok(none(py));
     }
-    let plane = vp
-        .getattr("scene")?
-        .getattr("section_planes")?
-        .get_item(1.into_bound_py_any(py)?.neg()?)?;
     let window = if vp.hasattr("window")? {
         vp.call_method0("window")?
     } else {
@@ -65,9 +61,6 @@ fn on_click<'py>(a: &Args<'py>) -> Reply<'py> {
         if window.hasattr("_sync_section_menu")? {
             window.call_method0("_sync_section_menu")?;
         }
-    }
-    if window.hasattr("prompt_section_name")? {
-        window.call_method1("prompt_section_name", (&plane,))?;
     }
     vp.call_method1(
         "flash_status",

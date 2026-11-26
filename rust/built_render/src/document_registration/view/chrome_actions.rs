@@ -239,6 +239,13 @@ fn run_one<'py>(win: &Obj<'py>, action: &Obj<'py>, source_view: &Obj<'py>) -> Py
                 glue.call_method1("delivery_action", (win, &view, arg))?;
             }
         }
+        "act" if arg == "organise-scenes" => {
+            view.getattr("renderer")?.call_method0("ui_organise_scenes")?;
+            view.call_method0("update")?;
+        }
+        "act" if matches!(arg, "form-style" | "form-shadows") => {
+            win.call_method("open_preferences", (), Some(&fields!(py; "page" => "appearance")))?;
+        }
         "act" if arg.starts_with("form-") => {
             if !view.is_none() {
                 direct(py, open_form, (&view, &arg[5..]))?;

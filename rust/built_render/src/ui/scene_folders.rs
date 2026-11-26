@@ -71,6 +71,7 @@ fn record_key(row: &Item) -> Option<u64> {
 #[derive(Default)]
 pub(super) struct Browser {
     owner: String,
+    pub open_management: bool,
     pub thumbnails: Option<bool>,
     photos: std::collections::BTreeMap<String, Photo>,
     pending: Option<String>,
@@ -149,6 +150,7 @@ impl Browser {
         let Some(root) = folders.first() else {
             return;
         };
+        let open_management = std::mem::take(&mut self.open_management);
         if self.owner != root.3 {
             let thumbnails = self.thumbnails;
             *self = Self::default();
@@ -266,6 +268,10 @@ impl Browser {
                     }
                 }
             });
+        if open_management {
+            let id = ui.make_persistent_id("manage scene folders");
+            ui.data_mut(|data| data.insert_persisted(id, true));
+        }
         kit::disclosure(ui, "manage scene folders", "Organise scenes", false, |ui| {
             ui.add(
                 kit::field(&mut self.name)
