@@ -126,7 +126,8 @@ pub fn build() -> muda::Result<Menus> {
             groups[entry.path].append(&check)?;
             model_checks.push(check);
         } else {
-            groups[entry.path].append(&item(entry.id, entry.label, None))?;
+            let accelerator = entry.view_shortcut().and_then(portable_accelerator);
+            groups[entry.path].append(&MenuItem::with_id(entry.id, entry.label, true, accelerator))?;
         }
     }
     for &(name, _) in GROUPS { bar.append(&groups[name])?; }
@@ -172,7 +173,7 @@ impl Menus {
                     parent = sub;
                 }
             }
-            let accelerator = extension_accelerator(key);
+            let accelerator = portable_accelerator(key);
             if label.is_empty() {
                 parent.append(&PredefinedMenuItem::separator())?;
             } else if *mark >= 0 {
@@ -206,7 +207,7 @@ impl Menus {
 }
 
 /// Bare keys belong to the focused text field or the active modelling tool.
-fn extension_accelerator(portable: &str) -> Option<Accelerator> {
+fn portable_accelerator(portable: &str) -> Option<Accelerator> {
     let mut parts: Vec<_> = portable.split('+').collect();
     let key = parts.pop()?;
     if !parts.iter().any(|m| matches!(*m, "Ctrl" | "Meta" | "Alt")) { return None; }

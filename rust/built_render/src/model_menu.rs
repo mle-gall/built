@@ -10,6 +10,13 @@ pub struct MenuEntry {
     handler: Handler,
 }
 
+impl MenuEntry {
+    /// Registry view commands can expose their binding to the native menu.
+    pub fn view_shortcut(&self) -> Option<&str> {
+        matches!(self.handler, Handler::View(_)).then_some(self.shortcut)
+    }
+}
+
 #[derive(Clone, Copy)]
 enum Handler {
     Window(&'static str),
@@ -164,18 +171,20 @@ fn build_entries() -> Vec<MenuEntry> {
     add("plugins_folder", "Plugins", "Open extensions folder", "", Handler::PluginsFolder);
     add("develop_plugin", "Plugins", "Develop an extension…", "",
         Handler::Web("https://github.com/mle-gall/built/blob/main/docs/plugins.md"));
-    for (group, id, label, _, _) in crate::commands::view_commands() {
+    for (group, id, label, keys, _) in crate::commands::view_commands() {
         let path = match group {
             "Style" => "Camera ▸ Style",
             "Projection" => "Camera ▸ Projection",
             "Views" if id.starts_with("view_") => "Camera ▸ Standard Views",
             "walkthrough" => "Camera ▸ Walkthrough",
             "Sections" => "Camera ▸ Sections",
+            "Sidebar" => "Window",
             "Settings" | "Scenes" => continue,
             _ => "Camera",
         };
         if !matches!(id, "zoom_extents" | "view_top" | "view_front" | "view_right" | "view_iso") {
-            add(id, path, label, "", View(id));
+            let shortcut = if group == "Sidebar" { keys[0] } else { "" };
+            add(id, path, label, shortcut, View(id));
         }
     }
     entries
