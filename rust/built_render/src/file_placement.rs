@@ -73,6 +73,9 @@ fn start_placement(
     let tool = transient_tool_class(py, "place_group")?.call((group,), Some(&kw))?;
     let wall = group.getattr_opt("ext")?.and_then(|ext| ext.get_item("library_host").ok())
         .is_some_and(|host| host.eq("wall").unwrap_or(false));
+    if wall {
+        tool.setattr("vcb_label", "Opening")?;
+    }
     activate(
         win,
         &tool,
