@@ -44,7 +44,9 @@ def test_delivery_lifecycle(fmt, tmp_path, request):
     h.undo()
     assert deliveries.records(scene)[key]["name"] == "Handover"
     assert run(h, "run_delivery", key=key, **ctx)["ok"]
-    assert path.stat().st_size and deliveries.records(scene)[key]["last_run"]
+    record = deliveries.records(scene)[key]
+    assert path.stat().st_size and record["last_run"]
+    assert record["runs"][-1]["folder"] == str(tmp_path.resolve())
     assert run(h, "delete_delivery", key=key)["ok"]
     assert not deliveries.records(scene)
     h.undo()

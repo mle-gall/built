@@ -123,6 +123,11 @@ fn run_delivery<'p>(
         d.set_item("job", runner.call1((key, &record))?)?;
         return Ok(d.into_any());
     }
+    let directory: Option<std::path::PathBuf> = match context {
+        Some(ctx) => ctx.get_item("project_directory")?.map(|p| p.extract()).transpose()?.flatten(),
+        None => None,
+    };
+    let (target, _) = write::destination_path(py, &s, &record, directory.as_deref())?;
     for step in py
         .import("built_core.deliveries")?
         .call_method("write_steps", (&s, record), context)?
@@ -130,7 +135,8 @@ fn run_delivery<'p>(
     {
         step?;
     }
-    delivery_finish(history, key, "", "Delivered")
+    let folder = target.parent().unwrap_or(&target).canonicalize()?;
+    delivery_finish(history, key, &folder.to_string_lossy(), "Delivered")
 }
 fn mesh_part<'p>(mesh: &Obj<'p>, keep: Option<&Obj<'p>>) -> PyResult<Obj<'p>> {
     let Some(keep) = keep else {
