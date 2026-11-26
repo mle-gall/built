@@ -35,7 +35,7 @@ const IMPORT_FILTERS: [(&str, &str, &str); 7] = [
     ("dwg", "Import .dwg", ".dwg files (*.dwg)"),
     ("rfa", "Import .rfa family", ".rfa family (*.rfa)"),
     ("glb", "Import glTF/GLB", "glTF (*.glb *.gltf)"),
-    ("igz", "Import a model as a group", "Built documents (*.built *.igz)"),
+    ("igz", "Import a model as a group", "Built models (*.built *.igz)"),
 ];
 
 /// This submodule, through its attributes.
@@ -240,6 +240,10 @@ fn command<'py>(py: Python<'py>, win: &Any<'py>, name: &str, args: &Bound<'py, P
     match name {
         "new" => m.call_method1("new_model", (win,)),
         "new_window" => m.call_method1("new_window", (win,)),
+        "new_project" => {
+            crate::start_host::new_project(win)?;
+            Ok(nil(py))
+        }
         "move_to_window" => m.call_method1("move_to_new_window", (win, first()?)),
         "open" => m.call_method1("open_dialog", (win,)),
         "home" => m.call_method1("show_start", (win,)),
@@ -1072,7 +1076,7 @@ fn do_save<'py>(py: Python<'py>, win: &Any<'py>, path: &Any<'py>, copy: bool) ->
     Ok(true)
 }
 
-/// File ▸ Save a Copy as Built (.igz): float32 geometry, after saying
+/// File ▸ Export ▸ Save a Copy as .igz (IngeTrazo): the legacy format, float32 geometry, after saying
 /// how far that rounding moves points.
 #[pyfunction]
 #[pyo3(signature = (win, path=None))]
@@ -1087,7 +1091,7 @@ fn export_igz<'py>(py: Python<'py>, win: &Any<'py>, path: Option<Any<'py>>) -> P
             let own = doc.getattr("path")?;
             let base = if truthy(&own) { own } else { path_of(py, &doc.call_method0("display_name")?)? };
             let default = base.call_method1("with_suffix", (".igz",))?;
-            let chosen = file_dialogs(py)?.call_method1("getSaveFileName", (win, tr(py, "Save a Copy as Built")?, default.str()?, "Built (*.igz)"))?.get_item(0)?;
+            let chosen = file_dialogs(py)?.call_method1("getSaveFileName", (win, tr(py, "Save a Copy as .igz (IngeTrazo)")?, default.str()?, "IngeTrazo (*.igz)"))?.get_item(0)?;
             if !truthy(&chosen) {
                 return Ok(false);
             }

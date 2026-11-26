@@ -2,6 +2,12 @@
 //! and action handles. A modelling command must never run over a sheet.
 use pyo3::{prelude::*, types::PyDict};
 
+/// The sheet's own keys: the model's menu-bar items do not take them as
+/// key equivalents, or AppKit would run the model command over a sheet.
+pub(crate) fn sheet_keys() -> impl Iterator<Item = &'static str> {
+    EDITS.iter().flat_map(|row| row.3.iter().copied())
+}
+
 const EDITS: &[(&str, &str, &str, &[&str])] = &[
     (
         "undo",

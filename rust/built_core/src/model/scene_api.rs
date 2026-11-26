@@ -436,7 +436,7 @@ fn entity_visible<'py>(me: &Obj<'py>, entity: &Obj<'py>) -> PyResult<bool> {
 /// offered to the cursor existed nowhere on screen, and a line drawn to it
 /// landed on a spot the user could not see, cutting the face it lay on (the
 /// "phantom vertex" segmentations). Hidden EDGES come back for inference
-/// only with Camera ▸ Hidden Geometry on, the same switch that draws them as
+/// only with View ▸ Hidden Geometry on, the same switch that draws them as
 /// a ghost and makes them selectable.
 #[pyfunction]
 fn scene_edge_snappable<'py>(me: &Obj<'py>, edge: &Obj<'py>) -> PyResult<bool> {

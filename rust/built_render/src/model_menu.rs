@@ -11,11 +11,46 @@ pub struct MenuEntry {
 }
 
 impl MenuEntry {
-    /// Registry view commands can expose their binding to the native menu.
-    pub fn view_shortcut(&self) -> Option<&str> {
-        matches!(self.handler, Handler::View(_)).then_some(self.shortcut)
+    /// The key the native menu bar shows and takes as its key equivalent:
+    /// only ⌘ keys ("Ctrl" in portable notation). ⌥-only and bare keys type
+    /// text in a field, the system owns ⌘H ⌘M ⌘Q ⌘Space, and a sheet's own
+    /// keys (⌘G…) must still reach the sheet (docs/menus.md, rule 7).
+    pub fn menu_key(&self) -> Option<&str> {
+        let key = self.shortcut;
+        let system = ["Ctrl+H", "Ctrl+M", "Ctrl+Q", "Ctrl+W", "Ctrl+Space", "Ctrl+Tab"];
+        (key.split('+').any(|m| m == "Ctrl")
+            && !system.contains(&key)
+            && !crate::sheet_search::sheet_keys().any(|k| k == key))
+        .then_some(key)
+    }
+
+    /// A separator goes before this row in its submenu.
+    pub fn starts_group(&self) -> bool {
+        BREAKS.contains(&self.id)
+    }
+
+    /// Shown as a check row (the state comes from the window).
+    pub fn checkable(&self) -> bool {
+        CHECKS.contains(&self.id)
     }
 }
+
+/// The path of a command with a key and a palette row but no menu row:
+/// a shortcut for something a menu already offers as choices.
+pub const PALETTE_ONLY: &str = "";
+
+/// Rows a submenu separates from the rows before them.
+const BREAKS: &[&str] = &[
+    "export:ifc", "export_image", "export_igz",
+    "scene_previous", "organise-scenes",
+    "rest_intensity", "hide_similar",
+    "form-style", "maximize_model_view",
+];
+
+/// Check rows: their state is mirrored from the window.
+pub const CHECKS: &[&str] = &[
+    "scene_play", "scene_transitions", "hide_similar", "rest_normal", "rest_fade", "rest_hide",
+];
 
 #[derive(Clone, Copy)]
 enum Handler {
@@ -33,6 +68,8 @@ enum Handler {
     DisplaySettings,
     Review,
     Export(&'static str),
+    /// `shell_files::command` runs it before the model menu is asked.
+    Shell,
 }
 
 pub fn entries() -> &'static [MenuEntry] {
@@ -40,6 +77,10 @@ pub fn entries() -> &'static [MenuEntry] {
     ENTRIES.get_or_init(build_entries)
 }
 
+/// The commands of the menu bar that are not plain rows of
+/// `desktop_menu_model::GROUPS`, with their home. `GROUPS` places the
+/// top-level ones (`Row::Entry`) and the submenus (`Row::Sub`); a
+/// submenu lists its rows in this order.
 #[rustfmt::skip]
 fn build_entries() -> Vec<MenuEntry> {
     use Handler::*;
@@ -47,69 +88,52 @@ fn build_entries() -> Vec<MenuEntry> {
     let mut add = |id, path, label, shortcut, handler| {
         entries.push(MenuEntry { id, path, label, shortcut, handler });
     };
+    // File
+    add("recover_discarded", "File", "Recover a Discarded Auto-Save…", "", Window("_on_recover_discarded"));
     add("import:obj", "File ▸ Import", "Wavefront OBJ (.obj)…", "", Window("_on_import_obj"));
-    add("import:stl", "File ▸ Import", "STL mesh (.stl)…", "", Window("_on_import_stl"));
+    add("import:stl", "File ▸ Import", "STL (.stl)…", "", Window("_on_import_stl"));
     for (id, label, method) in [
-        ("import:photomesh", "Photogrammetric mesh (WebODM)…", "_on_import_photomesh"),
+        ("import:photomesh", "Photogrammetric Mesh (WebODM)…", "_on_import_photomesh"),
         ("import:alignment", "Georeference (KML / GeoJSON)…", "_on_import_georef"),
-        ("import:survey_points", "Survey points CSV (UTM)…", "_on_import_survey_points"),
+        ("import:survey_points", "Survey Points (UTM CSV)…", "_on_import_survey_points"),
         ("import:orthomosaic", "Orthomosaic (GeoTIFF)…", "_on_import_orthophoto"),
         ("import:image", "Image (PNG / JPG)…", "_on_import_image"),
-        ("clear_texture_cache", "Clear imported texture cache…", "_on_clear_texture_cache"),
     ] {
         add(id, "File ▸ Import", label, "", Window(method));
     }
+    // Export ▸: the handover, the single formats, the views, the legacy copy.
+    add("delivery_export", "File ▸ Export", "Deliveries…", "", Shell);
     for (id, label, fmt) in [
-        ("export:ifc", "IFC (BIM)…", "ifc"),
-        ("export:glb", "glTF / GLB…", "glb"),
+        ("export:ifc", "IFC (.ifc)…", "ifc"),
+        ("export:glb", "glTF (.glb)…", "glb"),
         ("export:dae", "COLLADA (.dae)…", "dae"),
-        ("export:stl", "STL (3D printing)…", "stl"),
+        ("export:stl", "STL (.stl)…", "stl"),
         ("export:obj", "Wavefront OBJ (.obj)…", "obj"),
-        ("export:dxf", "Current view as DXF…", "dxf"),
     ] {
         add(id, "File ▸ Export", label, "", Export(fmt));
     }
-    for (id, label, action) in [
-        ("scene_add", "Add Scene", "add"), ("scene_show", "Show Scene", "show"),
-        ("scene_update", "Update Scene", "update"), ("scene_rename", "Rename Scene…", "rename"),
-        ("scene_duplicate", "Duplicate Scene", "duplicate"), ("scene_delete", "Delete Scene", "delete"),
-    ] {
-        add(id, "Camera ▸ Scenes", label, "", Scene(action));
-    }
-    for (id,label,shortcut,handler) in [
-        ("scene_transitions","Scene Transitions","",Transitions), ("scene_play","Play / Stop","",Playback),
-        ("scene_next","Next Scene","PgDown",Step(1)), ("scene_previous","Previous Scene","PgUp",Step(-1)),
-        ("animation_video","Export Video…","",Window("export_video")),
-        ("animation_settings","Animation Settings…","",Window("ask_animation")),
-    ] { add(id,"Camera ▸ Animation",label,shortcut,handler); }
-    for (id, key, label) in crate::model_views::presets() {
-        add(id, "Window ▸ Model Views", label, "", Argument("set_view_layout", key));
-    }
-    add("review", "Window", "Review", "Ctrl+0", Review);
-    add("maximize_model_view", "Window", "Maximize / Restore View", "Ctrl+Space", Window("_maximize_model_view"));
-    add("export:video","File ▸ Export","Scenes as Video…","",Window("export_video"));
-    for (id,label,mode) in [("rest_normal","Show normally","normal"),("rest_fade","Fade","fade"),("rest_hide","Hide (fastest)","hide")] {
-        add(id,"Camera ▸ Rest of model while editing",label,"",RestMode(mode));
-    }
-    add("rest_intensity","Camera ▸ Rest of model while editing","Fade intensity…","",DisplaySettings);
-    add("hide_rest","Camera ▸ Component Edit","Hide Rest of Model","Alt+Q",Window("_on_toggle_hide_rest"));
-    add("hide_similar","Camera ▸ Component Edit","Hide Similar Components","Alt+W",Window("_on_toggle_hide_similar"));
+    add("export_image", "File ▸ Export", "Current View as Image…", "", Shell);
+    add("export_view_svg", "File ▸ Export", "Current View as SVG…", "", Shell);
+    add("export:dxf", "File ▸ Export", "Current View as DXF…", "", Export("dxf"));
+    add("export:video", "File ▸ Export", "Scenes as Video…", "", Window("export_video"));
+    add("export_igz", "File ▸ Export", "Save a Copy as .igz (IngeTrazo)…", "", Shell);
+    // Edit
     for (id, label, keys, method) in [
-        ("repeat_last_command", "Repeat last command", "Shift+R", "repeat_last_command"),
+        ("repeat_last_command", "Repeat Last Command", "Shift+R", "repeat_last_command"),
         ("invert_selection", "Invert Selection", "Ctrl+Shift+I", "_on_invert_selection"),
         ("make_group", "Make Group", "Ctrl+G", "_on_make_group"),
         ("verb:make_component", "Make Component…", "G", "_on_make_component"),
         ("explode_group", "Explode Group", "Ctrl+Shift+G", "_on_explode_group"),
         ("split_pieces", "Split into Pieces", "", "_on_split_into_pieces"),
-        ("verb:simplify_mesh", "Simplify Mesh…", "", "_on_simplify_mesh"),
-        ("convert_path", "Convert Path to Geometry", "", "_on_convert_geopath"),
-        ("delete_guides", "Delete Guides", "", "_on_delete_guides"),
         ("hide", "Hide", "Ctrl+H", "_on_hide"),
+        ("delete_guides", "Delete Guides", "", "_on_delete_guides"),
         ("reverse_faces", "Reverse Faces", "", "_on_reverse_faces"),
         ("orient_faces", "Orient Faces", "", "_on_orient_faces"),
         ("heal_overlaps", "Heal Overlapping Faces", "", "_on_heal_overlaps"),
-        ("join_segments", "Join Segments", "", "_on_join_segments"),
         ("rebuild_planar", "Rebuild Faces (Planar)", "", "_on_rebuild_planar"),
+        ("join_segments", "Join Segments", "", "_on_join_segments"),
+        ("verb:simplify_mesh", "Simplify Mesh…", "", "_on_simplify_mesh"),
+        ("convert_path", "Convert Path to Geometry", "", "_on_convert_geopath"),
     ] {
         add(id, "Edit", label, keys, Window(method));
     }
@@ -127,66 +151,104 @@ fn build_entries() -> Vec<MenuEntry> {
     ] {
         add(id, "Edit ▸ Intersect Faces", label, "", Argument("_on_intersect_faces", mode));
     }
+    // View: the registry's camera and display commands, then scenes.
+    for (group, id, label, keys, _) in crate::commands::view_commands() {
+        let path = match (group, id) {
+            (_, "zoom_extents") => continue,
+            (_, "style_xray") => PALETTE_ONLY,
+            (_, "form-style") => "View ▸ Style",
+            (_, "section_cuts") => "View ▸ Sections",
+            ("Style", _) => "View ▸ Style",
+            ("Projection", _) => "View ▸ Projection",
+            ("Views", _) if id.starts_with("view_") => "View ▸ Standard Views",
+            ("walkthrough", _) => "View ▸ Walkthrough",
+            ("Sections", _) => "View ▸ Sections",
+            ("Scenes", _) => continue, // after the scene commands, below
+            ("Sidebar" | "Activity", _) => "Window",
+            _ => "View",
+        };
+        add(id, path, label, keys.first().copied().unwrap_or(""), View(id));
+    }
+    add("tool:first_person", "View ▸ Walkthrough", "First Person", "", Tool("first_person"));
+    add("toggle_projection", PALETTE_ONLY, "Toggle Perspective / Parallel", "Shift+P", Window("_toggle_projection"));
+    add("verb:field_of_view", "View", "Field of View…", "", Window("_ask_field_of_view"));
+    for (id, label, action) in [
+        ("scene_add", "Add Scene", "add"), ("scene_show", "Show Scene", "show"),
+        ("scene_update", "Update Scene", "update"), ("scene_rename", "Rename Scene…", "rename"),
+        ("scene_duplicate", "Duplicate Scene", "duplicate"), ("scene_delete", "Delete Scene", "delete"),
+    ] {
+        add(id, "View ▸ Scenes", label, "", Scene(action));
+    }
+    add("scene_previous", "View ▸ Scenes", "Previous Scene", "PgUp", Step(-1));
+    add("scene_next", "View ▸ Scenes", "Next Scene", "PgDown", Step(1));
+    add("organise-scenes", "View ▸ Scenes", "Organise Scenes", "", View("organise-scenes"));
+    add("scene_transitions", "View ▸ Animation", "Scene Transitions", "", Transitions);
+    add("scene_play", "View ▸ Animation", "Play / Stop", "", Playback);
+    add("animation_settings", "View ▸ Animation", "Animation Settings…", "", Window("ask_animation"));
+    for (id, label, mode) in [("rest_normal", "Show Normally", "normal"), ("rest_fade", "Fade", "fade"), ("rest_hide", "Hide (Fastest)", "hide")] {
+        add(id, "View ▸ Rest of Model While Editing", label, "", RestMode(mode));
+    }
+    add("rest_intensity", "View ▸ Rest of Model While Editing", "Fade Intensity…", "", DisplaySettings);
+    add("hide_similar", "View ▸ Rest of Model While Editing", "Hide Similar Components", "Alt+W", Window("_on_toggle_hide_similar"));
+    add("hide_rest", PALETTE_ONLY, "Toggle Hide Rest of Model", "Alt+Q", Window("_on_toggle_hide_rest"));
+    for (id, key, label) in crate::model_views::presets() {
+        add(id, "View ▸ Model Views", label, "", Argument("set_view_layout", key));
+    }
+    add("maximize_model_view", "View ▸ Model Views", "Maximize / Restore View", "Ctrl+Space", Window("_maximize_model_view"));
+    // Draw and Tools: the tools you arm, then what runs at once.
     for (id, path, label, tool) in [
+        ("tool:line", "Draw", "Line", "line"),
         ("tool:freehand", "Draw", "Freehand", "freehand"),
         ("tool:geopath", "Draw", "Path", "geopath"),
+        ("tool:rectangle", "Draw", "Rectangle", "rectangle"),
+        ("tool:rotated_rect", "Draw", "Rotated Rectangle", "rotated_rect"),
+        ("tool:circle", "Draw", "Circle", "circle"),
+        ("tool:polygon", "Draw", "Polygon", "polygon"),
         ("tool:arc", "Draw ▸ Arcs", "Arc", "arc"),
         ("tool:arc3", "Draw ▸ Arcs", "3-Point Arc", "arc3"),
         ("tool:center_arc", "Draw ▸ Arcs", "Center Arc", "center_arc"),
         ("tool:pie", "Draw ▸ Arcs", "Pie", "pie"),
-        ("tool:rotated_rect", "Draw ▸ Shapes", "Rotated Rectangle", "rotated_rect"),
-        ("tool:polygon", "Draw ▸ Shapes", "Polygon", "polygon"),
-        ("tool:first_person", "Camera ▸ Walkthrough", "First Person", "first_person"),
+        ("tool:select", "Tools", "Select", "select"),
+        ("tool:eraser", "Tools", "Eraser", "eraser"),
+        ("tool:paint", "Tools", "Paint", "paint"),
+        ("tool:pushpull", "Tools", "Push/Pull", "pushpull"),
+        ("tool:move", "Tools", "Move", "move"),
+        ("tool:rotate", "Tools", "Rotate", "rotate"),
         ("tool:scale", "Tools", "Scale", "scale"),
         ("tool:flip", "Tools", "Flip", "flip"),
         ("tool:followme", "Tools", "Follow Me", "followme"),
+        ("tool:offset", "Tools", "Offset", "offset"),
         ("tool:fillet", "Tools", "Fillet 3D", "fillet"),
-        ("tool:protractor", "Tools", "Protractor", "protractor"),
-        ("tool:north", "Tools", "North", "north"),
-        ("tool:dimension", "Tools", "Dimension", "dimension"),
-        ("tool:text", "Tools", "Text", "text"),
-        ("tool:section", "Tools", "Section Plane", "section"),
         ("tool:outer_shell", "Tools", "Outer Shell", "outer_shell"),
         ("tool:solid_intersect", "Tools ▸ Solid Tools", "Intersect", "solid_intersect"),
         ("tool:solid_union", "Tools ▸ Solid Tools", "Union", "solid_union"),
         ("tool:solid_subtract", "Tools ▸ Solid Tools", "Subtract", "solid_subtract"),
         ("tool:solid_trim", "Tools ▸ Solid Tools", "Trim", "solid_trim"),
         ("tool:solid_split", "Tools ▸ Solid Tools", "Split", "solid_split"),
+        ("tool:tape", "Tools", "Tape Measure", "tape"),
+        ("tool:protractor", "Tools", "Protractor", "protractor"),
+        ("tool:dimension", "Tools", "Dimension", "dimension"),
+        ("tool:text", "Tools", "Text", "text"),
+        ("tool:section", "Tools", "Section Plane", "section"),
+        ("tool:north", "Tools", "North", "north"),
     ] {
         add(id, path, label, "", Tool(tool));
     }
     for (id, path, label, method) in [
-        ("toggle_projection", "Camera", "Toggle Perspective / Parallel", "_toggle_projection"),
-        ("verb:field_of_view", "Camera", "Field of View…", "_ask_field_of_view"),
         ("bridge", "Tools", "Bridge", "_on_bridge"),
         ("make_faces", "Tools", "Make Faces", "_on_make_faces"),
         ("text3d", "Tools", "3D Text…", "_on_insert_3d_text"),
-        ("terrain_profile", "Tools", "Terrain profile of selection", "_on_terrain_profile"),
-        ("recover_discarded", "File", "Recover a discarded auto-save…", "_on_recover_discarded"),
+        ("terrain_profile", "Tools", "Terrain Profile of Selection", "_on_terrain_profile"),
+        ("clear_texture_cache", "Tools", "Clear Imported Texture Cache…", "_on_clear_texture_cache"),
         ("documentation", "Help", "Documentation", "_on_documentation"),
-        ("get_models", "Help", "Get more models and textures…", "_on_get_models"),
+        ("get_models", "Help", "Get More Models and Textures…", "_on_get_models"),
     ] {
-        add(id, path, label, if id == "toggle_projection" { "Shift+P" } else { "" }, Window(method));
+        add(id, path, label, "", Window(method));
     }
-    add("plugins_folder", "Plugins", "Open extensions folder", "", Handler::PluginsFolder);
-    add("develop_plugin", "Plugins", "Develop an extension…", "",
+    add("plugins_folder", "Extensions", "Open Extensions Folder", "", Handler::PluginsFolder);
+    add("develop_plugin", "Extensions", "Develop an Extension…", "",
         Handler::Web("https://github.com/mle-gall/built/blob/main/docs/plugins.md"));
-    for (group, id, label, keys, _) in crate::commands::view_commands() {
-        let path = match group {
-            "Style" => "Camera ▸ Style",
-            "Projection" => "Camera ▸ Projection",
-            "Views" if id.starts_with("view_") => "Camera ▸ Standard Views",
-            "walkthrough" => "Camera ▸ Walkthrough",
-            "Sections" => "Camera ▸ Sections",
-            "Sidebar" => "Window",
-            "Settings" | "Scenes" => continue,
-            _ => "Camera",
-        };
-        if !matches!(id, "zoom_extents" | "view_top" | "view_front" | "view_right" | "view_iso") {
-            let shortcut = if group == "Sidebar" { keys[0] } else { "" };
-            add(id, path, label, shortcut, View(id));
-        }
-    }
+    add("review", "Window", "Review (Hide Panels)", "Ctrl+0", Review);
     entries
 }
 
@@ -203,6 +265,7 @@ pub fn run_model_menu(win: &Bound<'_, PyAny>, id: &str) -> PyResult<bool> {
             py.import("built_core.desktop_open")?.call_method1("open_url", (folder,))?
         }
         Handler::Web(url) => win.py().import("built_core.desktop_open")?.call_method1("open_url", (url,))?,
+        Handler::Shell => return Ok(false),
         Handler::Window(method) => win.call_method0(method)?,
         Handler::Argument(method, arg) => win.call_method1(method, (arg,))?,
         Handler::Tool(tool) => win.call_method1("_activate_tool", (tool,))?,

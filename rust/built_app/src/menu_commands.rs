@@ -196,11 +196,18 @@ impl NativeMenuCommand {
     }
 }
 
+/// The Extensions menu's own rows (separators included); the installed
+/// extensions' rows follow them.
+fn fixed_extension_rows() -> usize {
+    use built_render::desktop_menu_model::{EXTENSIONS_MENU, GROUPS};
+    GROUPS.iter().find(|g| g.0 == EXTENSIONS_MENU).map_or(0, |g| g.1.len())
+}
+
 fn collect(menu: &NSMenu, trail: &mut Vec<String>, out: &mut Vec<NativeMenuCommand>) {
     menu.update();
     for (index, item) in menu.itemArray().iter().enumerate() {
         // The per-window Rust extension registry supplies these commands directly.
-        if trail.as_slice() == ["Plugins"] && index >= 2 {
+        if trail.len() == 1 && trail[0] == built_render::desktop_menu_model::EXTENSIONS_MENU && index >= fixed_extension_rows() {
             continue;
         }
         if item.isSeparatorItem() || item.isHidden() {

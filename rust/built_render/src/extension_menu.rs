@@ -262,7 +262,7 @@ impl ExtensionMenus {
             .into_iter()
             .filter(|r| !r.2.is_empty())
             .map(|(id, path, label, keys, _, _)| {
-                let mut full = vec!["Plugins".to_owned()];
+                let mut full = vec![crate::desktop_menu_model::EXTENSIONS_MENU.to_owned()];
                 full.extend(path);
                 (id, full.join(" ▸ "), label, keys)
             })

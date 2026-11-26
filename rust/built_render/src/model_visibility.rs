@@ -85,7 +85,7 @@ fn change_visibility(win: &Bound<'_, PyAny>, verb: &str) -> PyResult<()> {
             ] {
                 add_hidden(&out, matching(&selection, module, name)?.as_any(), &hidden)?;
             }
-            (out.into_any(),"Nothing hidden in the selection — turn on Camera ▸ Hidden Objects / Geometry to select hidden things.",4000)
+            (out.into_any(),"Nothing hidden in the selection — turn on View ▸ Hidden Geometry to select hidden things.",4000)
         }
         "last" => (last(&history, &cmd)?.into_any(), "Nothing to unhide.", 3000),
         "all" => (

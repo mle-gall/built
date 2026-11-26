@@ -76,20 +76,50 @@ fn item(id: &str, text: &str, accel: Option<&str>) -> MenuItem {
 /// `import:<suffix>`.
 pub use built_render::desktop_menu_model::IMPORTS;
 
+fn entry_item(entry: &built_render::model_menu::MenuEntry, checks: &mut Vec<CheckMenuItem>) -> muda::MenuItemKind {
+    if entry.checkable() {
+        let check = CheckMenuItem::with_id(entry.id, entry.label, true, false, None);
+        checks.push(check.clone());
+        muda::MenuItemKind::Check(check)
+    } else {
+        let accelerator = entry.menu_key().and_then(portable_accelerator);
+        muda::MenuItemKind::MenuItem(MenuItem::with_id(entry.id, entry.label, true, accelerator))
+    }
+}
+
+fn append(menu: &Submenu, row: &muda::MenuItemKind) -> muda::Result<()> {
+    match row {
+        muda::MenuItemKind::Check(c) => menu.append(c),
+        muda::MenuItemKind::MenuItem(i) => menu.append(i),
+        _ => unreachable!("entry rows are items or checks"),
+    }
+}
+
 pub fn build() -> muda::Result<Menus> {
-    use built_render::desktop_menu_model::{Row, GROUPS};
+    use built_render::desktop_menu_model::{placed, Row, EXTENSIONS_MENU, GROUPS};
+    use built_render::model_menu::{entries, PALETTE_ONLY};
     let bar = Menu::new();
     let recent = Submenu::with_items("Open Recent", true, &[&MenuItem::new(EMPTY_RECENT, false, None)])?;
     let import = Submenu::new("Import", true);
     for &(id, label) in IMPORTS {
         import.append(&item(id, label, None))?;
     }
-    let mut groups = std::collections::HashMap::from([("File ▸ Import", import.clone())]);
+    let mut model_checks = Vec::new();
+    let mut groups: std::collections::HashMap<String, Submenu> = std::collections::HashMap::from([("File ▸ Import".to_owned(), import.clone())]);
     for &(name, rows) in GROUPS {
         let sub = Submenu::new(name, true);
         for row in rows {
             match *row {
                 Row::Command(id, label, accel) => sub.append(&item(id, label, accel))?,
+                Row::Entry(id) => {
+                    let entry = entries().iter().find(|e| e.id == id).expect("placed model-menu command");
+                    append(&sub, &entry_item(entry, &mut model_checks))?;
+                }
+                Row::Sub(title) => {
+                    let child = Submenu::new(title, true);
+                    sub.append(&child)?;
+                    groups.insert(format!("{name} ▸ {title}"), child);
+                }
                 Row::Recent => sub.append(&recent)?,
                 Row::Imports => sub.append(&import)?,
                 Row::Separator => sub.append(&PredefinedMenuItem::separator())?,
@@ -108,27 +138,27 @@ pub fn build() -> muda::Result<Menus> {
                 }
             }
         }
-        groups.insert(name, sub);
+        groups.insert(name.to_owned(), sub);
     }
-    let plugins = groups["Plugins"].clone();
+    let plugins = groups[EXTENSIONS_MENU].clone();
     let window = groups["Window"].clone();
-    let mut model_checks = Vec::new();
-    for entry in built_render::model_menu::entries() {
-        if let Some((parent, label)) = entry.path.split_once(" ▸ ") {
-            if !groups.contains_key(entry.path) {
+    // Submenu rows in their order; anything GROUPS does not place goes last.
+    for entry in entries() {
+        if entry.path == PALETTE_ONLY || (placed(entry.id) && !entry.path.contains(" ▸ ")) {
+            continue;
+        }
+        if !groups.contains_key(entry.path) {
+            if let Some((parent, label)) = entry.path.rsplit_once(" ▸ ") {
                 let sub = Submenu::new(label, true);
                 groups[parent].append(&sub)?;
-                groups.insert(entry.path, sub);
+                groups.insert(entry.path.to_owned(), sub);
             }
         }
-        if matches!(entry.id,"scene_play"|"scene_transitions"|"hide_rest"|"hide_similar"|"rest_normal"|"rest_fade"|"rest_hide") {
-            let check=CheckMenuItem::with_id(entry.id,entry.label,true,false,None);
-            groups[entry.path].append(&check)?;
-            model_checks.push(check);
-        } else {
-            let accelerator = entry.view_shortcut().and_then(portable_accelerator);
-            groups[entry.path].append(&MenuItem::with_id(entry.id, entry.label, true, accelerator))?;
+        let menu = &groups[entry.path];
+        if entry.starts_group() && !menu.items().is_empty() {
+            menu.append(&PredefinedMenuItem::separator())?;
         }
+        append(menu, &entry_item(entry, &mut model_checks))?;
     }
     for &(name, _) in GROUPS { bar.append(&groups[name])?; }
     #[cfg(target_os = "macos")]

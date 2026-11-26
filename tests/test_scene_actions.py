@@ -29,9 +29,9 @@ def test_each_takes_a_key_in_preferences_and_has_none_yet(win):
         assert action in sheet.actions() and action.portable_keys() == []
 
 
-def test_they_live_in_camera_scenes(win):
+def test_they_live_in_view_scenes(win):
     for key in KEYS:
-        assert win._command_paths["menu:" + key] == "Camera ▸ Scenes"
+        assert win._command_paths["menu:" + key] == "View ▸ Scenes"
 
 
 def test_add_update_and_delete_reach_history(win):

@@ -1,6 +1,6 @@
 //! In-window application menus for the X11, Wayland and Win32 shells.
 use crate::{
-    desktop_menu_model::{Row, GROUPS, IMPORTS},
+    desktop_menu_model::{self, Row, EXTENSIONS_MENU, GROUPS, IMPORTS},
     extension_menu, model_menu,
 };
 use egui::{Rect, Ui};
@@ -67,6 +67,21 @@ fn item(
         ui.close_menu();
     }
 }
+fn entry_check(state: &Desktop, id: &str) -> Option<bool> {
+    if !model_menu::CHECKS.contains(&id) {
+        return None;
+    }
+    state.checks.as_ref().and_then(|(rest, transitions, similar, playing)| {
+        Some(match id {
+            "scene_transitions" => *transitions,
+            "scene_play" => *playing,
+            "hide_similar" => *similar,
+            id => id.strip_prefix("rest_")? == rest,
+        })
+    })
+}
+/// The model-menu rows of `path` in order; at the top level of a menu only
+/// what `GROUPS` does not place itself.
 fn model_rows(
     ui: &mut Ui,
     path: &str,
@@ -76,38 +91,27 @@ fn model_rows(
 ) {
     let prefix = format!("{path} ▸ ");
     let mut groups = Vec::new();
+    let mut first = true;
     for entry in model_menu::entries() {
         if entry.path == path {
-            let checked =
-                state
-                    .checks
-                    .as_ref()
-                    .and_then(|(rest, transitions, similar, playing)| {
-                        Some(match entry.id {
-                            "scene_transitions" => *transitions,
-                            "scene_play" => *playing,
-                            "hide_rest" => rest == "hide",
-                            "hide_similar" => *similar,
-                            id => id.strip_prefix("rest_")? == rest,
-                        })
-                    });
-            item(
-                ui,
-                entry.id,
-                entry.label,
-                entry.shortcut,
-                true,
-                checked,
-                selected,
-            );
+            if desktop_menu_model::placed(entry.id) && !path.contains(" ▸ ") {
+                continue;
+            }
+            if entry.starts_group() && !first {
+                ui.separator();
+            }
+            first = false;
+            item(ui, entry.id, entry.label, entry.shortcut, true, entry_check(state, entry.id), selected);
         } else if let Some(sub) = entry.path.strip_prefix(&prefix) {
             let sub = sub.split(" ▸ ").next().unwrap();
-            if (path == "File" && sub == "Import") || groups.contains(&sub) {
+            let full = format!("{prefix}{sub}");
+            if (path == "File" && sub == "Import") || groups.contains(&sub) || desktop_menu_model::placed(&full) {
                 continue;
             }
             groups.push(sub);
+            first = false;
             ui.menu_button(sub, |ui| {
-                model_rows(ui, &format!("{prefix}{sub}"), state, selected, hits);
+                model_rows(ui, &full, state, selected, hits);
                 hits.push(ui.min_rect());
             });
         }
@@ -192,6 +196,17 @@ pub(crate) fn show(ui: &mut Ui, extensions: &[extension_menu::Row], enabled: boo
                                     None,
                                     &mut selected,
                                 ),
+                                Row::Entry(id) => {
+                                    if let Some(e) = model_menu::entries().iter().find(|e| e.id == id) {
+                                        item(ui, e.id, e.label, e.shortcut, true, entry_check(state, id), &mut selected);
+                                    }
+                                }
+                                Row::Sub(title) => {
+                                    ui.menu_button(title, |ui| {
+                                        model_rows(ui, &format!("{group} ▸ {title}"), state, &mut selected, &mut hits);
+                                        hits.push(ui.min_rect());
+                                    });
+                                }
                                 Row::System(_) => {
                                     if let Some((id, label)) = system {
                                         item(ui, id, label, "", true, None, &mut selected);
@@ -247,7 +262,7 @@ pub(crate) fn show(ui: &mut Ui, extensions: &[extension_menu::Row], enabled: boo
                             }
                         }
                         model_rows(ui, group, state, &mut selected, &mut hits);
-                        if group == "Plugins" {
+                        if group == EXTENSIONS_MENU {
                             plugins(ui, extensions, &mut Vec::new(), &mut selected, &mut hits);
                         }
                         hits.push(ui.min_rect());
