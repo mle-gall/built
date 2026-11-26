@@ -274,24 +274,16 @@ def test_native_location_coordinates_map_apply_and_cancel(tmp_path):
     requested = tmp_path / "tile"
     venv = fixture_venv(tmp_path,
         "from georef.tile_fetcher import TileFetcher\nfrom pathlib import Path\n"
-        f"TileFetcher.request = lambda self, src, x, y, z: Path({str(requested)!r}).touch()\n"
-        "from built_render import Host, chrome_sheet\n"
-        "original = Host.menu\n"
-        "def dispatch(self, command):\n"
-        "    steps = {'fixture-place': [('v','site_northing','48.85'),('v','site_easting','2.35')],"
-        "'fixture-edit': [('v','site_northing','33')], 'fixture-apply': [('verb','site_apply')]}\n"
-        "    if command not in steps: return original(self,command)\n"
-        "    for step in steps[command]:\n"
-        "        chrome_sheet.action(self.window,chrome_sheet.SEP.join(('site-placement',*step)))\n"
-        "        chrome_sheet.before_frame(self.view,self.window)\n"
-        "Host.menu = dispatch\n")
+        f"TileFetcher.request = lambda self, src, x, y, z: Path({str(requested)!r}).touch()\n")
     steps = tmp_path / "commands"
     steps.write_text("wait 600\nkey escape\nmenu site_placement\nwait 400\n"
-                     "menu fixture-place\nwait 200\nstate\nmenu fixture-apply\nwait 250\n"
-                     "menu site_placement\nwait 250\nmenu fixture-edit\nkey escape\nwait 250\n"
+                     "click 1090 211\ntype 48.85, 2.35\nkey enter\nwait 180\n"
+                     "click 912 249\nwait 180\nclick 997 249\nwait 200\nstate\n"
+                     "click 1165 714\nwait 250\nmenu tool:north\nwait 250\n"
+                     "click 1080 539\nkey a cmd\ntype 33\nkey enter\nkey escape\nwait 250\n"
                      f"menu save_to:{saved}\nwait 500\nstate\nquit\n")
     result = run([str(BIN), "--root", str(ROOT), "--venv", str(venv), "--new-instance",
-                  "--size", "1000x920", "--script", str(steps), str(model)],
+                  "--size", "1280x800", "--script", str(steps), str(model)],
                  env=dict(os.environ, BUILT_ANSWERS="escape,cmd-d,cmd-d"), home=home, settings=english(tmp_path / "profile"),
                  capture_output=True, text=True, timeout=90)
     log = result.stdout + result.stderr
