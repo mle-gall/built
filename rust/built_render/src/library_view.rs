@@ -6,7 +6,7 @@
 //! Python gathers the items (dicts, `Item`) from the document, the Rust
 //! catalogue and My library, counts their uses, sends them with the
 //! browsing state (`Browse`), and draws what comes back onto the sheet; it
-//! keeps the thumbnails, the registry tab, the online catalogue and what
+//! keeps the thumbnails, the online catalogue and what
 //! the verbs do.
 use pyo3::prelude::*;
 use serde::{Deserialize, Serialize};
