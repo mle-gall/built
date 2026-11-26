@@ -1566,8 +1566,13 @@ impl Ui {
                                   if self.review { 1 } else { 0 }, true);
                     if menu_row(ui, &review) { toggle_review = true; }
                     ui.add_space(SPACE_XS);
-                    egui::ScrollArea::vertical().id_salt("view command groups")
-                        .max_height((self.screen.bottom() - a.bottom() - 90.).max(ROW_H * 3.))
+                    // Down to the bottom bar (M05). The area remembers last
+                    // frame's size, so give the scroll its room explicitly or
+                    // it stays at the first frame's default height.
+                    let room = view_menu_room(self.screen, ui.cursor().top());
+                    let at = Rect::from_min_size(ui.cursor().min, vec2(ui.available_width(), room));
+                    ui.scope_builder(egui::UiBuilder::new().max_rect(at), |ui| egui::ScrollArea::vertical().id_salt("view command groups")
+                        .max_height(room)
                         .show(ui, |ui| {
                             for (si, (title, items)) in self.view_menu.iter().enumerate() {
                                 if si > 0 { ui.add_space(SPACE_XS); }
@@ -1588,7 +1593,7 @@ impl Ui {
                                     }
                                 }
                             }
-                        });
+                        }));
                 });
             });
         if close { self.view_open = false; }
@@ -3080,6 +3085,12 @@ fn inspector_rows(ui: &mut egui::Ui, rows: &[(String, String)], edits: &mut std:
     }
 }
 
+/// The View menu's scrolling height from `top` (its groups' first row)
+/// down to the bottom bar, less a gutter and the menu's own margin.
+fn view_menu_room(screen: Rect, top: f32) -> f32 {
+    (screen.bottom() - BOT_H - GUT - 6.0 - top).max(ROW_H * 3.)
+}
+
 /// A bar button that opens a menu: label and ▾; returns its rect when clicked.
 fn menu_button(ui: &mut egui::Ui, label: &str, open: bool) -> Option<Rect> {
     let g = ui.painter().layout_no_wrap(label.to_owned(), body(), INK);
@@ -3163,6 +3174,29 @@ fn scene_chooser_owns_modified_arrows_and_moves_within_one_folder() {
     assert!(ui.take_actions().is_empty());
     assert!(ui.key("ArrowUp", true, 1));
     assert_eq!(ui.take_actions(), ["tab:scene:up"]);
+}
+
+#[test]
+fn the_view_menu_reaches_down_to_the_bottom_bar() {
+    let Some(mut ui) = test_chrome() else { return };
+    ui.ctx = test_context();
+    let (cluster, menu) = crate::commands::command_chrome(Default::default(), Default::default(), Default::default());
+    ui.set_cluster(cluster, menu);
+    for (w, h) in [(1600., 1000.), (1280., 800.)] {
+        let screen = Rect::from_min_size(Pos2::ZERO, vec2(w, h));
+        ui.screen = screen;
+        ui.view_open = true;
+        ui.view_anchor = Rect::from_min_size(pos2(w - 80., 6.), vec2(70., 28.));
+        let ctx = ui.ctx.clone();
+        for _ in 0..3 {
+            let raw = egui::RawInput { screen_rect: Some(screen), ..Default::default() };
+            let _ = ctx.run(raw, |c| ui.view_popup(c));
+        }
+        let r = ctx.memory(|m| m.area_rect(egui::Id::new("view_menu"))).unwrap();
+        // Every row fits at 1000 high; either way the menu stops at the bottom bar.
+        assert!(r.max.y <= h - BOT_H - GUT + 0.5, "{h}: ends at {}", r.max.y);
+        assert!(r.height() > 450., "{h}: only {} high", r.height());
+    }
 }
 
 #[test]
