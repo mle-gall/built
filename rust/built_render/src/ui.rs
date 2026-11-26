@@ -17,6 +17,17 @@ mod library_previews;
 mod sheets;
 mod activity;
 mod plugins;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum DrawerMode { Fillet, Soften, Pinned }
+
+impl DrawerMode {
+    fn resolve(soften: bool, fillet: bool, pinned: bool) -> Option<Self> {
+        if soften { Some(Self::Soften) } else if fillet { Some(Self::Fillet) }
+        else if pinned { Some(Self::Pinned) } else { None }
+    }
+}
+
 pub use activity::ActivityRow;
 /// Project tabs in the top bar (views/wgpu_tabs.py).
 mod tabs;
@@ -184,6 +195,7 @@ pub struct Ui {
     top_groups: Vec<Rect>,
     pub cluster_buttons: Vec<(String, (f32, f32))>,
     top_right_w: f32,
+    scene_controls_w: f32,
     units: String,
     glass: crate::glass::Glass,
     /// The app's one question or message (unsaved changes, errors,
@@ -395,6 +407,7 @@ impl Ui {
             gizmo: Default::default(),
             top_groups: Vec::new(),
             cluster_buttons: Vec::new(),
+            scene_controls_w: 250.,
             top_right_w: 0.0,
             units: "mm".into(),
             sheet: None,
@@ -769,7 +782,7 @@ impl Ui {
     }
     pub fn plugin_visible(&self, instance: &str) -> bool {
         self.gallery.is_none() && !self.review && !self.lsheet.open && !self.sheets.shown
-            && (self.destination == Destination::Plugin(instance.into()) || self.plugins.utility_visible(instance) || (self.destination == Destination::Project && self.plugins.dock_visible(instance)))
+            && (self.destination == Destination::Plugin(instance.into()) || (self.drawer_mode() == Some(DrawerMode::Pinned) && self.plugins.pinned_visible(instance)) || (self.destination == Destination::Project && self.plugins.dock_visible(instance)))
     }
     pub fn plugin_document(&mut self, document: String, live: &[String]) {
         if self.plugin_document != document {
@@ -910,11 +923,16 @@ impl Ui {
         if self.lsheet.open { return true; }
         if self.sheets.shown { return self.sheets_claims_key(name); }
         if self.scene_move_key(name, mods).is_some() { return true; }
+        if self.fillet_key(name) { return true; }
         let filing = self.column.as_ref().is_some_and(|c| c.filing.is_some() || c.row_menu.is_some()
             || c.kind_menu.is_some() || c.head_menu.is_some() || c.prompt.is_some() || c.edits.contains_key("\u{1d}pick"));
         self.column.as_ref().is_some_and(|c| !self.review && c.claims_row_key(name, mods)) || self.sheet.is_some() || self.dialog.is_some() || self.cmd_open || (name == "Escape" && (self.view_open || self.menu.is_some() || self.form.is_some() || filing
             || self.ctx_menu.is_some() || self.strip.menus_open()))
             || self.ctx.wants_keyboard_input()
+    }
+    fn fillet_key(&self, name: &str) -> bool {
+        self.drawer_mode() == Some(DrawerMode::Fillet) && !self.cmd_open && !self.review &&
+            (name == "Escape" || (name == "Enter" && !self.cursor.live.as_ref().is_some_and(|v| v.typing)))
     }
     pub fn key(&mut self, name: &str, pressed: bool, mods: u8) -> bool {
         if self.gallery.is_some() || self.font_picker.is_some() {
@@ -996,6 +1014,18 @@ impl Ui {
                     self.view_open = false;
                 } else if self.menu.take().is_none() && self.form.take().is_some() {
                     self.actions.push("form:close".into());
+                }
+            }
+            return true;
+        }
+        if self.fillet_key(name) {
+            if pressed {
+                if name == "Escape" {
+                    self.actions.push("tool:select".into());
+                } else if self.ctx.wants_keyboard_input() {
+                    self.ctx.memory_mut(|m| m.stop_text_input());
+                } else {
+                    self.actions.push(r#"panel:["bevel.finish",null]"#.into());
                 }
             }
             return true;
@@ -1130,7 +1160,11 @@ impl Ui {
             let pointer = self.ctx.input(|i| i.pointer.hover_pos()).unwrap_or(self.screen.center());
             self.cursor.retype_anchor(revision).unwrap_or(pointer - egui::vec2(0., 22.))
         });
+        let confirming_fillet = self.active == "fillet" && self.cursor.live.as_ref().is_some_and(|v| v.typing);
         self.cursor.set(caption, value, typing, at, start.map(|_| at), revision);
+        if confirming_fillet && !typing && self.cursor.readback.is_some() {
+            self.actions.push("tool:select".into());
+        }
     }
     pub fn set_selection(&mut self, summary: String, actions: Vec<(String, String, String, bool, bool)>) {
         self.selection = (!summary.is_empty()).then_some((summary, actions));
@@ -1151,6 +1185,8 @@ impl Ui {
         let visible = |name| self.ctx.memory(|m| m.areas().visible_last_frame(
             &egui::LayerId::new(egui::Order::Foreground, egui::Id::new(name))));
         [
+            ("drawer_pinned", visible("drawer") && self.drawer_mode() == Some(DrawerMode::Pinned)),
+            ("drawer_operation", visible("drawer") && matches!(self.drawer_mode(), Some(DrawerMode::Fillet | DrawerMode::Soften))),
             ("recent_preview", self.glass.showing_preview()),
             ("tool_rail", visible("palette") || visible("sheets_rail")), ("dock", visible("column") || visible("sheets_dock")), ("bottom_bar", visible("bottom")),
             ("view_menu", self.view_open),
@@ -1323,7 +1359,7 @@ impl Ui {
                             if !self.strip.tabs.is_empty() {
                                 // The project tabs (option B): room is left for
                                 // the scene control and at least 60 pt to drag.
-                                let max_w = if sheet_up { screen.width() - lights - 68.0 } else { (screen.width() - lights - 8.0 - self.top_right_w - 300.0 - 60.0).max(160.0) };
+                                let max_w = if sheet_up { screen.width() - lights - 68.0 } else { (screen.width() - lights - 8.0 - self.top_right_w - self.scene_controls_w - 60.0).max(160.0) };
                                 let acts = self.strip.show(ui, max_w);
                                 self.actions.extend(acts);
                                 if !sheet_up { bar_divider(ui); }
@@ -1337,6 +1373,7 @@ impl Ui {
                                 bar_divider(ui);
                             }
                             if sheet_up { return; }
+                            let controls_left = ui.cursor().left();
                             if self.review {
                                 let exit = text_button_response(ui, "Exit review", "Show the panels again", true);
                                 self.cluster_buttons.push(("exit_review".into(), exit.rect.center().into()));
@@ -1358,6 +1395,7 @@ impl Ui {
                                 let next = (String::new(), "›".to_owned(), "Next scene (⇟)".to_owned(), String::new(), -1i8, true);
                                 if !scenes.is_empty() && item_button(ui, &next, None) { clicked = Some("scene:next".into()); }
                             }
+                            self.scene_controls_w = ui.cursor().left() - controls_left;
                         });
                         groups.push(left.response.rect);
                         if sheet_up { return; }
@@ -1367,6 +1405,11 @@ impl Ui {
                         {
                             let right = ui.horizontal(|ui| {
                                 ui.spacing_mut().item_spacing = vec2(SPACE_XS, 0.0);
+                                if self.plugins.registered("render_blender") && !self.sheets.shown {
+                                    let render = text_button_response(ui, "Render", "Open render drawer", true);
+                                    self.cluster_buttons.push(("render".into(), render.rect.center().into()));
+                                    if render.clicked() { self.actions.push("drawer:render_blender".into()); }
+                                }
                                 let library = text_button_response(ui, "▤  Library", "Open Library (⇧⌘L)", true);
                                 self.cluster_buttons.push(("library".into(), library.rect.center().into()));
                                 if library.clicked() { clicked = Some("libsheet:".into()); }
@@ -1456,11 +1499,7 @@ impl Ui {
                             ui.label(egui::RichText::new(&self.status).font(strong(TYPE_BODY)).color(INK));
                             ui.add_space(SPACE_S);
                         }
-                        if self.active == "fillet" && self.panels.data["bevel"].is_object() {
-                            self.panels.bevel(ui, &mut self.actions);
-                            return;
-                        }
-                        for (id, label, key, state) in &self.options {
+                        for (id, label, key, state) in self.options.iter().filter(|_| self.active != "fillet") {
                             if *state == 2 {
                                 ui.label(egui::RichText::new(label).font(meta()).color(WARN));
                                 ui.add_space(SPACE_S);
@@ -1863,9 +1902,38 @@ impl Ui {
         (top + GUT, bottom - GUT)
     }
 
-    /// Where a plugin's utility pane may sit: right of the rail and left of
-    /// the dock, each with a gutter, from the band's top to its bottom.
-    fn utility_bay(&self, ctx: &egui::Context, screen: Rect) -> Rect {
+    fn drawer_mode(&self) -> Option<DrawerMode> {
+        DrawerMode::resolve(self.dialog.as_ref().is_some_and(|d| d.has_soften_preview()),
+                            self.active == "fillet" && self.panels.data["bevel"].is_object(),
+                            self.plugins.has_pinned())
+    }
+
+    fn draw_drawer(&mut self, ctx: &egui::Context, screen: Rect) {
+        let Some(mode) = self.drawer_mode() else { return };
+        let bounds = self.drawer_bounds(ctx, screen);
+        if mode == DrawerMode::Soften {
+            self.draw_soften_preview(ctx, bounds);
+        }
+        kit::drawer(ctx, bounds, |ui| {
+            let width = ui.available_width();
+            match mode {
+                DrawerMode::Pinned => {
+                    egui::Resize::default().id_salt("drawer-height")
+                        .resizable([false, true]).default_width(width)
+                        .min_width(width).max_width(width).default_height(230.)
+                        .max_height((bounds.height() * 0.60).max(120.))
+                        .show(ui, |ui| self.plugins.pinned(ui, &mut self.actions));
+                }
+                DrawerMode::Fillet => {
+                    kit::caption_plain(ui, "Fillet");
+                    self.panels.bevel(ui, &mut self.actions);
+                }
+                DrawerMode::Soften => self.soften_fields(ui),
+            }
+        });
+    }
+
+    fn drawer_bounds(&self, ctx: &egui::Context, screen: Rect) -> Rect {
         let (top, bottom) = self.band(ctx, screen);
         let left = if self.groups.is_empty() { GUT } else { GUT + self.rail_w + GUT };
         let right = self.free_right(ctx, screen) - GUT;
@@ -1873,7 +1941,7 @@ impl Ui {
     }
 
     fn form_anchor(&self, ctx: &egui::Context, screen: Rect) -> Pos2 {
-        let free = self.utility_bay(ctx, screen);
+        let free = self.drawer_bounds(ctx, screen);
         pos2(free.center().x, free.top())
     }
 
@@ -2533,12 +2601,6 @@ impl Ui {
                     let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 1.0), Sense::hover());
                     ui.painter().hline(r.x_range(), r.center().y, Stroke::new(1.0_f32, EDGE));
                     ui.add_space(SPACE_S);
-                    if self.active == "fillet" && self.panels.data["bevel"].is_object() {
-                        egui::ScrollArea::vertical().id_salt("bevel inspector").show(ui, |ui| {
-                            self.panels.bevel_inspector(ui, &mut cmds);
-                        });
-                        return;
-                    }
                     ui.spacing_mut().scroll = egui::style::ScrollStyle {
                         foreground_color: true,
                         floating_width: SPACE_XS,
@@ -2669,7 +2731,7 @@ impl Ui {
                         }
                         let sections = col.inspector.clone();
                         for (title, rows) in &sections {
-                            if matches!(title.as_str(), "Actions" | "Component actions") { continue; }
+                            if matches!(title.as_str(), "Actions" | "Component actions") || (title == "Solid" && selection.is_some() && self.plugins.registered("solid_inspector")) { continue; }
                             if matches!(title.as_str(),"Quantities" | "Export details") && native_export { continue; }
                             if title.starts_with("Export") || matches!(title.as_str(), "What it needs" | "Solid") {
                                 ui.add_space(SPACE_XS);
@@ -2679,6 +2741,20 @@ impl Ui {
                                 ui.add_space(SPACE_S);
                                 caption(ui, title);
                                 inspector_rows(ui, rows, &mut col.edits, &mut actions);
+                            }
+                        }
+                        if let Some((summary, _)) = selection.filter(|_| self.plugins.registered("solid_inspector")) {
+                            ui.add_space(SPACE_S);
+                            caption(ui, "Health");
+                            kit::prop_row(ui, "Selection", summary);
+                            if let Some(count) = self.panels.data["selection"]["health_faces"].as_u64() {
+                                kit::prop_row(ui, "Faces", &count.to_string());
+                            }
+                            for (_, counts) in sections.iter().filter(|(title, _)| title == "Solid") {
+                                inspector_rows(ui, counts, &mut col.edits, &mut actions);
+                            }
+                            if kit::quiet(ui, "Show in drawer").clicked() {
+                                cmds.push("drawer:selection_health".into());
                             }
                         }
                         // A node filed by a tag: that tag's drawing style, as a section.
@@ -2878,6 +2954,9 @@ impl Ui {
         let left = if self.review { GUT } else { GUT + self.rail_w + GUT };
         let right = if self.review { screen.max.x - GUT } else { self.free_right(ctx, screen) - GUT };
         let bottom = if self.review { screen.max.y - GUT } else { screen.max.y - BOT_H - GUT };
+        let bottom = if !self.review && self.drawer_mode().is_some() {
+            ctx.memory(|m| m.area_rect(egui::Id::new("drawer"))).map_or(bottom, |r| bottom.min(r.top() - GUT))
+        } else { bottom };
         let free = Rect::from_min_max(pos2(left, TOP_H + GUT), pos2(right, bottom));
         let (back, live) = self.cursor.place(free, vec2(170.0, 30.0));
         let pill = |id: &str, r: Rect, caption: &str, value: &str, typing: bool, committed: bool| {
@@ -2956,8 +3035,12 @@ impl Ui {
                     self.bottom_bar(ctx, screen, retract);
                 }
                 if !self.review && !sheet_up {
-                    let bay = self.utility_bay(ctx, screen);
-                    self.plugins.utility(ctx, bay, &mut self.actions);
+                    self.draw_drawer(ctx, screen);
+                    if self.drawer_mode() == Some(DrawerMode::Pinned) {
+                        if let Some(at) = ctx.data(|d| d.get_temp::<Pos2>("drawer-close".into())) {
+                            self.cluster_buttons.push(("drawer-close".into(), at.into()));
+                        }
+                    }
                     self.paint_strip(ctx, screen);
                     if self.panels.data["terrain"].is_object() {
                         let bounds = Rect::from_min_max(pos2(12.,0.),pos2(self.free_right(ctx,screen)-8.,screen.bottom()-BOT_H-4.));
@@ -2997,7 +3080,7 @@ impl Ui {
         let model = !self.sheets.shown && !sheet_up;
         let shown = [("top", true), ("palette", work && model && !self.groups.is_empty()),
                      ("view_menu", self.view_open), ("menu", self.menu.is_some()), ("form", self.form.is_some()),
-                     ("plugin_utility", work && model && self.plugins.utility_open()), ("column", work && model && self.column.is_some()), ("bottom", work),
+                     ("drawer", work && model && self.drawer_mode().is_some()), ("column", work && model && self.column.is_some()), ("bottom", work),
                      ("paint_strip", work && model && self.paint_strip_shown()),
                      ("commands", self.cmd_open),
                      ("row_menu", model && self.column.as_ref().is_some_and(|c| c.row_menu.is_some())),
@@ -3007,7 +3090,7 @@ impl Ui {
                      ("terrain_profile", work && model && self.panels.data["terrain"].is_object()),
                      ("jobs", !self.jobs.is_empty() || self.activity_open),
                      ("notices", self.history.iter().any(|r| r.5 > 0.)),
-                     ("dialog", self.dialog.is_some()),
+                     ("dialog", self.dialog.as_ref().is_some_and(|d| !d.has_soften_preview())),
                      ("tab_menu", self.strip.menu_open()),
                      ("tab_overflow", self.strip.overflow_open()),
                      ("ctx_menu", self.ctx_menu.is_some()),

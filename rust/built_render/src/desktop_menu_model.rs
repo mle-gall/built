@@ -95,6 +95,8 @@ pub const GROUPS: &[(&str, &[Row])] = &[
     (
         "Tools",
         &[
+            Row::Command("panel:solid_inspector", "Diagnostics", None),
+            Row::Command("panel:python_console", "Python Console", Some("CmdOrCtrl+Shift+P")),
             Row::Command("tool:select", "Select", None),
             Row::Command("tool:line", "Line", None),
             Row::Command("tool:rectangle", "Rectangle", None),
@@ -111,11 +113,6 @@ pub const GROUPS: &[(&str, &[Row])] = &[
     (
         "Plugins",
         &[
-            Row::Command(
-                "panel:python_console",
-                "Python Console",
-                Some("CmdOrCtrl+Shift+P"),
-            ),
             Row::Command("panel:render_blender", "Blender Render", None),
         ],
     ),

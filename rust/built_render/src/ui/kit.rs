@@ -11,6 +11,22 @@ pub mod view_gizmo;
 use super::tokens::*;
 use egui::{pos2, vec2, Color32, CornerRadius, Pos2, Rect, Sense, Stroke};
 
+/// Glass and insets shared by operation and pinned drawers.
+pub fn drawer_frame() -> Glass {
+    super::glass(super::Surface::Panel).inner_margin(egui::Margin::same(SPACE_M as i8))
+}
+
+pub(super) fn drawer(ctx: &egui::Context, bounds: Rect, body: impl FnOnce(&mut egui::Ui)) {
+    egui::Area::new("drawer".into()).constrain(false)
+        .pivot(egui::Align2::LEFT_BOTTOM).fixed_pos(bounds.left_bottom())
+        .order(egui::Order::Foreground).show(ctx, |ui| {
+            drawer_frame().show(ui, |ui| {
+                ui.set_width((bounds.width() - 2. * SPACE_M).max(100.));
+                body(ui);
+            });
+        });
+}
+
 /// The egui style every Built context starts from: the kit's state looks for
 /// egui's own widgets (text fields, numbers, choices).
 pub fn install_style(s: &mut egui::Style) {

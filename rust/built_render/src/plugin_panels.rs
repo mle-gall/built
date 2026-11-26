@@ -159,9 +159,18 @@ pub(crate) fn open_panel(win: &Obj, key: &Obj) -> PyResult<bool> {
         return Ok(false);
     }
     sync(&view, win)?;
+    let diagnostics = "solid_inspector".into_pyobject(win.py())?.into_any();
+    let report = if key.eq("model_info")? { Some("Geometry") }
+        else if key.eq("selection_health")? { Some("Objects") } else { None };
+    let (key, report) = if report.is_some() && lookup(&view, &diagnostics)?.is_some() {
+        (&diagnostics, report)
+    } else { (key, None) };
     let Some(b) = lookup(&view, key)? else {
         return Ok(false);
     };
+    if let Some(report) = report {
+        b.getattr("model")?.setattr("report_view", report)?;
+    }
     if let Some(opened) = b
         .getattr("model")?
         .getattr_opt("on_open")?

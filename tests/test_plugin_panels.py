@@ -44,16 +44,19 @@ def test_render_job(window, monkeypatch, tmp_path, cancel):
     proc = process_class.return_value
     panel = render_blender.create_panel(ExtensionApp(window, "render_blender"), lambda: None)
     panel.event("width", "commit", 384)
-    panel.event("engine", "commit", "cycles")
+    _blender_panel.native_settings().setValue("render/engine", "cycles")
     panel.event("render", "invoke", None)
     assert process_class.call_args.args[0] == ["mock-blender", "--background"]
     assert write_job.call_args.kwargs["width"] == 384
     assert write_job.call_args.kwargs["engine"] == "cycles"
     assert window._chrome_jobs == [panel.job]
-    (panel.work / "blender.log").write_bytes(b"BUILT stats Rendering 32 / 64 samples\n")
+    (panel.work / "blender.log").write_bytes(b"BUILT preview render.png.preview.png\nBUILT stats Rendering 32 / 64 samples\n")
     proc.poll.return_value = None
     panel._poll_process()
+    assert panel.image == panel.work / "render.png.preview.png"
     assert panel.fraction == panel.job.fraction == .5
+    panel.on_open()
+    assert panel.proc is proc and panel.status == "Rendering"
     if cancel:
         panel.job.cancel()
         proc.kill.assert_called_once()
@@ -64,6 +67,9 @@ def test_render_job(window, monkeypatch, tmp_path, cancel):
     panel._poll_process()
     assert not window._chrome_jobs
     assert panel.status == ("Cancelled" if cancel else "Complete")
+    assert bool(panel.recent) is not cancel
+    if not cancel:
+        assert panel.recent_path == str(panel.work / "render.png")
     preview = [i for s in panel.sections() for i in s["items"] if i["kind"] == "image"]
     assert [i["path"] for i in preview] == ([] if cancel else [str(panel.work / "render.png")])
 

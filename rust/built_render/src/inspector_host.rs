@@ -171,6 +171,14 @@ fn selection(view: &Bound<'_, PyAny>, win: &Bound<'_, PyAny>) -> PyResult<()> {
     out.set_item("schema", schema)?;
     out.set_item("vocabulary", vocabulary)?;
     out.set_item("selection_count", sel.len())?;
+    if !groups.is_empty() && groups.len() == sel.len() {
+        let face_count = py.import("built_core.mesh")?.getattr("face_count")?;
+        let mut faces = 0usize;
+        for group in &groups {
+            faces += face_count.call1((group.getattr("mesh")?,))?.extract::<usize>()?;
+        }
+        out.set_item("health_faces", faces)?;
+    }
     out.set_item("rule", rule)?;
     out.set_item("records", records)?;
     out.set_item("parts", parts)?;
@@ -395,7 +403,7 @@ fn bevel_edit(host: &Bound<'_, PyAny>, tool: &Bound<'_, PyAny>, key: &str, value
     }
     let text = value.extract::<String>().ok();
     match (key, text.as_deref()) {
-        ("apply", _) => {
+        ("apply" | "finish", _) => {
             tool.call_method1("apply_from_panel", (host,))?;
         }
         ("amount", _) => {
@@ -637,7 +645,13 @@ fn inspector_action(win: &Bound<'_, PyAny>, view: &Bound<'_, PyAny>, payload: &s
         "parts" => parts_edit(win, view, &vp, verb, &v),
         "bevel" => {
             let tools = view.getattr("tools")?;
-            bevel_edit(&tools, &tools.getattr("tool")?, verb, &v)
+            let history = vp.getattr("history")?;
+            let revision = history.getattr("revision")?;
+            bevel_edit(&tools, &tools.getattr("tool")?, verb, &v)?;
+            if verb == "finish" && history.getattr("revision")?.ne(&revision)? {
+                win.call_method1("_activate_tool", ("select",))?;
+            }
+            Ok(())
         }
         "camera" => camera_edit(win, view, verb, &v),
         "terrain" => terrain::action(view,&vp,verb),

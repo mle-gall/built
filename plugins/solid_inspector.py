@@ -131,11 +131,14 @@ def _frame(vp, pts) -> None:
 
 
 class SolidInspectorPanel:
-    id, title, slot = "solids", tr("Solid Inspector"), "utility"
+    id, title, slot = "solids", tr("Diagnostics"), "utility"
     notify_close = True
+    sections_on_show = True
 
     def __init__(self, viewport):
         self._viewport = viewport
+        self.model_info = None
+        self.report_view = "Objects"
         self.visible = False
         self._last_key = None
         self._rows = []
@@ -149,7 +152,13 @@ class SolidInspectorPanel:
         if self._inspected_key() != self._last_key:
             self.refresh()
 
-    on_open = show
+    def on_open(self):
+        self.show()
+        selection = self._viewport.scene.selection
+        for i, row in enumerate(self._rows):
+            if row.get("group") in selection or row.get("top") in selection:
+                self.selected = i
+                break
 
     def close(self):
         self.visible = False
@@ -223,11 +232,16 @@ class SolidInspectorPanel:
             return self._rows[self.selected]
 
     def sections(self):
-        from built_core.plugin_panels import section, item
+        from built_core.plugin_panels import field, section, item
         from built_core.units import fmt_volume
         if not self.visible:
             return [section("inspector", self.title, item("button", "inspect", tr("Inspect")))]
         self.show()
+        views = ["Objects", "Geometry", "Materials", "Layers", "BIM objects"]
+        switch = field("report_view", "Report", "choice", self.report_view, options=views)
+        if self.model_info is not None and self.report_view != "Objects":
+            section_data = self.model_info.sections()[views.index(self.report_view) - 1]
+            return [section("report", "", switch, *section_data["items"])]
         rows = []
         for i, row in enumerate(self._rows):
             rep = row["report"]
@@ -238,9 +252,9 @@ class SolidInspectorPanel:
             else:
                 status = "✘ " + tr("faces reversed" if rep["watertight"] else "not watertight")
             volume = fmt_volume(rep["volume"]) if rep["volume"] is not None else "—"
-            rows.append(dict(key=str(i), cells=[row["name"], str(rep["faces"]), status,
-                                                _problem_text(rep), volume]))
-        controls = [item("table", "objects", columns=list(map(tr, ("Object", "Faces", "Status", "Problems", "Volume"))),
+            rows.append(dict(key=str(i), cells=[row["name"], str(rep["faces"]), status, _problem_text(rep), volume,
+                                                str(len(row["mesh"].vertices)), str(rep["edges"])]))
+        controls = [switch, item("table", "objects", columns=list(map(tr, ("Object", "Faces", "Status", "Problems", "Volume", "Vertices", "Edges"))),
                          rows=rows, selection=str(self.selected)),
                     item("log", "details", lines=[self.note])]
         for key, label in (("previous", "Previous problem"), ("next", "Next problem"),
@@ -255,7 +269,11 @@ class SolidInspectorPanel:
         return cur is not None and not why_not_repairable(cur["mesh"], cur["item"])
 
     def event(self, control, event, value):
-        if control == "objects" and event == "selection":
+        if control == "report_view":
+            self.report_view = value
+        elif control == "copy" and self.model_info:
+            self.model_info.event(control, event, value)
+        elif self.report_view == "Objects" and control == "objects" and event == "selection":
             self.selected = int(value)
             self.focus_object()
         elif control == "_panel" and event == "closed":
@@ -534,4 +552,7 @@ class SolidInspectorTool(Tool):
 
 
 def create_panel(app, invalidate):
-    return SolidInspectorPanel(app.viewport)
+    from plugins.model_info import ModelInfoPanel
+    panel = SolidInspectorPanel(app.viewport)
+    panel.model_info = ModelInfoPanel(app, invalidate)
+    return panel

@@ -111,9 +111,6 @@ impl Tool for Solid {
                 {
                     return Reply::committed();
                 }
-                if !groups.is_empty() && matches!(self.op(), "subtract" | "trim") {
-                    host.call("solid_cutter_hint", Json::Null);
-                }
                 host.call("solid_select", Json::Null);
             }
             ToolEvent::Cancel | ToolEvent::Deactivate => {

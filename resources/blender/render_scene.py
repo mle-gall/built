@@ -437,6 +437,17 @@ def main():
     if job.get("serve"):
         serve(scene, figures)
         return
+    if job.get("preview"):
+        render = scene.render
+        final_path = render.filepath
+        render.resolution_percentage = max(1, min(100, 32000 // max(w, h)))
+        set_samples(scene, 1)
+        render.filepath = final_path + ".preview.png"
+        bpy.ops.render.render(write_still=True)
+        say("preview", render.filepath)
+        render.filepath = final_path
+        render.resolution_percentage = 100
+        set_samples(scene, job["samples"])
     say("rendering", w, "x", h)
     bpy.ops.render.render(write_still=True)
     if job.get("blend"):

@@ -843,6 +843,10 @@ impl Gallery {
                     sheet_button(ui, "Cancel", "Esc", 0);
                 });
             });
+        drawer_frame().show(ui, |ui| {
+            let tabs = ["Render", "Console", "Diagnostics"].map(|title| (title.into(), String::new(), true));
+            inline_underline_tabs(ui, &tabs, 0);
+        });
         activity_capsule().show(ui, |ui| {
             ui.set_width(ui.available_width());
             ui.spacing_mut().item_spacing = vec2(SPACE_XS, 0.);

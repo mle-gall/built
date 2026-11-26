@@ -178,6 +178,7 @@ fn run_one<'py>(win: &Obj<'py>, action: &Obj<'py>, source_view: &Obj<'py>) -> Py
     }
     let view = stand_in(win)?;
     match kind {
+        "drawer" => { crate::plugin_panels::open_panel(win, &arg.into_bound_py_any(py)?)?; }
         "tool" => {
             let run = match view.getattr_opt("_ui_palette_runs")? {
                 Some(runs) => runs.call_method1("get", (arg,))?,

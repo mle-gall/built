@@ -157,10 +157,6 @@ fn begin<'py>(a: &Args<'py>) -> Reply<'py> {
     if !suppress.is_none() {
         suppress.call1((PySet::new(py, [face.clone()])?.into_any(),))?;
     }
-    let flash = optional(&viewport, "flash_status")?;
-    if !flash.is_none() {
-        flash.call1((module.call_method1("tr", ("Drag the texture or a pin — red moves, green scales and rotates, blue scales and shears. Enter finishes.",))?, 6000,))?;
-    }
     let update = optional(&viewport, "update")?;
     if !update.is_none() {
         update.call0()?;

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Blender rendering, camera follow and light placement in the native dock."""
+"""Blender rendering, camera follow and light placement in the Render drawer."""
 from built_core import render_blender as rb
 from built_core.i18n import tr
 from plugins._blender_panel import BlenderPanel, CameraSession, create_panel

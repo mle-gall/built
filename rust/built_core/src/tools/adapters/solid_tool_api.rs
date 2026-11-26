@@ -111,19 +111,6 @@ fn host_solid_error<'py>(a: &Args<'py>) -> Reply<'py> {
     )?;
     Ok(none(py))
 }
-fn host_solid_cutter_hint<'py>(a: &Args<'py>) -> Reply<'py> {
-    let py = a.py();
-    let vp = a.get_item(1)?;
-    let tr = imported(py, "built_core.i18n")?.getattr("tr")?;
-    vp.call_method1(
-        "flash_status",
-        (
-            tr.call1(("Click the solid that cuts, then the one it cuts",))?,
-            4000,
-        ),
-    )?;
-    Ok(none(py))
-}
 fn on_activate<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let tool = a.get_item(0)?;
@@ -229,7 +216,6 @@ pub(super) const METHODS: &[Method] = &[
     ("host_solid_select", Mode::Method, host_solid_select, &["self", "vp", "uid"], "", ""),
     ("host_solid_result", Mode::Method, host_solid_result, &["self", "vp", "_"], "", ""),
     ("host_solid_error", Mode::Method, host_solid_error, &["self", "vp", "message"], "", ""),
-    ("host_solid_cutter_hint", Mode::Method, host_solid_cutter_hint, &["self", "vp", "_"], "", ""),
     ("on_activate", Mode::Method, on_activate, &["self", "vp"], "", ""),
     ("on_hover", Mode::Method, on_hover, &["self", "ctx"], "", ""),
 ];

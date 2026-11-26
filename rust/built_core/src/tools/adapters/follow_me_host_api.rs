@@ -208,7 +208,7 @@ fn host_sweep_message<'py>(a: &Args<'py>) -> Reply<'py> {
         "flash_status",
         (
             module.call_method1("tr", (module.getattr("_MESSAGES")?.get_item(&code)?,))?,
-            (if ("intro", "drag").into_bound_py_any(py)?.contains(&code)? {
+            (if code.eq("drag")? {
                 6000.into_bound_py_any(py)?
             } else {
                 2500.into_bound_py_any(py)?

@@ -237,12 +237,9 @@ def test_a_finished_render_reuses_the_image_utility(window, tmp_path, monkeypatc
     panel = _panel(window)
     panel.image = tmp_path / "render.png"
     write_png(panel.image, 64, 40)
-    panel._show_result()
-    first = panel.viewer
-    assert first.model.slot == "utility" and first.model.path == str(panel.image)
-    panel._show_result()
-    assert panel.viewer is first and view.renderer.ui_plugin_open.call_count == 2
-    assert view.renderer.ui_plugin_open.call_args.args == (first.instance,)
+    images = [i for section in panel.sections() for i in section["items"] if i["kind"] == "image"]
+    assert panel.slot == "utility" and images[0]["path"] == str(panel.image)
+    view.renderer.ui_plugin_open.assert_not_called()
 
 
 def test_the_sun_strength_reaches_the_job(tmp_path):
@@ -278,10 +275,9 @@ def test_save_and_open_folder_live_in_the_image_utility(window, tmp_path, monkey
     saved = tmp_path / "saved.png"
     monkeypatch.setattr(ShellFileDialog, "getSaveFileName", lambda *_: (str(saved), ""))
     monkeypatch.setattr(_blender_panel, "open_url", folder)
-    panel._show_result()
-    model = panel.viewer.model
+    model = panel
     controls = {i["id"] for s in model.sections() for i in s["items"]}
-    assert {"image", "save", "folder", "follow"} <= controls
+    assert {"preview", "save", "folder", "sync"} <= controls
     model.event("save", "invoke", None)
     model.event("folder", "invoke", None)
     assert saved.read_bytes() == panel.image.read_bytes()
@@ -293,6 +289,7 @@ def test_change_date_and_time_drops_the_shadows_panel(window, monkeypatch):
     run = Mock()
     monkeypatch.setattr(window, "run_command", run)
     panel = _panel(window)
+    panel.event("lights_open", "commit", True)
     assert any(i["id"] == "shadows" for section in panel.sections() for i in section["items"])
     panel.event("shadows", "invoke", None)
     run.assert_called_once_with("view:form-shadows")

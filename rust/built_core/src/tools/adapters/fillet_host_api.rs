@@ -35,25 +35,8 @@ fn host_reset_bevel<'py>(a: &Args<'py>) -> Reply<'py> {
         "bevel_selection",
         (&sel, &mesh, tool.call_method0("_corners_mode")?),
     )?;
-    if picked.is_truthy()? && tool.call_method0("_corners_mode")?.is_truthy()? {
+    if picked.is_truthy()? {
         tool.setattr("edges", &picked)?;
-        viewport.call_method1("flash_status", (module.call_method("tr", ("{n} corner(s) selected — type the size, or click and move the cursor to set it.",), Some(&fields!(py; "n" => picked.len()?.into_bound_py_any(py)?)))?, 5000,))?;
-    } else {
-        if picked.is_truthy()? {
-            tool.setattr("edges", &picked)?;
-            viewport.call_method1("flash_status", (module.call_method("tr", ("{n} edge(s) selected — type the size, or click and move the cursor to set it.",), Some(&fields!(py; "n" => picked.len()?.into_bound_py_any(py)?)))?, 5000,))?;
-        } else {
-            viewport.call_method1(
-                "flash_status",
-                (
-                    module.call_method1(
-                        "tr",
-                        ("Click an edge to round or bevel it; type the size and Enter.",),
-                    )?,
-                    4000,
-                ),
-            )?;
-        }
     }
     tool.call_method0("_replan")?;
     Ok(none(py))
@@ -336,7 +319,10 @@ fn set_corners<'py>(a: &Args<'py>) -> Reply<'py> {
         return Ok(none(py));
     }
     tool.get_type().into_any().setattr("corners", &corners)?;
-    viewport.call_method1("flash_status", (module.call_method("tr", ("Corners: {c}",), Some(&fields!(py; "c" => module.call_method1("tr", ((if corners.eq("round")? { ("Fill (triangle / cap)").into_bound_py_any(py)? } else { ("No fill (notch)").into_bound_py_any(py)? }),))?)))?,))?;
+    let label = if corners.eq("round")? { "Follow profile" } else { "Flat cut" };
+    let name = module.call_method1("tr", (label,))?;
+    let message = module.call_method("tr", ("Corners: {c}",), Some(&fields!(py; "c" => name)))?;
+    viewport.call_method1("flash_status", (message,))?;
     tool.call_method0("_replan")?;
     viewport.call_method0("update")?;
     Ok(none(py))
@@ -347,16 +333,12 @@ fn apply_from_panel<'py>(a: &Args<'py>) -> Reply<'py> {
     let tool = a.get_item(0)?;
     let viewport = a.get_item(1)?;
     if !tool.call_method0("_current_edges")?.is_truthy()? {
-        viewport.call_method1(
-            "flash_status",
-            (
-                module.call_method1(
-                    "tr",
-                    ("Click an edge to round or bevel it; type the size and Enter.",),
-                )?,
-                4000,
-            ),
-        )?;
+        let message = if tool.call_method0("_corners_mode")?.is_truthy()? {
+            "Fillet needs a selected vertex."
+        } else {
+            "Fillet needs a selected edge."
+        };
+        viewport.call_method1("flash_status", (module.call_method1("tr", (message,))?, 4000))?;
         return Ok(none(py));
     }
     tool.call_method1(

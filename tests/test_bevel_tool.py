@@ -233,19 +233,29 @@ def test_a_bad_amount_in_the_panel_is_ignored(viewport):
     assert viewport.active_tool.radius == pytest.approx(0.1)
 
 
-def test_apply_with_nothing_picked_only_speaks(viewport):
-    _box_scene(viewport)
+@pytest.mark.parametrize(("affect", "target"), [("edges", "edge"), ("vertices", "vertex")])
+def test_fillet_opens_quietly_and_reports_missing_target_on_apply(viewport, monkeypatch, affect, target):
+    mesh = _box_scene(viewport)
+    viewport.scene.select([])
+    FilletTool.affect = affect
     said = []
-    viewport.flash_status = lambda text, *a, **k: said.append(text)
+    monkeypatch.setattr(viewport, "flash_status", lambda text, *args: said.append(text))
     tool = FilletTool()
     viewport.set_active_tool(tool)
+    assert not said
     viewport._hover_edge = None
     tool.hover_edge = None
     depth = len(viewport.history.undo_stack)
     _edit(viewport, "apply")
     assert len(viewport.history.undo_stack) == depth
-    assert any("Click an edge" in s for s in said)
-    viewport.flash_status = lambda *a, **k: None
+    assert said == [f"Fillet needs a selected {target}."]
+
+    edge = next(iter(mesh.edges))
+    viewport.scene.select([edge])
+    said.clear()
+    tool.on_activate(viewport)
+    assert tool.edges == [edge] if affect == "edges" else len(tool.edges) == 2
+    assert not said
 
 
 # ---- Corners (vertices) ---------------------------------------------------------

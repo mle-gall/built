@@ -7,7 +7,7 @@ mod rule;
 mod terrain;
 
 use crate::ui::{kit, tokens};
-use egui::{DragValue, Ui};
+use egui::Ui;
 use serde_json::{json, Value};
 pub use terrain::{plot_png, Terrain};
 
@@ -33,25 +33,21 @@ fn label(v: &Value) -> &str {
     v.as_str().unwrap_or("")
 }
 
-fn choice(
+fn bevel_choice<const N: usize>(
     ui: &mut Ui,
-    key: &str,
+    action: &str,
     current: &str,
-    choices: &[&str],
+    options: [(&'static str, &'static str); N],
     out: &mut Vec<String>,
     layers: &mut Vec<egui::Id>,
-) {
-    egui::ComboBox::from_id_salt(key)
-        .width(72.)
-        .selected_text(current)
-        .show_ui(ui, |ui| {
-            layers.push(ui.layer_id().id);
-            for &v in choices {
-                if ui.selectable_label(v == current, v).clicked() {
-                    send(out, key, json!(v));
-                }
-            }
-        });
+) -> Option<&'static str> {
+    let display = options.iter().find(|(key, _)| *key == current).map_or("—", |(_, name)| *name);
+    let names = options.map(|(_, name)| name);
+    let (selected, popup) = kit::select(ui, action, display, &names);
+    layers.extend(popup);
+    let key = options[selected?].0;
+    send(out, action, json!(key));
+    Some(key)
 }
 
 fn number(
@@ -250,84 +246,60 @@ impl Panels {
 
     pub fn bevel(&mut self, ui: &mut Ui, out: &mut Vec<String>) {
         let b = &self.data["bevel"];
-        choice(
-            ui,
-            "bevel.affect",
-            label(&b["affect"]),
-            &["edges", "vertices"],
-            out,
-            &mut self.popup_layers,
-        );
-        ui.add_enabled_ui(b["affect"] == "edges", |ui| {
-            choice(
-                ui,
-                "bevel.measure",
-                label(&b["measure"]),
-                &["radius", "offset", "width", "depth"],
-                out,
-                &mut self.popup_layers,
-            )
-        });
-        let id = ui.make_persistent_id("bevel.amount");
-        let mut amount = ui
-            .data(|d| d.get_temp::<String>(id))
-            .unwrap_or_else(|| label(&b["amount"]).to_owned());
-        let r = ui.add(egui::TextEdit::singleline(&mut amount).desired_width(64.));
-        if r.changed() {
-            ui.data_mut(|d| d.insert_temp(id, amount.clone()));
-        }
-        if r.lost_focus() && ui.data(|d| d.get_temp::<String>(id)).is_some() {
-            send(out, "bevel.amount", json!(amount));
-            ui.data_mut(|d| d.remove::<String>(id));
-        }
         let shape = if self.numeric_profile && b["shape"].is_null() {
             "profile value"
         } else {
             bevel::shape_name(b)
         };
-        egui::ComboBox::from_id_salt("bevel.shape")
-            .selected_text(shape)
-            .show_ui(ui, |ui| {
-                self.popup_layers.push(ui.layer_id().id);
-                for name in [
-                    "round",
-                    "chamfer",
-                    "profile value",
-                    "steps",
-                    "supports",
-                    "cornice",
-                    "crown",
-                    "drawn",
-                ] {
-                    if ui.selectable_label(shape == name, name).clicked() {
-                        self.numeric_profile = name == "profile value";
-                        send(out, "bevel.shape", json!(name));
-                    }
-                }
+        let shapes = [
+            ("round", "Round"), ("chamfer", "Chamfer"), ("profile value", "Profile value"),
+            ("steps", "Steps"), ("supports", "Supports"), ("cornice", "Cornice"),
+            ("crown", "Crown"), ("drawn", "Drawn"),
+        ];
+        ui.columns(6, |cols| {
+            kit::caption_plain(&mut cols[0], "Affect");
+            bevel_choice(&mut cols[0], "bevel.affect", label(&b["affect"]),
+                         [("edges", "Edges"), ("vertices", "Vertices")], out, &mut self.popup_layers);
+            kit::caption_plain(&mut cols[1], "Measure");
+            cols[1].add_enabled_ui(b["affect"] == "edges", |ui| {
+                bevel_choice(ui, "bevel.measure", label(&b["measure"]),
+                             [("radius", "Radius"), ("offset", "Offset"), ("width", "Width"), ("depth", "Depth")],
+                             out, &mut self.popup_layers);
             });
-        let mut seg = b["segments"].as_i64().unwrap_or(3);
-        if ui
-            .add(DragValue::new(&mut seg).range(1..=64).suffix(" segments"))
-            .changed()
-        {
-            send(out, "bevel.segments", json!(seg));
-        }
-        ui.add_enabled_ui(b["affect"] == "edges", |ui| {
-            choice(
-                ui,
-                "bevel.corners",
-                label(&b["corners"]),
-                &["round", "cut"],
-                out,
-                &mut self.popup_layers,
-            );
+            let ui = &mut cols[2];
+            kit::caption_plain(ui, "Size");
+            let id = ui.make_persistent_id("bevel.amount");
+            let mut amount = ui.data(|d| d.get_temp::<String>(id)).unwrap_or_else(|| label(&b["amount"]).to_owned());
+            let field = ui.add(kit::field(&mut amount).desired_width(ui.available_width()));
+            if field.changed() { ui.data_mut(|d| d.insert_temp(id, amount.clone())); }
+            if field.lost_focus() && ui.data(|d| d.get_temp::<String>(id)).is_some() {
+                send(out, "bevel.amount", json!(amount));
+                ui.data_mut(|d| d.remove::<String>(id));
+            }
+            kit::caption_plain(&mut cols[3], "Profile");
+            if let Some(key) = bevel_choice(&mut cols[3], "bevel.shape", shape, shapes, out, &mut self.popup_layers) {
+                self.numeric_profile = key == "profile value";
+            }
+            kit::caption_plain(&mut cols[4], "Segments");
+            let mut segments = b["segments"].as_f64().unwrap_or(3.);
+            if cols[4].add(kit::number(&mut segments, "").range(1..=64).fixed_decimals(0)).changed() {
+                send(out, "bevel.segments", json!(segments.round() as i64));
+            }
+            kit::caption_plain(&mut cols[5], "Corners");
+            cols[5].add_enabled_ui(b["affect"] == "edges", |ui| {
+                bevel_choice(ui, "bevel.corners", label(&b["corners"]),
+                             [("round", "Follow profile"), ("cut", "Flat cut")], out, &mut self.popup_layers);
+            });
         });
-        if ui.button("Apply").clicked() {
-            send(out, "bevel.apply", Value::Null);
-        }
-        if ui.button("Done").clicked() {
-            out.push("tool:select".into());
-        }
+        self.bevel_inspector(ui, out);
+        ui.horizontal(|ui| {
+            if kit::sheet_button(ui, "Apply", "↵", 1) {
+                send(out, "bevel.finish", Value::Null);
+            }
+            if kit::sheet_button(ui, "Cancel", "Esc", 0) {
+                out.push("tool:select".into());
+            }
+        });
     }
 
     pub fn frame_guide(&self, ctx: &egui::Context, screen: egui::Rect) {

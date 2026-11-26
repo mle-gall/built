@@ -1167,6 +1167,14 @@ pub const NDOF_SUPPORTED: bool = cfg!(any(target_os = "linux", target_os = "wind
 
 pub fn section_groups<'py>(py: Python<'py>, env: &Bound<'py, PyAny>, section: &str) -> PyResult<Bound<'py, PyList>> {
     match section {
+        "blender" => {
+            let mut rows = Vec::new();
+            for (key, default, kind) in [("render/blender_path", "", Kind::Str),
+                    ("render/engine", "eevee", Kind::Str), ("render/samples", "0", Kind::Int)] {
+                rows.push(Binding::new(key, key_get(py, key, obj(py, default)?, kind)?, key_set(py, key, kind)?));
+            }
+            pref_page(py, env, section, rows)
+        }
         "ai" => ai(py, env),
         "general" => general(py, env),
         "navigation" => navigation(py, env),

@@ -38,13 +38,6 @@ def _store(app, st: dict) -> None:
                            "lights": st["lights"]})
 
 
-def _render_result(app, path, following, save, folder, follow):
-    from built_render import RenderResult
-    from built_core.plugin_panels import show_utility
-    return show_utility(app.window, app.key + ".result",
-                        RenderResult(str(path), following, save, folder, follow))
-
-
 class CameraSession:
     """Keep one background Blender for consecutive views of the same scene."""
 
@@ -119,7 +112,6 @@ class CameraSession:
                 if completed.is_file():
                     p.image = completed
                     p.status = "Following camera"
-                    p._show_result()
                     p.invalidate()
         camera = rb.camera_key(p.app.viewport.camera)
         if settled and self.ready and self.pending is None and camera != self.last_camera:
@@ -135,7 +127,8 @@ class CameraSession:
 
 class BlenderPanel:
     """Blender job controller for the host-drawn panel."""
-    id, title, slot = "render", "Blender Render", "dock"
+    id, title, slot = "render", "Render", "utility"
+    notify_close = True
 
     def __init__(self, app, invalidate):
         self.app, self.invalidate = app, invalidate
@@ -144,13 +137,19 @@ class BlenderPanel:
         quality = settings.value(_SETTINGS + "quality", 1, type=int)
         width = settings.value(_SETTINGS + "width", 1920, type=int)
         self.opts = dict(engine=engine if engine in ("cycles", "eevee") else "eevee",
-                         quality=["Draft", "Preview", "Final"][max(0, min(2, quality))],
-                         width=max(64, min(16384, width)), height=1080,
+                         quality="Final" if quality == 2 else "Draft",
+                         width=max(64, min(16384, width)),
+                         height=max(64, min(16384, settings.value(_SETTINGS + "height", 1080, type=int))),
                          ground=str(settings.value(_SETTINGS + "ground", "1")) != "0",
                          keep_blend=str(settings.value(_SETTINGS + "blend", "0")) != "0",
                          binary=str(settings.value(rb.SETTINGS_KEY, "") or ""))
-        self.proc = self.job = self.image = self.selected = self.viewer = None
-        self.lights_open = bool(int(settings.value(_SETTINGS + "open_lights", 1)))
+        self.proc = self.job = self.image = self.selected = None
+        self.render_count = 0
+        self.recent = []
+        self.recent_path = None
+        self.camera = "Current view"
+        self.selected_camera_key = None
+        self.lights_open = bool(int(settings.value(_SETTINGS + "open_lights", 0)))
         self.scene = app.scene
         self.host = app.window._host
         self.sync_timer = self.host.timers.timer(self._sync_camera, 500, True)
@@ -166,6 +165,20 @@ class BlenderPanel:
         self.view_pick = None
         app.add_pickable(self.pick_light, on_select=self.on_light_picked, delete=self.delete_light)
         self.pickables = app.viewport._ext_pickables
+
+    def _settings(self, *, detect=False):
+        settings = native_settings()
+        engine = settings.value(_SETTINGS + "engine", "eevee")
+        self.opts["engine"] = engine if engine in ("eevee", "cycles") else "eevee"
+        binary = str(settings.value(rb.SETTINGS_KEY, "") or "")
+        if detect or binary != self.opts["binary"]:
+            self.opts["binary"] = binary
+            self.found, availability = blender_availability(binary)
+            if not self.proc and not self.image:
+                self.status = availability
+
+    def on_open(self):
+        self._settings(detect=True)
 
     def pick_light(self, viewport, x, y):
         if viewport.scene is not self.scene:
@@ -258,16 +271,33 @@ class BlenderPanel:
                                 field("tilt", "Tilt", "number", tilt, min=-90, max=90)])
                 details.append(field("angle", "Cone", "number", light["angle"], min=1, max=179, unit="°"))
             details.append(item("button", "remove", "Remove light"))
-        result = [item("progress", "activity", self.status, fraction=self.fraction),
+        cameras = ["Current view", *[f"{i + 1}. {v.name}" for i, v in enumerate(self.scene.saved_views)]]
+        self._settings()
+        if self.camera not in cameras or self.selected_camera_key != rb.camera_key(self.app.viewport.camera):
+            self.camera = cameras[0]
+        result = [item("chip", "availability", "Blender · One-way export" if self.found else "Blender unavailable",
+                       available=self.found is not None),
+                  field("quality", "Preset", "choice", opts["quality"], options=["Draft", "Final"]),
+                  field("camera", "Camera", "choice", self.camera, options=cameras),
+                  item("progress", "activity", self.status, fraction=self.fraction),
                   item("button", "render", "Render", primary=True, enabled=self.found is not None and self.proc is None)]
+        if not self.found:
+            result.append(item("button", "settings", "Blender settings…"))
         if self.proc:
             result.append(item("button", "cancel", "Cancel render"))
+        preview = []
         if self.image:
-            result.extend([item("image", "preview", path=str(self.image)),
-                           item("button", "preview_result", "Open preview…"),
-                           item("button", "save", "Save PNG…"),
+            preview.append(item("image", "preview", path=str(self.image)))
+        if self.image and not self.proc:
+            preview.extend([item("button", "save", "Save PNG…"),
+                           item("button", "folder", "Open folder"),
                            field("sync", "Follow camera", "toggle", self.sync_timer.isActive())])
-        if self.lines:
+        if self.recent:
+            preview.extend([item("list", "recent", columns=["Recent renders", "Preset", "Resolution"],
+                                rows=[dict(key=str(path), cells=[name, quality, size])
+                                      for path, name, quality, size in self.recent], selection=self.recent_path),
+                           item("button", "open_image", "Open image")])
+        if self.lines and self.status == "Failed":
             result.append(item("log", "worker", lines=self.lines))
         lighting = [field("lights_open", "Show light controls", "toggle", self.lights_open)]
         if self.lights_open:
@@ -277,23 +307,18 @@ class BlenderPanel:
                              item("list", "lights", columns=["Scene lights"], rows=light_rows, selection=self.selected),
                              item("button", "point", "Place point"), item("button", "spot", "Place spot"),
                              item("button", "aim", "Aim…", enabled=editing), *details])
-        return [section("output", "Output",
-                        field("binary", "Blender", "path", opts["binary"] or (self.found.where if self.found else "")),
-                        field("engine", "Engine", "choice", opts["engine"], options=["eevee", "cycles"]),
-                        field("quality", "Quality", "choice", opts["quality"], options=["Draft", "Preview", "Final"]),
+        return [section("job", "", *result),
+                section("preview_output", "", *preview),
+                section("output", "Output",
                         field("width", "Width", "number", opts["width"], min=64, max=16384, unit=" px"),
                         field("height", "Height", "number", opts["height"], min=64, max=16384, unit=" px"),
                         field("ground", "Ground plane", "toggle", opts["ground"]),
                         field("keep_blend", "Keep .blend", "toggle", opts["keep_blend"])),
-                section("lighting", "Lighting", *lighting),
-                section("job", "Render", *result)]
+                section("lighting", "Lighting", *lighting)]
 
     def event(self, control, event, value):
-        if event == "commit" and control in self.opts:
+        if event == "commit" and control in ("quality", "width", "height", "ground", "keep_blend"):
             self.opts[control] = int(value) if control in ("width", "height") else value
-            if control == "binary":
-                native_settings().setValue(rb.SETTINGS_KEY, value)
-                self.found, self.status = blender_availability(value)
         elif event == "commit" and control in ("sun_scale", "ambience"):
             _store(self.app, {**_state(self.app), control: value})
         elif control == "shadows":
@@ -301,6 +326,14 @@ class BlenderPanel:
         elif control == "lights_open":
             self.lights_open = bool(value)
             native_settings().setValue(_SETTINGS + "open_lights", int(self.lights_open))
+        elif control == "settings":
+            from built_render.settings_sheet import show
+            show(self.app.window, "blender")
+        elif control == "folder" and self.image:
+            open_url(self.image.parent)
+        elif control == "_panel" and event == "closed":
+            self.sync_timer.stop()
+            self.camera_session.close()
         elif control == "sync":
             if value:
                 self.observed_camera = None
@@ -327,29 +360,32 @@ class BlenderPanel:
             else:
                 st["lights"][idx][control] = value
             _store(self.app, st)
+        elif control == "camera":
+            if value != "Current view":
+                self.scene.saved_views[int(value.split(".", 1)[0]) - 1].apply_camera(self.app.viewport.camera)
+                self.app.viewport.update()
+            self.selected_camera_key = rb.camera_key(self.app.viewport.camera)
+            self.camera = value
+        elif control == "recent":
+            self.recent_path = value
+        elif control == "open_image" and self.recent_path:
+            open_url(Path(self.recent_path))
         elif control == "lights":
             self.selected = value
         elif control in ("point", "spot", "aim"):
             self._pick(control)
-        elif control == "render" and self.proc is None and self.found:
-            self._render()
+        elif control == "render" and self.proc is None:
+            self._settings()
+            if self.found:
+                self._render()
         elif control == "cancel" and self.job:
             self.job.cancel()
-        elif control == "preview_result" and self.image:
-            self._show_result()
         elif control == "save" and self.image:
             import shutil
             from built_render.shell_files import ShellFileDialog
             path, _ = ShellFileDialog.getSaveFileName(self.app.window, "Save image", "render.png", "PNG (*.png)")
             if path:
                 shutil.copyfile(self.image, path)
-
-    def _show_result(self):
-        if self.app.scene is self.scene:
-            self.viewer = _render_result(self.app, self.image, self.sync_timer.isActive(),
-                           lambda: self.event("save", "invoke", None),
-                           lambda: open_url(self.image.parent),
-                           lambda on: self.event("sync", "commit", on))
 
     def _pick(self, control):
         def picked(point, on_face):
@@ -402,6 +438,8 @@ class BlenderPanel:
         self.job = Job(self.app.window, "Blender render", on_cancel=lambda: self.proc.kill() if self.proc else None)
         self.job.update(phase="Preparing scene")
         try:
+            args["sample_override"] = native_settings().value(_SETTINGS + "samples", 0, type=int)
+            args["preview"] = True
             path = rb.write_job(self.app.scene, self.app.viewport.camera, self.work, **args, **_state(self.app))
             argv = rb.command(self.found, path)
             log_path = self.work / "blender.log"
@@ -418,13 +456,15 @@ class BlenderPanel:
             self.job = None
             raise
         settings = native_settings()
-        for key in ("engine", "width", "quality"):
+        for key in ("width", "height", "quality"):
             settings.setValue(_SETTINGS + key, ["Draft", "Preview", "Final"].index(self.opts[key])
                               if key == "quality" else self.opts[key])
         settings.setValue(_SETTINGS + "ground", int(args["ground"]))
         settings.setValue(_SETTINGS + "blend", int(args["keep_blend"]))
         self.lines, self.image, self.fraction, self.status = [], None, None, "Preparing scene"
         self.partial = ""
+        self.render_count += 1
+        self.job_description = (self.opts["quality"], f'{args["width"]} × {args["height"]}')
         self.process_timer.start()
 
     def _read(self, final=False):
@@ -435,6 +475,8 @@ class BlenderPanel:
         self.partial = "" if final else lines.pop()
         self.lines = (self.lines + lines)[-200:]
         for line in lines:
+            if line.startswith("BUILT preview "):
+                self.image = self.work / "render.png.preview.png"
             f = rb.progress_of(line)
             if f is not None:
                 self.fraction, self.status = f, "Rendering"
@@ -460,13 +502,20 @@ class BlenderPanel:
         self.image = output if ok else None
         self.status = "Complete" if ok else "Cancelled" if cancelled else "Failed"
         self.fraction = 1. if ok else 0.
-        self.job.end(failed=not ok and not cancelled, detail=self.status)
+        if ok:
+            self.job.end(result_title="Render complete", action_label="Open image",
+                         action=lambda: open_url(output))
+        else:
+            self.job.end(failed=not cancelled, detail=self.status)
         self.process_timer.stop()
         self.output.close()
         self.proc = self.job = None
-        self.invalidate()
         if ok:
-            self._show_result()
+            self.recent_path = str(output)
+            preset, size = self.job_description
+            self.recent.insert(0, (output, f"Render {self.render_count}", preset, size))
+            del self.recent[12:]
+        self.invalidate()
 
 
 create_panel = BlenderPanel

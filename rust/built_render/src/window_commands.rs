@@ -225,8 +225,7 @@ fn run<'py>(py: Python<'py>, name: &str, win: &Bound<'py, PyAny>, a: &Args<'_, '
         "_on_change_axes" => {
             let tool = win.getattr("_tools")?.get_item("change_axes")?;
             tool.setattr("target", a.req(0, "group")?)?;
-            win.call_method1("_activate_tool", ("change_axes",))?;
-            done!(viewport(win)?.call_method1("flash_status", (tr(py, "Click the new origin")?, 4000)))
+            done!(win.call_method1("_activate_tool", ("change_axes",)))
         }
         // Right-click ▸ Flip Along ▸ Red / Green / Blue.
         "_on_flip_along" => done!(py.import("tools.flip")?.getattr("FlipTool")?.call0()?.call_method1("flip", (viewport(win)?, a.req(0, "axis")?))),
