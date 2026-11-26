@@ -10,7 +10,7 @@ use std::io::{Read, Seek};
 use std::path::{Component, Path, PathBuf};
 use std::sync::LazyLock;
 
-const MAX_LEGACY: usize = 1024 * 1024;
+pub(super) const MAX_LEGACY: usize = 1024 * 1024;
 #[derive(Default, Serialize, Deserialize)]
 struct Summary {
     units: Option<String>,
@@ -135,7 +135,9 @@ fn records(py: Python<'_>, p: &Path, limit: usize) -> PyResult<Summary> {
         let doc: Document = serde_json::from_slice(data)
             .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
         Ok(Summary {
-            units: doc.scene.and_then(|s| s.units).map(|u| u.length),
+            units: doc.scene.and_then(|s| s.units).map(|u| u.length).or_else(|| {
+                p.extension()?.eq_ignore_ascii_case("built").then(|| "m".into())
+            }),
             links: linked_files(data),
         })
     };

@@ -594,7 +594,10 @@ def test_link_preview_follows_moved_sources_and_stops_at_a_cycle(tmp_path):
 def test_saved_summary_does_not_read_document_or_geometry(tmp_path):
     from built_core import start_document_summary
     import zipfile
-    path = doc(tmp_path, "indexed.built")
+    path = tmp_path / "indexed.built"
+    scene = Scene()
+    scene.plugin_data["padding"] = "x" * (1024 * 1024)
+    igz.save_scene(scene, path)
     with zipfile.ZipFile(path) as archive:
         index = archive.read("start-summary.json")
     with zipfile.ZipFile(path, "w") as archive:
