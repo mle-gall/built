@@ -209,8 +209,11 @@ def test_a_dark_corner_stays_darker_than_a_light_one(
     """The bounce follows the face's colour: dark walls pass on little
     light, so their corner keeps more of its darkening."""
     def samples(color):
-        vp = corner_blocks(color)
+        nonlocal vp_light
+        vp_light = vp = corner_blocks(color)
         return [_render_at(vp, monkeypatch, enabled, 1000, 800) for enabled in ("0", "1")]
+
+    vp_light = None
 
     light_off, light_on = samples((0.85, 0.85, 0.82))
     dark_off, dark_on = samples((0.25, 0.25, 0.25))
@@ -221,7 +224,12 @@ def test_a_dark_corner_stays_darker_than_a_light_one(
     dark = dark_on[walls] / dark_off[walls]
     corner = light < 0.9
     assert corner.sum() > 100
-    assert np.median(light[corner] - dark[corner]) > 0.025
+    renderer = getattr(vp_light.keys_stand_in, "renderer", None)
+    seen = {"light corner": float(np.median(light[corner])), "dark corner": float(np.median(dark[corner])),
+            "wall pixels": int(walls.sum()), "corner pixels": int(corner.sum()),
+            "light wall": float(np.median(light_off[walls])), "dark wall": float(np.median(dark_off[walls])),
+            "sample counts": renderer.msaa_levels() if renderer is not None else None}
+    assert np.median(light[corner] - dark[corner]) > 0.025, seen
 
 
 
