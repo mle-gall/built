@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
-"""Refresh the shipped source inventory with --write. Without it, check and report."""
+"""Refresh the shipped source inventory with --write. Otherwise check and report.
+
+Run the report from the checkout with the native modules installed:
+    .venv/bin/python -m scripts.translation_coverage
+
+A nonblank entry counts even when its spelling matches English (e.g. "OK").
+Retired catalogue entries remain available for contributors.
+"""
 import argparse
 import ast
 import json
