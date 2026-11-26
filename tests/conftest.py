@@ -14,8 +14,9 @@ os.environ.setdefault("QT_MAC_DISABLE_FOREGROUND_APPLICATION_TRANSFORM", "1")
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 # Set these before importing product code, including collection-time imports.
-from scripts.isolated_launch import preferences_mtime
+from scripts.isolated_launch import log_mtimes, preferences_mtime
 
+_real_logs_before = log_mtimes()
 _real_preferences_before = preferences_mtime()
 _profile_root = tempfile.TemporaryDirectory(prefix="built-pytest-")
 _home = os.path.join(_profile_root.name, "home")
@@ -24,7 +25,7 @@ _settings_dir = os.path.join(_profile_root.name, "settings")
 for directory in (_home, _data_dir, _settings_dir):
     os.makedirs(directory)
 os.environ.update(HOME=_home, CFFIXED_USER_HOME=_home, XDG_DATA_HOME=_data_dir,
-                  XDG_CONFIG_HOME=_settings_dir, BUILT_SETTINGS_DIR=_settings_dir)
+                  BUILT_LOG_DIR=os.path.join(_settings_dir, "logs"), XDG_CONFIG_HOME=_settings_dir, BUILT_SETTINGS_DIR=_settings_dir)
 if sys.platform == "win32":
     os.environ.update(USERPROFILE=_home, APPDATA=_data_dir, LOCALAPPDATA=_data_dir)
 
@@ -290,6 +291,8 @@ def pytest_configure(config):
 @pytest.hookimpl(trylast=True)
 def pytest_sessionfinish(session, exitstatus):
     """A change to the real macOS preferences domain invalidates the run."""
+    if not hasattr(session.config, "workerinput") and log_mtimes() != _real_logs_before:
+        pytest.exit("The real Built logs changed during the test session", returncode=pytest.ExitCode.TESTS_FAILED)
     if not hasattr(session.config, "workerinput") and preferences_mtime() != _real_preferences_before:
         pytest.exit("The real Built preferences plist changed during the test session",
                     returncode=pytest.ExitCode.TESTS_FAILED)

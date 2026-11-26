@@ -17,10 +17,20 @@ from built_core import paths
 
 @pytest.fixture
 def state_home(tmp_path, monkeypatch):
+    monkeypatch.delenv("BUILT_SETTINGS_DIR", raising=False)
+    monkeypatch.delenv("BUILT_LOG_DIR", raising=False)
     d = tmp_path / "state"
     monkeypatch.setenv("XDG_STATE_HOME", str(d))
     monkeypatch.setenv("LOCALAPPDATA", str(d))
     return d
+
+
+def test_log_overrides(tmp_path, monkeypatch):
+    monkeypatch.setenv("BUILT_SETTINGS_DIR", str(tmp_path))
+    monkeypatch.delenv("BUILT_LOG_DIR", raising=False)
+    assert paths.user_log_dir() == tmp_path / "logs"
+    monkeypatch.setenv("BUILT_LOG_DIR", str(tmp_path / "separate"))
+    assert paths.user_log_dir() == tmp_path / "separate"
 
 
 def test_user_log_dir_is_writable_and_outside_the_app(state_home):

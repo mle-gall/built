@@ -195,19 +195,23 @@ assert NativeSettings(profile).value('isolation/child_process') == str(home)
     subprocess.run([sys.executable, "-c", probe], check=True, timeout=20)
 
 
-def test_session_guard_rejects_a_changed_plist(tmp_path, monkeypatch):
+@pytest.mark.parametrize(("getter", "saved", "message"), [
+    ("preferences_mtime", "_real_preferences_before", "plist changed"),
+    ("log_mtimes", "_real_logs_before", "logs changed"),
+])
+def test_session_guard_rejects_a_changed_file(tmp_path, monkeypatch, getter, saved, message):
     from types import SimpleNamespace
     from tests import conftest
 
-    probe = tmp_path / "test-domain.plist"
+    probe = tmp_path / "guarded-file"
     probe.write_bytes(b"seed")
     baseline = probe.stat().st_mtime_ns
-    monkeypatch.setattr(conftest, "_real_preferences_before", baseline)
-    monkeypatch.setattr(conftest, "preferences_mtime", lambda: probe.stat().st_mtime_ns)
+    monkeypatch.setattr(conftest, saved, baseline)
+    monkeypatch.setattr(conftest, getter, lambda: probe.stat().st_mtime_ns)
     session = SimpleNamespace(config=SimpleNamespace())
     conftest.pytest_sessionfinish(session, 0)
     os.utime(probe, ns=(baseline, baseline + 2_000_000_000))
-    with pytest.raises(pytest.exit.Exception, match="plist changed") as failure:
+    with pytest.raises(pytest.exit.Exception, match=message) as failure:
         conftest.pytest_sessionfinish(session, 0)
     assert failure.value.returncode == pytest.ExitCode.TESTS_FAILED
 

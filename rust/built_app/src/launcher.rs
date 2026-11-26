@@ -292,6 +292,13 @@ pub fn initialize(py: Python<'_>) -> PyResult<()> {
     py.import("built_core.python_tls")?.call_method0("ensure_once")?;
     let core = py.import("built_core")?;
     core.call_method0("install_main_thread_collector")?;
+    if std::env::var_os("BUILT_SCRIPTED").is_some()
+        && std::env::var_os("BUILT_LOG_DIR").is_none()
+        && std::env::var_os("BUILT_SETTINGS_DIR").is_none()
+    {
+        let folder = py.import("tempfile")?.call_method0("mkdtemp")?;
+        py.import("os")?.getattr("environ")?.set_item("BUILT_LOG_DIR", folder)?;
+    }
     let log = py.import("built_core.paths")?.call_method0("open_crash_log")?;
     if !log.is_none() {
         let faults = py.import("faulthandler")?;

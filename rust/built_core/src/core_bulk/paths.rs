@@ -39,7 +39,12 @@ fn user_log_dir(py: Python<'_>) -> PyResult<Obj<'_>> {
         .call_method0("home")?
         .extract::<PathBuf>()?;
     let platform = py.import("sys")?.getattr("platform")?.extract::<String>()?;
-    let folder = if platform.starts_with("win") {
+    let configured = |key| env::var_os(key).filter(|s| !s.is_empty()).map(PathBuf::from);
+    let folder = if let Some(logs) = configured("BUILT_LOG_DIR") {
+        logs
+    } else if let Some(profile) = configured("BUILT_SETTINGS_DIR") {
+        profile.join("logs")
+    } else if platform.starts_with("win") {
         env::var_os("LOCALAPPDATA")
             .filter(|s| !s.is_empty())
             .map(PathBuf::from)

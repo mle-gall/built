@@ -1354,6 +1354,9 @@ fn main() {
             std::process::exit(2);
         }
     };
+    if let Some(settings) = &args.settings {
+        std::env::set_var("BUILT_SETTINGS_DIR", settings);
+    }
     if args.gallery { std::env::set_var("BUILT_GALLERY", "1"); }
     // A scripted run is deterministic: camera moves jump instead of gliding.
     if args.script.is_some() { std::env::set_var("BUILT_SCRIPTED", "1"); }
