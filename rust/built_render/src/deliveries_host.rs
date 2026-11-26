@@ -748,9 +748,6 @@ impl DeliveryStep {
             }
             Err(e) if e.is_instance_of::<pyo3::exceptions::PyStopIteration>(py) => {
                 let key = me.key.bind(py);
-                if deliveries(py)?.call_method1("records", (history.getattr("scene")?,))?.contains(key)? {
-                    deliveries(py)?.call_method1("finish", (history, key))?;
-                }
                 let path = py.import("pathlib")?.getattr("Path")?;
                 let dest = path.call1((record.get_item("destination")?,))?.call_method0("expanduser")?;
                 let base = match &me.current {
@@ -758,6 +755,9 @@ impl DeliveryStep {
                     None => dest,
                 };
                 let folder = base.call_method0("resolve")?.getattr("parent")?;
+                if deliveries(py)?.call_method1("records", (history.getattr("scene")?,))?.contains(key)? {
+                    deliveries(py)?.call_method1("finish", (history, key, folder.str()?))?;
+                }
                 win.setattr("_delivery_result", (&name, &folder))?;
                 let open = Py::new(py, OpenUrl { target: folder.clone().unbind() })?;
                 record_activity(win, format!("Delivered · {name}"), folder.str()?.to_string(), "info", Some(("Open folder", open)))?;
@@ -765,6 +765,10 @@ impl DeliveryStep {
             }
             Err(e) if e.is_instance_of::<PyInterruptedError>(py) => Ok(false),
             Err(e) if e.is_instance_of::<pyo3::exceptions::PyException>(py) => {
+                let key = me.key.bind(py);
+                if deliveries(py)?.call_method1("records", (history.getattr("scene")?,))?.contains(key)? {
+                    deliveries(py)?.call_method1("finish", (history, key, "", "Failed"))?;
+                }
                 record_activity(win, format!("Failed · {name}"), e.value(py).str()?.to_string(), "error", None)?;
                 Ok(false)
             }
@@ -851,6 +855,18 @@ fn delivery_action(win: &Bound<'_, PyAny>, view: &Bound<'_, PyAny>, arg: &str) -
     let vp = win.getattr("viewport")?;
     if verb == "new" {
         export_form(win, None, false, "ifc")?;
+    } else if verb == "history" {
+        if let Some((key, i)) = given.rsplit_once(':') {
+            let records = deliveries(py)?.call_method1("records", (vp.getattr("scene")?,))?;
+            if let (Some(record), Ok(i)) = (records.call_method1("get", (key,))?.extract::<Option<Bound<'_, PyAny>>>()?, i.parse::<usize>()) {
+                if let Ok(run) = record.get_item("runs")?.get_item(i) {
+                    let folder = py.import("pathlib")?.getattr("Path")?.call1((run.get_item("folder")?,))?;
+                    if folder.call_method0("is_dir")?.is_truthy()? {
+                        py.import("built_core.desktop_open")?.call_method1("open_url", (folder,))?;
+                    }
+                }
+            }
+        }
     } else if verb == "folder" {
         let result = win.getattr("__dict__")?.call_method1("pop", ("_delivery_result", py.None()))?;
         if result.is_truthy()? {

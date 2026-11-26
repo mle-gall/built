@@ -64,7 +64,7 @@ wait 200
 click 1040 124
 wait 200
 state # filing
-menu delivery_export
+menu export:ifc
 wait 180
 click 630 208
 wait 150

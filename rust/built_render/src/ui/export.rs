@@ -31,60 +31,86 @@ pub(super) fn summary(report: &Value) -> String {
     }
 }
 
-/// The delivery line over the tree: the labelled picker, Run for a kept
-/// delivery, and the count of ready placements. Returns the picker's rect
-/// when it is clicked (its menu opens under it).
-pub(super) fn strip(ui: &mut egui::Ui, report: &Value, open: bool, cmds: &mut Vec<String>) -> Option<egui::Rect> {
-    let active = report["active"].as_str().unwrap_or("");
-    let mut clicked = None;
-    ui.horizontal(|ui| {
-        ui.set_height(super::CONTROL_H);
-        ui.spacing_mut().item_spacing.x = super::SPACE_XS;
-        let count = summary(report);
-        let count_w = ui.painter().layout_no_wrap(count.clone(), super::caption_font(), super::DIM).size().x;
-        let run = if active.is_empty() { 0.0 } else { 48.0 };
-        let room = (ui.available_width() - count_w - run - super::SPACE_M).max(96.0);
-        let picker = kit::dropdown(ui, "Delivery:", delivery_name(report), open, room);
-        if picker.clicked() {
-            clicked = Some(picker.rect);
-        }
-        if !active.is_empty() && kit::quiet(ui, "Run").on_hover_text("Export this delivery").clicked() {
-            cmds.push(format!("deliver:run:{active}"));
-        }
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            ui.add_space(super::SPACE_S);
-            kit::caption_plain(ui, &count);
-        });
-    });
-    clicked
+pub(super) fn blocked(report: &Value) -> u64 {
+    report["total"].as_u64().unwrap_or(0).saturating_sub(report["ready"].as_u64().unwrap_or(0))
 }
 
-/// The delivery picker's rows. Returns whether the menu closes.
-pub(super) fn delivery_menu(ui: &mut egui::Ui, report: &Value, cmds: &mut Vec<String>) -> bool {
+/// Link the per-row view to its delivery setup.
+pub(super) fn strip(ui: &mut egui::Ui, report: &Value) -> bool {
+    ui.horizontal(|ui| {
+        let room = (ui.available_width() - 95.).max(96.);
+        let clicked = kit::dropdown(ui, "Delivery:", delivery_name(report), false, room).clicked();
+        kit::caption_plain(ui, &summary(report));
+        clicked
+    }).inner
+}
+
+/// Kept deliveries, checks and completed runs share the active record key.
+pub(super) fn destination(ui: &mut egui::Ui, report: &Value, cmds: &mut Vec<String>, actions: &mut Vec<String>, rule: &mut Option<(String, String)>) -> bool {
+    let mut show = false;
     let active = report["active"].as_str().unwrap_or("");
     let choices = report["choices"].as_array().map(Vec::as_slice).unwrap_or_default();
-    let mut close = false;
-    let mut row = |ui: &mut egui::Ui, label: &str, checked: i8, command: String| {
-        let item = (String::new(), label.to_owned(), String::new(), "check".to_owned(), checked, true);
-        if kit::menu_row(ui, &item) {
-            cmds.push(command);
-            close = true;
+    kit::inspector_title(ui, "Deliveries", "");
+    ui.add_space(super::SPACE_S);
+    egui::ScrollArea::vertical().id_salt("delivery contents")
+        .max_height((ui.available_height() - super::BUTTON_H - super::SPACE_M).max(super::ROW_H))
+        .auto_shrink([false, false]).show(ui, |ui| {
+        kit::caption_plain(ui, "Kept deliveries");
+        if choices.is_empty() && report.is_object() {
+            kit::empty_state(ui, "No kept deliveries yet");
         }
-    };
-    if choices.is_empty() {
-        row(ui, "Project checks", 1, "deliver:select:".into());
-    }
-    for choice in choices {
-        let key = choice[0].as_str().unwrap_or("");
-        row(ui, choice[1].as_str().unwrap_or("Delivery"), i8::from(active == key), format!("deliver:select:{key}"));
-    }
-    kit::menu_separator(ui);
-    row(ui, "New delivery…", -1, "deliver:new".into());
-    if !active.is_empty() {
-        row(ui, "Edit delivery…", -1, format!("deliver:edit:{active}"));
-        row(ui, "Delete delivery", -1, format!("deliver:delete:{active}"));
-    }
-    close
+        for choice in choices {
+            let key = choice[0].as_str().unwrap_or("");
+            let row = (String::new(), choice[1].as_str().unwrap_or("Delivery").into(), String::new(), "check".into(), i8::from(key == active), true);
+            if kit::menu_row(ui, &row) { cmds.push(format!("deliver:select:{key}")); }
+        }
+        if kit::quiet(ui, "New delivery…").clicked() { cmds.push("deliver:new".into()); }
+        ui.separator();
+        kit::inspector_title(ui, delivery_name(report), &summary(report));
+        let n = blocked(report);
+        if n > 0 && kit::quiet(ui, &format!("Show {n} to fix")).clicked() {
+            *rule = None;
+            let paths: std::collections::BTreeSet<_> = checks(report, None, &Default::default()).values()
+                .flat_map(|c| &c.paths).map(Value::to_string).collect();
+            if !paths.is_empty() { actions.push(format!("exportshow\u{1f}[{}]", paths.into_iter().collect::<Vec<_>>().join(","))); }
+            show = true;
+        }
+        kit::disclosure(ui, ("delivery checks", active), "Fix checklist", true, |ui| {
+            if let Some(selected) = checklist(ui, report, None, &Default::default(), actions) {
+                *rule = Some(selected);
+                show = true;
+            }
+        });
+        if !active.is_empty() {
+            ui.separator();
+            if kit::quiet(ui, "Edit setup…").clicked() { cmds.push(format!("deliver:edit:{active}")); }
+            if let Some(outputs) = report["outputs"].as_array().filter(|outputs| !outputs.is_empty()) {
+                kit::caption_plain(ui, "Outputs");
+                for output in outputs {
+                    let format = output["format"].as_str().unwrap_or("").to_uppercase();
+                    let path = output["destination"].as_str().unwrap_or("");
+                    let row = ui.scope(|ui| kit::prop_row(ui, &format, path));
+                    row.response.on_hover_text(path);
+                }
+            }
+            kit::disclosure(ui, ("delivery history", active), "Run history", true, |ui| {
+                let runs = report["runs"].as_array().map(Vec::as_slice).unwrap_or_default();
+                if runs.is_empty() { kit::empty_state(ui, "No runs yet"); }
+                for (i, run) in runs.iter().enumerate().rev() {
+                    ui.push_id(i, |ui| {
+                        kit::prop_row(ui, run["result"].as_str().unwrap_or("Delivered"), run["time"].as_str().unwrap_or(""));
+                        if run["folder"].as_str().is_some_and(|s| !s.is_empty()) && kit::quiet(ui, "Open folder").clicked() {
+                            cmds.push(format!("deliver:history:{active}:{i}"));
+                        }
+                    });
+                }
+            });
+            if kit::quiet(ui, "Delete delivery").clicked() { cmds.push(format!("deliver:delete:{active}")); }
+        }
+    });
+    ui.add_space(super::SPACE_S);
+    if !active.is_empty() && kit::sheet_button(ui, "Run", "", 1) { cmds.push(format!("deliver:run:{active}")); }
+    show
 }
 
 /// What a row's Readiness cell says.
@@ -215,14 +241,15 @@ pub(super) fn checklist(
     focus: Option<&str>,
     placements: &std::collections::HashSet<String>,
     actions: &mut Vec<String>,
-) {
+) -> Option<(String, String)> {
     if !report.is_object() {
         ui.horizontal(|ui| {
             ui.add_space(INDENT);
             kit::empty_state(ui, "Checking…");
         });
-        return;
+        return None;
     }
+    let mut selected = None;
     let found = checks(report, focus, placements);
     for ((label, fix), check) in &found {
         ui.push_id((label, fix), |ui| {
@@ -247,6 +274,7 @@ pub(super) fn checklist(
                         }
                     }
                     if !check.paths.is_empty() && kit::quiet(ui, "Show").on_hover_text("Select and zoom to them").clicked() {
+                        selected = Some((label.to_string(), fix.to_string()));
                         actions.push(format!("exportshow\u{1f}{}", json!(check.paths)));
                     }
                     ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
@@ -292,6 +320,25 @@ pub(super) fn checklist(
             }
         });
     }
+    selected
+}
+
+pub(super) fn rule_rows(report: &Value, rule: &(String, String)) -> std::collections::HashSet<String> {
+    let mut rows = std::collections::HashSet::new();
+    if let Some(by_row) = report["checks"].as_object() {
+        for (key, rules) in by_row {
+            for entry in rules.as_object().into_iter().flatten().map(|(_, entry)| entry) {
+                if entry[0] != rule.0 { continue; }
+                for item in entry[1].as_array().into_iter().flatten().filter(|item| item["fix"] == rule.1) {
+                    rows.insert(key.clone());
+                    if let Some(id) = item["row"].as_str() {
+                        for kind in ["i", "c", "g"] { rows.insert(format!("{kind}:{id}")); }
+                    } else if item["path"].is_null() { rows.insert("geometry:loose".into()); }
+                }
+            }
+        }
+    }
+    rows
 }
 
 #[cfg(test)]

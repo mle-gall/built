@@ -298,6 +298,34 @@ impl Stage {
         result
     }
 }
+pub(super) fn destination_path(py: Python<'_>, s: &Obj<'_>, r: &Obj<'_>, directory: Option<&Path>) -> PyResult<(PathBuf, Option<PathBuf>)> {
+    let project = match directory {
+        Some(p) => Some(p.to_path_buf()),
+        None => s
+            .getattr_opt("_project_host_path")?
+            .filter(|v| v.is_truthy().unwrap_or(false))
+            .map(|p| p.extract::<PathBuf>())
+            .transpose()?
+            .and_then(|p| p.parent().map(Path::to_owned)),
+    };
+    let raw = py
+        .import("pathlib")?
+        .call_method1("Path", (r.get_item("destination")?,))?
+        .call_method0("expanduser")?
+        .extract::<PathBuf>()?;
+    let target = if raw.is_absolute() {
+        raw
+    } else {
+        project
+            .as_ref()
+            .ok_or_else(|| {
+                PyValueError::new_err("Choose an absolute destination for an unsaved document")
+            })?
+            .join(raw)
+    };
+    Ok((target, project))
+}
+
 #[pyclass]
 struct DeliverySteps {
     scene: Py<PyAny>,
@@ -316,30 +344,7 @@ impl DeliverySteps {
         let r = self.record.bind(py);
         let s = self.scene.bind(py);
         delivery_validate(r)?;
-        let project = match &self.project {
-            Some(p) => Some(p.clone()),
-            None => s
-                .getattr_opt("_project_host_path")?
-                .filter(|v| v.is_truthy().unwrap_or(false))
-                .map(|p| p.extract::<PathBuf>())
-                .transpose()?
-                .and_then(|p| p.parent().map(Path::to_owned)),
-        };
-        let raw = py
-            .import("pathlib")?
-            .call_method1("Path", (r.get_item("destination")?,))?
-            .call_method0("expanduser")?
-            .extract::<PathBuf>()?;
-        let target = if raw.is_absolute() {
-            raw
-        } else {
-            project
-                .as_ref()
-                .ok_or_else(|| {
-                    PyValueError::new_err("Choose an absolute destination for an unsaved document")
-                })?
-                .join(raw)
-        };
+        let (target, project) = destination_path(py, s, r, self.project.as_deref())?;
         let views = if r.get_item("scope")?.eq("scenes")? {
             chosen(
                 &s.getattr("saved_views")?,

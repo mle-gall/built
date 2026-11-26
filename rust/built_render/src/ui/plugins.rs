@@ -19,6 +19,7 @@ pub(super) struct Panel {
 #[serde(rename_all = "lowercase")]
 enum Slot {
     Dock,
+    Destination,
     Utility,
 }
 #[derive(Deserialize)]
@@ -195,6 +196,7 @@ impl Panels {
     pub(super) fn open(&mut self, instance: &str) {
         if let Some(p) = self.models.iter().find(|p| p.instance == instance) {
             match p.slot {
+                Slot::Destination => {}
                 Slot::Dock => {
                     self.showing = true;
                     self.dock = Some(instance.into())
@@ -206,10 +208,11 @@ impl Panels {
             }
         }
     }
-    pub(super) fn visible(&self, instance: &str) -> bool {
-        self.utility.as_deref() == Some(instance)
-            || (self.showing && self.dock.as_deref() == Some(instance))
+    pub(super) fn destinations(&self) -> impl Iterator<Item=(&str, &str)> {
+        self.models.iter().filter(|p| p.slot == Slot::Destination).map(|p| (p.instance.as_str(), p.title.as_str()))
     }
+    pub(super) fn dock_visible(&self, id: &str) -> bool { self.showing && self.dock.as_deref() == Some(id) }
+    pub(super) fn utility_visible(&self, id: &str) -> bool { self.utility.as_deref() == Some(id) }
     pub(super) fn available(&self) -> bool {
         !self.models.is_empty() || !self.commands.is_empty()
     }
@@ -241,7 +244,7 @@ impl Panels {
         }
         let mut open = None;
         ui.horizontal_wrapped(|ui| {
-            for p in &self.models {
+            for p in self.models.iter().filter(|p| p.slot != Slot::Destination) {
                 if ui
                     .selectable_label(self.dock.as_ref() == Some(&p.instance), &p.title)
                     .clicked()
@@ -295,7 +298,7 @@ impl Panels {
                     });
             });
     }
-    fn draw(&mut self, ui: &mut egui::Ui, id: &str, actions: &mut Vec<String>) {
+    pub(super) fn draw(&mut self, ui: &mut egui::Ui, id: &str, actions: &mut Vec<String>) {
         let Some(p) = self.models.iter().find(|p| p.instance == id) else {
             return;
         };
@@ -774,6 +777,17 @@ mod tests {
             serde_json::from_str(events[0].strip_prefix("plugin:").unwrap()).unwrap();
         assert_eq!(event["event"], "selection");
         assert_eq!(event["value"], "faces");
+    }
+
+    #[test]
+    fn destination_registration_uses_document_instance_and_updates_in_place() {
+        let mut panel = descriptor(json!({"kind":"log","id":"events","lines":[]}));
+        panel["slot"] = json!("destination");
+        let mut panels = Panels::default();
+        panels.set(&panel.to_string()).unwrap();
+        panel["title"] = json!("Coordination");
+        panels.set(&panel.to_string()).unwrap();
+        assert_eq!(panels.destinations().collect::<Vec<_>>(), [("doc1-demo", "Coordination")]);
     }
 
     #[test]

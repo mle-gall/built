@@ -236,7 +236,7 @@ pub(crate) fn export_readiness(
             let parents = rows_of(&owner)?;
             // The placement's own row, by the tree's row id.
             let row_id: String = tree.call_method1("row_id", (&owner,))?.extract()?;
-            *items.entry(row_id).or_default() += 1;
+            *items.entry(row_id.clone()).or_default() += 1;
             let mut fix = String::new();
             if code == "status" && !obj.getattr("locked")?.is_truthy()? {
                 let rec = obj.getattr("ifc")?;
@@ -248,7 +248,7 @@ pub(crate) fn export_readiness(
                 }
             }
             let rule_key = format!("{code}/{fix}");
-            let element = json!({"name":name,"path":path,"fix":fix,"visible":!obj.getattr("hidden")?.is_truthy()?});
+            let element = json!({"name":name,"path":path,"row":row_id,"fix":fix,"visible":!obj.getattr("hidden")?.is_truthy()?});
             for key in parents {
                 blockers.entry(key.clone()).or_default().insert(id);
                 checks
@@ -270,7 +270,23 @@ pub(crate) fn export_readiness(
         .iter()
         .map(|(key, count)| (key, [blockers.get(key).map_or(0, HashSet::len), *count]))
         .collect();
+    let mut outputs = Vec::new();
+    let runs = if let Some(record) = delivery.as_ref() {
+        outputs.push(json!({
+            "format": format.as_deref().unwrap_or(""),
+            "destination": record.call_method1("get", ("destination", ""))?.str()?.to_str()?,
+        }));
+        let raw = record.call_method1("get", ("runs", pyo3::types::PyList::empty(scene.py())))?;
+        let encoded: String = scene.py().import("json")?.call_method1("dumps", (raw,))?.extract()?;
+        let mut runs: Vec<Value> = serde_json::from_str(&encoded).unwrap_or_default();
+        if runs.is_empty() {
+            if let Some(time) = record.call_method1("get", ("last_run",))?.extract::<Option<String>>()? {
+                runs.push(json!({"result":"Delivered","time":time}));
+            }
+        }
+        Value::Array(runs)
+    } else { Value::Null };
     let report = json!({"choices":deliveries,"active":active,"scope":scope,"ready":total-blocked,"total":total,
-        "rows":rows,"items":items,"checks":checks,"notes":notes});
+        "outputs":outputs,"runs":runs,"rows":rows,"items":items,"checks":checks,"notes":notes});
     Ok(report.to_string())
 }

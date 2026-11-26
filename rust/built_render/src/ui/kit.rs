@@ -2369,3 +2369,58 @@ mod switch_row_tests {
         assert!(!row(false, false, true).1);
     }
 }
+
+/// Window-side destination rail, inside the glass and outside its content padding.
+pub use super::tokens::DESTINATION_STRIP_W;
+
+pub fn destination_strip(ui: &mut egui::Ui, rect: Rect, draw: impl FnOnce(&mut egui::Ui)) {
+    ui.painter().vline(rect.left(), rect.y_range(), Stroke::new(1_f32, DIVIDER));
+    let inner = rect.shrink2(vec2(3., SPACE_S));
+    let mut strip = ui.new_child(egui::UiBuilder::new().id_salt("destinations").max_rect(inner));
+    strip.spacing_mut().item_spacing.y = SPACE_XS;
+    draw(&mut strip);
+}
+
+/// Each destination has the same hit target, including when a badge is present.
+pub fn destination_button(ui: &mut egui::Ui, name: &str, glyph: &str, shortcut: &str, badge: &str, active: bool) -> bool {
+    let (rect, response) = ui.allocate_exact_size(vec2(30., 30.), Sense::click());
+    if active {
+        paint_selected_row(ui, rect);
+    } else {
+        paint_state(ui, rect, state_of(&response, false, true), R_CONTROL);
+    }
+    let ink = if active { BRIGHT } else { INK_2 };
+    let center = rect.center();
+    if glyph == "folder" {
+        let points = [(-8., -6.), (-2., -6.), (0., -3.), (8., -3.), (8., 6.), (-8., 6.)];
+        ui.painter().add(egui::Shape::closed_line(points.map(|(x, y)| center + vec2(x, y)).to_vec(), Stroke::new(1.4_f32, ink)));
+    } else if glyph == "component" {
+        let points = [(0., -8.), (7., -4.), (7., 4.), (0., 8.), (-7., 4.), (-7., -4.)];
+        let stroke = Stroke::new(1.4_f32, ink);
+        ui.painter().add(egui::Shape::closed_line(points.map(|(x, y)| center + vec2(x, y)).to_vec(), stroke));
+        for (x, y) in [(-7., -4.), (7., -4.), (0., 8.)] {
+            ui.painter().line_segment([center, center + vec2(x, y)], stroke);
+        }
+    } else if glyph == "tasks" {
+        for dy in [-5., 0., 5.] {
+            ui.painter().circle_filled(center + vec2(-6., dy), 1., ink);
+            ui.painter().line_segment([center + vec2(-2., dy), center + vec2(7., dy)], Stroke::new(1.4_f32, ink));
+        }
+    } else {
+        row_glyph(ui.painter(), center, glyph, ink);
+    }
+    if !badge.is_empty() {
+        let at = rect.right_top() + vec2(-5., 5.);
+        ui.painter().circle_filled(at, 6., WARN);
+        ui.painter().text(at, egui::Align2::CENTER_CENTER, badge, meta(), PANEL);
+    }
+    let mut label = format!("{name}  {shortcut}");
+    if !badge.is_empty() { label.push_str(" · Needs attention"); }
+    response.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, active, &label));
+    if response.has_focus() || response.hovered() {
+        let text = ui.painter().layout_no_wrap(label.clone(), body(), INK);
+        let pos = response.rect.left_center() - vec2(text.size().x + SPACE_M * 2., CONTROL_H / 2.);
+        egui::show_tooltip_at(ui.ctx(), response.layer_id, response.id, pos, |ui| { ui.label(label); });
+    }
+    response.clicked()
+}

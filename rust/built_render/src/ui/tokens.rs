@@ -149,13 +149,15 @@ pub const GUT: f32 = 8.0;
 // The dock has one width, the user's: dragged on its inner edge between
 // DOCK_MIN_W and DOCK_MAX_SHARE of the window, the same under every column
 // preset of the tree. DOCK_MAX_W only bounds a stored value.
+pub const DESTINATION_STRIP_W: f32 = 36.;
 pub const DOCK_W: f32 = 300.0;
 pub const DOCK_MIN_W: f32 = 280.0;
 pub const DOCK_MAX_SHARE: f32 = 0.45;
 pub const DOCK_MAX_W: f32 = 1200.0;
 /// The dock's width in a window `window` wide, from the width the user set.
 pub fn dock_width(wanted: f32, window: f32) -> f32 {
-    wanted.clamp(DOCK_MIN_W, (window * DOCK_MAX_SHARE).max(DOCK_MIN_W))
+    let minimum = DOCK_MIN_W + DESTINATION_STRIP_W;
+    wanted.clamp(minimum, (window * DOCK_MAX_SHARE).max(minimum))
 }
 // Type scale (design pass 2026-11-23): four sizes. Meta 11 for labels,
 // captions, counts and shortcuts; body 12 for values and controls; title 13

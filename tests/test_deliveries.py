@@ -44,7 +44,9 @@ def test_delivery_lifecycle(fmt, tmp_path, request):
     h.undo()
     assert deliveries.records(scene)[key]["name"] == "Handover"
     assert run(h, "run_delivery", key=key, **ctx)["ok"]
-    assert path.stat().st_size and deliveries.records(scene)[key]["last_run"]
+    record = deliveries.records(scene)[key]
+    assert path.stat().st_size and record["last_run"]
+    assert record["runs"][-1]["folder"] == str(tmp_path.resolve())
     assert run(h, "delete_delivery", key=key)["ok"]
     assert not deliveries.records(scene)
     h.undo()
@@ -102,6 +104,10 @@ def test_queue_keep_cancel(tmp_path, next_turn):
     assert not win._chrome_jobs and not cancelled.exists()
     assert path.read_bytes()[:4] == b"glTF" and deliveries.records(scene)[key]["last_run"]
     assert win._delivery_result[1] == tmp_path
+    record = deliveries.records(scene)[key]
+    assert record["runs"][-1]["time"] == record["last_run"]
+    assert record["runs"][-1]["folder"] == str(tmp_path)
+    assert record["runs"][-1]["result"] == "Delivered"
 
 
 def test_scope_node(tmp_path):
@@ -155,7 +161,7 @@ def test_scenes_cancel_keeps_previous_files(tmp_path):
     assert all((tmp_path / f"plan-{i:02}.dxf").read_text().endswith("EOF\n") for i in (1, 2))
 
 
-def test_checks_and_one_off_export(tmp_path, native_host):
+def test_checks_and_file_export_open_deliveries(tmp_path, native_host, monkeypatch):
     from views import wgpu_ui
     win = native_host.window
     scene = win.viewport.scene
@@ -170,10 +176,11 @@ def test_checks_and_one_off_export(tmp_path, native_host):
     readiness = json.loads(blob)
     assert panel == "readiness" and (readiness["ready"], readiness["total"]) == (0, 1)
     assert readiness["checks"]["*"]["unfiled/"][0] == "Not filed"
-    from built_render import chrome_sheet
+    assert readiness["outputs"] == [{"format": "ifc", "destination": str(tmp_path / "handover.ifc")}]
+    renderer = Mock()
+    monkeypatch.setattr(win._doc.stand_in, "renderer", renderer)
     native_host.menu("delivery_export")
-    assert chrome_sheet.current(win).id == "export"
-    chrome_sheet.close(win)
+    renderer.ui_show_destination.assert_called_once_with("deliveries")
 
 
 def test_problem_checks_cover_filed_geometry():

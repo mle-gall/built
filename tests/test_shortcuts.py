@@ -164,6 +164,12 @@ def test_menu_y_barra_comparten_la_accion_de_cada_vista(ventana):
         assert ventana._view_bindings[f"view_{name}"][0] == shortcut_text(f"Ctrl+{i}")[1]
 
 
+def test_sidebar_shortcuts_use_the_registered_actions(ventana):
+    for i, name in enumerate(("project", "tasks", "deliveries"), 1):
+        action = ventana._registry_actions[f"view:sidebar_{name}"]
+        assert action.portable_keys() == [f"Ctrl+Alt+{i}"]
+
+
 def test_el_boton_de_vista_muestra_su_atajo(ventana):
     top = ventana._registry_actions["view:view_top"]
     top.setShortcuts(["Ctrl+Alt+1"])

@@ -553,7 +553,7 @@ impl Gallery {
         let y = section(ui, at, w, "Organisms", "dock, inspector, menu, question sheet, activity");
         let h = bottom - y;
         let gap = SPACE_S;
-        let widths = [222., 214., 168.];
+        let widths = [222. + DESTINATION_STRIP_W, 214., 168.];
         let mut x = at.x;
         let mut rects = Vec::new();
         for cw in widths {
@@ -561,7 +561,15 @@ impl Gallery {
             x += cw + gap;
         }
         rects.push(Rect::from_min_max(pos2(x, y), pos2(at.x + w, bottom)));
-        put(ui, rects[0], down(), |ui| self.dock(ui));
+        let mut content = rects[0];
+        content.max.x -= DESTINATION_STRIP_W;
+        put(ui, content, down(), |ui| self.dock(ui));
+        let strip = Rect::from_min_max(content.right_top(), rects[0].right_bottom());
+        destination_strip(ui, strip, |ui| {
+            destination_button(ui, "Project", "folder", "⌥⌘1", "", true);
+            destination_button(ui, "Tasks", "tasks", "⌥⌘2", "2", false);
+            destination_button(ui, "Deliveries", "component", "⌥⌘3", "!", false);
+        });
         put(ui, rects[1], down(), |ui| Self::inspector(ui));
         put(ui, rects[2], down(), |ui| {
             Self::menu(ui);

@@ -10,7 +10,6 @@ use super::*;
 pub(super) enum HeadMenu {
     Columns,
     Filter,
-    Delivery,
     More,
 }
 
@@ -95,10 +94,8 @@ pub(super) fn show(
     col: &mut Column,
     ctx: &egui::Context,
     screen: Rect,
-    report: &serde_json::Value,
     selected: bool,
     actions: &mut Vec<String>,
-    cmds: &mut Vec<String>,
 ) {
     let Some((menu, anchor)) = col.head_menu else { return };
     let width = match menu {
@@ -123,7 +120,6 @@ pub(super) fn show(
                         match menu {
                             HeadMenu::Columns => columns(col, ui, actions),
                             HeadMenu::Filter => filter(col, ui, actions),
-                            HeadMenu::Delivery => export::delivery_menu(ui, report, cmds),
                             HeadMenu::More => more(col, ui, selected, actions),
                         }
                     })
