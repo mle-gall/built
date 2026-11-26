@@ -225,6 +225,7 @@ fn set_scene<'py>(a: &Args<'py>) -> Reply<'py> {
         let candidates = if previous.is_none() { none(py) } else { np.call_method1("union1d", (previous.getattr("ids")?, &ids))? };
         view.setattr("_billboards", billboards(py)?.call1((&packed, candidates))?)?;
         if written || changed || removed.is_truthy()? {
+            packed.setattr("_linework_rows", py.None())?;
             let mut mapping_changed = removed.is_truthy()?;
             let (uids, uid_rows) = (packed.getattr("uids")?, view.getattr("uid_rows")?);
             for row in ids.try_iter()? {

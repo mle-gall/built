@@ -492,17 +492,37 @@ impl MeshToolAccess {
         if !ok.is_truthy()? {
             return nothing();
         }
-        let origin = inverse.call_method1("map", (origin,))?;
-        let direction = inverse.call_method1("mapVector", (direction,))?;
+        let local_origin = inverse.call_method1("map", (&origin,))?;
+        let local_direction = inverse.call_method1("mapVector", (&direction,))?;
         let excluded = match s.getattr("tool")?.getattr_opt("moving_face_ids")? {
             Some(moving) => moving.call0()?,
             None => PySet::empty(py)?.into_any(),
         };
-        let ordinal = s.call_method1("_face_picker", (&mesh,))?.call_method1(
-            "first",
-            (origin.call_method0("toTuple")?, direction.call_method0("toTuple")?, excluded),
+        let hits = s.call_method1("_face_picker", (&mesh,))?.call_method1(
+            "hits",
+            (local_origin.call_method0("toTuple")?, local_direction.call_method0("toTuple")?, excluded),
         )?;
-        let best = if ordinal.is_none() { none(py) } else { mesh.getattr("faces")?.get_item(ordinal)? };
+        let scene = s.getattr("scene")?;
+        let section = if scene.getattr("show_section_cuts")?.is_truthy()? {
+            scene.call_method0("active_section")?
+        } else { none(py) };
+        let faces = mesh.getattr("faces")?;
+        let mut best = none(py);
+        for hit in hits.try_iter()? {
+            let (ordinal, distance) = pair(&hit?)?;
+            if !section.is_none() {
+                let point = origin.add(direction.mul(distance)?)?;
+                if section.call_method1("side", (point,))?.extract::<f64>()? > 0. { continue; }
+            }
+            let face = faces.get_item(ordinal)?;
+            // Visible locked geometry still supplies drawing planes. Revealed
+            // hidden faces can be picked too, according to the scene rules.
+            if scene.call_method1("entity_visible", (&face,))?.is_truthy()?
+                || scene.call_method1("entity_selectable", (&face,))?.is_truthy()? {
+                best = face;
+                break;
+            }
+        }
         let placement = if group.is_none() {
             none(py)
         } else {
@@ -808,11 +828,8 @@ impl MeshToolAccess {
         let py = slf.py();
         let s = slf.as_any();
         let packed = s.getattr("view")?.getattr("packed")?;
-        let key = id_of(&packed);
-        if let Some(cached) = own_dict(s)?.get_item("_linework_rows_memo")?.filter(|c| !c.is_none()) {
-            if cached.get_item(0)?.eq(key)? && cached.get_item(1)?.is(&packed) {
-                return cached.get_item(2);
-            }
+        if let Some(mask) = some(&packed, "_linework_rows")? {
+            return Ok(mask);
         }
         let int64 = numpy(py)?.getattr("int64")?;
         let mut faces = packed.getattr("commands")?.get_item("count")?.call_method1("astype", (int64,))?;
@@ -821,7 +838,7 @@ impl MeshToolAccess {
         }
         let codes = packed.getattr("instances")?.get_item("info")?.get_item((PySlice::full(py), 0))?;
         let mask = faces.get_item(codes)?.rich_compare(0, CompareOp::Eq)?;
-        s.setattr("_linework_rows_memo", (key, packed, &mask))?;
+        packed.setattr("_linework_rows", &mask)?;
         Ok(mask)
     }
 

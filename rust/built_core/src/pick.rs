@@ -512,6 +512,22 @@ impl FacePicker {
         }
         Ok(picker)
     }
+    /// Intersect each face once and preserve document order for coincident hits.
+    /// The view applies visibility and section rules to this short list.
+    fn hits(&self, py: Python<'_>, origin: P, direction: P, excluded: std::collections::HashSet<i128>) -> Vec<(usize, f64)> {
+        py.detach(|| {
+            let mut hits = Vec::new();
+            for (key, ordinal, range) in &self.faces {
+                if excluded.contains(key) { continue; }
+                let distance = self.triangles[range.clone()].iter()
+                    .filter_map(|&[a, e1, e2]| ray_triangle(origin, direction, a, e1, e2))
+                    .min_by(f64::total_cmp);
+                if let Some(t) = distance { hits.push((*ordinal, t)); }
+            }
+            hits.sort_by(|a, b| a.1.total_cmp(&b.1));
+            hits
+        })
+    }
     fn first(&self, py:Python<'_>, origin:P, direction:P, excluded:std::collections::HashSet<i128>) -> Option<usize> {
         py.detach(|| {
             let mut best = None;
