@@ -192,7 +192,8 @@ fn row(doc: &Snapshot, owner: &str, fields: &J, (name, label, kind): &Row) -> Op
             let t = text(v);
             format!("{ED}edit{ED}{fid}{ED}{}", if unit.is_empty() { t } else { format!("{t} {unit}") })
         }
-        F::Int | F::Text | F::Color => format!("{ED}edit{ED}{fid}{ED}{}", text(v)),
+        F::Color => format!("{ED}color{ED}{fid}{ED}{}", text(v)),
+        F::Int | F::Text => format!("{ED}edit{ED}{fid}{ED}{}", text(v)),
         F::Scale => format!("{ED}edit{ED}{fid}{ED}{}", format_scale(v.as_f64().unwrap_or(100.0))),
         F::Multi => format!("{ED}text{ED}{fid}{ED}{}", v.as_str().unwrap_or("").replace([ED, SEP], " ")),
         F::Check => format!("{ED}check{ED}{fid}{ED}{}", u8::from(v.as_bool().unwrap_or(false))),
@@ -354,6 +355,18 @@ mod tests {
         assert!(src.contains("\"view_key\":\"scene:Iso\"") && src.contains("\"cam_yaw\":null"), "{src}");
         assert_eq!(edit(&d, "1:refresh", "").unwrap(), "refresh\u{1f}1");
         assert_eq!(edit(&d, "1:w_mm", "abc"), None);
+    }
+
+    #[test]
+    fn an_inherited_colour_is_a_well_and_can_be_set_or_cleared() {
+        let doc = doc();
+        let fields = json!({"color": ""});
+        let (_, wire) = row(&doc, "1", &fields, &("color", "Colour", F::Color)).unwrap();
+        assert_eq!(wire, format!("{ED}color{ED}1:color{ED}"));
+        let mut doc = doc;
+        doc.items[0].kind = "text".into();
+        doc.items[0].data["fields"]["color"] = json!("#abcdef");
+        assert!(edit(&doc, "1:color", "").unwrap().contains(r#""color":"""#));
     }
 
     #[test]

@@ -360,7 +360,7 @@ fn run<'py>(py: Python<'py>, name: &str, win: &Bound<'py, PyAny>, a: &Args<'_, '
                 return done!(view.call_method1("flash_status", (tr(py, "Select faces, edges or groups to soften")?, 4000)));
             }
             let saved = py.import("built_core.settings")?.call_method0("settings")?.call_method1("value", ("tools/soften_angle", 30.0))?;
-            let (w, v, at) = (win.clone().unbind(), view.clone().unbind(), sc.unbind());
+            let (w, v, at) = (win.clone().unbind(), view.clone().unbind(), sc.clone().unbind());
             let apply = func(py, move |py, args| {
                 let (win, view) = (w.bind(py), v.bind(py));
                 if win.getattr("viewport")?.is(view) && view.getattr("scene")?.is(at.bind(py)) {
@@ -370,9 +370,10 @@ fn run<'py>(py: Python<'py>, name: &str, win: &Bound<'py, PyAny>, a: &Args<'_, '
             })?;
             let forms = py.import("built_render.chrome_forms")?;
             let model = n.getattr("OperationForm")?.call_method1("soften", (saved.str()?,))?;
-            let note = tr(py, "Edges between faces at this angle or less become smooth; sharper edges stay hard. Selected groups include their nested geometry, and component copies share the change.")?;
+            let note = tr(py, "Highlighted edges will change. Edges between faces at this angle or less become smooth. Changes to a component affect its copies.")?;
             let kw = kwargs(py, &[("note", s(py, &note))])?;
-            let form = forms.getattr("OperationForm")?.call((tr(py, "Soften / Smooth Edges")?, model, apply), Some(&kw))?;
+            let form = forms.getattr("OperationForm")?.call((tr(py, "Soften edges")?, model, apply), Some(&kw))?;
+            form.setattr("soften_scene", sc)?;
             done!(forms.call_method1("show", (win, form)))
         }
         // Open the terrain chart in the chrome's bottom bar.

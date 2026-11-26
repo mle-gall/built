@@ -177,7 +177,7 @@ fn roles<'py>(py: Python<'py>, buttons: &Bound<'py, PyAny>, default: &Bound<'py,
         let (role, hint) = if bid.eq(default)? {
             (1, "↩")
         } else if bid.eq(discard)? {
-            (2, "⌘D")
+            (2, "")
         } else if bid.eq(cancel)? {
             (3, "esc")
         } else {

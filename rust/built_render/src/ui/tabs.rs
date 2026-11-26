@@ -133,7 +133,7 @@ impl Strip {
             }
             if *front {
                 // The accent line on the bar's bottom edge.
-                ui.painter().hline(rect.x_range().shrink(6.0), TOP_H - 1.0, Stroke::new(2.0_f32, ACCENT));
+                ui.painter().hline(rect.x_range().shrink(6.0), rect.center().y + TOP_H / 2. - 1., Stroke::new(2.0_f32, ACCENT));
             }
             if resp.clicked() {
                 out.push(if over_x { format!("ptab:close:{i}") } else { format!("ptab:activate:{i}") });

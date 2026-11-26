@@ -56,6 +56,16 @@ def test_each_choice_sets_the_new_document(win, profile,
     assert win.viewport.scene.units == expected
 
 
+def test_units_prompt_displays_the_platform_shortcut(win):
+    from built_render import shortcut_text
+
+    units_question.offer_at_start(win)
+    form = chrome_forms.current(win)
+    assert shortcut_text("Ctrl+U")[1] in form.note
+    assert "{key}" not in form.note
+    form.press("cancel")
+
+
 def test_metres_mean_square_and_cubic_metres_and_degrees(win):
     choose(win, 0)
     assert units.fmt_area(2.0) == "2.00 m²"

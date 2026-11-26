@@ -56,6 +56,8 @@ Use `utility` for a console or other wide output. Section IDs must be unique in 
 | `progress` | Label and `fraction` between 0 and 1, or null during indeterminate work | Display only |
 | `image` | Local `path` to a completed RGB or RGBA PNG | Fit and actual-size preview |
 
+Fields share the inspector label and control columns. Table selection acts on a whole row. In utility panels containing a console, buttons appear in the header, the log occupies the space above the prompt, and Run submits the prompt. Set the optional button property `primary=True` to identify the main action. Existing descriptors use their first button by default.
+
 Keep transcripts and history bounded. The renderer caches the preview texture by path. Give each finished image a new path. For document edits use the viewport history or the existing command API.
 
 ## Transport and lifetime

@@ -68,7 +68,7 @@ class AssistantPanel:
                            item("button", "remove_photo", tr("Remove photo"))] if self.attachment else []),
                         *([item("button", "view_photo", tr("View sent photo"))] if self.last_photo else []),
                         field("shots", tr("Viewport screenshots"), "toggle", self.shots),
-                        item("button", "stop" if self.busy else "send", tr("Stop" if self.busy else "Send")))]
+                        item("button", "stop" if self.busy else "send", tr("Stop" if self.busy else "Send"), primary=True))]
 
     def event(self, control, event, value):
         if control == "stop":

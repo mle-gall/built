@@ -150,7 +150,7 @@ class ConsolePanel(_ConsoleExecution):
     def __init__(self, app, invalidate):
         self._viewport = app.viewport
         self._scope = {"__name__": "__console__"}
-        self.lines = ["Python console · scene, mesh, selection and viewport are in scope."]
+        self.lines = ["Globals: scene, mesh, selection, viewport."]
         self.history = []
 
     def _append_text(self, text, role="out"):

@@ -333,7 +333,7 @@ fn make_component(win: &Bound<'_, PyAny>) -> PyResult<()> {
     py.import("built_render.chrome_forms")?.getattr("ask_text")?.call(
         (
             win,
-            translated(py, "Make Component", None)?,
+            translated(py, "Make component", None)?,
             translated(py, "Component name:", None)?,
         ),
         Some(&kw),

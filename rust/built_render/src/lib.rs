@@ -2919,6 +2919,9 @@ impl Renderer {
                      fields: Vec<ui::dialog::Field>, buttons: Vec<ui::dialog::Button>) {
         if let Some(ui) = self.ui.as_mut() { ui.set_dialog(seq, title, note, width, fields, buttons); }
     }
+    fn ui_set_soften_preview(&mut self, lines: Vec<([f32; 2], [f32; 2])>) {
+        if let Some(ui) = self.ui.as_mut() { ui.set_soften_preview(lines); }
+    }
     #[pyo3(signature=(seq, marks, matrix, width, height, origin=(0.0, 0.0)))]
     fn ui_set_join_marks(&mut self, seq: &str, marks: PyRef<'_, edge_commands::JoinMarks>, matrix: [f64; 16], width: f64, height: f64, origin: (f64, f64)) {
         if let Some(ui) = self.ui.as_mut() { ui.set_join_marks(seq, marks.project(matrix, width, height, origin)); }
