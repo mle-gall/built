@@ -17,11 +17,24 @@ impl ScaleEditor {
             .call_method1("group_scale", (self.group.bind(py),))?
             .extract()
     }
+    fn opening<'p>(&self, py: Python<'p>) -> PyResult<Option<Obj<'p>>> {
+        Ok(self
+            .group
+            .bind(py)
+            .getattr_opt("ext")?
+            .and_then(|e| e.get_item("wall_host").ok())
+            .filter(|h| h.contains("profile").unwrap_or(false)))
+    }
     fn refresh(&self, form: &Obj) -> PyResult<()> {
         let py = form.py();
         let format = py.import("builtins")?.getattr("format")?;
         for (axis, value) in ["x", "y", "z"].into_iter().zip(self.factors(py)?) {
             form.call_method1("set", (axis, format.call1((value, ".6g"))?))?;
+        }
+        if let Some(host) = self.opening(py)? {
+            for key in ["sill", "offset"] {
+                form.call_method1("set", (key, format.call1((host.get_item(key)?, ".6g"))?))?;
+            }
         }
         Ok(())
     }
@@ -48,6 +61,47 @@ impl ScaleEditor {
 #[pymethods]
 impl ScaleEditor {
     fn change(&self, form: &Obj, field: &str, value: &str) -> PyResult<()> {
+        if matches!(field, "sill" | "offset") {
+            let py = form.py();
+            if let (Some(host), Ok(number)) = (
+                self.opening(py)?,
+                value.trim().replace(',', ".").parse::<f64>(),
+            ) {
+                let args = PyDict::new(py);
+                args.set_item("placement", self.group.bind(py).getattr("uid")?)?;
+                for key in ["sill", "offset"] {
+                    args.set_item(
+                        key,
+                        if key == field {
+                            number
+                        } else {
+                            host.get_item(key)?.extract()?
+                        },
+                    )?;
+                }
+                let win = self.window.bind(py);
+                let result = py
+                    .import("built_core.command_protocol")?
+                    .getattr("run")?
+                    .call(
+                        (
+                            win.getattr("viewport")?.getattr("history")?,
+                            "set_opening_position",
+                        ),
+                        Some(&args),
+                    );
+                if !result.is_ok_and(|r| {
+                    r.get_item("ok")
+                        .is_ok_and(|ok| ok.is_truthy().unwrap_or(false))
+                }) {
+                    win.call_method1(
+                        "notify",
+                        ("warning", tr(py, "Opening position could not be applied.")?),
+                    )?;
+                }
+            }
+            return self.refresh(form);
+        }
         let mut scale = self.factors(form.py())?;
         if let (Some(i), Ok(x)) = (
             ["x", "y", "z"].iter().position(|s| *s == field),
@@ -103,6 +157,17 @@ pub(crate) fn ask_scale(window: &Obj, group: Py<PyAny>, done: Option<Py<PyAny>>)
             (axis, "edit", axis.to_uppercase(), value),
             Some(&[("commit_on_blur", true)].into_py_dict(py)?),
         )?)?;
+    }
+    if let Some(host) = editor.borrow().opening(py)? {
+        for (key, label) in [("sill", "Sill (m)"), ("offset", "Offset (m)")] {
+            let value = py
+                .import("builtins")?
+                .call_method1("format", (host.get_item(key)?, ".6g"))?;
+            fields.append(field.call(
+                (key, "edit", tr(py, label)?, value),
+                Some(&[("commit_on_blur", true)].into_py_dict(py)?),
+            )?)?;
+        }
     }
     for (key, label) in [("reset", "Reset scale"), ("undo", "Undo"), ("redo", "Redo")] {
         fields.append(field.call1((key, "button", tr(py, label)?))?)?;

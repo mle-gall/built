@@ -143,7 +143,18 @@ impl ViewportToolHost {
                 )?;
                 Value::Null
             }
+            "opening_feedback" => {
+                let (invalid,warn):(bool,bool)=args(arg)?;
+                if let Some(tool)=&self.tool {
+                    tool.bind(py).setattr("wireframe_color",if invalid {(0.85,0.16,0.16,1.)}else{(0.13,0.17,0.23,1.)})?;
+                }
+                if warn { view.call_method0("window")?.call_method1("notify",("warning",py.import("built_core.i18n")?.call_method1("tr",(crate::hosted_openings::INVALID,))?))?; }
+                Value::Null
+            }
             "family_wall" => {
+                let ray = view.call_method1("_pixel_to_ray", args::<(f64,f64)>(arg)?)?;
+                let origin = xyz(&ray.get_item(0)?)?;
+                let dir = xyz(&ray.get_item(1)?)?;
                 let Some(pair) = hit(view, "pick_face_placement", args(arg)?)? else { return Ok(Some(Value::Null)); };
                 let face = pair.get_item(0)?;
                 let placement = pair.get_item(1)?;
@@ -152,24 +163,17 @@ impl ViewportToolHost {
                 let wall = record.and_then(|r| r.get_item("class").ok()).and_then(|v| v.extract::<String>().ok());
                 if face.is_none() || !matches!(wall.as_deref(), Some("IfcWall" | "IfcWallStandardCase"))
                     || owner.getattr_opt("locked")?.is_some_and(|v| v.is_truthy().unwrap_or(true)) {
-                    return Ok(Some(Value::Null));
+                    return Ok(Some(crate::hosted_openings::aperture_at(&view.getattr("scene")?,origin,dir)?.unwrap_or(Value::Null)));
                 }
                 let matrix = placement.getattr_opt("xform")?.filter(|m| !m.is_none());
                 let (center, normal) = local_plane(&face, matrix.as_ref())?;
                 if normal.z.abs() > 0.001 { return Ok(Some(Value::Null)); }
-                let ray = view.call_method1("_pixel_to_ray", args::<(f64,f64)>(arg)?)?;
-                let origin = xyz(&ray.get_item(0)?)?;
-                let dir = xyz(&ray.get_item(1)?)?;
                 let dot = dir.dot(normal);
                 if dot.abs() < 1e-8 { return Ok(Some(Value::Null)); }
                 let point = origin + dir * (center-origin).dot(normal)/dot;
-                let mut corners = Vec::new();
-                for v in face.getattr("vertices")?.try_iter()? {
-                    let v = v?;
-                    let p = match matrix.as_ref() { Some(m) => m.call_method1("map", (v,))?, None => v };
-                    corners.push(xyz(&p)?.to_array());
-                }
-                json!({"uid":owner.getattr("uid")?.extract::<String>()?, "point":point.to_array(),"normal":normal.to_array(),"corners":corners})
+                if !view.getattr("scene")?.getattr("groups")?.contains(&owner)? {return Ok(Some(Value::Null));}
+                crate::hosted_openings::pick(&owner,point,normal)?.unwrap_or(Value::Null)
+
             }
             "section_normal" | "placement_normal" => {
                 let method = if verb == "placement_normal" && view.hasattr("pick_face_placement")? {

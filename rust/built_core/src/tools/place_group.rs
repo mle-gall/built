@@ -23,6 +23,8 @@ struct WallFace {
     point: P3,
     normal: P3,
     corners: Vec<P3>,
+    #[serde(default)]
+    occupied: Vec<[P3; 4]>,
 }
 
 #[derive(Default)]
@@ -34,6 +36,8 @@ pub struct PlaceGroup {
     normal: Option<P3>,
     segments: Vec<[P3; 2]>,
     hosted: bool,
+    dimensions: Option<[f64; 2]>,
+    invalid: bool,
     wall: Option<WallFace>,
     sill: f64,
     reveal: f64,
@@ -43,6 +47,7 @@ pub struct PlaceGroup {
 impl PlaceGroup {
     fn fit_opening(&mut self) {
         self.opening = None;
+        self.invalid = true;
         let Some(wall) = &self.wall else { return };
         if wall.corners.len() != 4 || self.segments.is_empty() {
             return;
@@ -82,9 +87,31 @@ impl PlaceGroup {
             .flatten()
             .map(|p| p[2])
             .fold(0., f64::max);
-        if left > -width || right_bound < width || base + self.sill + height > top + 1e-6 {
-            return;
-        }
+        let [width, height] = self
+            .dimensions
+            .map(|[w, h]| [w * 0.5, h])
+            .unwrap_or([width, height]);
+        let bottom = base + self.sill;
+        self.invalid = left >= -width - 1e-6
+            || right_bound <= width + 1e-6
+            || bottom + height >= top - 1e-6
+            || wall.occupied.iter().any(|loop_| {
+                let mut lo = f64::INFINITY;
+                let mut hi = -lo;
+                let mut z = f64::INFINITY;
+                let mut t = -z;
+                for p in loop_ {
+                    let u = (DVec3::from(*p) - at).dot(right);
+                    lo = lo.min(u);
+                    hi = hi.max(u);
+                    z = z.min(p[2]);
+                    t = t.max(p[2]);
+                }
+                lo <= width + 1e-6
+                    && hi >= -width - 1e-6
+                    && z <= bottom + height + 1e-6
+                    && t >= bottom - 1e-6
+            });
         let point = DVec3::new(at.x, at.y, base + self.sill);
         let a = point - right * width;
         let b = point + right * width;
@@ -120,6 +147,7 @@ impl Tool for PlaceGroup {
                 self.align = align;
                 self.segments = lines;
             }
+            "dimensions" => self.dimensions = serde_json::from_value(v.clone()).ok(),
             "wall_family" => {
                 self.hosted = true;
                 self.sill = if v == "window" { 0.9 } else { 0. };
@@ -131,8 +159,11 @@ impl Tool for PlaceGroup {
     }
     fn query(&self, k: &str, v: &Json) -> Json {
         if k == "wall_values" {
-            return self.opening.filter(|_| self.hosted && self.template.is_some())
-                .map(|outline| json!([outline[1], self.sill, self.reveal])).unwrap_or(Json::Null);
+            return self
+                .opening
+                .filter(|_| self.hosted && self.template.is_some())
+                .map(|outline| json!([outline[1], self.sill, self.reveal]))
+                .unwrap_or(Json::Null);
         }
         if k == "basis" {
             json!(basis(json_p3(v)))
@@ -167,10 +198,15 @@ impl Tool for PlaceGroup {
                 _ => return Reply::ignored(),
             }
             self.fit_opening();
-            if matches!(ev, ToolEvent::Click(_)) && self.opening.is_some() {
+            let click = matches!(ev, ToolEvent::Click(_));
+            h.call(
+                "opening_feedback",
+                json!([self.invalid, click && self.invalid]),
+            );
+            if click && self.opening.is_some() && !self.invalid {
                 let wall = self.wall.as_ref().unwrap();
                 let args = json!({"template":uid,"offset":self.offset,"basis":basis(self.normal),
-                    "wall_host":{"uid":wall.uid,"sill":self.sill,"offset":self.reveal,"flipped":self.flipped}});
+                    "wall_host":{"uid":wall.uid,"outline":self.opening,"normal":wall.normal,"initial_offset":self.reveal,"sill":self.sill,"offset":self.reveal,"flipped":self.flipped}});
                 if h.run(&Command {
                     name: "place_group",
                     args,
@@ -247,23 +283,31 @@ mod tests {
     #[test]
     fn hosted_family_fits_above_wall_base_and_flips_about_the_opening() {
         let mut t = PlaceGroup {
-            hosted: true, template: Some("type".into()), sill: 0.8, reveal: 0.1,
-            segments: vec![[[-0.5,0.,0.],[0.5,0.,1.2]]],
-            wall: Some(WallFace { uid:"wall".into(),point:[2.,0.,4.],normal:[0.,-1.,0.],
-                corners:vec![[0.,0.,3.],[4.,0.,3.],[4.,0.,6.],[0.,0.,6.]] }),
+            hosted: true,
+            template: Some("type".into()),
+            sill: 0.8,
+            reveal: 0.1,
+            segments: vec![[[-0.5, 0., 0.], [0.5, 0., 1.2]]],
+            wall: Some(WallFace {
+                uid: "wall".into(),
+                point: [2., 0., 4.],
+                normal: [0., -1., 0.],
+                occupied: vec![],
+                corners: vec![[0., 0., 3.], [4., 0., 3.], [4., 0., 6.], [0., 0., 6.]],
+            }),
             ..Default::default()
         };
         t.fit_opening();
-        assert_eq!(t.offset,[2.,0.1,3.8]);
+        assert_eq!(t.offset, [2., 0.1, 3.8]);
         let outline = t.opening.unwrap();
-        assert_eq!(outline[0],[1.5,0.,3.8]);
+        assert_eq!(outline[0], [1.5, 0., 3.8]);
         assert!(t.preview().value.is_some());
         t.flipped = true;
         t.fit_opening();
-        assert_eq!(t.normal,Some([0.,1.,0.]));
-        assert_eq!(t.opening,Some(outline));
+        assert_eq!(t.normal, Some([0., 1., 0.]));
+        assert_eq!(t.opening, Some(outline));
         t.sill = 2.5;
         t.fit_opening();
-        assert!(t.opening.is_none() && t.preview().lines.is_empty());
+        assert!(t.invalid && !t.preview().lines.is_empty());
     }
 }

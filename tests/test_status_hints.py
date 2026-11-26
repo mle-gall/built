@@ -97,3 +97,9 @@ def test_bar_uses_menu_modifier_names_and_omits_chipped_options(native_window):
         win._activate_tool(key)
         assert "base" not in win.statusBar().currentMessage()
         assert "centre" not in win.statusBar().currentMessage()
+
+
+def test_hosted_placement_hint_on_transient_tool():
+    from types import SimpleNamespace
+    tool = SimpleNamespace(_wall_family=True)
+    assert hint_for(None, tool) == "Hover a wall · Tab flips side · enter sill;offset · click to place"

@@ -190,7 +190,6 @@ fn place_group<'py>(
         Some(g) => g.clone(),
         None => groups.call_method1("copy_group", (one(history, template)?,))?,
     };
-    if let Some(host) = wall_host { g.getattr("ext")?.set_item("wall_host", host)?; }
     let axes = basis.extract::<[[f64; 3]; 3]>()?;
     let shift = offset.extract::<[f64; 3]>()?;
     let mut rows = Vec::with_capacity(16);
@@ -218,9 +217,81 @@ fn place_group<'py>(
     } else {
         None
     };
+    let link = if let Some(host) = wall_host {
+        let link = py.get_type::<PyDict>().call1((host,))?;
+        let wall = one(history, &host.get_item("uid")?)?;
+        if wall.getattr("locked")?.is_truthy()?
+            || !matches!(
+                wall.getattr("ifc")?
+                    .get_item("class")?
+                    .extract::<String>()?
+                    .as_str(),
+                "IfcWall" | "IfcWallStandardCase"
+            )
+        {
+            return Err(PyValueError::new_err("Select an unlocked wall"));
+        }
+        let flipped = host.get_item("flipped")?.is_truthy()?;
+        let n = match host.get_item("normal") {
+            Ok(n) => glam::DVec3::from_array(n.extract()?),
+            Err(_) => glam::DVec3::from_array(axes[1]) * if flipped { 1. } else { -1. },
+        };
+        let reveal = host.get_item("offset")?.extract::<f64>()?;
+        let matrix = crate::math::mat(&m)?;
+        let profile = match host.get_item("outline") {
+            Ok(outline) => outline
+                .extract::<[[f64; 3]; 4]>()?
+                .map(glam::DVec3::from_array),
+            Err(_) => {
+                use crate::tools::host_geometry::ToolBounds;
+                let anchor = ToolBounds::placement_bounds(&g)?.anchor(true);
+                let [w, h] = ToolBounds::opening_size(&g)?;
+                let a = matrix.transform_point3(anchor) + n * reveal;
+                let right = glam::DVec3::Z.cross(n) * w * 0.5;
+                [
+                    a - right,
+                    a + right,
+                    a + right + glam::DVec3::Z * h,
+                    a - right + glam::DVec3::Z * h,
+                ]
+            }
+        };
+        let placed = if pose.is_none() {
+            matrix
+        } else {
+            matrix * crate::math::mat(&pose)?
+        };
+        let inv = placed.inverse();
+        link.set_item("normal", n.to_array())?;
+        link.set_item(
+            "profile",
+            profile.map(|p| inv.transform_point3(p).to_array()),
+        )?;
+        link.set_item(
+            "facing",
+            inv.transform_vector3(if flipped { -n } else { n })
+                .to_array(),
+        )?;
+        link.set_item(
+            "anchor",
+            inv.transform_point3(profile[0] - n * reveal).to_array(),
+        )?;
+        link.call_method1("pop", ("outline", py.None()))?;
+        Some(link)
+    } else {
+        None
+    };
     let before = history.getattr("revision")?;
     let run = (|| -> PyResult<()> {
-        if !pose.is_none() {
+        if let Some(link) = &link {
+            if g.getattr("ext")?.is_none() {
+                g.setattr("ext", PyDict::new(py))?;
+            }
+            g.getattr("ext")?.set_item("wall_host", link)?;
+        }
+        if link.is_some() && pose.is_none() {
+            g.setattr("xform", &m)?;
+        } else if !pose.is_none() {
             g.setattr("xform", m.mul(&pose)?)?;
         } else {
             let verts = py
@@ -234,18 +305,24 @@ fn place_group<'py>(
                     mesh.call_method1("move_vertex", (v, delta))?;
                 }
             }
-            crate::model::module(groups.py(), "built_core")?.call_method1("group_remap_uvws", (&mesh, &m))?;
+            crate::model::module(groups.py(), "built_core")?
+                .call_method1("group_remap_uvws", (&mesh, &m))?;
             groups.call_method1("carry_axes", (&g, &m))?;
         }
         let kw = PyDict::new(py);
         kw.set_item("attachment", anchor)?;
-        let cmd = py
-            .import("built_core.history")?
-            .call_method("InsertGroupCommand", (&g,), Some(&kw))?;
+        let cmd =
+            py.import("built_core.history")?
+                .call_method("InsertGroupCommand", (&g,), Some(&kw))?;
         let api = py.import("built_core.history")?;
         let mut steps = Vec::new();
-        if let Some(key) = g.getattr_opt("ext")?.and_then(|ext| ext.get_item("library_family_type").ok()) {
-            let reg = py.import("core.bim_registry")?.call_method1("get", (&scene,))?;
+        if let Some(key) = g
+            .getattr_opt("ext")?
+            .and_then(|ext| ext.get_item("library_family_type").ok())
+        {
+            let reg = py
+                .import("core.bim_registry")?
+                .call_method1("get", (&scene,))?;
             let types = reg.get_item("types")?;
             let record = g.getattr("ifc")?;
             if !types.contains(&key)? {
@@ -259,7 +336,11 @@ fn place_group<'py>(
             record.set_item("type", key)?;
         }
         steps.push(cmd);
-        let step = if steps.len() == 1 { steps.pop().unwrap() } else { api.call_method1("CompoundCommand", (steps,))? };
+        let step = if steps.len() == 1 {
+            steps.pop().unwrap()
+        } else {
+            api.call_method1("CompoundCommand", (steps,))?
+        };
         history.call_method1("execute", (step,))?;
         Ok(())
     })();
@@ -273,9 +354,38 @@ fn place_group<'py>(
     run?;
     answer(history, &before, true)
 }
+/// Adjust the fill along the wall normal and vertical in one history step.
+#[pyfunction]
+fn set_opening_position<'py>(
+    history: &Obj<'py>,
+    placement: &Obj<'py>,
+    sill: f64,
+    offset: f64,
+) -> Reply<'py> {
+    if !sill.is_finite() || sill < 0. || !offset.is_finite() {
+        return Err(PyValueError::new_err("Invalid opening position"));
+    }
+    let g = one(history, placement)?;
+    let link = g.getattr("ext")?.get_item("wall_host")?;
+    let normal = glam::DVec3::from_array(link.get_item("normal")?.extract()?);
+    let delta = glam::DVec3::Z * (sill - link.get_item("sill")?.extract::<f64>()?)
+        - normal * (offset - link.get_item("offset")?.extract::<f64>()?);
+    if delta.length_squared() < 1e-16 {
+        return answer(history, &history.getattr("revision")?, false);
+    }
+    execute(
+        history,
+        &history_command(
+            history.py(),
+            "MoveGroupCommand",
+            (g, crate::math::Vec3::from(delta)),
+        )?,
+    )
+}
 pub(super) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(paint_placements, m)?)?;
     m.add_function(wrap_pyfunction!(paint_material, m)?)?;
     m.add_function(wrap_pyfunction!(place_group, m)?)?;
+    m.add_function(wrap_pyfunction!(set_opening_position, m)?)?;
     Ok(())
 }

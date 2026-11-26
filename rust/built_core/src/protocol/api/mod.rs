@@ -218,6 +218,7 @@ const VERBS: &[&str] = &[
     "move_selection",
     "scale_selection",
     "place_group",
+    "set_opening_position",
     "erase_stroke",
     "add_geo_path",
     "move_geo_path_node",

@@ -54,7 +54,8 @@ fn activate(
     let vars = PyDict::new(py);
     vars.set_item("name", translated(py, label, None)?)?;
     win.setattr("tool_label", translated(py, "Tool: {name}", Some(&vars))?)?;
-    vp.call_method1("flash_status", (translated(py, hint, None)?, ms))?;
+    if hint.is_empty() { crate::native_view_actions::activate_tool_hint(win)?; }
+    else {vp.call_method1("flash_status", (translated(py, hint, None)?, ms))?;}
     vp.call_method0("update")?;
     Ok(())
 }
@@ -80,7 +81,7 @@ fn start_placement(
         win,
         &tool,
         if wall { "Place hosted family" } else { "Place component" },
-        if wall { "Hover a wall · Tab flips side · enter sill;offset · click to place" } else { "Click to place the component (Esc cancels)" },
+        if wall { "" } else { "Click to place the component (Esc cancels)" },
         4000,
     )
 }
