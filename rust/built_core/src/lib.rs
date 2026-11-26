@@ -201,6 +201,7 @@ mod pushscan;
 mod push_command;
 mod push_operation;
 mod solids;
+mod hosted_openings;
 mod sweep_operation;
 mod make_faces;
 mod geometry_arrays;

@@ -38,6 +38,8 @@ fn place_group_host_init<'py>(a: &Args<'py>) -> Reply<'py> {
     tool.setattr("_wall_family", false)?;
     if group.getattr_opt("ext")?.and_then(|v| v.get_item("library_host").ok()).is_some_and(|v| v.eq("wall").unwrap_or(false)) {
         tool.setattr("_wall_family", true)?;
+        let dimensions=crate::tools::host_geometry::ToolBounds::opening_size(&group)?;
+        tool.getattr("_machine")?.call_method1("set",("dimensions",dimensions))?;
         let window = group.getattr("ifc")?.get_item("class")?.eq("IfcWindow")?;
         tool.getattr("_machine")?.call_method1("set", ("wall_family", if window { "window" } else { "door" }))?;
     }

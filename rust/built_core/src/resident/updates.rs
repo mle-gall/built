@@ -268,6 +268,16 @@ fn visit<'py>(s: &Obj<'py>, command: &Obj<'py>, phase: &Obj<'py>, step: &Obj<'py
         rebake_definition()?;
         return Ok(true);
     }
+    // The fill and the wall both changed. Include the host in the row update
+    // when replaying insertion, deletion or a placement transform.
+    if let Some(group)=command.getattr_opt("group")? {
+        if let Some(host)=group.getattr_opt("ext")?.and_then(|e|e.get_item("wall_host").ok()) {
+            if host.contains("profile")? {
+                let wall=scene.call_method1("resolve_occurrence",(vec![host.get_item("uid")?.extract::<String>()?],))?;
+                if !wall.is_none(){set(s,"pending")?.add(wall)?;}
+            }
+        }
+    }
     if classes.any(command, &["InsertGroupCommand", "DeleteGroupCommand"])? && command.getattr("_owner")?.is(&scene.getattr("groups")?) {
         let adding = classes.any(command, &["InsertGroupCommand"])? != phase.eq("undo")?;
         let group = command.getattr("group")?;

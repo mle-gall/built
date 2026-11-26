@@ -53,12 +53,26 @@ pub struct ToolBounds {
     geometry: std::sync::OnceLock<BoxGeometry>,
 }
 impl ToolBounds {
-    pub(super) fn placement_bounds(group: &Bound<'_, PyAny>) -> PyResult<Self> {
+    pub(crate) fn placement_bounds(group: &Bound<'_, PyAny>) -> PyResult<Self> {
         let mut b = Self::new(None);
         b.add_group(group)?;
         Ok(b)
     }
-    pub(super) fn anchor(&self, back: bool) -> DVec3 {
+    pub(crate) fn opening_size(group:&Bound<'_,PyAny>) -> PyResult<[f64;2]> {
+        let bounds=Self::placement_bounds(group)?;
+        let size=bounds.hi-bounds.lo;
+        let mut dimensions=[size.x,size.z];
+        let Some(params)=group.getattr("ifc")?.call_method1("get",("psets",))?.get_item(".rfa parameters").ok() else {return Ok(dimensions)};
+        for (axis,names) in [["Opening Width","Rough Width"],["Opening Height","Rough Height"]].iter().enumerate() {
+            for name in names {
+                if let Ok(value)=params.get_item(*name).and_then(|p|p.get_item("value")).and_then(|v|Ok(v.extract::<f64>()?)) {
+                    if value.is_finite() && value>0. {dimensions[axis]=value;break;}
+                }
+            }
+        }
+        Ok(dimensions)
+    }
+    pub(crate) fn anchor(&self, back: bool) -> DVec3 {
         if self.lo.x > self.hi.x {
             DVec3::ZERO
         } else {
