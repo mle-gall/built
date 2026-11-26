@@ -923,6 +923,8 @@ impl App {
         let (window_id, display, platform) = launcher::surface_handles(&window)?;
         let ns_view = if platform == "cocoa" { window_id } else { 0 };
         native::configure_window(ns_view);
+        #[cfg(target_os = "macos")]
+        native::layout_window_buttons(ns_view);
         if self.args.background() { native::send_window_back(ns_view); }
         let size = window.inner_size();
         let scale = window.scale_factor();
@@ -1097,6 +1099,8 @@ impl App {
             if let Some(t) = title {
                 w.window.set_title(&t);
             }
+            #[cfg(target_os = "macos")]
+            native::layout_window_buttons(w.ns_view);
             if drag {
                 let _ = w.window.drag_window();
             }
@@ -1660,6 +1664,8 @@ impl App {
                 if size.width == 0 || size.height == 0 { return; }
                 let s = self.scale(id);
                 if let Some(w) = self.win(id) {
+                    #[cfg(target_os = "macos")]
+                    native::layout_window_buttons(w.ns_view);
                     w.host.call("resize", (size.width as f64 / s, size.height as f64 / s, s));
                     // AppKit can stay in its live-resize loop before it
                     // dispatches another RedrawRequested.

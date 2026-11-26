@@ -341,7 +341,7 @@ pub(super) fn install_module(module: &Bound<PyModule>) -> PyResult<()> {
     // Drawing and Export have room for previews and a readiness checklist,
     // and reserve room for their columns.
     // Window buttons' room at the top left (mac_glass: 14 + three buttons).
-    module.add("LIGHTS_ROOM", 86.0)?;
+    module.add("LIGHTS_ROOM", crate::ui::tokens::LIGHTS_ROOM)?;
     // The docked top bar (ui.rs TOP_H): its empty parts move the window.
     module.add("TOP_H", 40.0)?;
     module.add("_CTRL", py.None())?;

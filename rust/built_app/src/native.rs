@@ -359,6 +359,34 @@ pub fn configure_window(view: usize) {
     let _ = view;
 }
 
+/// AppKit lays out the hidden title bar again after title, edited-state,
+/// appearance and space transitions. Reconcile in window coordinates after
+/// the native event turn, including during live resize.
+#[cfg(target_os = "macos")]
+pub fn layout_window_buttons(view: usize) {
+    use built_render::ui::tokens::{MAC_BUTTON_GAP, MAC_BUTTON_INSET, TOP_H};
+    use objc2_app_kit::{NSView, NSWindowButton, NSWindowStyleMask};
+    use objc2_foundation::{NSPoint, NSRect};
+
+    if view == 0 { return; }
+    let view = unsafe { &*(view as *const NSView) };
+    let Some(window) = view.window() else { return };
+    let fullscreen = window.styleMask().contains(NSWindowStyleMask::FullScreen);
+    let mut x = f64::from(MAC_BUTTON_INSET);
+    for kind in [NSWindowButton::CloseButton, NSWindowButton::MiniaturizeButton, NSWindowButton::ZoomButton] {
+        let Some(button) = window.standardWindowButton(kind) else { continue };
+        if button.isHidden() != fullscreen { button.setHidden(fullscreen); }
+        if fullscreen { continue; }
+        let Some(parent) = (unsafe { button.superview() }) else { continue };
+        let size = button.frame().size;
+        let top = view.convertRect_toView(view.bounds(), None).max().y;
+        let desired = NSRect::new(NSPoint::new(x, top - (f64::from(TOP_H) + size.height) / 2.), size);
+        let origin = parent.convertRect_fromView(desired, None).origin;
+        if button.frame().origin != origin { button.setFrameOrigin(origin); }
+        x += size.width + f64::from(MAC_BUTTON_GAP);
+    }
+}
+
 /// Background (test) runs: an invisible, click-through window behind every
 /// other app's windows, so a scripted run never covers what the user is doing.
 pub fn send_window_back(view: usize) {

@@ -1332,7 +1332,7 @@ impl Ui {
         let mut groups = Vec::new();
         self.cluster_buttons.clear();
         let sheet_up = self.lsheet.open;
-        let lights = self.projects.as_ref().map_or(86.0, |p| p.0);
+        let lights = self.projects.as_ref().map_or(tokens::LIGHTS_ROOM, |p| p.0);
         #[cfg(any(target_os="linux", windows))]
         egui::Area::new("desktop_menu".into()).fixed_pos(Pos2::ZERO).order(egui::Order::Foreground)
             .show(ctx, |ui| {
@@ -1464,7 +1464,7 @@ impl Ui {
         let p = pos2(x, y);
         !self.menu_hits.iter().any(|r| r.contains(p)) && !self.dismissible_menu_open() && self.gallery.is_none() && y <= TOP_H && !self.top_groups.iter().any(|r| r.contains(p))
             && !(self.ctx.memory(|m| m.area_rect(egui::Id::new("jobs"))).is_some_and(|r| (!self.jobs.is_empty() || self.activity_open) && r.contains(p)))
-            && !(self.projects.is_none() && x < 86.0)
+            && !(self.projects.is_none() && x < tokens::LIGHTS_ROOM)
     }
 
     /// The active tool, its options and its gesture hint.
