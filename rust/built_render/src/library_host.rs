@@ -11,6 +11,7 @@
 //! and who uses them, runs the verbs through the protocol, and feeds the
 //! Paint strip and the material inspector. Model edits go through
 //! `built_core.protocol.commands`.
+use crate::library_collections as collections;
 use crate::settings_rows::{func, none, obj, opt, s, Res};
 use pyo3::{
     prelude::*,
@@ -1197,6 +1198,12 @@ impl FamiliesProvider {
 
     #[classattr]
     fn label() -> &'static str { "Families" }
+
+    fn items<'py>(&self, py: Python<'py>, _ctx: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
+        let rows: Vec<_> = collections::manifests()?.into_iter()
+            .flat_map(|mut manifest| manifest["items"].take().as_array().cloned().unwrap_or_default()).collect();
+        json(py)?.call_method1("loads", (serde_json::Value::Array(rows).to_string(),))
+    }
 }
 
 /// Coming: section outlines (steel shapes, extrusion and sweep profiles) to
@@ -1487,6 +1494,7 @@ impl LibrarySheet {
             scene.getattr("content_version")?,
             crate::document_registration::view::calls::current_material_name(py)?,
             st.get_item("mine_rev")?,
+            obj(py, collections::REVISION.load(std::sync::atomic::Ordering::Relaxed))?.into_bound(py),
             if st.get_item("type")?.eq("components")? { scene.getattr("version")? } else { py.None().into_bound(py) },
             PyTuple::new(py, recent)?.into_any(),
         ])
@@ -1537,7 +1545,7 @@ impl LibrarySheet {
             let mut n = 0;
             for e in items.try_iter()? {
                 let src = e?.get_item("source")?;
-                if src.eq("model")? || src.eq("linked")? {
+                if src.eq("model")? || src.eq("linked")? || p.getattr("id")?.eq("families")? {
                     n += 1;
                 }
             }
@@ -1604,6 +1612,16 @@ impl LibrarySheet {
         sheet.call_method1("search", (out.get_item("search")?,))?;
         sheet.getattr("menus")?.call_method1("append", (out.get_item("sort")?,))?;
         sheet.setattr("side", out.get_item("side")?)?;
+        let collections = if prov_id == "families" { collections::manifests()? } else { Vec::new() };
+        if !has_target {
+            sheet.call_method1("verb", ("import-collection", "Import collection…"))?;
+        }
+        if prov_id == "families" {
+            for collection in &collections {
+                let scope = format!("s:{}", collection["source"].as_str().unwrap_or(""));
+                sheet.call_method("side_item", (&scope, collection["name"].as_str().unwrap_or("")), Some(&[("on", st.get_item("scope")?.eq(&scope)?)].into_py_dict(py)?))?;
+            }
+        }
         if prov_id == "components" {
             let label = py.import("built_core.i18n")?.call_method1("tr", ("Component library",))?;
             sheet.call_method("side_item", ("s:online", label), Some(&[("on", online)].into_py_dict(py)?))?;
@@ -1619,6 +1637,18 @@ impl LibrarySheet {
             slf.call_method0("close_catalogue")?;
         }
         let content = sheet.call_method("content", (), Some(out.get_item("content")?.cast::<PyDict>()?))?;
+        if prov_id == "families" {
+            let status = collections::status();
+            if !status.is_empty() { content.call_method1("caption", (status,))?; }
+            for collection in &collections {
+                let scope = format!("s:{}",collection["source"].as_str().unwrap_or(""));
+                if st.get_item("scope")?.eq("s:all")? || st.get_item("scope")?.eq(scope)? {
+                    for report in collection["reports"].as_array().into_iter().flatten() {
+                        content.call_method1("text", (report.as_str().unwrap_or(""),))?;
+                    }
+                }
+            }
+        }
         for g in out.get_item("groups")?.try_iter()? {
             let g = g?;
             if g.get_item("caption")?.is_truthy()? {
@@ -1829,7 +1859,17 @@ impl LibrarySheet {
                 slf.call_method1("run", (ctx, &args[1], &arg))?;
             }
             "verb" => {
-                if let Some(action) = arg.strip_prefix("typeact:") {
+                if arg == "import-collection" {
+                    let path = py.import("built_render.shell_files")?.getattr("ShellFileDialog")?
+                        .call_method1("getExistingDirectory", (&win, "Import family collection", ""))?;
+                    if path.is_truthy()? {
+                        collections::import_collection(path.extract()?, None)?;
+                        st.set_item("type", "families")?;
+                        st.set_item("scope", "s:all")?;
+                        st.set_item("filter", "")?;
+                        _save_state(&st)?;
+                    }
+                } else if let Some(action) = arg.strip_prefix("typeact:") {
                     provider(py, &st.get_item("type")?.str()?.to_string())?.call_method1("type_action", (&lctx, action))?;
                 } else {
                     let cursor = st.call_method1("get", ("cursor",))?;
@@ -1974,6 +2014,7 @@ fn open_library(py: Python<'_>, win: &Bound<'_, PyAny>, type_id: Option<String>,
     let st = _state(&view)?;
     _land(&view, win)?;
     if let Some(t) = type_id.filter(|t| !t.is_empty()) {
+        if t == "families" && !st.get_item("type")?.eq("families")? { st.set_item("scope", "s:all")?; }
         st.set_item("type", t)?;
     }
     if let Some(sc) = scope.filter(|s| !s.is_empty()) {
@@ -2370,6 +2411,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     sub.add_class::<LibraryProvider>()?;
     sub.add_class::<MaterialsProvider>()?;
     sub.add_class::<ComponentsProvider>()?;
+    sub.add_function(wrap_pyfunction!(collections::import_collection, &sub)?)?;
     sub.add_class::<FamiliesProvider>()?;
     sub.add_class::<ProfilesProvider>()?;
     sub.add_class::<LibrarySheet>()?;

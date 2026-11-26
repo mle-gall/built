@@ -375,3 +375,41 @@ def test_failed_or_abandoned_catalogue_download_never_places(win, monkeypatch):
     gate.set()
     win._host.idle()
     assert not placed
+
+
+def test_family_collection_import_reopen_and_partial_report(win, tmp_path, monkeypatch):
+    import json
+    import sys
+    import time
+    from types import SimpleNamespace
+    from tests.test_rfa_import import payload
+
+    monkeypatch.setenv("BUILT_SETTINGS_DIR", str(tmp_path / "prefs"))
+    folder = tmp_path / "Sample set"
+    folder.mkdir()
+    for name in ("cabinet.RFA", "invalid.rfa"):
+        (folder / name).touch()
+
+    def read(path):
+        if path.name == "invalid.rfa":
+            raise ValueError("Invalid family")
+        return json.dumps(payload())
+
+    monkeypatch.setitem(sys.modules, "built_rfa", SimpleNamespace(read_family=read))
+    (folder / "cabinet.txt").write_text(",Width##LENGTH##MILLIMETERS\nWide,1600\n")
+    L.import_collection(folder)
+    deadline = time.monotonic() + 15
+    while time.monotonic() < deadline:
+        paths = list(tmp_path.glob("prefs/data/Built/collections/*/collection.json"))
+        if paths:
+            break
+        time.sleep(.025)
+    assert paths
+    manifest = json.loads(paths[0].read_text())
+    assert manifest["name"] == "Sample set"
+    assert any("invalid.rfa" in s for s in manifest["reports"])
+    assert [r["name"] for r in manifest["items"]] == ["Standard", "Empty", "Wide"]
+    assert L.open_library(win, "families")
+    sh = frame(win)
+    act(win, "side", "s:" + manifest["source"])
+    assert {r["label"] for r in tiles(frame(win))} == {"Standard", "Empty", "Wide"}

@@ -288,7 +288,7 @@ fn categories<'a>(members: &[&'a Item]) -> Vec<&'a str> {
 /// by where it comes from.
 pub fn groups_for<'a>(items: &'a [Item], st: &Browse) -> Vec<(String, String, Vec<&'a Item>)> {
     let scope = if st.scope.is_empty() { "s:model" } else { st.scope.as_str() };
-    if searching(st) {
+    if searching(st) && !scope.starts_with("s:collection:") && !items.iter().any(|e| e.source.starts_with("collection:")) {
         let mut out = vec![];
         let found = filtered(items, st);
         for (sec, title) in SCOPES {
@@ -541,11 +541,12 @@ pub fn sheet(inp: &Input) -> Value {
         options.extend(FACETS.iter().map(|(i, l)| verb(i, l, "", i64::from(*i == facet))));
     }
     let sort = json!({"id": "sort", "label": format!("Sort: {label}"), "on": st.sort, "options": options});
-    let sides = side_rows(&inp.items, st);
+    let mut sides = side_rows(&inp.items, st);
+    if t == "families" { sides.retain(|r| matches!(r.0.as_str(), "s:all" | "s:mine")); }
     let mut scope = if st.scope.is_empty() { "s:model".to_owned() } else { st.scope.clone() };
     let online = t == "components" && scope == "s:online";
-    if !online && !sides.iter().any(|r| !r.0.is_empty() && r.0 == scope) {
-        scope = "s:model".into();
+    if !online && !scope.starts_with("s:collection:") && !sides.iter().any(|r| !r.0.is_empty() && r.0 == scope) {
+        scope = if t == "families" { "s:all" } else { "s:model" }.into();
     }
     let search = searching(st);
     let side: Vec<Value> = sides.iter().map(|(id, label, n, depth, kind, fold)| {
@@ -703,7 +704,7 @@ mod tests {
                    ["In this model", "Bundled · Stone", "Bundled · Wood"]);
         let st = Browse { fold: vec!["s:bundled".into()], ..Default::default() };
         let side: Vec<String> = side_rows(&items, &st).into_iter().map(|r| r.0).collect();
-        assert_eq!(side, ["s:model", "s:recent", "s:mine", "s:bundled"]);
+        assert_eq!(side, ["s:model", "s:recent", "s:mine", "s:bundled", "s:all"]);
         let st = Browse::default();
         assert!(side_rows(&items, &st).iter().any(|r| r.0 == "c:bundled:Stone"));
     }

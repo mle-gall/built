@@ -86,6 +86,7 @@ mod sheet_runtime;
 mod settings_rows;
 mod settings_host;
 mod library_host;
+mod library_collections;
 mod start_host;
 mod forms_host;
 mod dialogs_host;

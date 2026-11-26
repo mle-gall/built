@@ -212,6 +212,11 @@ fn command<'py>(py: Python<'py>, win: &Any<'py>, name: &str, args: &Bound<'py, P
             return if ws.is_none() { Ok(nil(py)) } else { ws.call_method1("_export_to", (what, path)) };
         }
         "link_source" => return py.import("views.wgpu_tabs")?.call_method1("open_link_source", (win, path_of(py, &s(py, arg))?)),
+        "library-import" if !arg.is_empty() => {
+            crate::library_collections::import_collection(arg.into(), None)?;
+            return r.getattr("wgpu_library")?.call_method1("open_library", (win, "families", py.None(), "s:all"));
+        }
+        "library-tab" => return r.getattr("wgpu_library")?.call_method1("open_library", (win, arg)),
         "ctx_demo" => return r.call_method1("context_menu_demo", (win, arg)),
         "close_doc" => {
             let doc = if arg.is_empty() { nil(py) } else { docs()?.get_item(py.import("builtins")?.getattr("int")?.call1((arg,))?)? };
