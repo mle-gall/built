@@ -468,3 +468,8 @@ def test_a_loose_edge_and_a_components_edge_under_the_cursor_together():
     px = vp._world_to_pixel(V(6, 4.0, 0))                    # on the component's edge
     vp._process_hover(ScreenPoint(*px), Input.NoModifier)
     assert getattr(vp._hover_edge, "in_group", False)
+
+
+def test_an_edge_hit_has_a_different_colour_from_an_axis_lock():
+    from built_core.snap import COLOR_ON_EDGE
+    assert COLOR_ON_EDGE not in AXIS_COLORS.values()

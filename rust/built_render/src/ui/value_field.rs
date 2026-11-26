@@ -12,7 +12,7 @@
 //! - **Readback.** The committed value stays on the result: the segment from
 //!   the old start to the new one when the tool chains on (Line), else where
 //!   the typed value stood.
-//! - **The next action ends it:** a press on the model, typing again,
+//! - **The next action ends it:** a pointer move or press on the model, wheel zoom, typing again,
 //!   another tool, or any other change to the document (undo included).
 use egui::{pos2, Pos2, Rect};
 

@@ -324,7 +324,7 @@ pub(super) fn register(root: &Module<'_>) -> PyResult<()> {
     for (name, color) in [
         ("COLOR_ENDPOINT", green),
         ("COLOR_MIDPOINT", cyan),
-        ("COLOR_ON_EDGE", red),
+        ("COLOR_ON_EDGE", (0.92, 0.64, 0.16)),
         ("COLOR_ON_FACE", (0.42, 0.46, 0.92)),
         ("COLOR_ORIGIN", (0.95, 0.45, 0.16)),
         ("COLOR_CLOSE", (0.20, 0.40, 0.78)),

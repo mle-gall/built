@@ -70,7 +70,7 @@ impl Strip {
             // Measured in the font it is drawn in (the front tab's is medium).
             let font = if t.2 { strong(TYPE_BODY) } else { body() };
             let w = ui.painter().layout_no_wrap(t.1.clone(), font, INK).size().x;
-            w + PAD_L + PAD_R + if t.4 { LINK_W } else { 0.0 }
+            w + PAD_L + PAD_R + if t.3 { 8.0 } else { 0.0 } + if t.4 { LINK_W } else { 0.0 }
         }).collect();
         // Fit: natural widths, else shrink each toward 96 pt, else overflow.
         let room = (max_w - PLUS_W).max(TAB_MIN_W);
@@ -114,11 +114,11 @@ impl Strip {
             }
             let mut job = egui::text::LayoutJob::single_section(name.clone(), egui::TextFormat {
                 font_id: if *front { strong(TYPE_BODY) } else { body() }, color: ink, ..Default::default() });
-            job.wrap = egui::text::TextWrapping { max_width: (rect.max.x - PAD_R - x).max(8.0), max_rows: 1,
+            job.wrap = egui::text::TextWrapping { max_width: (rect.max.x - PAD_R - if *dirty { 8.0 } else { 0.0 } - x).max(8.0), max_rows: 1,
                                                   break_anywhere: true, overflow_character: Some('…') };
             let g = ui.painter().layout_job(job);
             ui.painter().galley(pos2(x, rect.center().y - g.size().y / 2.0), g, ink);
-            // • while unsaved; × on hover, in its place.
+            // Keep the unsaved mark visible when the close button appears.
             let mark = Rect::from_center_size(pos2(rect.max.x - 13.0, rect.center().y), vec2(18.0, 18.0));
             let over_x = hovered && resp.hover_pos().is_some_and(|p| mark.contains(p));
             if hovered {
@@ -128,8 +128,10 @@ impl Strip {
                 let pen = Stroke::new(1.3_f32, if over_x { INK } else { DIM });
                 ui.painter().line_segment([c + vec2(-k, -k), c + vec2(k, k)], pen);
                 ui.painter().line_segment([c + vec2(-k, k), c + vec2(k, -k)], pen);
-            } else if *dirty {
-                ui.painter().circle_filled(mark.center(), 3.0, if *front { INK } else { DIM });
+            }
+            if *dirty {
+                let at = if hovered { mark.left_center() - vec2(4.0, 0.0) } else { mark.center() };
+                ui.painter().circle_filled(at, 3.0, if *front { INK } else { DIM });
             }
             if *front {
                 // The accent line on the bar's bottom edge.

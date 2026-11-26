@@ -424,7 +424,7 @@ def test_the_header_says_what_and_where(host, kinds):
     scene = host.viewport.scene
     scene.select(kinds["group"])
     menu = context_menu_build(host.window, host.view)
-    assert (menu.title, menu.subtitle) == ("Box A", "Group · Unfiled")
+    assert (menu.title, menu.subtitle) == ("Box A", "Group · Not filed")
     scene.select(kinds["linked_part"])
     assert context_menu_build(host.window, host.view).subtitle == "in parts.built ↗ · read-only"
     scene.select(kinds["groups"])

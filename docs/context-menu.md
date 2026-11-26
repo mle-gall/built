@@ -2,7 +2,7 @@
 
 The menu shows only the verbs that apply to what you right-clicked. It has
 no More › and no submenus. Related verbs share one row as segments (for
-example **Intersect: Model | Selection | Context**). No kind has more than
+example **Intersect: Model | Selection | Context**). Independent verbs use two fixed columns, wrapping a third verb to the next line. No kind has more than
 14 rows under its header.
 
 The native shell draws this menu with egui. The Select row grows the selection in the current editing context and leaves document history untouched. Extensions can declare actions in the Extensions menu. Their legacy right-click callbacks have no native host.

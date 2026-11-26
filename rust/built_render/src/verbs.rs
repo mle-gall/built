@@ -134,7 +134,7 @@ fn join(parts: &[&str]) -> String {
 pub fn header(f: &Facts, kind: &str) -> (String, String) {
     let other = f.total.saturating_sub(f.groups + f.faces + f.edges);
     match kind {
-        "empty" => ("Nothing here".into(), f.context.clone()),
+        "empty" => (if f.context.is_empty() { "Model".into() } else { f.context.clone() }, String::new()),
         "group" | "component" => {
             let mut what = if kind == "component" { "Component".to_owned() } else { "Group".to_owned() };
             let name = if f.name.is_empty() { what.clone() } else { f.name.clone() };
@@ -922,7 +922,7 @@ mod tests {
         f.text = "Slab edge".into();
         assert_eq!(header(&f, "annotation"), ("Text".into(), "“Slab edge”".into()));
         let f = facts_for("empty");
-        assert_eq!(header(&f, "empty").0, "Nothing here");
+        assert_eq!(header(&f, "empty").0, if f.context.is_empty() { "Model" } else { &f.context });
     }
 
     #[test]

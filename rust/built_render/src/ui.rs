@@ -1161,7 +1161,7 @@ impl Ui {
             self.cursor.retype_anchor(revision).unwrap_or(pointer - egui::vec2(0., 22.))
         });
         let confirming_fillet = self.active == "fillet" && self.cursor.live.as_ref().is_some_and(|v| v.typing);
-        self.cursor.set(caption, value, typing, at, start.map(|_| at), revision);
+        self.cursor.set(caption, value, typing, at, start.map(|(x, y)| pos2(x, y)), revision);
         if confirming_fillet && !typing && self.cursor.readback.is_some() {
             self.actions.push("tool:select".into());
         }
@@ -1223,9 +1223,11 @@ impl Ui {
     /// then neither hover, pick, nor navigate).
     pub fn pointer(&mut self, kind: &str, x: f32, y: f32, button: u8, mods: u8) -> bool {
         let pos = pos2(x, y);
-        // A press is the next action: the committed value's readback goes.
-        if kind == "press" {
+        // Keep the confirmation at rest. Moving on the model starts a new reading.
+        if kind == "press" || (kind == "move" && self.cursor.readback.is_some() && !self.over_chrome(pos)) {
             self.cursor.end_readback();
+        }
+        if kind == "press" {
             if let Some(c) = self.column.as_mut() { c.focused_row = None; }
         }
         self.modifiers = mods_from(mods);
@@ -1299,6 +1301,7 @@ impl Ui {
     pub fn wheel(&mut self, x: f32, y: f32, dx: f32, dy: f32) -> bool {
         let pos = pos2(x, y);
         if !self.over_chrome(pos) {
+            self.cursor.end_readback();
             return false;
         }
         self.events.push(egui::Event::PointerMoved(pos));
@@ -2093,7 +2096,11 @@ impl Ui {
                     } else if col.proposal_available && !col.proposal_dismissed {
                         ui.horizontal(|ui| {
                             ui.set_height(CONTROL_H);
-                            if kit::quiet(ui, "Propose kinds…").on_hover_text("Preview a filing structure from these tags").clicked() {
+                            if col.overview.tags <= 1 || col.path.len() > 1 {
+                                if kit::quiet(ui, "New node").clicked() { actions.push("new\u{1f}".into()); }
+                                return;
+                            }
+                            if kit::quiet(ui, "Propose structure from tags…").on_hover_text("Preview a filing structure from these tags").clicked() {
                                 actions.push("propose\u{1f}".into());
                             }
                             if kit::quiet(ui, "×").on_hover_text("Dismiss the suggestion").clicked() {
@@ -2188,6 +2195,9 @@ impl Ui {
                         &filtered
                     } else { &col.ordered };
                     let nodes_len = if self.fix_rows { order.len() } else { col.nodes.len() };
+                    if nodes_len > 0 && !col.filter.trim().is_empty() {
+                        kit::caption_plain(ui, &format!("{nodes_len} {} shown", if nodes_len == 1 { "row" } else { "rows" }));
+                    }
                     if nodes_len == 0 {
                         empty_state(ui, if self.fix_rows { "No rows to fix" } else { "No matching rows" });
                     }
@@ -2648,6 +2658,7 @@ impl Ui {
                         ui.add_space(SPACE_XS);
                     }
                     if !tag_focus && !col.inspector_title.is_empty() {
+                        let inline = |id: &str| matches!(id, "file" | "file_to" | "hide" | "edit" | "linkopen");
                         let curated: Vec<_> = col.inspector.iter().filter(|(title,_)|title=="Actions").flat_map(|(_,rows)| rows).collect();
                         if let Some((_, verbs)) = col.inspector.iter().find(|(title, _)| title == "Component actions") {
                             ui.horizontal_wrapped(|ui| {
@@ -2658,7 +2669,7 @@ impl Ui {
                         }
                         ui.horizontal_wrapped(|ui| {
                             if let Some((_,acts)) = selection {
-                                for (id,label,_,enabled,_) in acts.iter().filter(|a| matches!(a.0.as_str(),"file"|"file_to"|"hide"|"edit"|"linkopen")) {
+                                for (id,label,_,enabled,_) in acts.iter().filter(|a| inline(&a.0)) {
                                     if *enabled && kit::quiet(ui,label).clicked() { cmds.push(format!("cmd:{id}")); }
                                 }
                             }
@@ -2671,7 +2682,7 @@ impl Ui {
                                         }
                                     }
                                     if let Some((_,acts)) = selection {
-                                        for (id,label,_,enabled,_) in acts {
+                                        for (id,label,_,enabled,_) in acts.iter().filter(|a| !inline(&a.0)) {
                                             if ui.add_enabled(*enabled,egui::Button::new(label.as_str()).frame(false)).clicked() {
                                                 cmds.push(format!("cmd:{id}"));
                                             }
@@ -4097,6 +4108,16 @@ fn inspector_texts(frame: &std::collections::HashMap<String, Pos2>, under: f32) 
     let mut texts: Vec<_> = frame.iter().filter(|(_, at)| at.y > under).map(|(text, _)| text.clone()).collect();
     texts.sort();
     texts
+}
+
+#[test]
+fn a_plain_name_filter_reports_the_visible_row_count() {
+    let Some(mut ui) = test_chrome() else { return };
+    ui.ctx = test_context();
+    ui.set_tree(tag_rows(&["Walls"]), 0);
+    ui.column.as_mut().unwrap().filter = "wall".into();
+    for _ in 0..3 { tree_frame(&mut ui, vec![]); }
+    assert!(tree_frame(&mut ui, vec![]).contains_key("1 row shown"));
 }
 
 #[test]

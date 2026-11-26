@@ -56,7 +56,7 @@ From lowest to highest, each level is lighter and casts more:
 
 The dock has one width, the user's: dragged on its inner edge between `DOCK_MIN_W` and `DOCK_MAX_SHARE` of the window and kept per user. The project tree has one set of rows; Filing, Drawing and Export are presets of its columns (`ui/lens.rs`), chosen in the Columns control with each column's own toggle. A preset changes the trailing cells only: rows, selection, expansion, scroll, the dock's width and the inspector stay. Cells that do not fit beside the name compact to swatches; if they still do not fit, they scroll under the pinned name. The inspector depends on what is in focus alone: a tag shows its drawing style under every preset, and with nothing selected the document shows its counts, the Fix checklist, its tag folders and its line types.
 
-The tool rail (`ui/rail.rs`) lays out from the band's height alone: two columns when every row fits between the bars, three when two do not, and three that scroll only as a last resort. A tool's place is its index in its group. The model and Sheets rails share it.
+The tool rail (`ui/rail.rs`) lays out from the band's height alone: two columns with standard or compact vertical gaps when every row fits between the bars, three when two do not, and three that scroll only as a last resort. A tool's place is its index in its group. The model and Sheets rails share it.
 
 The About sheet uses `credits_roll` for contributor names, linked profiles and translated roles. The band pauses under the pointer and accepts wheel movement in either direction. The gallery includes a sample credit.
 

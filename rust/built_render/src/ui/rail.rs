@@ -3,7 +3,7 @@
 //! in both hosts.
 //!
 //! - Two columns when every row fits between the bars.
-//! - Three columns when two do not.
+//! - Tighten vertical gaps before moving tools to three columns.
 //! - Only then three columns that scroll, as a last resort.
 //!
 //! A tool's place is its index in its group (row `i / cols`, column
@@ -32,12 +32,18 @@ pub struct RailPlan {
 
 /// The rail's outer height with `cols` columns: rows and rules, the gaps
 /// between them and the margin. `groups` holds each group's tool count.
-pub fn height(groups: &[usize], cols: usize) -> f32 {
+fn height_with_gap(groups: &[usize], cols: usize, gap: f32) -> f32 {
     let rows: usize = groups.iter().map(|n| n.div_ceil(cols)).sum();
     let rules = groups.len().saturating_sub(1);
     let items = rows + rules;
-    rows as f32 * CELL + rules as f32 * RULE + items.saturating_sub(1) as f32 * GAP + 2.0 * PAD
+    rows as f32 * CELL + rules as f32 * RULE + items.saturating_sub(1) as f32 * gap + 2.0 * PAD
 }
+
+fn height(groups: &[usize], cols: usize) -> f32 {
+    height_with_gap(groups, cols, GAP)
+}
+
+const COMPACT_GAP: f32 = GAP / 2.0;
 
 /// The rail's outer width with `cols` columns.
 pub fn width(cols: usize) -> f32 {
@@ -67,7 +73,7 @@ pub fn fallback_mark(id: &str, ids: &[&str]) -> String {
 /// Two columns, then three, then three that scroll.
 pub fn plan(groups: &[usize], room: f32) -> RailPlan {
     for cols in [2, 3] {
-        if height(groups, cols) <= room {
+        if height_with_gap(groups, cols, COMPACT_GAP) <= room {
             return RailPlan { cols, scroll: false };
         }
     }
@@ -85,7 +91,8 @@ pub(super) fn show(ctx: &egui::Context, id: &str, groups: &[Vec<Tool>], active: 
     let mut clicked = None;
     let ids: Vec<&str> = groups.iter().flatten().map(|t| t.id.as_str()).collect();
     let tools = |ui: &mut egui::Ui, clicked: &mut Option<String>| {
-        ui.spacing_mut().item_spacing = vec2(GAP, GAP);
+        let gap = if height(&counts, cols) <= room { GAP } else { COMPACT_GAP };
+        ui.spacing_mut().item_spacing = vec2(GAP, gap);
         for (gi, group) in groups.iter().enumerate() {
             if gi > 0 {
                 let (r, _) = ui.allocate_exact_size(vec2(rule_width(cols), RULE), Sense::hover());
@@ -160,8 +167,8 @@ mod tests {
     fn short_windows_go_to_three_columns_then_scroll() {
         assert_eq!(plan(&MODEL, band(1000.0)), RailPlan { cols: 2, scroll: false });
         let at_800 = plan(&MODEL, band(800.0));
-        assert_eq!(at_800.cols, 3);
-        assert!(height(&MODEL, at_800.cols) <= band(800.0));
+        assert_eq!(at_800, RailPlan { cols: 2, scroll: false });
+        assert!(height_with_gap(&MODEL, 2, COMPACT_GAP) <= band(800.0));
         assert_eq!(plan(&MODEL, band(300.0)), RailPlan { cols: 3, scroll: true });
     }
 

@@ -129,7 +129,7 @@ fn context_path(py: Python<'_>, scene: &Bound<'_, PyAny>) -> PyResult<String> {
     Ok(if names.is_empty() { "Model".into() } else { names.join(" › ") })
 }
 
-/// The group's node path in the project tree, or "Unfiled".
+/// The group's node path in the project tree, or "Not filed".
 fn filed_path(py: Python<'_>, scene: &Bound<'_, PyAny>, g: &Bound<'_, PyAny>) -> String {
     let path = || -> PyResult<Option<String>> {
         let structure = py.import("built_core.structure")?;
@@ -142,7 +142,7 @@ fn filed_path(py: Python<'_>, scene: &Bound<'_, PyAny>, g: &Bound<'_, PyAny>) ->
         Ok(Some(parts.join(" › ")))
     };
     // A stale key: no path, not an error.
-    path().ok().flatten().unwrap_or_else(|| "Unfiled".into())
+    path().ok().flatten().unwrap_or_else(|| "Not filed".into())
 }
 
 // ---- the facts ---------------------------------------------------------------------------

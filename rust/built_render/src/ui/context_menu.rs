@@ -62,7 +62,8 @@ impl Ui {
                 let longest = verbs.iter().map(|seg|
                     fonts.layout_no_wrap(seg.1.clone(), body(), INK).size().x
                 ).fold(0.0_f32, f32::max);
-                width.max(family_width + verbs.len() as f32 * (longest + padding))
+                let columns = if family.is_empty() { verbs.len().min(2) } else { verbs.len() };
+                width.max(family_width + columns as f32 * (longest + padding))
             })
         });
         let width = desired_width.min((right - screen.min.x - 2.0 * GUT - 12.0).max(WIDTH));
@@ -128,6 +129,10 @@ pub(super) fn menu_contents(ui: &mut egui::Ui, width: f32, heading: &str, subtit
             if response.clicked() && *enabled { clicked = Some(id.clone()); }
             if let Some((_, _, why)) = reasons.iter().find(|(verb, _, why)| verb == id && !why.is_empty()) {
                 response.on_hover_text(why);
+            }
+        } else if family.is_empty() {
+            for pair in segs.chunks(2) {
+                if let Some(id) = segment_row(ui, family, pair) { clicked = Some(id); }
             }
         } else if let Some(id) = segment_row(ui, family, segs) {
             clicked = Some(id);
