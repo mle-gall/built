@@ -9,9 +9,33 @@ use std::sync::Arc;
 #[serde(untagged, deny_unknown_fields)]
 pub enum Reference {
     Point([f64; 3]),
-    Placement { placement: String },
-    Element { path: Vec<String>, id: String },
-    Row { row: String },
+    Placement {
+        placement: String,
+    },
+    Element {
+        path: Vec<String>,
+        id: String,
+    },
+    Row {
+        row: String,
+    },
+    Axis {
+        sweep: String,
+        at: Station,
+        #[serde(default)]
+        point: Option<String>,
+    },
+    Slot {
+        slot: String,
+    },
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum Station {
+    End(String),
+    Fraction(f64),
+    Offset { from: String, mm: f64 },
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -27,6 +51,8 @@ pub struct Row {
     pub open_top: bool,
     #[serde(default)]
     pub inputs: Vec<Reference>,
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub slots: std::collections::BTreeMap<String, Reference>,
     #[serde(default)]
     pub state: String,
 }
@@ -45,9 +71,12 @@ pub enum Key {
 impl Row {
     fn keys(&self) -> HashSet<Key> {
         let mut keys = HashSet::new();
-        for r in &self.inputs {
+        for r in self.inputs.iter().chain(self.slots.values()) {
             match r {
-                Reference::Point(_) => (),
+                Reference::Point(_) | Reference::Slot { .. } => (),
+                Reference::Axis { sweep, .. } => {
+                    keys.insert(Key::Row(sweep.clone()));
+                }
                 Reference::Placement { placement } => {
                     keys.insert(Key::Placement(placement.clone()));
                 }
@@ -183,5 +212,58 @@ impl LiveTable {
             return Err("cycle");
         }
         Ok(result)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn row(id: &str, owner: &str, inputs: Vec<Reference>) -> Row {
+        Row {
+            uid: id.into(),
+            owner: owner.into(),
+            kind: "test_box".into(),
+            v: 1,
+            size: unit(),
+            open_top: false,
+            inputs,
+            slots: Default::default(),
+            state: "ok".into(),
+        }
+    }
+
+    #[test]
+    fn a_diamond_runs_once_in_creation_order() {
+        let mut t = LiveTable::default();
+        let source = || Reference::Placement {
+            placement: "anchor".into(),
+        };
+        t.insert(row("right", "b", vec![source()])).unwrap();
+        t.insert(row("left", "a", vec![source()])).unwrap();
+        t.insert(row(
+            "end",
+            "c",
+            vec![
+                Reference::Row { row: "left".into() },
+                Reference::Placement {
+                    placement: "b".into(),
+                },
+            ],
+        ))
+        .unwrap();
+        let saved = t.clone();
+        let affected = t.users(&Key::Placement("anchor".into())).cloned();
+        assert_eq!(t.schedule(affected).unwrap(), ["right", "left", "end"]);
+        t.insert(row(
+            "left",
+            "a",
+            vec![Reference::Placement {
+                placement: "c".into(),
+            }],
+        ))
+        .unwrap();
+        assert_eq!(t.schedule(["left".into()]), Err("cycle"));
+        assert_eq!(saved.schedule(["left".into()]).unwrap(), ["left", "end"]);
     }
 }

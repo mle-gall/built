@@ -3,7 +3,9 @@
 import json
 import zipfile
 
-from built_core import Matrix4
+import pytest
+
+from built_core import Matrix4, Vec3
 from built_core.group import Group
 from built_core.history import History
 from built_core.protocol import commands, queries
@@ -103,7 +105,7 @@ def test_compatible_file_and_stale_choices(tmp_path):
     assert all_ids(back.groups[0].mesh) == ids
 
     # An outside reader changes the geometry while preserving optional metadata.
-    back.groups[0].mesh.add_vertex((3, 4, 5))
+    back.groups[0].mesh.add_edge(Vec3(3, 4, 5), Vec3(4, 5, 6))
     outside = tmp_path / "outside.built"
     igz.save_scene(back, outside)
     stale = Scene()
@@ -125,3 +127,95 @@ def test_compatible_file_and_stale_choices(tmp_path):
     igz.load_into(plain, baked)
     assert queries.live_rows(plain) == []
     assert all_ids(plain.groups[0].mesh) == ids
+
+
+@pytest.mark.slow
+@pytest.mark.perf
+def test_dirty_closure_on_synthetic_assembly(tmp_path):
+    """One edited input drives ten of a thousand recipes on the ride fixture."""
+    import statistics
+    import time
+    from built_core import element_ids
+    from tests.test_big_model_budgets import big_model
+
+    scene = Scene()
+    igz.load_into(scene, big_model(tmp_path / "assembly.built"))
+    h = History(scene)
+    owners = list(scene.groups_by_uid().values())[-1001:-1]
+    vertex = scene.mesh.vertices[0]
+    element = element_ids.id_text("vertex", scene.mesh._store.id_of("vertex", vertex.key))
+    for i, owner in enumerate(owners):
+        inputs = [dict(path=[], id=element)] if i < 10 else []
+        apply(h, "live_set", row=box(owner, i+1, inputs=inputs))
+    before = [g.mesh for g in owners]
+    times = []
+    for _ in range(9):
+        start = time.perf_counter_ns()
+        apply(h, "move_vertices", vertices=[element], delta=[0, 0, .01])
+        times.append((time.perf_counter_ns()-start)/1e6)
+    assert sum(g.mesh is not m for g, m in zip(owners, before)) == 10
+    print(f"1,000 rows, 10 dirty, median History commit {statistics.median(times):.3f} ms")
+
+
+
+def test_axis_datum_and_slot_binding():
+    scene, h, (a, b) = setup_groups(2)
+    source = box(a, size=[2, 4, 6])
+    apply(h, "live_set", row=source)
+    attached = box(b, 2, inputs=[dict(slot="host")],
+                   slots={"host": dict(sweep=source["uid"], at="end", point="centre")})
+    apply(h, "live_set", row=attached)
+    assert min(v.position_tuple() for v in b.mesh.vertices) == (2., 2., 3.)
+    apply(h, "live_set", row=dict(source, size=[3, 4, 6]))
+    assert min(v.position_tuple() for v in b.mesh.vertices) == (3., 2., 3.)
+    previous = b.mesh
+    apply(h, "live_set", row=dict(attached, slots={"host": dict(slot="host")}))
+    assert b.mesh is previous and queries.live_rows(scene)[1]["state"] == "ref_lost"
+
+
+def test_reader_drops_placement_marker_and_document_reuse(tmp_path):
+    scene, h, (g,) = setup_groups(1)
+    row = box(g)
+    apply(h, "live_set", row=row)
+    g.ext = {}
+    path = tmp_path / "no-marker.built"
+    igz.save_scene(scene, path)
+    igz.load_into(scene, path)
+    assert queries.live_rows(scene)[0]["state"] == "stale"
+    plain = tmp_path / "plain.built"
+    rewrite(path, plain, lambda doc: doc.pop("ext"))
+    igz.load_into(scene, plain)
+    assert queries.live_rows(scene) == [] and len(scene.groups[0].mesh.faces) == 6
+
+
+def test_copy_release_and_opaque_inverse():
+    from built_core.history import Command
+
+    scene, h, (anchor, g) = setup_groups(2)
+    source = box(g, inputs=[dict(placement=anchor.uid)])
+    apply(h, "live_set", row=source)
+    apply(h, "copy_placements", placements=[g.uid], delta=[4, 0, 0])
+    copied = scene.groups[-1]
+    original, duplicate = queries.live_rows(scene)
+    assert duplicate["uid"] != original["uid"]
+    assert copied.ext["built.live"]["row"] == duplicate["uid"]
+    apply(h, "live_release", uid=duplicate["uid"])
+    baked = copied.mesh
+
+    class MoveAnchor(Command):
+        def do(self, scene):
+            moved = Matrix4()
+            moved.translate(1, 0, 0)
+            anchor.xform = moved
+
+        def undo(self, scene):
+            anchor.xform = Matrix4()
+
+    before = g.mesh
+    h.execute(MoveAnchor())
+    after = g.mesh
+    assert after is not before
+    apply(h, "undo")
+    assert g.mesh is before
+    apply(h, "redo")
+    assert g.mesh is after and copied.mesh is baked

@@ -543,6 +543,7 @@ fn strings<'py>(payload: &Dict<'py>, key: &str, require_value: bool) -> PyResult
 #[pyfunction]
 pub fn igz_reset_scene(scene: &Obj<'_>, payload: &Dict<'_>, survey: &Obj<'_>) -> PyResult<()> {
     let py = scene.py();
+    crate::live::clear(scene)?;
     for k in [
         "mesh",
         "selection",

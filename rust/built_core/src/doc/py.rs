@@ -2808,7 +2808,7 @@ pub struct PyTransaction {
 
 impl PyTransaction {
     /// A record of document ops only (a nested step's own slice).
-    pub(super) fn from_parts(ops: Vec<Op>, pins: Vec<Py<PyAny>>) -> Self {
+    pub(crate) fn from_parts(ops: Vec<Op>, pins: Vec<Py<PyAny>>) -> Self {
         Self {
             geometry: Vec::new(),
             ops,

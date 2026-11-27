@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! The root's journalled attribute holds a frozen, structurally shared table.
 //! Definition replacements and placement markers are ordinary document ops.
+mod file;
 mod geometry;
+mod reference;
+pub(crate) use file::{load, save};
 mod table;
 use crate::{
     doc::{self, Data, Field, Op},
@@ -34,14 +37,7 @@ fn current(py: Python<'_>, root: doc::Key) -> Option<LiveTable> {
         };
         obj.0.clone_ref(py)
     };
-    Some(
-        value
-            .bind(py)
-            .cast::<LiveTable>()
-            .expect("native live table")
-            .get()
-            .clone(),
-    )
+    Some(value.bind(py).cast::<LiveTable>().ok()?.get().clone())
 }
 fn put(scene: &Obj<'_>, table: LiveTable) -> PyResult<()> {
     let py = scene.py();
@@ -61,15 +57,21 @@ fn root(scene: &Obj<'_>) -> PyResult<doc::Key> {
 fn index(root: doc::Key) -> HashMap<String, doc::Key> {
     let d = doc::lock();
     let mut result = HashMap::new();
+    let mut ambiguous = HashSet::new();
     let mut todo = vec![root];
     while let Some(k) = todo.pop() {
         let Some(node) = d.node(k) else { continue };
         if let Data::Placement(p) = &node.data {
             if let Some(uid) = &p.uid {
-                result.insert(uid.clone(), k);
+                if result.insert(uid.clone(), k).is_some() {
+                    ambiguous.insert(uid.clone());
+                }
             }
         }
         todo.extend(node.children.iter().copied());
+    }
+    for uid in ambiguous {
+        result.remove(&uid);
     }
     result
 }
@@ -78,87 +80,14 @@ fn group<'p>(py: Python<'p>, table: &LiveTable, uid: &str) -> Option<Obj<'p>> {
         .handle_ref(py, *table.groups.get(uid)?)
         .map(|g| g.into_bound(py))
 }
-fn frame(mut k: doc::Key) -> DMat4 {
-    let d = doc::lock();
-    let mut m = DMat4::IDENTITY;
-    while let Some(n) = d.node(k) {
-        let Data::Placement(p) = &n.data else { break };
-        if let Some(x) = &p.xform {
-            m = DMat4::from_cols_array(&x.doubles()) * m;
-        }
-        let Some(parent) = n.owners.first() else {
-            break;
-        };
-        k = *parent;
+fn loose_mesh<'p>(scene: &Obj<'p>) -> PyResult<Obj<'p>> {
+    match scene
+        .getattr_opt("_loose_mesh")?
+        .filter(|mesh| !mesh.is_none())
+    {
+        Some(mesh) => Ok(mesh),
+        None => scene.getattr("mesh"),
     }
-    m
-}
-fn reference(
-    scene: &Obj<'_>,
-    table: &LiveTable,
-    r: &Reference,
-    owner: doc::Key,
-) -> PyResult<Option<DVec3>> {
-    let py = scene.py();
-    let (g, local) = match r {
-        Reference::Point(p) => return Ok(Some(DVec3::from(*p))),
-        Reference::Placement { placement } => (group(py, table, placement), DVec3::ZERO),
-        Reference::Row { row } => {
-            let Some(source) = table.rows.get(row).filter(|s| s.state == "ok") else {
-                return Ok(None);
-            };
-            (group(py, table, &source.owner), DVec3::ZERO)
-        }
-        Reference::Element { path, id } => {
-            let (g, mesh) = if path.is_empty() {
-                (None, scene.getattr("mesh")?)
-            } else {
-                let g = scene.call_method1("resolve_occurrence", (path.clone(),))?;
-                if g.is_none() {
-                    return Ok(None);
-                }
-                let m = g.getattr("mesh")?;
-                (Some(g), m)
-            };
-            let Ok((letter, id)) = eid::from_text(id) else {
-                return Ok(None);
-            };
-            let k = Kind::parse(eid::kind_name(letter).unwrap()).unwrap();
-            let store = mesh.getattr("_store")?.cast_into::<PyMeshStore>()?;
-            let borrow = store.try_borrow()?;
-            let s = &borrow.inner;
-            let Some(slot) = s.slot_of_pid(k, id) else {
-                return Ok(None);
-            };
-            let vertices = match k {
-                Kind::Vertex => vec![slot],
-                Kind::Edge => s.state.ends.get(slot as usize).to_vec(),
-                Kind::Face => s.face_rings(slot).remove(0),
-            };
-            let point = vertices
-                .iter()
-                .map(|v| {
-                    DVec3::from(
-                        s.state
-                            .frame
-                            .definition_point(*s.state.vpos.get(*v as usize)),
-                    )
-                })
-                .sum::<DVec3>()
-                / vertices.len() as f64;
-            if path.is_empty() {
-                return Ok(Some(frame(owner).inverse().transform_point3(point)));
-            }
-            (g, point)
-        }
-    };
-    let Some(g) = g else { return Ok(None) };
-    let k = g.getattr("_doc_key")?.extract()?;
-    Ok(Some(
-        frame(owner)
-            .inverse()
-            .transform_point3(frame(k).transform_point3(local)),
-    ))
 }
 fn metadata<'p>(g: &Obj<'p>) -> PyResult<Bound<'p, PyDict>> {
     let ext = g.getattr("ext")?;
@@ -178,7 +107,7 @@ fn evaluate(scene: &Obj<'_>, t: &LiveTable, row: &Row) -> PyResult<&'static str>
     }
     let mut origin = DVec3::ZERO;
     for r in &row.inputs {
-        let Some(point) = reference(scene, t, r, t.groups[&row.owner])? else {
+        let Some(point) = reference::origin(scene, t, r, row)? else {
             return Ok("ref_lost");
         };
         origin += point;
@@ -218,7 +147,12 @@ fn run(scene: &Obj<'_>, t: &mut LiveTable, seeds: HashSet<String>) -> PyResult<(
     Ok(())
 }
 
-pub(crate) fn finish(scene: &Obj<'_>, document: doc::Key) -> PyResult<()> {
+pub(crate) fn finish(
+    scene: &Obj<'_>,
+    document: doc::Key,
+    command: &Obj<'_>,
+    journalled: bool,
+) -> PyResult<()> {
     let py = scene.py();
     let Some(mut t) = current(py, document) else {
         return Ok(());
@@ -273,11 +207,54 @@ pub(crate) fn finish(scene: &Obj<'_>, document: doc::Key) -> PyResult<()> {
         }
     }
     if structure {
-        t.groups = Arc::new(index(document));
+        let next = index(document);
+        // A copied placement inherits its marker and baked definition. Give
+        // its recipe a fresh identity before another edit can write either.
+        let added: Vec<_> = next
+            .iter()
+            .filter(|(uid, k)| t.groups.get(*uid) != Some(*k))
+            .map(|(uid, _)| uid.clone())
+            .collect();
+        let removed: Vec<_> = t
+            .groups
+            .keys()
+            .filter(|uid| !next.contains_key(*uid))
+            .cloned()
+            .collect();
+        t.groups = Arc::new(next);
+        for uid in added {
+            let g = group(py, &t, &uid).expect("indexed placement");
+            let ext = metadata(&g)?;
+            let marker = ext.get_item(EXT)?;
+            if let Some(source) = marker
+                .and_then(|m| m.get_item("row").ok())
+                .and_then(|id| id.extract::<String>().ok())
+                .and_then(|id| t.rows.get(&id).cloned())
+            {
+                if source.owner != uid && !t.owners.contains_key(&uid) {
+                    let mut copy = (*source).clone();
+                    copy.uid = eid::new_uid();
+                    copy.owner = uid.clone();
+                    let marker = ext.get_item(EXT)?.unwrap().cast_into::<PyDict>()?.copy()?;
+                    marker.set_item("row", &copy.uid)?;
+                    ext.set_item(EXT, marker)?;
+                    g.setattr("ext", ext)?;
+                    t.insert(copy).map_err(PyValueError::new_err)?;
+                }
+            }
+            seeds.extend(t.users(&Key::Placement(uid)).cloned());
+        }
+        for uid in removed {
+            seeds.extend(t.users(&Key::Placement(uid.clone())).cloned());
+            if let Some(id) = t.owners.get(&uid).cloned() {
+                t.remove(&id);
+                seeds.extend(t.users(&Key::Row(id)).cloned());
+            }
+        }
     }
     for mesh in doc::geometry::touched_meshes(py) {
         let root = scene.getattr("_root")?;
-        if mesh.bind(py).is(&scene.getattr("mesh")?) {
+        if mesh.bind(py).is(&loose_mesh(scene)?) {
             seeds.extend(t.users(&Key::Root).cloned());
         }
         for uid in root
@@ -290,8 +267,32 @@ pub(crate) fn finish(scene: &Obj<'_>, document: doc::Key) -> PyResult<()> {
     if seeds.is_empty() && !structure {
         return Ok(());
     }
-    run(scene, &mut t, seeds)?;
-    put(scene, t)
+    if journalled {
+        run(scene, &mut t, seeds)?;
+        return put(scene, t);
+    }
+    // Opaque commands own their inverse. Only the evaluator's writes must
+    // accompany it on replay. A savepoint prevents coalescing with the input.
+    let api = py.import("built_core.doc_model")?;
+    api.call_method1("begin", (document,))?;
+    let result = run(scene, &mut t, seeds).and_then(|()| put(scene, t));
+    if let Err(error) = result {
+        api.call_method0("rollback")?;
+        return Err(error);
+    }
+    let (ops, pins) = {
+        let d = doc::lock();
+        let open = d.open.as_ref().expect("live savepoint");
+        (
+            open.ops[*open.marks.last().unwrap()..].to_vec(),
+            open.pins.iter().map(|p| p.clone_ref(py)).collect(),
+        )
+    };
+    api.call_method0("commit")?;
+    command.setattr(
+        "_live_txn",
+        Py::new(py, doc::py::PyTransaction::from_parts(ops, pins))?,
+    )
 }
 
 #[derive(Clone)]
@@ -303,6 +304,7 @@ enum Edit {
 #[pyclass(frozen, dict, name = "LiveCommand")]
 struct Mutation(Edit);
 #[pymethods]
+#[allow(non_upper_case_globals)]
 impl Mutation {
     #[classattr]
     const doc_undo: bool = true;
@@ -320,6 +322,13 @@ impl Mutation {
     fn apply(&self, scene: &Obj<'_>) -> PyResult<()> {
         let py = scene.py();
         let document = root(scene)?;
+        if scene
+            .getattr_opt("doc_ext")?
+            .filter(|ext| !ext.is_none())
+            .is_some_and(|ext| ext.contains(EXT).unwrap_or(false))
+        {
+            return Err(PyValueError::new_err("unsupported live extension version"));
+        }
         let mut t = current(py, document).unwrap_or_else(|| LiveTable {
             groups: Arc::new(index(document)),
             ..Default::default()
@@ -416,73 +425,9 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(live_reevaluate, m)?)?;
     m.add_function(wrap_pyfunction!(live_rows, m)?)
 }
-pub(crate) fn save(scene: &Obj<'_>, out: &Bound<'_, PyDict>) -> PyResult<()> {
-    let py = scene.py();
-    let Some(t) = current(py, root(scene)?) else {
-        return Ok(());
-    };
-    let ext = match out.get_item("_doc_ext")? {
-        Some(e) => e.cast_into::<PyDict>()?,
-        None => PyDict::new(py),
-    };
-    let data = PyDict::new(py);
-    data.set_item("v", 1)?;
-    data.set_item("rows", to_py(py, &t.by_creation())?)?;
-    ext.set_item(EXT, data)?;
-    out.set_item("_doc_ext", ext)
-}
-pub(crate) fn load(scene: &Obj<'_>, ext: &Bound<'_, PyDict>) -> PyResult<()> {
-    let Some(data) = ext.get_item(EXT)? else {
-        return Ok(());
-    };
-    // Preserve an unrecognised extension verbatim like other optional data.
-    let Ok(data) = data.cast::<PyDict>() else {
-        return Ok(());
-    };
-    if data.get_item("v")?.and_then(|v| v.extract::<u32>().ok()) != Some(1) {
-        return Ok(());
+pub(crate) fn clear(scene: &Obj<'_>) -> PyResult<()> {
+    if let Some(root) = scene.getattr_opt("_root")? {
+        root.call_method1("_set_attr", (TABLE, scene.py().None()))?;
     }
-    let Some(raw) = data.get_item("rows")? else {
-        return Ok(());
-    };
-    let Ok(rows) = json::<Vec<Row>>(&raw) else {
-        return Ok(());
-    };
-    let py = scene.py();
-    let mut t = LiveTable::default();
-    t.groups = Arc::new(index(root(scene)?));
-    for mut row in rows {
-        let id = row.uid.clone();
-        if t.rows.contains_key(&id) {
-            return Ok(());
-        }
-        if let Some(g) = group(py, &t, &row.owner) {
-            let marker = metadata(&g)?.get_item(EXT)?;
-            let stamp = marker
-                .as_ref()
-                .and_then(|m| m.get_item("stamp").ok())
-                .and_then(|v| v.extract::<String>().ok());
-            if let Some(stamp) = stamp {
-                let store = g
-                    .getattr("mesh")?
-                    .getattr("_store")?
-                    .cast_into::<PyMeshStore>()?;
-                if stamp != geometry::stamp(&store.try_borrow()?.inner) {
-                    row.state = "stale".into();
-                }
-            } else if row.state == "ok" {
-                row.state = "stale".into();
-            }
-        } else {
-            row.state = "ref_lost".into();
-        }
-        if t.insert(row).is_err() {
-            return Ok(());
-        }
-        if t.schedule([id.clone()]).is_err() {
-            t.set_state(&id, "cycle");
-        }
-    }
-    put(scene, t)?;
-    ext.del_item(EXT)
+    Ok(())
 }
