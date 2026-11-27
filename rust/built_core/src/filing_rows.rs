@@ -120,6 +120,7 @@ pub(crate) fn refresh_unfiled(scene: &Obj<'_>, tree: &Obj<'_>) -> PyResult<bool>
 
 struct Catalogue<'py> {
     cuts: HashMap<String,Vec<(String,String,bool)>>,
+    repeats: HashMap<String,String>,
     scene: Obj<'py>,
     tree: Obj<'py>,
     nodes: Obj<'py>,
@@ -317,6 +318,14 @@ impl<'py> Catalogue<'py> {
         }
         r.1[2] = self.bad.contains(&id(g)) as i64;
         crate::project_tree::placement_controls(&mut r, g)?;
+        if !self.repeats.is_empty() {
+            if let Some(label) = self.repeats.get(&g.getattr("uid")?.extract::<String>()?) {
+                r.0[2] = label.clone();
+                r.0[3] = format!("×{}", kids.len()?);
+                rows.push(r);
+                return Ok(());
+            }
+        }
         let cuts=if self.cuts.is_empty(){None}else{self.cuts.get(&g.getattr("uid")?.extract::<String>()?)};
         r.1[7] = (kids.is_truthy()? || cuts.is_some()) as i64;
         r.1[8] = open as i64;
@@ -559,6 +568,7 @@ pub(crate) fn filing_rows<'py>(
     };
     let mut c = Catalogue {
         cuts:crate::live::cut_labels(&scene)?,
+        repeats:crate::live::repeat_labels(&scene)?,
         scene,
         tree: tree.clone(),
         nodes: nodes.clone(),

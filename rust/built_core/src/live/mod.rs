@@ -10,6 +10,7 @@ mod joints;
 mod presets;
 pub(crate) mod profile;
 mod reference;
+mod repeat;
 pub mod sketch;
 mod sketch_scene;
 mod sweep;
@@ -114,6 +115,9 @@ fn evaluate(
     skipped: &mut Vec<(String, &'static str)>,
 ) -> PyResult<&'static str> {
     let py = scene.py();
+    if row.kind == "repeat" {
+        return repeat::evaluate(scene, t, row);
+    }
     if row.kind == "cut" {
         return Ok("ok");
     }
@@ -200,6 +204,7 @@ fn evaluate(
                         r.cutter,
                         Some(
                             cut::Cutter::Body(_)
+                                | cut::Cutter::Repeat(_)
                                 | cut::Cutter::Section(_)
                                 | cut::Cutter::Opening(_)
                         )
@@ -256,8 +261,12 @@ fn run(scene: &Obj<'_>, t: &mut LiveTable, seeds: HashSet<String>) -> PyResult<(
         let mut active = None;
         let mut skipped = Vec::new();
         let state = evaluate(scene, t, row, &mut active, &mut skipped)?;
+        let repeat = row.kind == "repeat";
         let cut_ids = row.cuts.clone();
         let initial = row.state.is_empty();
+        if repeat && state == "ok" {
+            t.groups = Arc::new(index(root(scene)?));
+        }
         if state == "ok" {
             for id in cut_ids {
                 if t.rows.contains_key(&id) {
@@ -704,6 +713,7 @@ impl Mutation {
                     let definitions = std::mem::take(&mut spec.cut_definitions);
                     let target_uid = owner.clone();
                     t.insert(Row {
+                        repeat: Default::default(),
                         kind: "sweep".into(),
                         uid: uid.clone(),
                         owner,
@@ -738,7 +748,11 @@ impl Mutation {
                     t.pending.insert(uid);
                 }
             }
-            Edit::Set(row) => {
+            Edit::Set(request) => {
+                let mut row = request.clone();
+                if row.kind == "repeat" {
+                    repeat::prepare(scene, &mut t, &mut row)?;
+                }
                 if row.kind != "sketch" && group(py, &t, &row.owner).is_none() {
                     return Err(PyValueError::new_err("unknown recipe owner"));
                 }
@@ -747,7 +761,6 @@ impl Mutation {
                         "stale recipe requires re-evaluation or release",
                     ));
                 }
-                let mut row = row.clone();
                 if let (Some(old), Some(new)) = (
                     t.rows.get(&row.uid).and_then(|r| r.sweep.as_deref()),
                     row.sweep.as_deref_mut(),
@@ -780,7 +793,22 @@ impl Mutation {
                     bind_drawing(&mut t, &mut spec.profile)?;
                 }
                 row.state.clear();
+                let new_repeat = row.kind == "repeat" && !t.rows.contains_key(&row.uid);
                 t.insert(row.clone()).map_err(PyValueError::new_err)?;
+                if new_repeat {
+                    let source = row.source.as_ref().unwrap();
+                    let users: Vec<_> = t.users(&Key::Placement(source.clone())).cloned().collect();
+                    for uid in users {
+                        let Some(mut cut) = t.rows.get(&uid).map(|r| (**r).clone()) else {
+                            continue;
+                        };
+                        if matches!(&cut.cutter, Some(cut::Cutter::Body(id)) if id == source) {
+                            cut.cutter = Some(cut::Cutter::Repeat(row.uid.clone()));
+                            cut::attach(scene, &mut t, &mut cut)?;
+                            t.insert(cut).map_err(PyValueError::new_err)?;
+                        }
+                    }
+                }
                 t.schedule([row.uid.clone()])
                     .map_err(PyValueError::new_err)?;
                 t.pending.insert(row.uid);
@@ -823,7 +851,21 @@ impl Mutation {
                     }
                     row = t.remove(&target_uid).unwrap();
                 }
-                if let Some(uid) = &row.source {
+                if row.kind == "repeat" {
+                    if let Some(g) = group(py, &t, &row.owner) {
+                        for copy in g.getattr("children")?.try_iter()? {
+                            let copy = copy?;
+                            let ext = metadata(&copy)?;
+                            for key in ["built.repeat", "built.repeat_state"] {
+                                if ext.contains(key)? {
+                                    ext.del_item(key)?;
+                                }
+                            }
+                            copy.setattr("ext", ext)?;
+                        }
+                    }
+                }
+                if let Some(uid) = row.source.as_ref().filter(|_| row.kind == "cut_stack") {
                     if !t.rows.values().any(|r| r.source.as_ref() == Some(uid)) {
                         if let Some(source) = cut::source(scene, uid)? {
                             scene
@@ -873,6 +915,130 @@ fn json<T: serde::de::DeserializeOwned>(v: &Obj<'_>) -> PyResult<T> {
 fn to_py<'p>(py: Python<'p>, v: &impl serde::Serialize) -> PyResult<Obj<'p>> {
     let raw = serde_json::to_string(v).map_err(|e| PyValueError::new_err(e.to_string()))?;
     py.import("json")?.call_method1("loads", (raw,))
+}
+#[pyfunction]
+fn live_repeat<'p>(scene: &Obj<'p>, owner: &str) -> PyResult<Obj<'p>> {
+    if let Some(t) = current(scene.py(), root(scene)?) {
+        let copy_row = group(scene.py(), &t, owner).and_then(|g| {
+            g.getattr("ext")
+                .ok()?
+                .get_item("built.repeat")
+                .ok()?
+                .get_item("row")
+                .ok()?
+                .extract::<String>()
+                .ok()
+        });
+        if let Some(row) = t
+            .owners
+            .get(owner)
+            .or(copy_row.as_ref())
+            .and_then(|uid| t.rows.get(uid))
+            .filter(|r| r.kind == "repeat")
+        {
+            let owner = &row.owner;
+            let result = to_py(scene.py(), row)?;
+            let mut breadcrumb = Vec::new();
+            let mut next = Some(row.as_ref());
+            let mut seen = HashSet::new();
+            while let Some(r) = next.filter(|r| seen.insert(r.uid.clone())) {
+                if let Some(g) = group(scene.py(), &t, &r.owner) {
+                    breadcrumb.push(g.getattr("name")?.extract::<String>()?);
+                }
+                next = r
+                    .source
+                    .as_ref()
+                    .and_then(|s| t.owners.get(s))
+                    .and_then(|id| t.rows.get(id))
+                    .filter(|r| r.kind == "repeat")
+                    .map(Arc::as_ref);
+            }
+            breadcrumb.reverse();
+            result.set_item("breadcrumb", breadcrumb)?;
+            let mut hosts = Vec::new();
+            let blocked: HashSet<_> = t
+                .schedule([row.uid.clone()])
+                .unwrap_or_default()
+                .into_iter()
+                .collect();
+            for id in t.repeats.iter().filter(|id| !blocked.contains(*id)) {
+                if let Some(g) = group(scene.py(), &t, &t.rows[id].owner) {
+                    hosts.push((id.clone(), g.getattr("name")?.extract::<String>()?));
+                }
+            }
+            result.set_item("between_options", hosts)?;
+            if let Some(source) = row.source.as_ref() {
+                if let Some(g) = group(scene.py(), &t, source) {
+                    result.set_item("source_path", scene.call_method1("occurrence_path", (g,))?)?;
+                }
+                result.set_item(
+                    "can_adapt",
+                    t.owners
+                        .get(source)
+                        .and_then(|id| t.rows.get(id))
+                        .is_some_and(|r| r.kind == "sweep"),
+                )?;
+            }
+            if let Some(g) = group(scene.py(), &t, owner) {
+                if let Some(marker) = metadata(&g)?.get_item(EXT)? {
+                    result.set_item(
+                        "owner_frame",
+                        reference::frame(t.groups[owner]).to_cols_array(),
+                    )?;
+                    for field in ["copies", "distinct", "stations"] {
+                        if let Ok(value) = marker.get_item(field) {
+                            result.set_item(field, value)?;
+                        }
+                    }
+                }
+            }
+            return Ok(result);
+        }
+    }
+    Ok(scene.py().None().into_bound(scene.py()))
+}
+/// Resolve the editable source for a double-click on a Repeat occurrence.
+pub(crate) fn repeat_source<'p>(scene: &Obj<'p>, picked: &Obj<'p>) -> PyResult<Option<Obj<'p>>> {
+    let Some(ext) = picked.getattr_opt("ext")?.filter(|ext| !ext.is_none()) else {
+        return Ok(None);
+    };
+    let Some(marker) = ext
+        .get_item("built.repeat")
+        .ok()
+        .or_else(|| ext.get_item(EXT).ok())
+    else {
+        return Ok(None);
+    };
+    let Some(id) = marker
+        .get_item("row")
+        .ok()
+        .and_then(|id| id.extract::<String>().ok())
+    else {
+        return Ok(None);
+    };
+    let Some(t) = current(scene.py(), root(scene)?) else {
+        return Ok(None);
+    };
+    Ok(t.rows
+        .get(&id)
+        .filter(|r| r.kind == "repeat")
+        .and_then(|r| r.source.as_deref())
+        .and_then(|uid| group(scene.py(), &t, uid)))
+}
+
+pub(crate) fn repeat_command<'p>(
+    py: Python<'p>,
+    source: &Obj<'p>,
+    run: serde_json::Value,
+    rule: serde_json::Value,
+    uid: String,
+) -> PyResult<Obj<'p>> {
+    let source = source.getattr("uid")?.extract::<String>()?;
+    let row = serde_json::from_value(serde_json::json!({
+        "uid": uid, "kind":"repeat", "source":source, "run":run, "rule":rule
+    }))
+    .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    Ok(Bound::new(py, Mutation(Edit::Set(row)))?.into_any())
 }
 #[pyfunction]
 fn live_sweep<'p>(scene: &Obj<'p>, owner: &str) -> PyResult<Obj<'p>> {
@@ -1033,13 +1199,17 @@ fn create_sweeps<'p>(history: &Obj<'p>, sweeps: &Obj<'p>) -> PyResult<Bound<'p, 
 fn live_set<'p>(history: &Obj<'p>, row: &Obj<'p>) -> PyResult<Bound<'p, PyDict>> {
     let row: Row = json(row)?;
     for uid in std::iter::once(&row.uid)
-        .chain((row.kind != "sketch" || !row.owner.is_empty()).then_some(&row.owner))
+        .chain((!matches!(row.kind.as_str(), "sketch" | "repeat") || !row.owner.is_empty()).then_some(&row.owner))
     {
         if uid.len() != 16 || !uid.bytes().all(|c| c.is_ascii_hexdigit()) {
             return Err(PyValueError::new_err("expected 16-hex uid"));
         }
     }
-    if !matches!(row.kind.as_str(), "test_box" | "sweep" | "sketch" | "cut") || row.v != 1 {
+    if !matches!(
+        row.kind.as_str(),
+        "test_box" | "sweep" | "sketch" | "cut" | "repeat"
+    ) || row.v != 1
+    {
         return Err(PyValueError::new_err("unsupported recipe"));
     }
     if row.kind == "sketch" {
@@ -1104,6 +1274,7 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(live_cuts, m)?)?;
     m.add_function(wrap_pyfunction!(cut::live_openings, m)?)?;
     m.add_function(wrap_pyfunction!(sweep_thumbnail, m)?)?;
+    m.add_function(wrap_pyfunction!(live_repeat, m)?)?;
     m.add_function(wrap_pyfunction!(live_sweep, m)?)?;
     m.add_function(wrap_pyfunction!(sweep_profile, m)?)?;
     m.add_function(wrap_pyfunction!(create_sweeps, m)?)?;
@@ -1133,6 +1304,34 @@ pub(crate) fn clear(scene: &Obj<'_>) -> PyResult<()> {
     Ok(())
 }
 
+pub(crate) fn repeat_labels(scene: &Obj<'_>) -> PyResult<HashMap<String, String>> {
+    let mut labels = HashMap::new();
+    let Some(k) = scene
+        .getattr_opt("_root")?
+        .and_then(|r| r.getattr("_doc_key").ok())
+        .and_then(|v| v.extract().ok())
+    else {
+        return Ok(labels);
+    };
+    if let Some(t) = current(scene.py(), k) {
+        for id in &t.repeats {
+            let row = &t.rows[id];
+            let rule = &row.repeat.rule;
+            let label = if let Some(n) = rule.get("count") {
+                format!("Repeat · {n}×")
+            } else if let Some(n) = rule.get("divide") {
+                format!("Repeat · /{n}")
+            } else if let Some(n) = rule.get("fit_max") {
+                format!("Repeat · ≤{n}")
+            } else {
+                format!("Repeat · {}", rule["spacing"])
+            };
+            labels.insert(row.owner.clone(), label);
+        }
+    }
+    Ok(labels)
+}
+
 pub(crate) fn cut_labels(
     scene: &Obj<'_>,
 ) -> PyResult<HashMap<String, Vec<(String, String, bool)>>> {
@@ -1158,6 +1357,7 @@ pub(crate) fn cut_labels(
                     cut::Cutter::Plane(_) => "plane",
                     cut::Cutter::Bisector(_) => "joint bisector",
                     cut::Cutter::Body(_) => "body",
+                    cut::Cutter::Repeat(_) => "Repeat · cutter",
                     cut::Cutter::Section(_) => "section",
                     cut::Cutter::Opening(_) => "Opening",
                 };

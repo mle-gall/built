@@ -322,7 +322,8 @@ def _save_ifc(scene, path, project_name, profile, stream, placements):
                     problems.append({'uid': group.uid, 'name': group.name, 'messages': [reason]})
             if target and reference_view:
                 rep = array_body(w, arrays, body, 'polygonal')
-            elif rep is None and config.get('instancing', False) and group is not None:
+            elif rep is None and group is not None and (config.get('instancing', False) or
+                    (group.ext or {}).get('built.repeat')):
                 rep = mapped_body(w, group, bases[id(group)], excluded,
                                   body, geometry, maps, axis)
             elif rep is None:

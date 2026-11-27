@@ -81,6 +81,12 @@ pub(super) fn assign_roles(
 /// Hash logical ids, canonical positions and connectivity in id order.
 /// Slot indices, process origin indices and file row order are transient.
 pub fn stamp(store: &Store) -> String {
+    content_hash(store, false)
+}
+pub(super) fn part_key(store: &Store) -> String {
+    content_hash(store, true)
+}
+fn content_hash(store: &Store, quantize: bool) -> String {
     let mut hash = Sha256::new();
     for kind in Kind::ALL {
         let mut records = Vec::new();
@@ -100,7 +106,15 @@ pub fn stamp(store: &Store) -> String {
                         .state
                         .frame
                         .definition_point(*store.state.vpos.get(slot as usize))
-                        .map(|v| if v == 0. { 0 } else { v.to_bits() }),
+                        .map(|v| {
+                            if quantize {
+                                (v * 1e6).round() as i64 as u64
+                            } else if v == 0. {
+                                0
+                            } else {
+                                v.to_bits()
+                            }
+                        }),
                 ),
                 Kind::Edge => {
                     let mut ends = store
