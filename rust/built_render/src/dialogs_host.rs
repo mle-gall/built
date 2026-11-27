@@ -137,6 +137,8 @@ pub struct Sheet {
     /// Non-blocking: called with the answer.
     done: Py<PyAny>,
     checklist: Py<PyAny>,
+    details: Option<String>,
+    details_open: bool,
 }
 
 #[pymethods]
@@ -144,7 +146,7 @@ impl Sheet {
     #[new]
     #[allow(clippy::too_many_arguments)]
     fn new(py: Python<'_>, title: Py<PyAny>, text: Py<PyAny>, tone: Py<PyAny>, buttons: Py<PyAny>, default: Py<PyAny>, cancel: Py<PyAny>, discard: Py<PyAny>, blocking: bool) -> Self {
-        Sheet { title, text, tone, buttons, default, cancel, discard, answer: py.None(), event_loop: py.None(), shown: false, blocking, done: py.None(), checklist: py.None() }
+        Sheet { title, text, tone, buttons, default, cancel, discard, answer: py.None(), event_loop: py.None(), shown: false, blocking, done: py.None(), checklist: py.None(), details: None, details_open: false }
     }
 }
 
@@ -254,9 +256,9 @@ fn ask<'py>(py: Python<'py>, parent: &Bound<'py, PyAny>, title: &Bound<'py, PyAn
 
 /// Post a question and deliver its answer to the continuation.
 #[pyfunction]
-#[pyo3(signature = (parent, title, text, buttons, done, *, default=None, cancel=None, discard=None, tone="question"))]
+#[pyo3(signature = (parent, title, text, buttons, done, *, default=None, cancel=None, discard=None, tone="question", details=None))]
 #[allow(clippy::too_many_arguments)]
-fn ask_later(py: Python<'_>, parent: &Bound<'_, PyAny>, title: &Bound<'_, PyAny>, text: &Bound<'_, PyAny>, buttons: &Bound<'_, PyAny>, done: &Bound<'_, PyAny>, default: Option<Bound<'_, PyAny>>, cancel: Option<Bound<'_, PyAny>>, discard: Option<Bound<'_, PyAny>>, tone: &str) -> PyResult<()> {
+fn ask_later(py: Python<'_>, parent: &Bound<'_, PyAny>, title: &Bound<'_, PyAny>, text: &Bound<'_, PyAny>, buttons: &Bound<'_, PyAny>, done: &Bound<'_, PyAny>, default: Option<Bound<'_, PyAny>>, cancel: Option<Bound<'_, PyAny>>, discard: Option<Bound<'_, PyAny>>, tone: &str, details: Option<String>) -> PyResult<()> {
     let n = || py.None().into_bound(py);
     let (default, cancel, discard) = (default.unwrap_or_else(n), cancel.unwrap_or_else(n), discard.unwrap_or_else(n));
     let win = cd(py)?.call_method1("async_host", (parent,))?;
@@ -266,6 +268,7 @@ fn ask_later(py: Python<'_>, parent: &Bound<'_, PyAny>, title: &Bound<'_, PyAny>
         return Ok(());
     }
     let sheet = new_sheet(py, title, text, tone, buttons, &default, &cancel, &discard, false)?;
+    sheet.borrow_mut().details = details;
     sheet.borrow_mut().done = done.clone().unbind();
     push(&win, sheet.as_any())
 }
@@ -517,6 +520,10 @@ fn sheet_buttons<'py>(py: Python<'py>, sheet: &Bound<'py, PyAny>) -> PyResult<Bo
             rows.append((format!("check:{i}"), row.get_item(0)?, "", if checked { 5 } else { 4 }))?;
         }
     }
+    if let Some(details) = sheet.getattr_opt("details")?.filter(|v| !v.is_none()) {
+        let open = sheet.getattr("details_open")?.is_truthy()?;
+        rows.append(("details", crate::settings_rows::tr(py, "Details")?, if open {details.extract::<String>()?} else {String::new()}, if open {7} else {6}))?;
+    }
     Ok(rows)
 }
 
@@ -555,6 +562,11 @@ fn answer(py: Python<'_>, win: &Bound<'_, PyAny>, bid: &str) -> PyResult<bool> {
     let m = cd(py)?;
     let sheet = m.call_method1("current_sheet", (win,))?;
     if !sheet.is_none() {
+        if bid == "details" && sheet.getattr_opt("details")?.is_some_and(|v| !v.is_none()) {
+            sheet.setattr("details_open", !sheet.getattr("details_open")?.is_truthy()?)?;
+            m.call_method1("_repaint", (win,))?;
+            return Ok(true);
+        }
         let checklist = sheet.getattr("checklist")?;
         if checklist.is_truthy()? {
             if let Some(index) = bid.strip_prefix("check:") {

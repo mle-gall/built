@@ -136,14 +136,19 @@ impl StagedOpen {
         let reason = match outcome {
             Err(e) => {
                 let dialogs = py.import("built_render.chrome_dialogs")?;
-                dialogs.call_method1("close_failed", (bar, e.value(py)))?;
                 let why = e.value(py).str()?.to_string();
-                dialogs.getattr("notify")?.call(
-                    (win, tr(py, "Open failed")?, &why),
-                    Some(&[("tone", "error")].into_py_dict(py)?),
-                )?;
-                py.import("logging")?
-                    .call_method1("error", ("Opening %s: %s", path, &why))?;
+                if self.target.is_some() || path.getattr("suffix")?.extract::<String>()?.eq_ignore_ascii_case(".skp") {
+                    crate::file_import::report::finish_progress(bar)?;
+                    crate::file_import::report::failed(win, &path.getattr("name")?.extract::<String>()?, &why)?;
+                } else {
+                    dialogs.call_method1("close_failed", (bar, e.value(py)))?;
+                    dialogs.getattr("notify")?.call(
+                        (win, tr(py, "Open failed")?, &why),
+                        Some(&[("tone", "error")].into_py_dict(py)?),
+                    )?;
+                    py.import("logging")?
+                        .call_method1("error", ("Opening %s: %s", path, &why))?;
+                }
                 why
             }
             Ok(Step::Cancelled) => tr(
@@ -286,18 +291,19 @@ fn start(win: &Obj, path: &Obj, install: &Obj, target: Option<&Obj>) -> PyResult
     }
     Ok(true)
 }
-fn finish_import(win: &Obj, path: &Obj, empty: bool, result: &Obj) -> PyResult<bool> {
+fn finish_import(win: &Obj, path: &Obj, bar: &Obj, empty: bool, result: &Obj) -> PyResult<bool> {
     win.call_method0("_refresh_scene_tabs")?;
     win.call_method0("_update_title")?;
     win.getattr("viewport")?.call_method0("update")?;
     let counts = result.getattr_opt("_skp_recovery_counts")?
         .map(|value| value.extract()).transpose()?;
+    crate::file_import::report::silence_progress(bar)?;
     let summary = crate::file_converters::skp_summary(&path.getattr("name")?, empty, counts)?;
     win.call_method0("statusBar")?.call_method1("showMessage", summary)?;
     Ok(true)
 }
 #[pyfunction]
-fn install_insertion(win: &Obj, path: &Obj, _bar: &Obj, command: &Obj) -> PyResult<bool> {
+fn install_insertion(win: &Obj, path: &Obj, bar: &Obj, command: &Obj) -> PyResult<bool> {
     let history = win.getattr("viewport")?.getattr("history")?;
     history.call_method1("execute", (command,))?;
     for name in ["last_error", "last_rejected"] {
@@ -311,7 +317,7 @@ fn install_insertion(win: &Obj, path: &Obj, _bar: &Obj, command: &Obj) -> PyResu
     if !empty {
         win.call_method0("_on_zoom_extents")?;
     }
-    finish_import(win, path, empty, command)
+    finish_import(win, path, bar, empty, command)
 }
 #[pyfunction]
 fn install_skp(win: &Obj, path: &Obj, bar: &Obj, staged: &Obj) -> PyResult<bool> {
@@ -374,7 +380,7 @@ fn install_skp(win: &Obj, path: &Obj, bar: &Obj, staged: &Obj) -> PyResult<bool>
     {
         win.call_method0("_refresh_worksession")?;
     }
-    finish_import(win, path, empty, &history)
+    finish_import(win, path, bar, empty, &history)
 }
 pub(crate) fn register(parent: &Bound<PyModule>) -> PyResult<()> {
     let py = parent.py();

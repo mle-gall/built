@@ -92,16 +92,25 @@ pub(crate) fn skp_summary(
     let py = name.py();
     let args = PyDict::new(py);
     args.set_item("name", name)?;
-    let (message, duration) = if empty {
-        ("{name} has no geometry — nothing to import.", 8000)
-    } else if let Some((arcs, faces)) = counts {
-        args.set_item("arcs", arcs)?;
-        args.set_item("faces", faces)?;
-        ("Imported {name} · Circular edges: {arcs} · Recovered faces: {faces}", 8000)
-    } else {
-        ("Imported {name}", 3000)
-    };
-    Ok((translated(py, message, Some(&args))?.extract()?, duration))
+    if empty {
+        let text = translated(py, "{name} has no geometry — nothing to import.", Some(&args))?;
+        return Ok((text.extract()?, 8000));
+    }
+    let mut parts: Vec<String> = vec![translated(py, "Imported {name}", Some(&args))?.extract()?];
+    if let Some((arcs, faces)) = counts {
+        use crate::settings_rows::{tr, trf};
+        match arcs {
+            0 => (),
+            1 => parts.push(tr(py, "1 circular edge")?),
+            n => parts.push(trf(py, "{n} circular edges", &[("n", n.into_pyobject(py)?.into_any())])?),
+        }
+        match faces {
+            0 => (),
+            1 => parts.push(tr(py, "1 recovered face")?),
+            n => parts.push(trf(py, "{n} recovered faces", &[("n", n.into_pyobject(py)?.into_any())])?),
+        }
+    }
+    Ok((parts.join(" · "), if parts.len() > 1 { 8000 } else { 3000 }))
 }
 
 #[pyfunction]
@@ -169,7 +178,7 @@ fn import_skp(win: &Bound<'_, PyAny>, path: &Bound<'_, PyAny>) -> PyResult<bool>
                 return Ok(false);
             }
             win.call_method1("_prepare_import_display", (cmd, &cb))?;
-            bar.call_method0("close")?;
+            crate::file_import::report::finish_progress(&bar)?;
             win.getattr("viewport")?.call_method0("update")?;
             win.setattr("_import_name", &name)?;
             win.call_method0("_update_title")?;

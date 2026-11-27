@@ -2986,9 +2986,17 @@ impl Ui {
                                 ui.add(egui::Label::new(egui::RichText::new(&sheet.body).font(body()).color(DIM)).wrap());
                             });
                         }
-                        if sheet.buttons.iter().any(|b| b.3 >= 4) {
+                        for (id, label, detail, role) in sheet.buttons.iter().filter(|b| matches!(b.3, 6 | 7)) {
+                            if kit::disclosure_toggle(ui, label, *role == 7) { clicked = Some(id.clone()); }
+                            if *role == 7 {
+                                egui::ScrollArea::vertical().max_height(screen.height() * 0.35).show(ui, |ui| {
+                                    ui.add(egui::Label::new(egui::RichText::new(detail).font(body()).color(DIM)).wrap());
+                                });
+                            }
+                        }
+                        if sheet.buttons.iter().any(|b| matches!(b.3, 4 | 5)) {
                             egui::ScrollArea::vertical().max_height(screen.height() * 0.45).show(ui, |ui| {
-                                for (id, label, _, role) in sheet.buttons.iter().filter(|b| b.3 >= 4) {
+                                for (id, label, _, role) in sheet.buttons.iter().filter(|b| matches!(b.3, 4 | 5)) {
                                     let mut checked = *role == 5;
                                     if ui.push_id(id, |ui| kit::toggle(ui, &mut checked, label)).inner.changed() {
                                         clicked = Some(id.clone());

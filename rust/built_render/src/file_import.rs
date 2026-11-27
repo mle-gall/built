@@ -1,5 +1,6 @@
 //! Import transactions preserve the receiving document and its undo baseline
 //! when a format reader fails midway. Format readers remain Python backends.
+pub(crate) mod report;
 use super::model_edit::translated;
 use pyo3::{
     prelude::*,
@@ -68,6 +69,18 @@ fn run_import<'py>(
     describe: Option<&Bound<'py, PyAny>>,
     command_type: Option<Bound<'py, PyAny>>,
 ) -> PyResult<Option<Bound<'py, PyAny>>> {
+    run_import_impl(win, load, bar, title, describe, command_type, None)
+}
+
+fn run_import_impl<'py>(
+    win: &Bound<'py, PyAny>,
+    load: &Bound<'py, PyAny>,
+    bar: &Bound<'py, PyAny>,
+    title: &str,
+    describe: Option<&Bound<'py, PyAny>>,
+    command_type: Option<Bound<'py, PyAny>>,
+    step_name: Option<&str>,
+) -> PyResult<Option<Bound<'py, PyAny>>> {
     let py = win.py();
     let errors = PyList::empty(py);
     let guarded = py.import("functools")?.call_method1(
@@ -105,12 +118,20 @@ fn run_import<'py>(
         None => error.str()?.into_any(),
     };
     let dialogs = py.import("built_render.chrome_dialogs")?;
-    dialogs.call_method1("close_failed", (bar, &msg))?;
+    if step_name.is_some() {
+        report::finish_progress(bar)?;
+    } else {
+        dialogs.call_method1("close_failed", (bar, &msg))?;
+    }
     if clean {
         win.setattr("_saved_version", vp.getattr("scene")?.getattr("version")?)?;
     }
     win.call_method0("_update_title")?;
-    dialogs.call_method1("critical", (win, title, msg))?;
+    if let Some(name) = step_name {
+        report::failed(win, name, &msg.str()?.to_string())?;
+    } else {
+        dialogs.call_method1("critical", (win, title, msg))?;
+    }
     Ok(None)
 }
 #[pyfunction]
@@ -337,7 +358,7 @@ fn import_prepared(
             {
                 Ok(p) => p,
                 Err(e) => {
-                    dialogs.call_method1("critical", (win, &title, e.value(py).str()?))?;
+                    report::failed(win, &name, &e.to_string())?;
                     return Ok(false);
                 }
             }
@@ -354,6 +375,10 @@ fn import_prepared(
             let kw = PyDict::new(py);
             kw.set_item("cancel", "cancel")?;
             kw.set_item("default", "cancel")?;
+            kw.set_item("tone", "warning")?;
+            let detail = problems.join("\n");
+            report::log(py, &name, &detail)?;
+            kw.set_item("details", &detail)?;
             let done = py.import("functools")?.call_method1(
                 "partial",
                 (
@@ -370,7 +395,7 @@ fn import_prepared(
                 (
                     win,
                     translated(py, "Import partial STEP model?", None)?,
-                    problems.join("\n"),
+                    report::summary(&prepared)?,
                     buttons,
                     done,
                 ),
@@ -460,12 +485,17 @@ fn import_prepared(
             partial.call((wrap_pyfunction!(dxf_failure, py)?,), Some(&bound))?,
         )?;
     }
-    let cmd = win.call_method("_run_import", (load, &bar, &title), Some(&kw))?;
+    let cmd = if kind == "step" {
+        run_import_impl(win, &load, &bar, &title, None, None, Some(&name))?
+            .unwrap_or_else(|| py.None().into_bound(py))
+    } else {
+        win.call_method("_run_import", (load, &bar, &title), Some(&kw))?
+    };
     if cmd.is_none() {
         return Ok(false);
     }
     win.call_method1("_prepare_import_display", (&cmd, &progress))?;
-    bar.call_method0("close")?;
+    report::finish_progress(&bar)?;
     if kind == "dxf" {
         win.call_method0("_on_zoom_extents")?;
     }
@@ -493,23 +523,7 @@ fn import_prepared(
     } else {
         if kind == "step" {
             let p = params.get_item("prepared")?.unwrap();
-            for k in ["exact", "faceted", "rejected", "missing"] {
-                args.set_item(k, p.get_item(k)?)?;
-            }
-            let mut text = message(
-                py,
-                "Imported {name}: {exact} exact, {faceted} faceted, {rejected} rejected, {missing} missing",
-                &args,
-            )?;
-            if p.get_item("synthetic_file_name")?.is_truthy()? {
-                text.push_str(" · ");
-                text.push_str(
-                    &translated(py, "Supplied missing STEP file name", None)?
-                        .extract::<String>()?,
-                );
-            }
-            win.call_method0("statusBar")?
-                .call_method1("showMessage", (text, 8000))?;
+            report::success(win, &name, &p)?;
         } else {
             report_import(win, &name, offset.as_ref())?;
         }
