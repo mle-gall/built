@@ -41,6 +41,9 @@ pub fn generate(store: &mut Store, row: &Row, origin: [f64; 3]) -> Result<(), &'
             .map_err(|_| "invalid_size")?;
         roles.push((format!("face/{role}"), Kind::Face, f));
     }
+    if store.n(Kind::Vertex) != 8 {
+        return Err("invalid_size");
+    }
     let corner = |v: u32| {
         points
             .iter()

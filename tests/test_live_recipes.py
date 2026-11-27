@@ -73,6 +73,7 @@ def test_order_cycle_move_failure():
     assert [a.mesh, b.mesh] == moved
     revision = h.revision
     result = commands.run(h, "live_set", row=dict(first, inputs=[dict(row=second["uid"])]))
+    assert result["rejected"] == "cycle" and not result["error"]
     assert not result["ok"] and h.revision == revision
     apply(h, "live_set", row=dict(first, size=[0, 1, 1]))
     assert a.mesh is moved[0]

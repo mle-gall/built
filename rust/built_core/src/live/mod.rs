@@ -321,6 +321,22 @@ impl Mutation {
     #[pyo3(name = "do")]
     fn apply(&self, scene: &Obj<'_>) -> PyResult<()> {
         let py = scene.py();
+        match self.apply_edit(scene) {
+            Err(e) if e.is_instance_of::<PyValueError>(py) => {
+                let rejection = py
+                    .import("built_core.history")?
+                    .getattr("CommandRejected")?
+                    .call1((e.value(py).str()?,))?;
+                Err(PyErr::from_value(rejection))
+            }
+            result => result,
+        }
+    }
+}
+
+impl Mutation {
+    fn apply_edit(&self, scene: &Obj<'_>) -> PyResult<()> {
+        let py = scene.py();
         let document = root(scene)?;
         if scene
             .getattr_opt("doc_ext")?
