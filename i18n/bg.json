@@ -1,4 +1,5 @@
 {
+ "Pick a target, then its cutter. Tab changes operation, L picks a preset, A anchors, D draws a section.": "Изберете целта, после режещия обект. Tab сменя операцията, L избира настройка, A задава опора, D чертае сечение.",
  "Pick a start, or press Enter to sweep selected edges.": "Задайте начало или натиснете Enter за избраните ръбове.",
  "Pick the end or enter a length. Alt keeps the end free.": "Посочете край или въведете дължина. Alt оставя края свободен.",
  "Join connected edges into one curve.": "Обединяване на свързаните ръбове в една крива.",

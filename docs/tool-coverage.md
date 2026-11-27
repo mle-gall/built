@@ -12,6 +12,7 @@ registry. Regenerate it from that function after adding a tool.
 | Registry key | Class | Metal status | GL hooks / preview dependencies |
 | --- | --- | --- | --- |
 | select | SelectTool | native | Rust state machine |
+| cut | CutTool | native | shared viewport / tool base |
 | sweep | SweepTool | native | shared viewport / tool base |
 | line | LineTool | native | Rust state machine |
 | line_on_surface | LineOnSurfaceTool | native | Rust state machine |

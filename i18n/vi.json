@@ -1,4 +1,5 @@
 {
+ "Pick a target, then its cutter. Tab changes operation, L picks a preset, A anchors, D draws a section.": "Chọn đối tượng đích rồi chọn đối tượng cắt. Tab đổi phép toán, L chọn thiết lập sẵn, A đặt điểm neo, D vẽ mặt cắt.",
  "Pick a start, or press Enter to sweep selected edges.": "Chọn điểm đầu hoặc nhấn Enter để dùng các cạnh đã chọn.",
  "Pick the end or enter a length. Alt keeps the end free.": "Chọn điểm cuối hoặc nhập chiều dài. Alt giữ đầu mút tự do.",
  "Join connected edges into one curve.": "Nối các cạnh liền nhau thành một đường cong.",
