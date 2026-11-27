@@ -25,6 +25,10 @@ def build(folder):
         apply("create_sweeps", sweeps=[spec])
         g = scene.groups[-1]
         g.name = name
+        if profile == "basic/timber":
+            g.material = {"mat": "Glulam", "color": [.74, .53, .32]}
+        else:
+            g.material = {"mat": "Wall panel", "color": [.80, .81, .79]}
         return g
 
     def repeat(source, uid, delta, count):
