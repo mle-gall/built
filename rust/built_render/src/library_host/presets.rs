@@ -115,14 +115,18 @@ fn edit(ctx: &Bound<'_, PyAny>, preset: Value, title: &str) -> PyResult<()> {
             }
         }
     }
-    let summary = format!(
-        "{} · {} · {}",
-        preset["values"]["profile"]["library"]
-            .as_str()
-            .unwrap_or("Drawn profile"),
-        preset["record"]["material"].as_str().unwrap_or(""),
-        preset["record"]["class"].as_str().unwrap_or("")
-    );
+    let summary = if preset["primitive"] == "repeat" {
+        shown(&preset["values"]["rule"])
+    } else {
+        format!(
+            "{} · {} · {}",
+            preset["values"]["profile"]["library"]
+                .as_str()
+                .unwrap_or("Drawn profile"),
+            preset["record"]["material"].as_str().unwrap_or(""),
+            preset["record"]["class"].as_str().unwrap_or("")
+        )
+    };
     if capture {
         fields.append(field.call(
             ("destination", "choice", "Save to", 0),
@@ -385,15 +389,19 @@ impl PresetsProvider {
                 if row.is_none() {
                     return flash(ctx, "Select a Repeat to apply the preset");
                 }
-                for (key, val) in data.get_item("values")?.cast::<PyDict>()? {
-                    row.set_item(key, val)?;
-                }
+                let link = PyDict::new(py);
+                link.set_item("uid", data.get_item("uid")?)?;
+                link.set_item("definition", &data)?;
+                row.set_item("repeat_preset", link)?;
                 let kw = PyDict::new(py);
                 kw.set_item("row", row)?;
-                api.getattr("run")?.call(
+                let reply = api.getattr("run")?.call(
                     (ctx.getattr("vp")?.getattr("history")?, "live_set"),
                     Some(&kw),
                 )?;
+                if !reply.get_item("ok")?.is_truthy()? {
+                    return flash(ctx, &reply.get_item("error")?.str()?.to_string());
+                }
                 notify(&ctx.getattr("vp")?)?;
             }
             "apply" if matches!(p["primitive"].as_str(),Some("sweep"|"cut")) => {
@@ -482,14 +490,19 @@ pub(crate) fn capture_preset(win: &Bound<'_, PyAny>, group: &Bound<'_, PyAny>) -
         let mut values = json!({});
         let spec: Value = serde_json::from_str(&dumps(py, &repeat)?)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        for field in ["rule", "orientation", "adapt"] {
+        for field in ["rule", "orientation", "adapt", "ends", "measure"] {
             if let Some(value) = spec.get(field) {
                 values[field] = value.clone();
             }
         }
+        let mut record: Value = serde_json::from_str(&dumps(py, &group.getattr("ifc")?)?)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        if let Some(fields) = record.as_object_mut() {
+            fields.retain(|k, _| matches!(k.as_str(), "class" | "predefined_type" | "object_type" | "material"));
+        }
         return edit(
             &ctx,
-            json!({"uid":uid(py)?,"name":group.getattr("name")?.extract::<String>()?,"pack":"This project","node":"","primitive":"repeat","values":values,"record":{},"locks":{},"naming":"","rev":1}),
+            json!({"uid":uid(py)?,"name":group.getattr("name")?.extract::<String>()?,"pack":"This project","node":"","primitive":"repeat","values":values,"record":record,"locks":{},"naming":"","rev":1}),
             "Save as preset",
         );
     }

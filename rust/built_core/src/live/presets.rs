@@ -19,6 +19,75 @@ pub struct Preset {
     pub locks: BTreeMap<String, String>,
     pub rev: u64,
 }
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RepeatPreset {
+    pub uid: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub rev: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub definition: Option<Box<Preset>>,
+}
+
+pub(super) fn follower(row: &Row) -> Option<&str> {
+    row.sweep
+        .as_ref()
+        .and_then(|s| s.preset_uid.as_deref())
+        .or_else(|| row.repeat.repeat_preset.as_ref().map(|p| p.uid.as_str()))
+}
+
+const REPEAT_FIELDS: &[&str] = &["rule", "ends", "measure", "orientation", "adapt"];
+
+fn apply_repeat(row: &mut Row, p: &Preset, fixed_only: bool) -> PyResult<()> {
+    let mut fields = json!(row.repeat);
+    for (key, val) in &p.values {
+        if !fixed_only || p.locks.get(key).is_some_and(|v| v == "fixed") {
+            fields[key] = val.clone();
+        }
+    }
+    row.repeat = serde_json::from_value(fields).map_err(error)?;
+    row.repeat.repeat_preset = Some(RepeatPreset {
+        uid: p.uid.clone(),
+        name: p.name.clone(),
+        rev: p.rev,
+        definition: None,
+    });
+    Ok(())
+}
+
+pub(super) fn bind_repeat(scene: &Obj<'_>, t: &mut LiveTable, row: &mut Row) -> PyResult<()> {
+    let Some(link) = &mut row.repeat.repeat_preset else {
+        return Ok(());
+    };
+    let explicit = link.definition.take();
+    let p = lookup(t, &link.uid)
+        .or_else(|| explicit.as_deref().cloned())
+        .filter(|p| p.uid == link.uid && p.primitive == "repeat")
+        .ok_or_else(|| error("Missing Repeat preset"))?;
+    let owner = group(scene.py(), t, &row.owner).ok_or_else(|| error("Unknown Repeat owner"))?;
+    if explicit.is_some() || t.rows.get(&row.uid).and_then(|r| follower(r)) != Some(p.uid.as_str())
+    {
+        p.validate()?;
+        apply_repeat(row, &p, false)?;
+        p.record(&owner, false)?;
+        Arc::make_mut(&mut t.presets).insert(p.uid.clone(), p);
+    } else {
+        let old = json!(t.rows[&row.uid].repeat);
+        let new = json!(row.repeat);
+        if let Some(key) = p
+            .values
+            .keys()
+            .find(|k| p.locks.get(*k).is_some_and(|v| v == "fixed") && old[*k] != new[*k])
+        {
+            row.repeat.repeat_preset = None;
+            owner
+                .getattr("ifc")?
+                .set_item("preset_note", format!("Detached from {}: {key}", p.name))?;
+        }
+    }
+    Ok(())
+}
 #[derive(Deserialize)]
 struct Pack {
     rows: Vec<Preset>,
@@ -42,6 +111,14 @@ impl Preset {
         {
             return Err(error("Invalid preset"));
         }
+        if self.primitive == "repeat"
+            && self
+                .values
+                .keys()
+                .any(|k| !REPEAT_FIELDS.contains(&k.as_str()))
+        {
+            return Err(error("Unknown Repeat preset field"));
+        }
         if self.primitive == "sweep" {
             if self
                 .record
@@ -61,7 +138,13 @@ impl Preset {
         for (key, val) in &self.values {
             if !matches!(
                 key.as_str(),
-                "profile" | "attachment" | "rotation" | "mirror" | "segments" | "corner" | "cut_definitions"
+                "profile"
+                    | "attachment"
+                    | "rotation"
+                    | "mirror"
+                    | "segments"
+                    | "corner"
+                    | "cut_definitions"
             ) {
                 return Err(error("Unknown sweep preset field"));
             }
@@ -143,19 +226,24 @@ pub fn update(scene: &Obj<'_>, t: &mut LiveTable, presets: &[Preset]) -> PyResul
         let followers: Vec<_> = t
             .rows
             .values()
-            .filter(|r| {
-                r.sweep
-                    .as_ref()
-                    .is_some_and(|s| s.preset_uid.as_ref() == Some(&p.uid))
-            })
+            .filter(|r| follower(r) == Some(p.uid.as_str()))
             .cloned()
             .collect();
         let mut shared_profile = None;
         for row in followers {
-            if p.primitive != "sweep" || row.state == "stale" {
+            if row.kind != p.primitive || row.state == "stale" {
                 return Err(error("Preset has an incompatible or stale follower"));
             }
             let mut row = (*row).clone();
+            if row.kind == "repeat" {
+                apply_repeat(&mut row, &p, true)?;
+                if let Some(g) = group(scene.py(), t, &row.owner) {
+                    p.record(&g, true)?;
+                }
+                t.pending.insert(row.uid.clone());
+                t.insert(row).map_err(error)?;
+                continue;
+            }
             let mut sweep = p.apply_values(json!(row.sweep), true)?;
             if p.locks.get("profile").is_some_and(|lock| lock == "fixed")
                 && sweep.profile.drawing.is_some()

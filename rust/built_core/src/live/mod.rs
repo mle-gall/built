@@ -475,10 +475,7 @@ pub(crate) fn finish(
             continue;
         };
         let row = &t.rows[&uid];
-        let Some(p) = row
-            .sweep
-            .as_ref()
-            .and_then(|s| s.preset_uid.as_ref())
+        let Some(p) = presets::follower(row)
             .and_then(|id| t.presets.get(id))
         else {
             continue;
@@ -496,13 +493,13 @@ pub(crate) fn finish(
                 .is_ok_and(|v| to_py(py, expected).and_then(|e| v.eq(e)).unwrap_or(false))
             {
                 let note = format!("Detached from {}: {key}", p.name);
-                let row = Arc::make_mut(t.rows.get_mut(&uid).unwrap())
-                    .sweep
-                    .as_mut()
-                    .unwrap();
-                row.preset = None;
-                row.preset_uid = None;
-                row.preset_rev = 0;
+                let row = Arc::make_mut(t.rows.get_mut(&uid).unwrap());
+                if let Some(sweep) = &mut row.sweep {
+                    sweep.preset = None;
+                    sweep.preset_uid = None;
+                    sweep.preset_rev = 0;
+                }
+                row.repeat.repeat_preset = None;
                 let record = if record.is_none() {
                     PyDict::new(py)
                 } else {
@@ -665,9 +662,7 @@ impl Mutation {
             Edit::Presets(rows) => presets::update(scene, &mut t, rows)?,
             Edit::DeletePreset(id) => {
                 if t.rows.values().any(|r| {
-                    r.sweep
-                        .as_ref()
-                        .is_some_and(|s| s.preset_uid.as_ref() == Some(id))
+                    presets::follower(r) == Some(id.as_str())
                 }) {
                     return Err(PyValueError::new_err("Preset is in use"));
                 }
@@ -784,6 +779,7 @@ impl Mutation {
                 let mut row = request.clone();
                 if row.kind == "repeat" {
                     repeat::prepare(scene, &mut t, &mut row)?;
+                    presets::bind_repeat(scene, &mut t, &mut row)?;
                 }
                 if row.kind != "sketch" && group(py, &t, &row.owner).is_none() {
                     return Err(PyValueError::new_err("unknown recipe owner"));

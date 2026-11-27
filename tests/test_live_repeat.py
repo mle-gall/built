@@ -265,3 +265,35 @@ def test_failed_adaptive_intersections_keep_their_last_mesh_and_recover():
     assert not any(g.ext.get("built.repeat_state") for g in assembly.children)
     assert [g.uid for g in assembly.children] == identities
     assert all(r["state"] == "ok" for r in queries.live_rows(scene))
+
+
+def test_repeat_preset_follows_fixed_rule_then_detaches(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from built_render.wgpu_library import PresetsProvider
+
+    monkeypatch.setenv("BUILT_SETTINGS_DIR", str(tmp_path))
+    scene, history, (source,) = setup_groups(1)
+    apply(history, "live_set", row=repeat(source))
+    assembly = scene.groups[-1]
+    scene.selection = [assembly]
+    ctx = SimpleNamespace(scene=scene, vp=SimpleNamespace(history=history, notify_scene_changed=lambda: None))
+    preset = dict(uid="00000000000ad001", name="Four bays", pack="This project", primitive="repeat",
+                  values={"rule": {"divide": 4}, "orientation": "alternate"}, record={"object_type": "Portal"},
+                  locks={"rule": "fixed", "object_type": "fixed"}, rev=1)
+    PresetsProvider().run(ctx, "apply", {"source": "mine", "preset": preset})
+    current = lambda: next(r for r in queries.live_rows(scene) if r["kind"] == "repeat")
+    assert current()["repeat_preset"]["uid"] == preset["uid"]
+    assert assembly.ifc["object_type"] == "Portal"
+    apply(history, "live_set", row=dict(current(), orientation="fixed"))
+    apply(history, "preset_update", rows=[dict(preset, values={"rule": {"divide": 6}, "orientation": "alternate"})])
+    assert current()["repeat_preset"]["rev"] == 2 and current()["orientation"] == "fixed"
+    assert len(assembly.children) == 6
+    path = tmp_path / "preset.built"
+    igz.save_scene(scene, path)
+    loaded = Scene()
+    igz.load_into(loaded, path)
+    assert queries.live_rows(loaded)[0]["repeat_preset"] == current()["repeat_preset"]
+    apply(history, "live_set", row=dict(current(), rule={"count": 3}))
+    assert not current().get("repeat_preset") and "rule" in assembly.ifc["preset_note"]
+    apply(history, "undo")
+    assert current()["repeat_preset"]["rev"] == 2

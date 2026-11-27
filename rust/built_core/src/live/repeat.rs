@@ -8,6 +8,8 @@ use serde_json::{json, Value};
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct Fields {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repeat_preset: Option<presets::RepeatPreset>,
     #[serde(default, skip_serializing_if = "Value::is_null")]
     pub run: Value,
     #[serde(default, skip_serializing_if = "Value::is_null")]

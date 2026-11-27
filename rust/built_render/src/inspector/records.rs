@@ -102,6 +102,11 @@ impl Records {
                             .join(" › "),
                     );
                 }
+                if let Some(name) = row["repeat_preset"]["name"].as_str() {
+                    kit::property_control(ui, "Preset", |ui| {
+                        ui.label(name);
+                    });
+                }
                 ui.label(format!(
                     "{} copies · {} distinct parts",
                     row["copies"], row["distinct"]
