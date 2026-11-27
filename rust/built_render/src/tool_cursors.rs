@@ -20,7 +20,6 @@ const TOOLS: &[(&str, [f32; 2])] = &[
     ("freehand", [6.0, 42.0]),
     ("geopath", [6.0, 42.0]),
     ("line", [6.0, 42.0]),
-    ("line_on_surface", [6.0, 42.0]),
     ("look_around", [24.0, 26.0]),
     ("move", [24.0, 24.0]),
     ("north", [24.0, 28.0]),
@@ -51,7 +50,7 @@ const TOOLS: &[(&str, [f32; 2])] = &[
 ];
 
 fn lookup(key: &str) -> Option<(u32, [f32; 2])> {
-    let key = if key == "chamfer" { "fillet" } else { key };
+    let key = match key { "chamfer" => "fillet", "line_on_surface" => "line", other => other };
     TOOLS
         .iter()
         .enumerate()

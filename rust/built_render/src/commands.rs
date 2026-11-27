@@ -738,6 +738,7 @@ pub fn command_description(label: &str, key: &str) -> Option<&'static str> {
             "menu:hide_similar" => "Hide the other copies of the component being edited.",
             "menu:extensions" => "Install, enable and update extensions.",
             "menu:get_models" => "Free websites with models and textures that open in Built.",
+            "menu:weld_edges" => "Join connected edges into one curve.",
             "menu:heal_overlaps" => "Remove the faces left lying over their own subdivisions after drawing or erasing.",
             "menu:hide" => "Stop showing the selected objects, faces and edges; they stay in the document until unhidden.",
             "menu:import:alignment" => "Bring in a KML, KMZ or GeoJSON alignment as paths in their true place, ready to profile or measure.",

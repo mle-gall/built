@@ -366,6 +366,7 @@ pub fn menu_rows(f: &Facts, kind: &str) -> Vec<Row> {
             r.one(zoom());
             r.one(make());
             if f.bridgeable { r.one(vec![e("bridge", "Bridge")]); }
+            if f.weldable { r.one(vec![e("weld_edges", "Weld Edges")]); }
             if faces {
                 r.one(vec![e("reverse", "Reverse faces"), e("orient", "Orient faces")]);
                 r.family("Intersect", intersect());
@@ -392,7 +393,6 @@ pub fn menu_rows(f: &Facts, kind: &str) -> Vec<Row> {
                     let mut row = Vec::new();
                     if f.loose_edges > 1 {
                         row.push(e("join", "Join segments"));
-                        if f.weldable { row.push(e("weld_edges", "Weld Edges")); }
                     }
                     if f.curve {
                         row.push(e("explodecurve", "Explode curve"));

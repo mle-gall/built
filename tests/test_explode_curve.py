@@ -75,3 +75,20 @@ def test_right_click_shows_it_on_a_curve_not_on_a_line(native_window):
     assert context_menu_build(win, win.view).find("explodecurve")
     sc.select([line])
     assert not context_menu_build(win, win.view).find("explodecurve")
+
+
+def test_weld_context_action_joins_face_boundary_and_undoes(native_window):
+    from built_render import context_menu_build
+
+    win = native_window
+    sc = win.viewport.scene
+    sc.mesh.add_face([V(0, 0, 0), V(1, 0, 0), V(1, 1, 0), V(0, 1, 0)])
+    a, b, c, _ = sc.mesh.edges
+    sc.select([a, c])
+    assert not context_menu_build(win, win.view).find("weld_edges")
+    sc.select([a, b])
+    assert context_menu_build(win, win.view).find("weld_edges")
+    win._on_weld_edges()
+    assert a.curve is not None and b.curve == a.curve
+    win.viewport.history.undo()
+    assert a.curve is None and b.curve is None

@@ -140,6 +140,7 @@ pub(super) fn tool_module_classes() -> Vec<(&'static str, &'static str, &'static
     ("tools.geopath_host","GeoPathTool","RustTool"),
     ("tools.place_group_host","PlaceGroupHost","object"),
     ("tools.rust_tools","LineTool","RustTool"),
+    ("tools.rust_tools","LineOnSurfaceTool","RustTool"),
     ("tools.rust_tools","SelectTool","RustTool"),
     ("tools.rust_tools","_PlanarMachine","PlaneLock,RustTool"),
     ("tools.rust_tools","RectangleTool","_PlanarMachine"),
