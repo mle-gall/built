@@ -191,6 +191,90 @@
         },
         "standard": "",
         "source": "Built parametric dimensions"
+      },
+      {
+        "key": "basic/rail",
+        "label": "Round rail 42 × 2",
+        "family": "chs",
+        "params": {
+          "width": 42,
+          "height": 42,
+          "web": 2,
+          "flange": 0,
+          "radius": 0
+        },
+        "standard": "",
+        "source": "Nominal parametric dimensions"
+      },
+      {
+        "key": "basic/gutter",
+        "label": "Channel 100 × 75 × 2",
+        "family": "channel",
+        "params": {
+          "width": 75,
+          "height": 100,
+          "web": 2,
+          "flange": 2,
+          "radius": 0
+        },
+        "standard": "",
+        "source": "Nominal parametric dimensions"
+      },
+      {
+        "key": "basic/duct",
+        "label": "Rectangular duct 400 × 200",
+        "family": "rhs",
+        "params": {
+          "width": 400,
+          "height": 200,
+          "web": 1,
+          "flange": 0,
+          "radius": 2
+        },
+        "standard": "",
+        "source": "Nominal parametric dimensions"
+      },
+      {
+        "key": "basic/moulding",
+        "label": "Rebated trim 30 × 20",
+        "family": "angle",
+        "params": {
+          "width": 30,
+          "height": 20,
+          "web": 8,
+          "flange": 0,
+          "radius": 0
+        },
+        "standard": "",
+        "source": "Nominal parametric dimensions"
+      },
+      {
+        "key": "basic/stud",
+        "label": "Stud 45 × 95",
+        "family": "rectangle",
+        "params": {
+          "width": 45,
+          "height": 95,
+          "web": 0,
+          "flange": 0,
+          "radius": 0
+        },
+        "standard": "",
+        "source": "Nominal parametric dimensions"
+      },
+      {
+        "key": "aisc/w8x18",
+        "label": "W8 × 18",
+        "family": "i",
+        "params": {
+          "width": 133.35,
+          "height": 206.756,
+          "web": 5.842,
+          "flange": 8.382,
+          "radius": 0
+        },
+        "standard": "",
+        "source": "Nominal parametric dimensions"
       }
     ]
   }

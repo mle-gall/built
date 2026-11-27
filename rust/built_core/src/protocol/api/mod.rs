@@ -210,7 +210,7 @@ pub(crate) fn install(m: &Module<'_>, full: &str) -> PyResult<()> {
     Ok(())
 }
 const VERBS: &[&str] = &[
-    "create_sweeps", "live_set", "live_release", "live_reevaluate",
+    "preset_delete", "preset_update", "create_sweeps", "live_set", "live_release", "live_reevaluate",
     "set_location",
     "set_model_units",
     "set_annotation_font",

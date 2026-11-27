@@ -422,13 +422,18 @@ fn tone(t: &str) -> Color32 {
     }
 }
 
-/// A picture: the texture cropped to fill (cover), a colour, or a quiet box.
-fn picture(ui: &egui::Ui, r: Rect, tex: Option<&egui::TextureHandle>, hex: &str, radius: u8) {
+/// Cover photo tiles and fit section drawings so thin flanges stay visible.
+fn picture(ui: &egui::Ui, r: Rect, icon: &str, tex: Option<&egui::TextureHandle>, hex: &str, radius: u8) {
     let cr = CornerRadius::same(radius);
     if let Some(tex) = tex {
         let [w, h] = tex.size();
         let (tw, th) = (w.max(1) as f32, h.max(1) as f32);
         let (rw, rh) = (r.width().max(1.0), r.height().max(1.0));
+        if icon.starts_with("lib:profile:") {
+            let size = vec2(tw, th) * (rw / tw).min(rh / th);
+            egui::Image::new(tex).paint_at(ui, Rect::from_center_size(r.center(), size));
+            return;
+        }
         // Cover: crop the texture's longer side.
         let uv = if tw / th > rw / rh {
             let u = (rh / th * tw - rw) / (rh / th * tw) / 2.0;
@@ -569,7 +574,7 @@ impl Draw<'_> {
                         tex.map_or(w, |t| w.min(h * t.aspect_ratio()))
                     } else { w };
                     let (r, _) = ui.allocate_exact_size(vec2(width, h), Sense::hover());
-                    picture(ui, r, tex, &b.hex, 10);
+                    picture(ui, r, &b.icon, tex, &b.hex, 10);
                     ui.add_space(SPACE_M);
                 }
                 "svg_preview" => {
@@ -657,7 +662,7 @@ impl Draw<'_> {
         let mut x = r.min.x;
         if !b.hex.is_empty() || !b.icon.is_empty() {
             let sw = Rect::from_min_size(pos2(x, r.center().y - 10.0), vec2(20.0, 20.0));
-            picture(ui, sw, self.icons.get(&b.icon).or_else(|| self.st.previews.texture(ui.ctx(), &b.icon)), &b.hex, 4);
+            picture(ui, sw, &b.icon, self.icons.get(&b.icon).or_else(|| self.st.previews.texture(ui.ctx(), &b.icon)), &b.hex, 4);
             x += 28.0;
         }
         let t = fit(ui, &b.text, heading(), INK, r.max.x - x - rw, 1);
@@ -776,7 +781,7 @@ impl Draw<'_> {
             let resp = ui.interact(r, ui.id().with(("lstile", &it.id, i)), Sense::click());
             if report_visible && !it.icon.is_empty() { visible.push(it.icon.clone()); }
             let pic = Rect::from_min_size(r.min, picture_size);
-            picture(ui, pic, self.icons.get(&it.icon).or_else(|| self.st.previews.texture(ui.ctx(), &it.icon)), &it.hex, 8);
+            picture(ui, pic, &it.icon, self.icons.get(&it.icon).or_else(|| self.st.previews.texture(ui.ctx(), &it.icon)), &it.hex, 8);
             if resp.hovered() && !focused {
                 ui.painter().rect_stroke(pic, CornerRadius::same(8), Stroke::new(1.0_f32, INK_2), egui::StrokeKind::Outside);
             }
@@ -864,7 +869,7 @@ impl Draw<'_> {
             if thumbs && (b.tone != "start-list" || !it.icon.is_empty()) {
                 let size=if b.tone=="components" {vec2(28.,20.)} else {vec2(44.,30.)};
                 let t = Rect::from_min_size(pos2(x, r.center().y-size.y/2.),size);
-                picture(ui, t, self.icons.get(&it.icon).or_else(|| self.st.previews.texture(ui.ctx(), &it.icon)), &it.hex, 4);
+                picture(ui, t, &it.icon, self.icons.get(&it.icon).or_else(|| self.st.previews.texture(ui.ctx(), &it.icon)), &it.hex, 4);
                 x += size.x+8.;
             } else if it.kind == "file" {
                 file_glyph(ui, pos2(x + 5.0, r.center().y), if it.dim { OFF } else { DIM });

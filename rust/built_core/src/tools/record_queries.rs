@@ -132,9 +132,10 @@ impl ViewportToolHost {
                 let id=mesh.getattr("_store")?.call_method1("id_of",("face",face.getattr("key")?))?.extract()?;
                 json!({"to":{"path":path,"id":crate::element_ids::to_text('f',id)},"normal":normal})
             }
+            "sweep_default" => crate::live::default_preset(&view.getattr("scene")?)?,
             "sweep_picker" => {
                 let canvas=view.call_method0("window")?.getattr("_host")?.getattr("view")?;
-                canvas.getattr("renderer")?.call_method1("ui_open_commands",("", "Sweep profiles"))?;
+                canvas.getattr("renderer")?.call_method1("ui_open_commands",("", "Sweep presets"))?;
                 canvas.call_method0("update")?;
                 Value::Null
             }

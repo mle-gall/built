@@ -57,6 +57,7 @@ pub struct Dialog {
     pub(super) prefix: String,
     pub(super) title: String,
     pub(super) placement: String,
+    pub(super) cursor_anchor: Option<egui::Pos2>,
     note: String,
     width: f32,
     soften_preview: Option<Vec<([f32; 2], [f32; 2])>>,
@@ -79,7 +80,7 @@ impl Dialog {
     pub(super) fn in_drawer(&self) -> bool { self.has_soften_preview() || self.placement == "drawer" }
     pub(super) fn has_soften_preview(&self) -> bool { self.soften_preview.is_some() }
     pub(super) fn new(seq: String) -> Self {
-        Dialog { placement: String::new(), prefix: format!("dlg:{seq}"), seq, title: String::new(), note: String::new(), width: 420.0, soften_preview: None, join_marks: None, fields: Vec::new(),
+        Dialog { cursor_anchor: None, placement: String::new(), prefix: format!("dlg:{seq}"), seq, title: String::new(), note: String::new(), width: 420.0, soften_preview: None, join_marks: None, fields: Vec::new(),
                  buttons: Vec::new(), page: 0, bufs: HashMap::new(), sent: HashMap::new(),
                  focus_pending: true, tab_focus: false, choice_open: None }
     }
@@ -275,9 +276,10 @@ impl Ui {
         let right = if review { screen.max.x - GUT } else { self.free_right(ctx, screen) - GUT };
         let anchor = self.form_anchor(ctx, screen);
         let Some(d) = self.dialog.as_mut() else { return };
-        if !d.placement.is_empty() || d.has_soften_preview() { return; }
+        if !d.placement.is_empty() && d.placement!="cursor" || d.has_soften_preview() { return; }
         let w = d.width.min((right - left).max(300.0)).min(screen.width() - 2.0 * GUT);
         let join = d.join_marks.is_some();
+        let anchor=d.cursor_anchor.map_or(anchor,|p|pos2(p.x+w/2.+8., p.y.clamp(TOP_H+GUT,(screen.bottom()-320.).max(TOP_H+GUT))));
         let x = (if join { right - w } else { anchor.x - w / 2.0 }).clamp(GUT, (screen.max.x - GUT - w).max(GUT));
         let top = if join {
             (screen.bottom() - 184.0 - 24.0 * d.fields.len() as f32).max(TOP_H + GUT)
@@ -293,7 +295,7 @@ impl Ui {
                 if let Some(marks) = &d.join_marks {
                     let paint = ui.painter().with_clip_rect(Rect::from_min_max(pos2(left, TOP_H), pos2(right, all.max.y)));
                     join_preview(&paint, marks);
-                } else {
+                } else if d.placement!="cursor" {
                     ui.painter().rect_filled(Rect::from_min_max(pos2(all.min.x, TOP_H), all.max), CornerRadius::ZERO, SCRIM);
                 }
                 let at = Rect::from_min_size(pos2(x, top), vec2(w, screen.height() - top - GUT));

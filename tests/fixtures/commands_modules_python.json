@@ -1,5 +1,7 @@
 {
   "commands": [
+    "preset_delete",
+    "preset_update",
     "create_sweeps",
     "live_set",
     "live_release",

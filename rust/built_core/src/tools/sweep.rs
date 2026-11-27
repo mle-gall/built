@@ -114,7 +114,9 @@ pub struct SweepTool {
     hover: Option<P3>,
     profile: Profile,
     attachment: usize,
-    rotation: i32,
+    inset: bool,
+    chosen: Option<Json>,
+    rotation: f64,
     mirror: bool,
 }
 impl Default for SweepTool {
@@ -131,7 +133,9 @@ impl Default for SweepTool {
                 params: Default::default(),
             },
             attachment: 0,
-            rotation: 0,
+            inset: false,
+            chosen: Some(crate::live::starter_preset()),
+            rotation: 0.,
             mirror: false,
         }
     }
@@ -158,7 +162,10 @@ impl SweepTool {
             )
         })
     }
-    fn preset(&self) -> &'static str {
+    fn preset(&self) -> &str {
+        if let Some(name) = self.chosen.as_ref().and_then(|p| p["name"].as_str()) {
+            return name;
+        }
         match self.profile.library.as_str() {
             "" => "Drawn member",
             "basic/wall" => "Wall",
@@ -171,7 +178,7 @@ impl SweepTool {
             return false;
         }
         let specs:Vec<_>=paths.into_iter().map(|path|json!({
-            "preset":self.preset(),"profile":self.profile,"path":path,
+            "preset":self.preset(),"preset_definition":self.chosen,"preset_uid":self.chosen.as_ref().map(|p|&p["uid"]),"profile":self.profile,"path":path,
             "rotation":self.rotation,"mirror":self.mirror,"attachment":self.attachment_name()
         })).collect();
         host.run(&Command {
@@ -225,10 +232,56 @@ impl Tool for SweepTool {
         self.start.is_some() || self.edit.is_some()
     }
     fn state(&self) -> Json {
-        json!({"length":self.start.zip(self.hover).map(|(a,b)|DVec3::from(a).distance(b.into())),"start_point":self.start,"hover_point":self.hover,"profile":self.profile.library,"chip":format!("{} · {} · {} · {}°{}",self.preset(),label(&self.profile.library).unwrap_or("Sweep"),self.attachment_name(),self.rotation,if self.mirror{" · ↔"}else{""}),"attachment":self.attachment_name(),"rotation":self.rotation,"mirror":self.mirror})
+        let inset = if self.inset && self.edit.is_none() {
+            self.profile.outline(24).ok().map(|outline| {
+                let centre = DVec2::new(outline.width, outline.height) * 0.5;
+                let scale = 48. / outline.width.max(outline.height);
+                outline
+                    .rings
+                    .iter()
+                    .map(|ring| {
+                        ring.iter()
+                            .map(|node| {
+                                let mut p = (node.p - centre) * scale;
+                                if self.mirror {
+                                    p.x = -p.x;
+                                }
+                                let p = DVec2::from_angle(self.rotation.to_radians()).rotate(p);
+                                [p.x, -p.y]
+                            })
+                            .collect::<Vec<_>>()
+                    })
+                    .collect::<Vec<_>>()
+            })
+        } else {
+            None
+        };
+        json!({"section_inset":inset,"length":self.start.zip(self.hover).map(|(a,b)|DVec3::from(a).distance(b.into())),"start_point":self.start,"hover_point":self.hover,"profile":self.profile.library,"chip":format!("{} · {} · {} · {}°{}",self.preset(),label(&self.profile.library).unwrap_or("Sweep"),self.attachment_name(),self.rotation,if self.mirror{" · ↔"}else{""}),"attachment":self.attachment_name(),"rotation":self.rotation,"mirror":self.mirror})
     }
     fn set(&mut self, key: &str, value: &Json) -> bool {
         match key {
+            "preset" => {
+                let fields = &value["values"];
+                let Ok(profile) = serde_json::from_value::<Profile>(fields["profile"].clone())
+                else {
+                    return false;
+                };
+                if value["primitive"] != "sweep" || profile.outline(24).is_err() {
+                    return false;
+                }
+                self.profile = profile;
+                self.edit = None;
+                self.rotation = fields["rotation"].as_f64().unwrap_or(0.);
+                self.mirror = fields["mirror"] == true;
+                let index = ATTACH
+                    .iter()
+                    .map(|a| a.0)
+                    .chain(self.extra_attachments())
+                    .position(|s| fields["attachment"] == s)
+                    .unwrap_or(0);
+                self.attachment = index;
+                self.chosen = Some(value.clone());
+            }
             "edit" => {
                 self.edit = PathEdit::from_row(value.clone());
                 return self.edit.is_some();
@@ -244,6 +297,7 @@ impl Tool for SweepTool {
                     return false;
                 }
                 self.edit = None;
+                self.chosen = None;
                 self.profile = profile;
                 let name = match value["attach"].as_str().unwrap_or("centre") {
                     "middle_left" => "left",
@@ -265,6 +319,7 @@ impl Tool for SweepTool {
                 let Some(k) = value.as_str().filter(|k| label(k).is_some()) else {
                     return false;
                 };
+                self.chosen = None;
                 self.profile = Profile {
                     library: k.into(),
                     sketch: None,
@@ -291,7 +346,40 @@ impl Tool for SweepTool {
                 self.start = None;
                 self.start_anchor = None;
             }
-            ToolEvent::Hover(p) => self.hover = p.world,
+            ToolEvent::Activate => {
+                let p = host.call("sweep_default", Json::Null);
+                if !p.is_null() {
+                    self.set("preset", &p);
+                }
+            }
+            ToolEvent::Hover(p) => {
+                self.hover = p.world;
+                self.inset = false;
+                if self.edit.is_none() && self.hover.is_some() {
+                    let pre = self.preview();
+                    let section: Vec<_> = pre
+                        .lines
+                        .iter()
+                        .take(
+                            pre.lines
+                                .len()
+                                .saturating_sub(usize::from(self.start.is_some())),
+                        )
+                        .map(|line| line.a)
+                        .collect();
+                    if let Ok(pixels) = serde_json::from_value::<Vec<Option<[f64; 2]>>>(
+                        host.call("to_px", json!({"points":section})),
+                    ) {
+                        let mut lo = DVec2::splat(f64::INFINITY);
+                        let mut hi = -lo;
+                        for p in pixels.into_iter().flatten() {
+                            lo = lo.min(p.into());
+                            hi = hi.max(p.into());
+                        }
+                        self.inset = (hi - lo).min_element() < 22.;
+                    }
+                }
+            }
             ToolEvent::Click(p) => {
                 if let Some(edit) = self.edit.as_mut() {
                     return edit.click(p, host);
@@ -349,7 +437,7 @@ impl Tool for SweepTool {
                 "tab" => {
                     self.attachment = (self.attachment + 1) % (9 + self.extra_attachments().count())
                 }
-                "r" => self.rotation = (self.rotation + 90) % 360,
+                "r" => self.rotation = (self.rotation + 90.) % 360.,
                 "f" => self.mirror = !self.mirror,
                 "l" => {
                     host.call("sweep_picker", Json::Null);

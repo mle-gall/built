@@ -335,6 +335,7 @@ fn read_facts_of<'py>(
         f.filed = filed_path(py, scene, one);
         f.text3d = editable.is_some();
         f.edited_letters = editable == Some(false);
+        f.live = one.getattr_opt("ext")?.is_some_and(|ext|ext.contains("built.live").unwrap_or(false));
         f.billboard = flag(one, "billboard");
         if is_component(one) {
             let mesh = one.getattr("mesh")?;
@@ -871,6 +872,7 @@ fn glue(
         "reveal" => {
             ui()?.call_method1("_tree_action", (win, view_or_none(py, view), format!("revealselection{}", sep(py)?)))?;
         }
+        "savepreset" => crate::library_host::capture_preset(win,first()?)?,
         "rename" => ask_rename(win, view, first()?)?,
         "edittext" => edit_text(win, view)?,
         _ => return Err(PyKeyError::new_err(name.to_owned())),

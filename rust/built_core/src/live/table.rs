@@ -184,6 +184,7 @@ impl Row {
 #[pyo3::pyclass(frozen, skip_from_py_object)]
 #[derive(Default, Clone)]
 pub struct LiveTable {
+    pub presets: Arc<std::collections::BTreeMap<String, super::presets::Preset>>,
     pub groups: Arc<std::collections::HashMap<String, u64>>,
     pub rows: HashMap<String, Arc<Row>>,
     pub owners: HashMap<String, String>,

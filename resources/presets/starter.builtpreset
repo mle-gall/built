@@ -1,0 +1,448 @@
+{
+  "format": "built.presets",
+  "v": 1,
+  "rows": [
+    {
+      "uid": "8bf3783ccf48197f",
+      "name": "Steel member",
+      "pack": "Steel EN 10365",
+      "primitive": "sweep",
+      "rev": 1,
+      "values": {
+        "profile": {
+          "library": "en/ipe240"
+        },
+        "attachment": "centre",
+        "rotation": 0,
+        "mirror": false
+      },
+      "record": {
+        "class": "IfcMember",
+        "predefined_type": "MEMBER",
+        "material": "S355",
+        "object_type": "Steel member"
+      },
+      "naming": "M-{n}",
+      "node": "Members",
+      "locks": {
+        "profile": "fixed",
+        "attachment": "free",
+        "rotation": "free",
+        "mirror": "free",
+        "material": "fixed",
+        "class": "fixed",
+        "predefined_type": "fixed",
+        "object_type": "fixed"
+      }
+    },
+    {
+      "uid": "c13fabbf1bad8d59",
+      "name": "Steel column",
+      "pack": "Steel EN 10365",
+      "primitive": "sweep",
+      "rev": 1,
+      "values": {
+        "profile": {
+          "library": "en/he200a"
+        },
+        "attachment": "centre",
+        "rotation": 0,
+        "mirror": false
+      },
+      "record": {
+        "class": "IfcColumn",
+        "predefined_type": "COLUMN",
+        "material": "S355",
+        "object_type": "Steel column"
+      },
+      "naming": "C-{n}",
+      "node": "Columns",
+      "locks": {
+        "profile": "fixed",
+        "attachment": "free",
+        "rotation": "free",
+        "mirror": "free",
+        "material": "fixed",
+        "class": "fixed",
+        "predefined_type": "fixed",
+        "object_type": "fixed"
+      }
+    },
+    {
+      "uid": "7a95d540b258c430",
+      "name": "Steel rafter",
+      "pack": "Steel EN 10365",
+      "primitive": "sweep",
+      "rev": 1,
+      "values": {
+        "profile": {
+          "library": "en/ipe240"
+        },
+        "attachment": "centre",
+        "rotation": 0,
+        "mirror": false
+      },
+      "record": {
+        "class": "IfcBeam",
+        "predefined_type": "BEAM",
+        "material": "S355",
+        "object_type": "Steel rafter"
+      },
+      "naming": "R-{n}",
+      "node": "Rafters",
+      "locks": {
+        "profile": "fixed",
+        "attachment": "free",
+        "rotation": "free",
+        "mirror": "free",
+        "material": "fixed",
+        "class": "fixed",
+        "predefined_type": "fixed",
+        "object_type": "fixed"
+      }
+    },
+    {
+      "uid": "0d988538e2d3c915",
+      "name": "Wide flange beam",
+      "pack": "Steel AISC",
+      "primitive": "sweep",
+      "rev": 1,
+      "values": {
+        "profile": {
+          "library": "aisc/w8x18"
+        },
+        "attachment": "centre",
+        "rotation": 0,
+        "mirror": false
+      },
+      "record": {
+        "class": "IfcBeam",
+        "predefined_type": "BEAM",
+        "material": "A992",
+        "object_type": "Wide flange beam"
+      },
+      "naming": "B-{n}",
+      "node": "Beams",
+      "locks": {
+        "profile": "fixed",
+        "attachment": "free",
+        "rotation": "free",
+        "mirror": "free",
+        "material": "fixed",
+        "class": "fixed",
+        "predefined_type": "fixed",
+        "object_type": "fixed"
+      }
+    },
+    {
+      "uid": "2fd29d6163395519",
+      "name": "Timber joist",
+      "pack": "Timber C16/C24",
+      "primitive": "sweep",
+      "rev": 1,
+      "values": {
+        "profile": {
+          "library": "basic/timber"
+        },
+        "attachment": "centre",
+        "rotation": 0,
+        "mirror": false
+      },
+      "record": {
+        "class": "IfcBeam",
+        "predefined_type": "JOIST",
+        "material": "C24",
+        "object_type": "Timber joist"
+      },
+      "naming": "J-{n}",
+      "node": "Joists",
+      "locks": {
+        "profile": "fixed",
+        "attachment": "free",
+        "rotation": "free",
+        "mirror": "free",
+        "material": "fixed",
+        "class": "fixed",
+        "predefined_type": "fixed",
+        "object_type": "fixed"
+      }
+    },
+    {
+      "uid": "153da99b8ea1b1ce",
+      "name": "Timber stud",
+      "pack": "Timber C16/C24",
+      "primitive": "sweep",
+      "rev": 1,
+      "values": {
+        "profile": {
+          "library": "basic/stud"
+        },
+        "attachment": "centre",
+        "rotation": 0,
+        "mirror": false
+      },
+      "record": {
+        "class": "IfcMember",
+        "predefined_type": "STUD",
+        "material": "C16",
+        "object_type": "Timber stud"
+      },
+      "naming": "S-{n}",
+      "node": "Studs",
+      "locks": {
+        "profile": "fixed",
+        "attachment": "free",
+        "rotation": "free",
+        "mirror": "free",
+        "material": "fixed",
+        "class": "fixed",
+        "predefined_type": "fixed",
+        "object_type": "fixed"
+      }
+    },
+    {
+      "uid": "f76ea921edc2e55d",
+      "name": "Wall",
+      "pack": "Architecture",
+      "primitive": "sweep",
+      "rev": 1,
+      "values": {
+        "profile": {
+          "library": "basic/wall"
+        },
+        "attachment": "bottom_left",
+        "rotation": 0,
+        "mirror": false
+      },
+      "record": {
+        "class": "IfcWall",
+        "predefined_type": "STANDARD",
+        "material": "Concrete",
+        "object_type": "Wall"
+      },
+      "naming": "W-{n}",
+      "node": "Walls",
+      "locks": {
+        "profile": "fixed",
+        "attachment": "free",
+        "rotation": "free",
+        "mirror": "free",
+        "material": "fixed",
+        "class": "fixed",
+        "predefined_type": "fixed",
+        "object_type": "fixed"
+      }
+    },
+    {
+      "uid": "5b2a3a7a09860758",
+      "name": "Handrail",
+      "pack": "Architecture",
+      "primitive": "sweep",
+      "rev": 1,
+      "values": {
+        "profile": {
+          "library": "basic/rail"
+        },
+        "attachment": "centre",
+        "rotation": 0,
+        "mirror": false
+      },
+      "record": {
+        "class": "IfcRailing",
+        "predefined_type": "HANDRAIL",
+        "material": "Stainless steel",
+        "object_type": "Handrail"
+      },
+      "naming": "HR-{n}",
+      "node": "Railings",
+      "locks": {
+        "profile": "fixed",
+        "attachment": "free",
+        "rotation": "free",
+        "mirror": "free",
+        "material": "fixed",
+        "class": "fixed",
+        "predefined_type": "fixed",
+        "object_type": "fixed"
+      }
+    },
+    {
+      "uid": "dd3cae75f2427fc7",
+      "name": "Gutter",
+      "pack": "Architecture",
+      "primitive": "sweep",
+      "rev": 1,
+      "values": {
+        "profile": {
+          "library": "basic/gutter"
+        },
+        "attachment": "centre",
+        "rotation": 90,
+        "mirror": false
+      },
+      "record": {
+        "class": "IfcPipeSegment",
+        "predefined_type": "GUTTER",
+        "material": "Aluminium",
+        "object_type": "Gutter"
+      },
+      "naming": "G-{n}",
+      "node": "Gutters",
+      "locks": {
+        "profile": "fixed",
+        "attachment": "free",
+        "rotation": "free",
+        "mirror": "free",
+        "material": "fixed",
+        "class": "fixed",
+        "predefined_type": "fixed",
+        "object_type": "fixed"
+      }
+    },
+    {
+      "uid": "3adf8a142241523a",
+      "name": "Moulding",
+      "pack": "Architecture",
+      "primitive": "sweep",
+      "rev": 1,
+      "values": {
+        "profile": {
+          "library": "basic/moulding"
+        },
+        "attachment": "centre",
+        "rotation": 0,
+        "mirror": false
+      },
+      "record": {
+        "class": "IfcBuildingElementProxy",
+        "predefined_type": "USERDEFINED",
+        "material": "Timber",
+        "object_type": "Moulding"
+      },
+      "naming": "T-{n}",
+      "node": "Trim",
+      "locks": {
+        "profile": "fixed",
+        "attachment": "free",
+        "rotation": "free",
+        "mirror": "free",
+        "material": "fixed",
+        "class": "fixed",
+        "predefined_type": "fixed",
+        "object_type": "fixed"
+      }
+    },
+    {
+      "uid": "2673a97782a6a5f7",
+      "name": "Duct",
+      "pack": "MEP",
+      "primitive": "sweep",
+      "rev": 1,
+      "values": {
+        "profile": {
+          "library": "basic/duct"
+        },
+        "attachment": "centre",
+        "rotation": 0,
+        "mirror": false
+      },
+      "record": {
+        "class": "IfcDuctSegment",
+        "predefined_type": "RIGIDSEGMENT",
+        "material": "Galvanised steel",
+        "object_type": "Duct"
+      },
+      "naming": "D-{n}",
+      "node": "Ducts",
+      "locks": {
+        "profile": "fixed",
+        "attachment": "free",
+        "rotation": "free",
+        "mirror": "free",
+        "material": "fixed",
+        "class": "fixed",
+        "predefined_type": "fixed",
+        "object_type": "fixed"
+      }
+    },
+    {
+      "uid": "3725dbfedcd5114e",
+      "name": "Pipe",
+      "pack": "MEP",
+      "primitive": "sweep",
+      "rev": 1,
+      "values": {
+        "profile": {
+          "library": "en/chs114.3x5"
+        },
+        "attachment": "centre",
+        "rotation": 0,
+        "mirror": false
+      },
+      "record": {
+        "class": "IfcPipeSegment",
+        "predefined_type": "RIGIDSEGMENT",
+        "material": "Steel",
+        "object_type": "Pipe"
+      },
+      "naming": "P-{n}",
+      "node": "Pipes",
+      "locks": {
+        "profile": "fixed",
+        "attachment": "free",
+        "rotation": "free",
+        "mirror": "free",
+        "material": "fixed",
+        "class": "fixed",
+        "predefined_type": "fixed",
+        "object_type": "fixed"
+      }
+    },
+    {
+      "uid": "81f3c1507efa12f3",
+      "name": "Mitre",
+      "pack": "Steel EN 10365",
+      "primitive": "cut",
+      "rev": 1,
+      "values": {
+        "operation": "trim",
+        "role": "end",
+        "cutter_kind": "bisector",
+        "on": true
+      },
+      "record": {},
+      "locks": {
+        "operation": "fixed",
+        "role": "fixed",
+        "cutter_kind": "free",
+        "on": "free"
+      },
+      "naming": "",
+      "node": ""
+    },
+    {
+      "uid": "d514908360f1b4c2",
+      "name": "Purlins at 1200 mm maximum",
+      "pack": "Steel EN 10365",
+      "primitive": "repeat",
+      "rev": 1,
+      "values": {
+        "rule": {
+          "fit_max": 1200
+        },
+        "measure": "pitch",
+        "orientation": "follow",
+        "adapt": "auto"
+      },
+      "record": {},
+      "locks": {
+        "rule": "free",
+        "measure": "fixed",
+        "orientation": "free",
+        "adapt": "free"
+      },
+      "naming": "",
+      "node": ""
+    }
+  ]
+}

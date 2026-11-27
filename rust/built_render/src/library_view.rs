@@ -97,7 +97,8 @@ pub const VERBS: [(&str, &str); 12] = [("apply", "Use"), ("edit", "Edit in the i
 
 
 /// What differs per resource type: (id, apply label, empty text).
-const TYPES: [(&str, &str, &str); 4] = [
+const TYPES: [(&str, &str, &str); 5] = [
+    ("presets","Use in Sweep","No presets in this collection."),
     ("materials", "Paint with it", "No materials yet."),
     ("components", "Place a copy", "No components yet."),
     ("families", "Place type", "Import a collection folder to browse its family types."),
@@ -454,6 +455,8 @@ fn tile(t: &str, e: &Item, current: Option<&str>, thumbs: &mut Vec<String>, labe
             s += &format!(" · used by {}", e.uses);
         }
         s
+    } else if t == "presets" {
+        e.defaults.iter().find(|d|d.0.starts_with("IFC class")).map(|d|d.1.clone()).unwrap_or_default()
     } else if t == "families" {
         e.category.clone()
     } else if e.uses != 0 {
@@ -482,6 +485,13 @@ pub(crate) fn detail(inp: &Input, e: &Item, thumbs: &mut Vec<String>) -> Vec<Val
         _ => String::new(),
     };
     out.push(block("heading", json!({"text": e.shown(), "right": where_})));
+    if inp.kind=="presets" {
+        if e.verbs.iter().any(|v|v=="apply"){out.push(block("buttons",json!({"buttons":[verb("apply","Use in Sweep","↩",PRIMARY)],"align":"fill"})));}
+        out.push(block("kv",json!({"rows":e.defaults})));
+        let actions:Vec<_>=[("edit","Edit…"),("duplicate","Duplicate"),("export","Export pack…"),("delete","Delete…")].into_iter().filter(|(id,_)|e.verbs.iter().any(|v|v==id)).map(|(id,title)|verb(id,title,"",0)).collect();
+        out.push(block("buttons",json!({"buttons":actions})));
+        return out;
+    }
     if inp.kind=="profiles" {
         out.push(block("buttons",json!({"buttons":[verb("apply","Use in Sweep","↩",PRIMARY)],"align":"fill"})));
         out.push(block("kv",json!({"rows":e.defaults})));
@@ -632,7 +642,7 @@ pub(crate) fn sheet_rows(inp: &Input, mut native: Option<&mut RowGroups>) -> Val
     let blocks = cursor.as_deref().and_then(|k| inp.items.iter().find(|e| e.key == k))
         .map(|e| detail(inp, e, &mut thumbs)).unwrap_or_default();
     json!({"scope": if faceted {"s:all"} else {&scope}, "tokens":tokens, "matches":faceted.then(||shown.iter().map(|e|&e.key).collect::<Vec<_>>()), "online": online, "searching": search, "search": format!("Search all {t}"), "sort": sort, "show": show,
-           "side": side, "content": content, "groups": groups, "type_actions": faceted || (!search && scope.starts_with("s:model")),
+           "side": side, "content": content, "groups": groups, "type_actions": inp.kind=="presets" || faceted || (!search && scope.starts_with("s:model")),
            "cursor": cursor, "detail": blocks, "thumbs": thumbs})
 }
 

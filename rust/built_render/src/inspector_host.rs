@@ -153,7 +153,16 @@ fn selection(view: &Bound<'_, PyAny>, win: &Bound<'_, PyAny>) -> PyResult<()> {
             }
             record.set_item("uid", record_address(&scene, g)?)?;
             if groups.len()==1 && g.getattr("ext")?.is_truthy()? && g.getattr("ext")?.contains("built.live")?{
-                record.set_item("sweep",py.import("built_core.command_protocol")?.call_method1("live_sweep",(&scene,g.getattr("uid")?))?)?;
+                let sweep=py.import("built_core.command_protocol")?.call_method1("live_sweep",(&scene,g.getattr("uid")?))?;
+                if !sweep.is_none(){
+                    let lib=py.import("built_render.wgpu_library")?;
+                    let ctx=py.import("types")?.getattr("SimpleNamespace")?.call0()?;
+                    ctx.setattr("scene",&scene)?;
+                    for (field,provider) in [("profile_options","ProfilesProvider"),("preset_options","PresetsProvider")]{
+                        sweep.set_item(field,lib.getattr(provider)?.call0()?.call_method1("items",(&ctx,))?)?;
+                    }
+                    record.set_item("sweep",sweep)?;
+                }
             }
             records.append(record)?;
         }
@@ -670,13 +679,23 @@ fn inspector_action(win: &Bound<'_, PyAny>, view: &Bound<'_, PyAny>, payload: &s
     let vp = win.getattr("viewport")?;
     let result = match surface {
         "sweep" => {
-            let row=py.import("built_core.command_protocol")?.call_method1("live_sweep",(vp.getattr("scene")?,&v))?;
+            let owner=if verb=="field"{v.get_item(0)?}else{v.clone()};
+            let row=py.import("built_core.command_protocol")?.call_method1("live_sweep",(vp.getattr("scene")?,owner))?;
             if !row.is_none(){
                 if verb=="path"{
                     win.call_method1("_activate_tool",("sweep",))?;
                     win.getattr("_tools")?.get_item("sweep")?.getattr("_machine")?.call_method1("set",("edit",&row))?;
-                }else if matches!(verb,"mitre"|"butt"){
-                    row.set_item("corner",verb)?;
+                }else if matches!(verb,"mitre"|"butt"|"field"){
+                    if verb=="field"{
+                        let field:String=v.get_item(1)?.extract()?;
+                        let val=v.get_item(2)?;
+                        if field=="preset"{
+                            let values=val.get_item("values")?;
+                            for (k,value) in values.cast::<PyDict>()?{row.set_item(k,value)?;}
+                            row.set_item("preset_uid",val.get_item("uid")?)?;
+                            row.set_item("preset_definition",&val)?;
+                        }else if matches!(field.as_str(),"profile"|"rotation"|"attachment"|"mirror"){row.set_item(field,val)?;}
+                    }else{row.set_item("corner",verb)?;}
                     let kw=PyDict::new(py);kw.set_item("row",&row)?;
                     commands(py)?.call((vp.getattr("history")?,"live_set"),Some(&kw))?;
                     vp.call_method0("notify_scene_changed")?;

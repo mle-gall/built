@@ -87,7 +87,7 @@ impl Ui {
                         }
                         let r = ui.add(
                             kit::field(&mut self.cmd_query)
-                                .hint_text(egui::RichText::new(if self.cmd_scope=="Sweep profiles" {"Search profiles"}else{"Search commands"}).color(FAINT))
+                                .hint_text(egui::RichText::new(if self.cmd_scope=="Sweep presets" {"Search presets"}else{"Search commands"}).color(FAINT))
                                 .font(body())
                                 .margin(Margin::symmetric(10, 7))
                                 .desired_width((width - 24.).max(1.))
@@ -111,7 +111,7 @@ impl Ui {
                             .show(ui, |ui| {
                                 if self.cmd_results.is_empty() && !self.cmd_query.is_empty() {
                                     ui.label(
-                                        egui::RichText::new("No command matches")
+                                        egui::RichText::new(if self.cmd_scope=="Sweep presets" {"No matching presets or profiles"}else{"No command matches"})
                                             .font(body())
                                             .color(FAINT),
                                     );
@@ -126,14 +126,27 @@ impl Ui {
                                     } else {
                                         label.clone()
                                     };
-                                    let row = command_row(
+                                    let preset=self.cmd_scope=="Sweep presets";
+                                    if preset && (i==0 || self.cmd_results[i-1].1!=*path){kit::caption(ui,path);}
+                                    let draw=|ui:&mut egui::Ui|command_row(
                                         ui,
                                         &text,
-                                        path,
+                                        if preset {""}else{path},
                                         key,
                                         *enabled,
                                         self.cmd_at == i,
                                     );
+                                    let row=if preset && key.contains(" · "){
+                                        ui.horizontal(|ui|{
+                                            let material=key.split(" · ").nth(1).unwrap_or("");
+                                            let color=match material{"C24"|"C16"|"Timber"=>MATERIAL_TIMBER,
+                                                "Concrete"=>MATERIAL_CONCRETE,"Aluminium"|"Stainless steel"=>MATERIAL_METAL,
+                                                _=>INK_2};
+                                            let (rect,_)=ui.allocate_exact_size(vec2(11.,11.),egui::Sense::hover());
+                                            kit::tag_swatch(ui,rect,Some(color));
+                                            draw(ui)
+                                        }).inner
+                                    }else{draw(ui)};
                                     let row = row.on_hover_ui(|ui| {
                                         ui.set_max_width(300.);
                                         ui.label(

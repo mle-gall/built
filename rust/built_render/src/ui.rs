@@ -166,6 +166,7 @@ pub struct Ui {
     /// The value field on the geometry and its readback (ui/value_field.rs).
     cursor: value_field::ValueField,
     /// The live value is the tool's refusal (Fillet: "Radius too large").
+    pub(crate) section_inset: Option<Vec<Vec<[f32;2]>>>,
     pub(crate) cursor_error: bool,
     /// Selection bar: summary and (id, label, shortcut) actions.
     selection: Option<(String, Vec<(String, String, String, bool, bool)>)>,
@@ -397,6 +398,7 @@ impl Ui {
             status: String::new(),
             hint: String::new(),
             cursor: Default::default(),
+            section_inset: None,
             cursor_error: false,
             selection: None,
             actions: Vec::new(),
@@ -797,7 +799,10 @@ impl Ui {
             self.destination = Destination::Project;
             self.plugins.showing = false;
         }
-        if let Some(d) = &mut self.dialog { d.placement = placement.into(); }
+        if let Some(d) = &mut self.dialog {
+            if placement=="cursor" && d.cursor_anchor.is_none(){d.cursor_anchor=self.ctx.pointer_latest_pos();}
+            d.placement = placement.into();
+        }
     }
     pub fn organise_scenes(&mut self) {
         self.menu = None;
@@ -3086,6 +3091,14 @@ impl Ui {
         }
         if let (Some(r), Some(l)) = (live, &self.cursor.live) {
             if screen.contains(l.at) {
+                if let Some(rings)=&self.section_inset{
+                    let center=pos2((l.at.x+45.).clamp(free.left(),free.right().max(free.left())),(l.at.y-50.).max(free.top()+32.));
+                    let painter=ctx.layer_painter(egui::LayerId::new(egui::Order::Tooltip,egui::Id::new("section inset")));
+                    painter.rect_filled(Rect::from_center_size(center,vec2(64.,64.)),6.,tokens::POPOVER);
+                    for ring in rings {
+                        painter.add(egui::Shape::closed_line(ring.iter().map(|p|center+vec2(p[0],p[1])).collect(),egui::Stroke::new(1.6_f32,tokens::INK)));
+                    }
+                }
                 pill("cursor_value", r, &l.caption, &l.value, l.typing, false, self.cursor_error && !l.typing);
             }
         }
