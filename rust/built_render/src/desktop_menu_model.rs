@@ -106,6 +106,7 @@ pub const GROUPS: &[(&str, &[Row])] = &[
             Row::Entry("heal_overlaps"),
             Row::Entry("rebuild_planar"),
             Row::Entry("join_segments"),
+            Row::Entry("weld_edges"),
             Row::Entry("verb:simplify_mesh"),
             Row::Entry("convert_path"),
         ],
@@ -156,6 +157,7 @@ pub const GROUPS: &[(&str, &[Row])] = &[
         "Draw",
         &[
             Row::Entry("tool:line"),
+            Row::Entry("tool:line_on_surface"),
             Row::Entry("tool:freehand"),
             Row::Entry("tool:geopath"),
             Row::Separator,

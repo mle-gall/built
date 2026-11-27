@@ -1,4 +1,9 @@
 {
+ "Weld Edges": "لحام الحواف",
+ "Line on Surface": "خط على سطح",
+ "Click the start point on a curved face.": "انقر على نقطة البداية على وجه منحنٍ.",
+ "Click the end point to draw along the surface.": "انقر على نقطة النهاية للرسم على طول السطح.",
+ "Draw along a curved face.": "ارسم على طول وجه منحنٍ.",
  "Click the first corner. Arrows pick the plane.": "انقر على الركن الأول. اختر المستوى بمفاتيح الأسهم.",
  "Click the start of the angle.": "انقر على بداية الزاوية.",
  "Click the end, or type degrees and Enter.": "انقر على النهاية أو اكتب الدرجات واضغط Enter.",

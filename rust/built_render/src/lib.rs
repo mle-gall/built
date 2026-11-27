@@ -33,6 +33,7 @@ mod document_camera;
 mod section_display;
 mod inspection_edits;
 mod context_edits;
+pub use context_edits::can_weld;
 mod native_view_actions;
 mod plugin_workspace;
 mod link_watch;

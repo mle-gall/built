@@ -1,4 +1,9 @@
 {
+ "Weld Edges": "Объединить рёбра",
+ "Line on Surface": "Линия на поверхности",
+ "Click the start point on a curved face.": "Щёлкните начальную точку на изогнутой грани.",
+ "Click the end point to draw along the surface.": "Щёлкните конечную точку, чтобы провести линию по поверхности.",
+ "Draw along a curved face.": "Рисование по изогнутой грани.",
  "Click the first corner. Arrows pick the plane.": "Щёлкните первый угол. Стрелками выберите плоскость.",
  "Click the start of the angle.": "Щёлкните начальную точку угла.",
  "Click the end, or type degrees and Enter.": "Щёлкните конечную точку или введите градусы и нажмите Enter.",

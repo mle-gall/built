@@ -187,6 +187,10 @@ pub struct State {
     /// survivor's death takes those entries too (no ghost entries, design
     /// decision 4); entries are checked against the registry before use.
     pub extra: Arc<FxHashMap<u32, Vec<Cell>>>,
+    /// The two curve runs made by a branch landing inside a segment.
+    /// Runtime curve ids are remapped by file readers.
+    #[serde(skip)]
+    pub(crate) split_runs: Arc<FxHashMap<u128, [i128; 2]>>,
     /// Edge tag keys (`Edge.layer` strings), interned per store.
     pub layers: Arc<Vec<String>>,
     /// Persistent element ids per kind (`ids.rs`). Kept out of the

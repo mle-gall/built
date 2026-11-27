@@ -357,14 +357,14 @@ impl Host {
         })
     }
 
-    pub fn model_menu_state(&self) -> Option<(String,bool,bool,bool)> {
+    pub fn model_menu_state(&self) -> Option<(String,bool,bool,bool,bool)> {
         Python::attach(|py| -> PyResult<_> {
             let viewport=self.obj.bind(py).getattr("viewport")?;
             let scene=viewport.getattr("scene")?;
             let transitions=scene.getattr("animation")?.getattr("enabled")?.is_truthy()?;
             let similar=scene.getattr("hide_similar_components")?.is_truthy()?;
             let playing = self.obj.bind(py).getattr("window")?.getattr("scene_player")?.call_method0("is_playing")?.is_truthy()?;
-            Ok((viewport.getattr("edit_rest_mode")?.extract()?,transitions,similar,playing))
+            Ok((viewport.getattr("edit_rest_mode")?.extract()?,transitions,similar,playing,built_render::can_weld(&scene)?))
         }).ok()
     }
 

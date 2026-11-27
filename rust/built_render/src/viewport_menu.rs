@@ -299,6 +299,7 @@ fn read_facts_of<'py>(
     f.makes_faces = geometry && win.call_method1("_makes_faces", (&selection,))?.is_truthy()?;
     f.textured_face = faces.len() == 1 && sel.len() == 1 && !win.call_method0("_single_textured_face")?.is_none();
     f.bridgeable = geometry && win.call_method1("_bridgeable", (&selection,))?.is_truthy()?;
+    f.weldable = edges.len() == sel.len() && crate::context_edits::can_weld(scene).unwrap_or(false);
     f.context = context_path(py, scene)?;
     let store = opt(&scene.getattr("mesh")?, "_store").filter(|s| s.hasattr("stale_keys").unwrap_or(false) && s.hasattr("curved_edges").unwrap_or(false));
     match store {

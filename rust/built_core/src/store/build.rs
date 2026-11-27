@@ -320,6 +320,7 @@ impl Store {
             corners: CowVec::from_vec(corners),
             ring_sizes: CowVec::from_vec(b.sizes.iter().map(|&s| s as u32).collect()),
             pool_garbage: 0,
+            split_runs: Default::default(),
             registry,
             displaced: Arc::new(FxHashMap::default()),
             extra: Arc::new(FxHashMap::default()),

@@ -20,6 +20,7 @@ const TOOLS: &[(&str, [f32; 2])] = &[
     ("freehand", [6.0, 42.0]),
     ("geopath", [6.0, 42.0]),
     ("line", [6.0, 42.0]),
+    ("line_on_surface", [6.0, 42.0]),
     ("look_around", [24.0, 26.0]),
     ("move", [24.0, 24.0]),
     ("north", [24.0, 28.0]),
@@ -121,6 +122,7 @@ pub fn tool_cursor_art<'py>(
 /// Rail art drawn as SVG on the same 48-unit grid, 3-unit round strokes and
 /// 45 % fills as the atlas (the Sheets tools that had none, P10).
 const RAIL_SVG: &[(&str, &str)] = &[
+    ("line_on_surface", include_str!("../assets/line_on_surface.svg")),
     ("comp_vista", include_str!("../assets/sheet_icons/comp_vista.svg")),
     ("comp_etiqueta", include_str!("../assets/sheet_icons/comp_etiqueta.svg")),
     ("comp_nivel", include_str!("../assets/sheet_icons/comp_nivel.svg")),

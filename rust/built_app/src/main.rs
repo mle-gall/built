@@ -1107,9 +1107,9 @@ impl App {
         }
         #[cfg(target_os = "macos")]
         if self.front() == Some(id) {
-            if let (Some(menus), Some((rest, transitions, similar, playing))) =
+            if let (Some(menus), Some((rest, transitions, similar, playing, weldable))) =
                     (&self._menus, self.win(id)?.host.model_menu_state()) {
-                menus.reflect_model_checks(&rest, transitions, similar, playing);
+                menus.reflect_model_checks(&rest, transitions, similar, playing, weldable);
             }
             let previous=self.extension_sig.filter(|(owner,_)| *owner==id).map(|(_,stamp)|stamp);
             if let Some((stamp,rows))=self.win(id)?.host.extension_updates(previous) {

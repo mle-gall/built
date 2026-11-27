@@ -1,4 +1,9 @@
 {
+ "Weld Edges": "Souder les arêtes",
+ "Line on Surface": "Ligne sur une surface",
+ "Click the start point on a curved face.": "Cliquez sur le point de départ sur une face courbe.",
+ "Click the end point to draw along the surface.": "Cliquez sur le point d’arrivée pour tracer sur la surface.",
+ "Draw along a curved face.": "Tracez sur une face courbe.",
  "Running {path}": "Exécution de {path}",
  "Run script": "Exécuter un script",
  "Console": "Console",

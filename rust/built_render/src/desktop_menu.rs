@@ -6,7 +6,7 @@ use crate::{
 use egui::{Rect, Ui};
 use std::cell::RefCell;
 
-type Checks = (String, bool, bool, bool);
+type Checks = (String, bool, bool, bool, bool);
 #[derive(Default)]
 struct Desktop {
     dispatch: Option<Box<dyn Fn(String)>>,
@@ -71,7 +71,7 @@ fn entry_check(state: &Desktop, id: &str) -> Option<bool> {
     if !model_menu::CHECKS.contains(&id) {
         return None;
     }
-    state.checks.as_ref().and_then(|(rest, transitions, similar, playing)| {
+    state.checks.as_ref().and_then(|(rest, transitions, similar, playing, _)| {
         Some(match id {
             "scene_transitions" => *transitions,
             "scene_play" => *playing,
@@ -198,7 +198,7 @@ pub(crate) fn show(ui: &mut Ui, extensions: &[extension_menu::Row], enabled: boo
                                 ),
                                 Row::Entry(id) => {
                                     if let Some(e) = model_menu::entries().iter().find(|e| e.id == id) {
-                                        item(ui, e.id, e.label, e.shortcut, true, entry_check(state, id), &mut selected);
+                                        item(ui, e.id, e.label, e.shortcut, id != "weld_edges" || state.checks.as_ref().is_some_and(|c| c.4), entry_check(state, id), &mut selected);
                                     }
                                 }
                                 Row::Sub(title) => {

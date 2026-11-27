@@ -17,7 +17,7 @@ use super::{add, json_p3, len, opt_p3_json, p3_json, scale, sub, unit, Answer, C
             ToolEvent, ToolHost, ToolInfo, Value, P3};
 use super::preview::ValueAnchor;
 
-static INFO: ToolInfo = ToolInfo {
+const INFO: ToolInfo = ToolInfo {
     kind: "line",
     name: "Line",
     shortcut: "L",
@@ -32,6 +32,14 @@ static INFO: ToolInfo = ToolInfo {
     screen_axis_px: Some(9.0),
     axis_source: true,
     axis_source_empty_only: true,
+};
+
+static SURFACE_INFO: ToolInfo = ToolInfo {
+    kind: "line_on_surface",
+    name: "Line on Surface",
+    shortcut: "",
+    description: "Draw along a curved face.",
+    ..INFO
 };
 
 const EPS: f64 = 1e-9;
@@ -63,8 +71,7 @@ pub struct LineTool {
     hover: Option<P3>,
     work_plane: Option<(P3, P3)>,
     last: Option<Retype>,
-    /// Alt: a straight chord instead of a line over a curved face.
-    chord: bool,
+    follow_surface: bool,
     /// The previewed line over a curved face, start to hover.
     surface: Option<Vec<P3>>,
 }
@@ -86,6 +93,10 @@ fn surface_line(a: P3, b: P3, host: &mut dyn ToolHost) -> Option<(Vec<P3>, Vec<P
 fn same(a: P3, b: P3) -> bool { len(sub(a, b)) < EPS }
 
 impl LineTool {
+    pub(super) fn on_surface() -> Self {
+        Self { follow_surface: true, ..Self::default() }
+    }
+
     fn reset(&mut self) {
         self.chain = None;
         self.work_plane = None;
@@ -97,15 +108,7 @@ impl LineTool {
     /// `offset`: a typed segment's exact delta, so the end is the start's
     /// stored doubles plus it (the host resolves the start).
     fn add_edge(&self, a: P3, b: P3, offset: Option<P3>, host: &mut dyn ToolHost) -> Answer {
-        if offset.is_none() && !self.chord {
-            if let Some(path) = surface_path(a, b, host) {
-                return Self::add_path(&path, host);
-            }
-        }
-        let mut args = serde_json::json!({"a": p3_json(a), "b": p3_json(b)});
-        if self.chord {
-            args["chord"] = serde_json::Value::Bool(true);
-        }
+        let mut args = serde_json::json!({"a": p3_json(a), "b": p3_json(b), "chord": true});
         if let Some(d) = offset {
             args["offset"] = p3_json(d);
         }
@@ -158,7 +161,7 @@ impl LineTool {
         }
         // Over a curved face the line follows the surface; its ends sit
         // on the facets, and the chain goes on from where it ended.
-        let path = if self.chord { None } else { surface_path(start, world, host) };
+        let path = if !self.follow_surface { None } else { surface_path(start, world, host) };
         let world = path.as_ref().and_then(|p| p.last().copied()).unwrap_or(world);
         let last = self.retype_state(start, world);
         let answer = match &path {
@@ -283,7 +286,7 @@ impl LineTool {
 }
 
 impl Tool for LineTool {
-    fn info(&self) -> &'static ToolInfo { &INFO }
+    fn info(&self) -> &'static ToolInfo { if self.follow_surface { &SURFACE_INFO } else { &INFO } }
 
     fn event(&mut self, ev: &ToolEvent, host: &mut dyn ToolHost) -> Reply {
         match ev {
@@ -308,24 +311,11 @@ impl Tool for LineTool {
                     self.hover = Some(w);
                 }
                 self.surface = match (self.start(), self.hover) {
-                    (Some(a), Some(b)) if !self.chord && !same(a, b) => {
+                    (Some(a), Some(b)) if self.follow_surface && !same(a, b) => {
                         surface_line(a, b, host).map(|(path, curve)| if curve.len() >= 2 { curve } else { path })
                     }
                     _ => None,
                 };
-                Reply::redraw()
-            }
-            ToolEvent::KeyRelease { key, tapped: true } if key == "Alt" => {
-                self.chord = !self.chord;
-                self.surface = None;
-                host.message(
-                    if self.chord {
-                        "Straight chord across curved faces (Alt: follow the surface)"
-                    } else {
-                        "Lines follow curved faces (Alt: straight chord)"
-                    },
-                    &[],
-                );
                 Reply::redraw()
             }
             ToolEvent::Click(p) | ToolEvent::DoubleClick(p) | ToolEvent::TripleClick(p) => match p.world {
@@ -366,7 +356,6 @@ impl Tool for LineTool {
                 .unwrap_or_default(),
             "work_plane": plane,
             "retype": self.last.is_some(),
-            "chord": self.chord,
             "surface_path": self.surface.as_ref().map(|p| p.iter().map(|v| p3_json(*v)).collect::<Vec<_>>()),
         })
     }
@@ -390,7 +379,6 @@ impl Tool for LineTool {
                 }
             }
             "hover_point" => self.hover = point,
-            "chord" => self.chord = value.as_bool().unwrap_or(false),
             "work_plane" => {
                 self.work_plane = value.as_array().and_then(|a| Some((json_p3(a.first()?)?, json_p3(a.get(1)?)?)));
             }

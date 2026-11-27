@@ -64,6 +64,7 @@ fn run_parts(parent: &Obj<'_>, scene: &Obj<'_>) -> PyResult<()> {
             "DeleteFaceCommand",
             "TagCurveCommand",
             "ExplodeCurvesCommand",
+            "WeldEdgesCommand",
             "PruneOrphanEdgesCommand",
             "MoveVerticesCommand",
         ]

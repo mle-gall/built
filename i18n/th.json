@@ -1,4 +1,9 @@
 {
+ "Weld Edges": "เชื่อมขอบ",
+ "Line on Surface": "เส้นบนพื้นผิว",
+ "Click the start point on a curved face.": "คลิกจุดเริ่มต้นบนผิวโค้ง",
+ "Click the end point to draw along the surface.": "คลิกจุดปลายเพื่อวาดไปตามพื้นผิว",
+ "Draw along a curved face.": "วาดไปตามผิวโค้ง",
  "Click the first corner. Arrows pick the plane.": "คลิกมุมแรก ใช้ปุ่มลูกศรเลือกระนาบ",
  "Click the start of the angle.": "คลิกจุดเริ่มต้นของมุม",
  "Click the end, or type degrees and Enter.": "คลิกจุดปลาย หรือพิมพ์องศาแล้วกด Enter",

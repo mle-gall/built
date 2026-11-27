@@ -107,6 +107,8 @@ pub struct Report {
     pub dropped: usize,
 }
 
+const SURFACE_PATH_STEP: f64 = std::f64::consts::PI / 60.;
+
 fn point(st: &State, v: u32) -> DVec3 {
     DVec3::from(st.frame.definition_point(*st.vpos.get(v as usize)))
 }
@@ -210,7 +212,7 @@ impl Store {
                 }
             }
         }
-        let ok = bound::tessellate(s, &pts, f64::INFINITY, tol).is_some();
+        let ok = bound::trim_region(s, &pts, tol).is_some();
         if !ok {
             debug(|| format!("face {f}: no trimmed region"));
         }
@@ -685,6 +687,33 @@ impl Store {
     }
 
     /// The run's vertices in walking order.
+    pub(crate) fn weld_chain(&self, run: &[u32]) -> Option<Vec<u32>> {
+        if run.len() < 2 { return None; }
+        let mut degree = HashMap::new();
+        if run.iter().copied().collect::<HashSet<_>>().len() != run.len() { return None; }
+        for &e in run {
+            for v in *self.state.ends.get(e as usize) {
+                let n = degree.entry(v).or_insert(0);
+                *n += 1;
+                if *n > 2 { return None; }
+            }
+        }
+        let ends = degree.values().filter(|&&n| n == 1).count();
+        if ends != 0 && ends != 2 { return None; }
+        let chain = self.chain(run);
+        (chain.len() == degree.len()).then_some(chain)
+    }
+
+    pub(crate) fn weld_edges(&mut self, run: &[u32], id: i128) -> Result<(), &'static str> {
+        let chain = self.weld_chain(run).ok_or("Select one connected edge chain")?;
+        let points: Vec<_> = chain.into_iter().map(|v| self.def_point(v)).collect();
+        if let Some(circle) = bound::fit_circle(&points, self.tol_for(points.iter().copied())) {
+            self.bind_circle(run, circle)?;
+        }
+        for &e in run { self.set_edge_curve(e, id); }
+        Ok(())
+    }
+
     fn chain(&self, run: &[u32]) -> Vec<u32> {
         let mut at: HashMap<u32, Vec<u32>> = HashMap::new();
         for &e in run {
@@ -1170,7 +1199,7 @@ impl Store {
             let Some(uv) = s.uv(p) else { continue };
             let Some(q) = s.point(uv) else { continue };
             // Within the drawn chord of the support (or on the facet).
-            let chord = 4. * s.size_hint() * (1. - (super::exact_display::DISPLAY_STEP * 0.5).cos());
+            let chord = 4. * s.size_hint() * (1. - (SURFACE_PATH_STEP * 0.5).cos());
             let on_surface = q.distance(p) <= chord.max(2e-3 * (hi - lo).length());
             let on_facet = self
                 .exact_face_plane(f)
@@ -1328,7 +1357,7 @@ impl Store {
         }
         path.push(end);
         let to_store = |p: DVec3| self.model_point(p.to_array());
-        let n = (((t1 - t0) * (ub - ua).max_element().abs().max((ub - ua).min_element().abs())) / super::exact_display::DISPLAY_STEP)
+        let n = (((t1 - t0) * (ub - ua).max_element().abs().max((ub - ua).min_element().abs())) / SURFACE_PATH_STEP)
             .ceil()
             .clamp(1., 2048.) as usize;
         let curve: Vec<[f64; 3]> = (0..=n)

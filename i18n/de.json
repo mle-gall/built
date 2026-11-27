@@ -1,4 +1,9 @@
 {
+ "Weld Edges": "Kanten verschweißen",
+ "Line on Surface": "Linie auf Fläche",
+ "Click the start point on a curved face.": "Startpunkt auf einer gekrümmten Fläche anklicken.",
+ "Click the end point to draw along the surface.": "Endpunkt anklicken, um auf der Fläche zu zeichnen.",
+ "Draw along a curved face.": "Auf einer gekrümmten Fläche zeichnen.",
  "Click the first corner. Arrows pick the plane.": "Erste Ecke anklicken. Pfeiltasten wählen die Ebene.",
  "Click the start of the angle.": "Anfang des Winkels anklicken.",
  "Click the end, or type degrees and Enter.": "Endpunkt anklicken oder Gradzahl eingeben und Enter drücken.",

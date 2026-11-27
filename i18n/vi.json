@@ -1,4 +1,9 @@
 {
+ "Weld Edges": "Hàn các cạnh",
+ "Line on Surface": "Đường trên bề mặt",
+ "Click the start point on a curved face.": "Nhấp vào điểm đầu trên một mặt cong.",
+ "Click the end point to draw along the surface.": "Nhấp vào điểm cuối để vẽ dọc theo bề mặt.",
+ "Draw along a curved face.": "Vẽ dọc theo một mặt cong.",
  "Click the first corner. Arrows pick the plane.": "Nhấp vào góc đầu tiên. Dùng phím mũi tên để chọn mặt phẳng.",
  "Click the start of the angle.": "Nhấp vào điểm đầu của góc.",
  "Click the end, or type degrees and Enter.": "Nhấp vào điểm cuối hoặc nhập số độ rồi nhấn Enter.",

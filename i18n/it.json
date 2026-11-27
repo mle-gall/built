@@ -1,4 +1,9 @@
 {
+ "Weld Edges": "Salda spigoli",
+ "Line on Surface": "Linea su superficie",
+ "Click the start point on a curved face.": "Fai clic sul punto iniziale di una faccia curva.",
+ "Click the end point to draw along the surface.": "Fai clic sul punto finale per disegnare sulla superficie.",
+ "Draw along a curved face.": "Disegna su una faccia curva.",
  "Click the first corner. Arrows pick the plane.": "Fai clic sul primo angolo. Le frecce scelgono il piano.",
  "Click the start of the angle.": "Fai clic sul punto iniziale dell’angolo.",
  "Click the end, or type degrees and Enter.": "Fai clic sul punto finale o digita i gradi e premi Invio.",

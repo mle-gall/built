@@ -466,16 +466,19 @@ impl Store {
                 incident.push(f);
             }
         }
+        let shading = self.state.eflags.get(e as usize) & (SOFT | FLAT);
         self.remove_edge(e, ch);
         let e0 = match self.find_edge(v0, mid) {
             Some(x) => x,
             None => {
-                // A new Python edge: default flags, the split edge's key.
-                self.revive_edge(e, v0, mid, 0, -1, NONE, ch);
+                // New halves keep the shading along the original edge.
+                self.revive_edge(e, v0, mid, shading, -1, NONE, ch);
                 e
             }
         };
+        let new_half = self.find_edge(mid, v1).is_none();
         let e1 = self.link_edge(mid, v1, ch)?;
+        if new_half { self.state.eflags.set(e1 as usize, shading); }
         for &f in &incident {
             let mut rings = self.face_rings(f);
             if insert_at_every_use(&mut rings, v0, v1, mid) {

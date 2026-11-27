@@ -117,25 +117,8 @@ fn last<'py>(a: &Args<'py>) -> Reply<'py> {
         none(py)
     })
 }
-/// Alt tapped: a straight chord instead of a line over a curved face.
-fn on_key_release<'py>(a: &Args<'py>) -> Reply<'py> {
-    let py = a.py();
-    let tool = a.get_item(0)?;
-    let vp = a.get_item(1)?;
-    let key = a.get_item(2)?;
-    // Qt::Key_Alt.
-    if !key.eq(0x0100_0023)? {
-        return false.into_bound_py_any(py);
-    }
-    tool.call_method1(
-        "_send",
-        (&vp, fields!(py; "type" => "key_release", "key" => "Alt", "tapped" => true).into_any()),
-    )?
-    .get_item("consumed")
-}
 #[rustfmt::skip]
 pub(super) const METHODS: &[Method] = &[
-    ("on_key_release", Mode::Method, on_key_release, &["self", "viewport", "key"], "bool", ""),
     ("chain_first_point", Mode::Property, chain_first_point, &["self"], "", ""),
     ("chain_vertices", Mode::Property, chain_vertices, &["self"], "", ""),
     ("work_plane", Mode::Property, work_plane, &["self"], "", ""),

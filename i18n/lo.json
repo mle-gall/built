@@ -1,4 +1,9 @@
 {
+ "Weld Edges": "ເຊື່ອມຂອບ",
+ "Line on Surface": "ເສັ້ນເທິງພື້ນຜິວ",
+ "Click the start point on a curved face.": "ຄລິກຈຸດເລີ່ມຕົ້ນເທິງຜິວໂຄ້ງ.",
+ "Click the end point to draw along the surface.": "ຄລິກຈຸດປາຍເພື່ອແຕ້ມຕາມພື້ນຜິວ.",
+ "Draw along a curved face.": "ແຕ້ມຕາມຜິວໂຄ້ງ.",
  "Click the first corner. Arrows pick the plane.": "ຄລິກມຸມທຳອິດ. ໃຊ້ປຸ່ມລູກສອນເລືອກລະນາບ.",
  "Click the start of the angle.": "ຄລິກຈຸດເລີ່ມຂອງມຸມ.",
  "Click the end, or type degrees and Enter.": "ຄລິກຈຸດປາຍ ຫຼື ພິມອົງສາແລ້ວກົດ Enter.",

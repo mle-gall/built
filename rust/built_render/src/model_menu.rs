@@ -136,6 +136,7 @@ fn build_entries() -> Vec<MenuEntry> {
         ("heal_overlaps", "Heal Overlapping Faces", "", "_on_heal_overlaps"),
         ("rebuild_planar", "Rebuild Faces (Planar)", "", "_on_rebuild_planar"),
         ("join_segments", "Join Segments", "", "_on_join_segments"),
+        ("weld_edges", "Weld Edges", "", "_on_weld_edges"),
         ("verb:simplify_mesh", "Simplify Mesh…", "", "_on_simplify_mesh"),
         ("convert_path", "Convert Path to Geometry", "", "_on_convert_geopath"),
     ] {
@@ -202,6 +203,7 @@ fn build_entries() -> Vec<MenuEntry> {
     // Draw and Tools: the tools you arm, then what runs at once.
     for (id, path, label, tool) in [
         ("tool:line", "Draw", "Line", "line"),
+        ("tool:line_on_surface", "Draw", "Line on Surface", "line_on_surface"),
         ("tool:freehand", "Draw", "Freehand", "freehand"),
         ("tool:geopath", "Draw", "Path", "geopath"),
         ("tool:rectangle", "Draw", "Rectangle", "rectangle"),

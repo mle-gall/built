@@ -930,12 +930,6 @@ impl PyMeshStore {
         self.inner.surface_path(a, b).map(|p| p.path)
     }
 
-    /// (hits, misses, entries) of the process-wide exact display cache.
-    #[staticmethod]
-    fn exact_display_cache() -> (u64, u64, usize) {
-        super::exact_display::cache_stats()
-    }
-
     /// Live (edges, faces) carrying a curved binding.
     fn exact_counts(&self) -> (usize, usize) {
         let Some(c) = self.inner.state.exact.curved.as_deref() else {
@@ -1261,18 +1255,18 @@ impl PyMeshStore {
     /// Resident draw data. Logical element order remains the editing API.
     #[pyo3(signature=(bake=false))]
     fn display_arrays<'py>(&self, py: Python<'py>, bake: bool) -> PyResult<Bound<'py, PyDict>> {
-        if self.inner.has_curved() {
-            let d = py.detach(|| self.inner.curved_display(bake));
-            let out = dense_dict(py, d.dense)?;
-            out.set_item("face_owner", d.face_owner.into_pyarray(py))?;
-            out.set_item("edge_owner", d.edge_owner.into_pyarray(py))?;
-            let normals = numpy::ndarray::Array2::from_shape_fn((d.corner_normals.len(), 3), |(i, j)| d.corner_normals[i][j]);
-            out.set_item("corner_normals", normals.into_pyarray(py))?;
-            return Ok(out);
-        }
         let Some(patch) = &self.inner.state.exact.native else {
-            // The resident baker reads no edge's faces.
-            return self.arrays(py, !bake, true);
+            let (dense, normals) = py.detach(|| {
+                let dense = self.inner.dense_parts(!bake, true);
+                let normals = self.inner.facet_normals(dense.corners.len());
+                (dense, normals)
+            });
+            let out = dense_dict(py, dense)?;
+            if let Some(normals) = normals {
+                let rows = numpy::ndarray::Array2::from_shape_fn((normals.len(), 3), |(i, j)| normals[i][j]);
+                out.set_item("corner_normals", rows.into_pyarray(py))?;
+            }
+            return Ok(out);
         };
         let mesh = patch.mesh().map_err(PyValueError::new_err)?;
         let logical = self.inner.dense();
@@ -3012,6 +3006,16 @@ impl PyMeshStore {
 
     fn tag_curve_path(&mut self, points: Vec<[f64; 3]>, closed: bool, id: i64) -> bool {
         self.inner.tag_curve_path(&points, closed, id)
+    }
+
+    fn can_weld_edges(&self, keys: Vec<u128>) -> bool {
+        let slots = keys.into_iter().map(|k| slot_of(&self.inner, Kind::Edge, k)).collect::<PyResult<Vec<_>>>();
+        slots.is_ok_and(|slots| self.inner.weld_chain(&slots).is_some())
+    }
+
+    fn weld_edges(&mut self, keys: Vec<u128>, id: i128) -> PyResult<()> {
+        let slots = keys.into_iter().map(|k| slot_of(&self.inner, Kind::Edge, k)).collect::<PyResult<Vec<_>>>()?;
+        self.inner.weld_edges(&slots, id).map_err(PyValueError::new_err)
     }
 
     fn explode_curves(&mut self, ids: std::collections::HashSet<i128>, record: bool) -> Vec<(u128, i128)> {
