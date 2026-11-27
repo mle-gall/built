@@ -971,11 +971,12 @@ def test_large_mesh_edits_match_a_fresh_pack_and_frame(native, monkeypatch, pain
 def test_painted_curved_edits_match_fresh_frames(native):
     from built_core import InstanceUpdates, Vec3, pack_scene
     from tests.test_big_model_budgets import _grid
-    from tests.test_exact_edit import cylinder
+    from tests.test_exact_edit import cylinder, run
     from tests.test_wgpu_updates import assert_matches_fresh_pack
     from pathlib import Path
 
-    scene, _ = cylinder()
+    scene, history = cylinder()
+    walls = [f.key for f in scene.mesh.faces if scene.mesh._store.exact_face(f.key)]
     assert "corner_normals" in scene.mesh._store.display_arrays()
     mesh = scene.mesh
     _grid(mesh, 182, x0=-182.)
@@ -989,10 +990,21 @@ def test_painted_curved_edits_match_fresh_frames(native):
     updates = InstanceUpdates(scene, packed)
     packed.upload(native)
     corner = mesh.vertex_at(Vec3(-1., 1., 0.))
-    for delta in (.2, .4):
-        mesh.move_vertex(corner, Vec3(0., 0., delta))
+    def check():
         updates.apply(*updates.diff(scene), native)
         frame = capture(native)
         assert_matches_fresh_pack(updates, scene)
         pack_scene(scene).upload(native)
         np.testing.assert_array_equal(frame, capture(native))
+
+
+    for delta in (.2, .4):
+        mesh.move_vertex(corner, Vec3(0., 0., delta))
+        check()
+    other = mesh._store.exact_face(walls[1])
+    run(history, "erase", faces=[walls[0]])
+    assert mesh._store.exact_face(walls[1]) == other
+    check()
+    history.undo()
+    assert mesh._store.exact_face(walls[0])
+    check()
