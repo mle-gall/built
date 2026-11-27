@@ -254,6 +254,7 @@ fn inspector<'py>(a: &Args<'py>) -> Reply<'py> {
         return Ok(none(py));
     }
     let identity = identity()?;
+    let is_curve = groups.is_empty() && complete_curve(&scene, &sel)?;
     let tag_row = glue.call_method1("inspector_tag_row", (&scene,))?;
     let has_tag_picker = tag_row.is_truthy()?;
     let facts = |offer_filing: bool| -> PyResult<Bound<'py, PyList>> {
@@ -262,7 +263,9 @@ fn inspector<'py>(a: &Args<'py>) -> Reply<'py> {
             let fact = fact?;
             let label = fact.get_item(0)?;
             if label.eq("Tag")? && has_tag_picker { continue; }
-            if label.eq("Filed in")? && offer_filing {
+            if is_curve && label.eq("Kind")? {
+                facts.append((label, "Curve", fact.get_item(2)?, fact.get_item(3)?))?;
+            } else if label.eq("Filed in")? && offer_filing {
                 facts.append(("Filing", "Not filed · File to…", "insp:file", py.None()))?;
             } else {
                 facts.append(fact)?;
@@ -499,7 +502,7 @@ fn inspector<'py>(a: &Args<'py>) -> Reply<'py> {
             break;
         }
     }
-    let shape = if groups.is_empty() { direct(py, curve_of, (&scene, &sel))? } else { none(py) };
+    let shape = if is_curve { regular_curve(&scene, &sel)? } else { none(py) };
     if !shape.is_none() {
         sections.insert(0, glue.call_method1("inspector_curve", (&scene, shape))?)?;
     } else if others != 0 {
@@ -513,7 +516,7 @@ fn inspector<'py>(a: &Args<'py>) -> Reply<'py> {
     if !groups.is_empty() {
         sections.append(("Export details", empty(py)))?;
     }
-    let title = if sel.len() == 1 {
+    let title = if is_curve { "Curve".to_owned() } else if sel.len() == 1 {
         text(&identity.get_item(0)?.get_item(1)?)?
     } else {
         format!("{} selected", sel.len())
@@ -841,25 +844,31 @@ fn link_action<'py>(a: &Args<'py>) -> Reply<'py> {
     Ok(none(py))
 }
 
-/// One curve selected (all its edges, one curve id) that reads back as a
-/// regular circle, arc or polygon; else None.
+/// A complete curve group can be an arbitrary polyline. Radius and
+/// resegmentation are available only for a regular circular shape.
+fn complete_curve(scene: &Obj<'_>, sel: &Bound<'_, PyList>) -> PyResult<bool> {
+    if sel.len() < 2 { return Ok(false); }
+    let first = sel.get_item(0)?;
+    let Some(tag) = first.getattr_opt("curve")? else { return Ok(false) };
+    if tag.is_none() { return Ok(false); }
+    let mesh = scene.getattr("mesh")?;
+    for e in sel.iter().skip(1) {
+        let Some(other) = e.getattr_opt("curve")? else { return Ok(false) };
+        if !tag.eq(other)? { return Ok(false); }
+    }
+    Ok(mesh.call_method1("curve_edges", (first,))?.len()? == sel.len())
+}
+
+fn regular_curve<'py>(scene: &Obj<'py>, sel: &Bound<'py, PyList>) -> Reply<'py> {
+    let py = scene.py();
+    if sel.len() > 4096 { return Ok(none(py)); }
+    py.import("built_core")?.getattr("curve_segments")?.call_method1("read_curve", (scene.getattr("mesh")?, sel.get_item(0)?))
+}
+
 pub(super) fn curve_of<'py>(a: &Args<'py>) -> Reply<'py> {
-    let py = a.py();
-    let (scene, sel) = (a.get_item(0)?, a.get_item(1)?);
-    if !sel.is_truthy()? || sel.len()? > 4096 {
-        return Ok(none(py));
-    }
-    let edge = py.import("built_core.mesh")?.getattr("Edge")?;
-    let ids = PySet::empty(py)?;
-    for entity in sel.try_iter()? {
-        let entity = entity?;
-        ids.add(if entity.is_instance(&edge)? { attr(&entity, "curve")? } else { none(py) })?;
-    }
-    if ids.len() != 1 || ids.contains(py.None())? {
-        return Ok(none(py));
-    }
-    let shape = py.import("built_core")?.getattr("curve_segments")?.call_method1("read_curve", (scene.getattr("mesh")?, sel.get_item(0)?))?;
-    Ok(if !shape.is_none() && shape.getattr("segments")?.eq(sel.len()?)? { shape } else { none(py) })
+    let scene = a.get_item(0)?;
+    let sel = list(&a.get_item(1)?)?;
+    if complete_curve(&scene, &sel)? { regular_curve(&scene, &sel) } else { Ok(none(a.py())) }
 }
 
 pub(super) fn status_text<'py>(a: &Args<'py>) -> Reply<'py> {

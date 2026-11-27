@@ -42,3 +42,27 @@ def test_a_face_with_an_opening_shows_its_net_area(native_host):
     units = native_host.viewport.scene.units
     assert inspector(native_host, [f])["Geometry"]["Area"] == fmt_area_with(15, units)
     assert inspector(native_host, [f, g])["Geometry"]["Area"] == fmt_area_with(16, units)
+
+
+def test_complete_welded_polyline_is_identified_as_one_curve(native_host):
+    from types import SimpleNamespace
+    from unittest.mock import patch
+
+    from views import wgpu_ui
+    from built_core.history import WeldEdgesCommand
+
+    host = native_host
+    mesh = host.viewport.scene.mesh
+    edges = [mesh.add_edge(V(0, 0, 0), V(1, 0, 0)),
+             mesh.add_edge(V(1, 0, 0), V(2, 1, 0)),
+             mesh.add_edge(V(2, 1, 0), V(2, 1, 1))]
+    host.viewport.history.execute(WeldEdgesCommand([e.key for e in edges]))
+    host.viewport.scene.select(mesh.curve_edges(edges[0]))
+    titles, facts = [], []
+    renderer = SimpleNamespace(ui_set_identity=facts.extend,
+                               ui_set_inspector=lambda title, *_: titles.append(title))
+    with patch.object(host.view, "renderer", renderer):
+        host.view._ui_insp_sig = None
+        wgpu_ui._inspector(host.view, host.window)
+    assert titles == ["Curve"]
+    assert next(row[1] for row in facts if row[0] == "Kind") == "Curve"
