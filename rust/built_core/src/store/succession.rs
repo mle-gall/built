@@ -374,7 +374,6 @@ mod tests {
     fn the_inheriting_half_also_inherits_an_exact_surface() {
         let mut st = Store::empty(8, Weld::default());
         let f = square(&mut st, 0.0, 4.0);
-        st.state.exact.face_surface = Some(super::super::cow::CowVec::from_vec(vec![super::super::keys::NONE; 1]));
         st.state.exact.inherit(Kind::Face, f, 7);
         let before = st.state.clone();
         let mut ch = Change::default();

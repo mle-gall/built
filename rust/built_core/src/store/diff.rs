@@ -75,6 +75,7 @@ impl State {
             }
             let i = s as usize;
             eb != ea
+                || (!a.exact.get(Kind::Edge, s) != b.exact.get(Kind::Edge, s))
                 || a.eflags.get(i) != b.eflags.get(i)
                 || a.ecurve.get(i) != b.ecurve.get(i)
                 || if layers_shared {
@@ -93,10 +94,23 @@ impl State {
         }, |s, _, _, same_key| {
             let i = s as usize;
             same_key
-                && (a.fattr.get(i) != b.fattr.get(i)
+                && ((!a.exact.get(Kind::Face, s) != b.exact.get(Kind::Face, s))
+                    || a.fattr.get(i) != b.fattr.get(i)
                     || a.fflags.get(i) != b.fflags.get(i)
                     || rings(a, s) != rings(b, s))
         });
+        for kind in [Kind::Edge, Kind::Face] {
+            let k=kind as usize;
+            if a.exact.shared(&b.exact,kind) {continue;}
+            let modified=&mut ch.modified[k];
+            for slot in a.exact.changed_slots(&b.exact,kind) {
+                if a.slots[k].alive(slot) && b.slots[k].alive(slot) && a.slots[k].gen(slot)==b.slots[k].gen(slot) {
+                    modified.push(a.key_of(kind,slot));
+                }
+            }
+            modified.sort_unstable_by_key(|key| (*key as u32) & (super::keys::MAX_SLOTS-1));
+            modified.dedup();
+        }
         let mut moved = Vec::new();
         diff_kind(a, b, Kind::Vertex, &mut ch, |c| a.vpos.same_chunk(&b.vpos, c), |s, _, _, same_key| {
             if same_key && a.vpos.get(s as usize) != b.vpos.get(s as usize) {

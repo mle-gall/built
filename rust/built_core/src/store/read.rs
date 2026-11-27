@@ -157,6 +157,7 @@ impl State {
             && cols_eq_live(&self.elayer, &o.elayer, |s| live(1, s))
             && cols_eq_live(&self.fattr, &o.fattr, |s| live(2, s))
             && cols_eq_live(&self.fflags, &o.fflags, |s| live(2, s))
+            && [Kind::Edge, Kind::Face].into_iter().all(|k| self.exact.same_live(&o.exact, k, |s| self.slots[k as usize].alive(s)))
             && self.registry.same_as(&o.registry)
             && layers_agree(&self.layers, &o.layers);
         if !ok {
