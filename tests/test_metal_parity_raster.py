@@ -994,11 +994,17 @@ def test_painted_curved_edits_match_fresh_frames(native):
         updates.apply(*updates.diff(scene), native)
         frame = capture(native)
         assert_matches_fresh_pack(updates, scene)
-        pack_scene(scene).upload(native)
+        fresh = pack_scene(scene)
+        _, start, count, flags = (int(v) for v in fresh.materials[:16].view(np.uint32))
+        live_flags, live_rows = packed.material_updates[0]
+        assert live_flags == flags and count > 0
+        np.testing.assert_array_equal(live_rows, fresh.materials[start * 16:start * 16 + count * 32])
+        fresh.upload(native)
         np.testing.assert_array_equal(frame, capture(native))
 
-
     for delta in (.2, .4):
+        row["texture"]["uvw"][3] += .25
+        row["back"]["color"] = (delta, .7, .2)
         mesh.move_vertex(corner, Vec3(0., 0., delta))
         check()
     other = mesh._store.exact_face(walls[1])

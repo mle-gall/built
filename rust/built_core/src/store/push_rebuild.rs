@@ -202,6 +202,10 @@ impl FaceBlocks {
                 let r = st.frings.get(f as usize);
                 let count: usize = (0..r.n_rings)
                     .map(|i| *st.ring_sizes.get((r.ring_start + i) as usize) as usize).sum();
+                if count == 0 {
+                    lo = [f64::NEG_INFINITY; 3];
+                    hi = [f64::INFINITY; 3];
+                }
                 for i in r.corner_start as usize..r.corner_start as usize + count {
                     let p = st.vpos.get(*st.corners.get(i) as usize);
                     for k in 0..3 {
@@ -393,6 +397,31 @@ impl Store {
         cache.scope.clone()
     }
 
+    fn face_blocks<'a>(&self, cache: &'a mut Cache) -> &'a FaceBlocks {
+        if cache.blocks.as_ref().is_none_or(|(token, _)| *token != cache.token) {
+            cache.blocks = Some((cache.token, FaceBlocks::new(self)));
+        }
+        &cache.blocks.as_ref().unwrap().1
+    }
+
+    /// Whole components need all coplanar faces, including those outside
+    /// the edit window. Reject only batches completely on one side. Use the
+    /// same allowance as may_meet_cap, with an upper bound on ring size.
+    fn plane_face_scope(&self, cache: &mut Cache, scope: &std::sync::Arc<[u32]>, origin: V3, normal: V3,
+                        threshold: usize) -> std::sync::Arc<[u32]> {
+        if scope.len() < threshold || scope.len() != self.n(Kind::Face) { return scope.clone(); }
+        let n = arr(normal);
+        let Some(k) = (0..3).find(|&k| n[k].abs() == 1. && n[(k+1)%3] == 0. && n[(k+2)%3] == 0.)
+            else { return scope.clone(); };
+        let blocks = self.face_blocks(cache);
+        let x = arr(origin)[k];
+        let scale = (self.state.corners.len() as f64 + 4.) * f64::EPSILON * 4.;
+        blocks.faces.chunks(FaceBlocks::BLOCK).zip(&blocks.bounds).filter(|(_, (lo, hi))| {
+            let pad = ON_PLANE + (lo[k].abs().max(hi[k].abs()) + x.abs() + 1.) * scale;
+            !(lo[k] - x > pad || x - hi[k] > pad)
+        }).flat_map(|(faces, _)| faces.iter().copied()).collect()
+    }
+
     /// `cache.packed(mesh, shadowed, want)`.
     fn packed(&self, cache: &mut Cache, shadowed: &HashSet<u32>, want: Option<BTreeSet<u32>>, window: Option<RayWindow>, h: Hypot) {
         let skey = if shadowed.is_empty() {
@@ -410,17 +439,14 @@ impl Store {
         if want.is_some() {
             self.components(cache);
         }
-        let comp = cache.comp.as_ref();
         let candidates: Vec<u32> = match window {
             Some(w) => {
-                if cache.blocks.as_ref().is_none_or(|(token, _)| *token != cache.token) {
-                    cache.blocks = Some((cache.token, FaceBlocks::new(self)));
-                }
-                cache.blocks.as_ref().unwrap().1.candidates(w)
+                self.face_blocks(cache).candidates(w)
                     .filter(|&f| w.intersects(self, f)).collect()
             }
             None => self.live_slots(Kind::Face),
         };
+        let comp = cache.comp.as_ref();
         let faces: Vec<u32> = candidates.into_iter()
             .filter(|f| !shadowed.contains(f))
             .filter(|&f| match &want {
@@ -498,6 +524,7 @@ impl Store {
         let fresh_set: Vec<u32> = fresh.iter().filter_map(|k| self.live_face(k)).collect();
         let fresh_slots: HashSet<u32> = fresh_set.iter().copied().collect();
         let shadowed = if ctx.keep { self.shadowed(&fresh_set, &scope_faces, cache, ctx) } else { HashSet::new() };
+        let scope_faces = self.plane_face_scope(cache, &scope_faces, origin, n, ctx.window_min_faces);
         let mut probes = Vec::with_capacity(regions.len());
         for (outer, holes) in &regions {
             probes.push(planar::region_point(&ctx.metrics, outer, holes).map_err(|_| OpError::Fallback("no region point"))?);
@@ -685,6 +712,7 @@ impl Store {
             Some((f, _)) => f,
             None => self.live_slots(Kind::Face).into(),
         };
+        let scope_faces = self.plane_face_scope(cache, &scope_faces, origin, n, ctx.window_min_faces);
         let old: Vec<u32> = scope_faces.iter().copied().filter(|&f| self.coplanar_on(f, origin, n, cache, ctx)).collect();
         let print_new: BTreeSet<_> = rebuilt
             .iter()
