@@ -244,8 +244,21 @@ impl Tool for SweepTool {
                     return false;
                 }
                 self.edit = None;
-                self.attachment = 0;
                 self.profile = profile;
+                let name = match value["attach"].as_str().unwrap_or("centre") {
+                    "middle_left" => "left",
+                    "middle_right" => "right",
+                    "bottom_centre" => "bottom",
+                    "top_centre" => "top",
+                    n => n,
+                };
+                let index = ATTACH
+                    .iter()
+                    .map(|a| a.0)
+                    .chain(self.extra_attachments())
+                    .position(|n| n == name)
+                    .unwrap_or(0);
+                self.attachment = index;
             }
             "profile" => {
                 self.edit = None;

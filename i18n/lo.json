@@ -1,4 +1,6 @@
 {
+ "Pick a start, or press Enter to sweep selected edges.": "ເລືອກຈຸດເລີ່ມ ຫຼື ກົດ Enter ເພື່ອໃຊ້ຂອບທີ່ເລືອກ.",
+ "Pick the end or enter a length. Alt keeps the end free.": "ເລືອກປາຍ ຫຼື ພິມຄວາມຍາວ. Alt ຮັກສາປາຍໃຫ້ເປັນອິດສະຫຼະ.",
  "Join connected edges into one curve.": "ເຊື່ອມຂອບທີ່ຕິດກັນເປັນເສັ້ນໂຄ້ງດຽວ.",
  "Weld Edges": "ເຊື່ອມຂອບ",
  "Line on Surface": "ເສັ້ນເທິງພື້ນຜິວ",

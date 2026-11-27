@@ -248,6 +248,7 @@ def sweep_body(w, group, base, row, context_id):
     up = add('IFCDIRECTION', '(0.,0.,1.)')
     items = []
     clipped = False
+    butt_planes = group.ext['built.live'].get('butt_planes', [])
     for i, (axis, depth) in enumerate(zip(axes, depths)):
         start_plane = joint(axes[i-1], axis) if i or closed else axis
         end_plane = joint(axis, axes[(i+1) % len(axes)]) if i+1 < len(axes) or closed else axis
@@ -257,14 +258,20 @@ def sweep_body(w, group, base, row, context_id):
             x -= axes[i-1] * (x @ start_plane) / (axes[i-1] @ start_plane)
             x -= axis * (x @ axis)
             x /= np.linalg.norm(x)
+        start, end = points[i], points[i+1]
+        if butt_planes:
+            (first, start_plane), (last, end_plane) = np.asarray(butt_planes[i])
+            start = start + axis * ((first - start) @ start_plane) / (axis @ start_plane)
+            end = end + axis * ((last - end) @ end_plane) / (axis @ end_plane)
+            depth = (end - start) @ axis
         def margin(normal):
             cosine = min(1., abs(axis @ normal))
             return radius * np.sqrt(max(0., 1 - cosine**2)) / cosine
         before, after = margin(start_plane), margin(end_plane)
-        pos = placement(points[i] - before * axis, axis, x)
+        pos = placement(start - before * axis, axis, x)
         solid = add('IFCEXTRUDEDAREASOLID', section, pos, up, _f((depth + before + after) * scale))
-        for distance, point, outward in ((before, points[i], -start_plane),
-                                          (after, points[i+1], end_plane)):
+        for distance, point, outward in ((before, start, -start_plane),
+                                          (after, end, end_plane)):
             if distance > 1e-12:
                 plane = add('IFCPLANE', placement(point, outward))
                 cutter = add('IFCHALFSPACESOLID', plane, '.F.')

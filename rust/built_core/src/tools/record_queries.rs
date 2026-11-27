@@ -133,7 +133,9 @@ impl ViewportToolHost {
                 json!({"to":{"path":path,"id":crate::element_ids::to_text('f',id)},"normal":normal})
             }
             "sweep_picker" => {
-                view.getattr("renderer")?.call_method1("ui_open_commands",("", "Sweep profiles"))?;
+                let canvas=view.call_method0("window")?.getattr("_host")?.getattr("view")?;
+                canvas.getattr("renderer")?.call_method1("ui_open_commands",("", "Sweep profiles"))?;
+                canvas.call_method0("update")?;
                 Value::Null
             }
             "sweep_edges" => {

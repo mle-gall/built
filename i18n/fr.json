@@ -1,4 +1,6 @@
 {
+ "Pick a start, or press Enter to sweep selected edges.": "Choisissez le départ ou appuyez sur Entrée pour utiliser les arêtes sélectionnées.",
+ "Pick the end or enter a length. Alt keeps the end free.": "Choisissez la fin ou saisissez une longueur. Alt laisse la fin libre.",
  "Join connected edges into one curve.": "Réunir les arêtes connectées en une courbe.",
  "Weld Edges": "Souder les arêtes",
  "Line on Surface": "Ligne sur une surface",

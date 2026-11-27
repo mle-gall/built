@@ -196,3 +196,96 @@ def test_ifc_mitre_body_volume(tmp_path):
     assert len(model.by_type("IfcBooleanClippingResult")) == 2
     shape = ifcopenshell.geom.create_shape(ifcopenshell.geom.settings(), model.by_type("IfcBeam")[0])
     assert get_volume(shape.geometry) == pytest.approx(.045 * .145 * 5, rel=1e-7)
+
+
+def test_inferred_decimal_endpoints_survive_record_and_reopen(tmp_path):
+    s = Scene()
+    h = History(s)
+    ends = [[.12345678901234568, -.25, 1.5], [1.75, .875, 1.5625]]
+    member = spec("basic/timber")
+    member["path"] = dict(ends=ends)
+    apply(h, "create_sweeps", sweeps=[member])
+    row, = queries.live_rows(s)
+    assert row["state"] == "ok"
+    assert row["path"]["ends"] == ends
+    igz.save_scene(s, tmp_path / "ends.built")
+    reopened = Scene()
+    igz.load_into(reopened, tmp_path / "ends.built")
+    assert queries.live_rows(reopened) == [row]
+
+
+def test_butt_joint_has_square_ends_and_separate_shells(tmp_path):
+    import ifcopenshell
+    import ifcopenshell.geom
+    from ifcopenshell.util.shape import get_volume
+    from formats.ifc.export import save_ifc
+
+    s = Scene()
+    h = History(s)
+    member = dict(spec("basic/timber"), corner="butt")
+    member["path"]["points"].append([2, 3, 0])
+    apply(h, "create_sweeps", sweeps=[member])
+    assert queries.live_rows(s)[0]["state"] == "ok"
+    group, = s.groups
+    assert len(group.mesh.faces) == 12 and len(group.mesh.vertices) == 16
+    assert all(len(e.faces) == 2 for e in group.mesh.edges)
+    out = tmp_path / "butt.ifc"
+    save_ifc(s, out)
+    model = ifcopenshell.open(out)
+    assert len(model.by_type("IfcExtrudedAreaSolid")) == 2
+    assert not model.by_type("IfcBooleanClippingResult")
+    shape = ifcopenshell.geom.create_shape(ifcopenshell.geom.settings(), model.by_type("IfcBeam")[0])
+    assert get_volume(shape.geometry) == pytest.approx(.045 * .145 * 5, rel=1e-7)
+
+
+def test_tool_keys_true_size_and_selected_edges():
+    from built_core import ToolMachine
+
+    class Host:
+        def __init__(self):
+            self.picker_open = False
+            self.specs = []
+
+        def call(self, name, args):
+            if name == "sweep_picker":
+                self.picker_open = True
+            if name == "sweep_edges":
+                return [{"chain": [{"path": [], "id": "edge-id"}]}]
+
+        def run(self, name, raw):
+            assert name == "create_sweeps"
+            self.specs = json.loads(raw)["sweeps"]
+            return True, 1, 0, None
+
+    host = Host()
+    machine = ToolMachine("sweep")
+    assert machine.set("profile", "basic/wall")
+    machine.event(dict(type="hover", world=[0, 0, 0]), host)
+    assert len(machine.preview_lines()) == 4
+    for key in ["Tab", "R", "F", "L", "Enter"]:
+        machine.event(dict(type="key", key=key), host)
+    assert host.picker_open
+    member, = host.specs
+    assert member["path"]["chain"][0]["id"] == "edge-id"
+    assert member["profile"]["library"] == "basic/wall"
+    assert member["rotation"] == 90 and member["mirror"]
+    assert member["attachment"] == "left"
+
+
+def test_end_zone_depth_is_independent_of_the_middle_length():
+    s = Scene()
+    h = History(s)
+    member = spec("basic/timber")
+    member["path"]["points"].append([2, 3, 0])
+    apply(h, "create_sweeps", sweeps=[member])
+    g, = s.groups
+    a, b = g.ext["built.live"]["zones"]
+    assert a[0] == [0., 0.] and b[2] == [3., 3.]
+    assert a[2][1] - a[2][0] == pytest.approx(.045)
+    row, = queries.live_rows(s)
+    row["path"]["points"][2][1] = 7
+    apply(h, "live_set", row=row)
+    changed_a, changed_b = g.ext["built.live"]["zones"]
+    assert changed_a == a
+    assert changed_b[0] == b[0]
+    assert changed_b[1][1] - b[1][1] == pytest.approx(4)

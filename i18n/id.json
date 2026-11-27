@@ -1,4 +1,6 @@
 {
+ "Pick a start, or press Enter to sweep selected edges.": "Pilih titik awal atau tekan Enter untuk memakai tepi terpilih.",
+ "Pick the end or enter a length. Alt keeps the end free.": "Pilih ujung atau ketik panjang. Alt membiarkan ujung bebas.",
  "Join connected edges into one curve.": "Gabungkan rusuk yang terhubung menjadi satu kurva.",
  "Weld Edges": "Satukan rusuk",
  "Line on Surface": "Garis pada permukaan",

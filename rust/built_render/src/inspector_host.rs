@@ -675,6 +675,11 @@ fn inspector_action(win: &Bound<'_, PyAny>, view: &Bound<'_, PyAny>, payload: &s
                 if verb=="path"{
                     win.call_method1("_activate_tool",("sweep",))?;
                     win.getattr("_tools")?.get_item("sweep")?.getattr("_machine")?.call_method1("set",("edit",&row))?;
+                }else if matches!(verb,"mitre"|"butt"){
+                    row.set_item("corner",verb)?;
+                    let kw=PyDict::new(py);kw.set_item("row",&row)?;
+                    commands(py)?.call((vp.getattr("history")?,"live_set"),Some(&kw))?;
+                    vp.call_method0("notify_scene_changed")?;
                 }else if verb=="release"{
                     let kw=PyDict::new(py);kw.set_item("uid",row.get_item("uid")?)?;
                     commands(py)?.call((vp.getattr("history")?,"live_release"),Some(&kw))?;

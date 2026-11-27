@@ -1,4 +1,6 @@
 {
+ "Pick a start, or press Enter to sweep selected edges.": "Chọn điểm đầu hoặc nhấn Enter để dùng các cạnh đã chọn.",
+ "Pick the end or enter a length. Alt keeps the end free.": "Chọn điểm cuối hoặc nhập chiều dài. Alt giữ đầu mút tự do.",
  "Join connected edges into one curve.": "Nối các cạnh liền nhau thành một đường cong.",
  "Weld Edges": "Hàn các cạnh",
  "Line on Surface": "Đường trên bề mặt",

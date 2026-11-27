@@ -51,8 +51,8 @@ const TOOLS: &[(&str, Phases)] = &[
         ("idle", "Click a face to paint it. Alt = sample the material under the cursor."),
     ]),
     ("sweep", &[
-        ("idle","Click the start or press Enter to sweep selected edges. Tab changes attachment, R rotates, F mirrors, L picks a profile."),
-        ("started","Click the end or type the length and press Enter. Snap to a face to anchor an end. Hold Alt for a free end."),
+        ("idle","Pick a start, or press Enter to sweep selected edges."),
+        ("started","Pick the end or enter a length. Alt keeps the end free."),
     ]),
     ("line_on_surface", &[
         ("idle", "Click the start point on a curved face."),

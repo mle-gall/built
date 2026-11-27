@@ -96,6 +96,18 @@ impl Records {
                 }
                 kit::prop_row(ui,"Rotation",&format!("{}°",self.sweep["rotation"]));
                 kit::prop_row(ui,"Mirror",if self.sweep["mirror"]==true{"On"}else{"Off"});
+                if let Some(path)=self.sweep["resolved_points"].as_array() {
+                    kit::prop_row(ui,"Path",&format!("{} spans",path.len().saturating_sub(1)+usize::from(self.sweep["path"]["closed"]==true)));
+                    if path.len()>2{
+                        let current=usize::from(self.sweep["corner"]=="butt");
+                        let mut selected=current;
+                        ui.add_enabled_ui(self.sweep_editable,|ui|ui.horizontal(|ui|{
+                            ui.label("Corner");
+                            kit::choice(ui,"sweep corner",&mut selected,&["Mitre","Butt"]);
+                        }));
+                        if current!=selected{send(out,if selected==1{"sweep.butt"}else{"sweep.mitre"},self.sweep["owner"].clone());}
+                    }
+                }
                 ui.add_enabled_ui(self.sweep_editable,|ui|ui.horizontal(|ui|{
                     if self.sweep["path"]["points"].is_array() && kit::quiet(ui,"Edit path").clicked(){
                         send(out,"sweep.path",self.sweep["owner"].clone());

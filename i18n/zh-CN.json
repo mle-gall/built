@@ -1,4 +1,6 @@
 {
+ "Pick a start, or press Enter to sweep selected edges.": "选择起点，或按 Enter 沿选定的边扫掠。",
+ "Pick the end or enter a length. Alt keeps the end free.": "选择终点或输入长度。按住 Alt 可保留自由端。",
  "Join connected edges into one curve.": "将相连的边合并为一条曲线。",
  "Weld Edges": "焊接边线",
  "Line on Surface": "曲面上的线",

@@ -4,6 +4,7 @@
 mod drawn_profile;
 mod file;
 mod geometry;
+mod joints;
 pub(crate) mod profile;
 mod reference;
 mod sweep;
@@ -103,13 +104,9 @@ fn metadata<'p>(g: &Obj<'p>) -> PyResult<Bound<'p, PyDict>> {
 fn evaluate(scene: &Obj<'_>, t: &LiveTable, row: &Row) -> PyResult<&'static str> {
     let py = scene.py();
     if row.kind == "sketch" {
-        return Ok(
-            if drawn_profile::outline(&serde_json::json!({"curves":row.curves}), 24).is_ok() {
-                "ok"
-            } else {
-                "invalid_profile"
-            },
-        );
+        return Ok(drawn_profile::outline(&serde_json::json!(row), 24)
+            .err()
+            .unwrap_or("ok"));
     }
     let Some(g) = group(py, t, &row.owner) else {
         return Ok("ref_lost");
@@ -127,6 +124,7 @@ fn evaluate(scene: &Obj<'_>, t: &LiveTable, row: &Row) -> PyResult<&'static str>
     let mesh = py.import("built_core.mesh")?.call_method0("Mesh")?;
     let store = mesh.getattr("_store")?.cast_into::<PyMeshStore>()?;
     let mut resolved_path = None;
+    let mut span_geometry = None;
     let stamp = {
         let mut s = store.try_borrow_mut()?;
         let result = if row.kind == "sweep" {
@@ -138,16 +136,16 @@ fn evaluate(scene: &Obj<'_>, t: &LiveTable, row: &Row) -> PyResult<&'static str>
             };
             let mut spec = (**spec).clone();
             if let Some(uid) = &spec.profile.sketch {
-                let Some(source) = t
-                    .rows
-                    .get(uid)
-                    .filter(|r| r.kind == "sketch" && r.state == "ok")
-                else {
+                let Some(source) = t.rows.get(uid).filter(|r| r.kind == "sketch") else {
                     return Ok("profile_missing");
                 };
+                if source.state != "ok" {
+                    return Ok("unchanged");
+                }
                 spec.profile.drawing = Some(serde_json::json!(source));
             }
-            let result = sweep::generate(&mut s.inner, &spec, &points);
+            let result = sweep::generate(&mut s.inner, &spec, &points)
+                .map(|geometry| span_geometry = Some(geometry));
             resolved_path = Some(points);
             result
         } else {
@@ -162,6 +160,12 @@ fn evaluate(scene: &Obj<'_>, t: &LiveTable, row: &Row) -> PyResult<&'static str>
     marker.set_item("row", &row.uid)?;
     if let Some(points) = resolved_path {
         marker.set_item("path", points)?;
+    }
+    if let Some(geometry) = span_geometry {
+        marker.set_item("zones", geometry.zones)?;
+        if !geometry.butt_planes.is_empty() {
+            marker.set_item("butt_planes", geometry.butt_planes)?;
+        }
     }
     marker.set_item("key", &stamp)?;
     marker.set_item("stamp", &stamp)?;
