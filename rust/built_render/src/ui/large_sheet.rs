@@ -157,6 +157,9 @@ pub struct Block {
 #[serde(default)]
 pub struct Item {
     pub component_source: String,
+    /// Where a library item lives ("My library", a shared library): a chip
+    /// on its tile, a word on its row.
+    pub place: String,
     pub toggle: Option<bool>,
     pub id: String,
     pub label: String,
@@ -794,6 +797,9 @@ impl Draw<'_> {
                 ui.painter().circle_filled(c, 8.0, ACCENT);
                 ui.painter().text(c, egui::Align2::CENTER_CENTER, "✓", meta(), BRIGHT);
             }
+            if !it.place.is_empty() {
+                kit::source_chip(ui.painter(), pic, &it.place);
+            }
             if !it.badge.is_empty() {
                 let g = ui.painter().layout_no_wrap(it.badge.clone(), meta(), INK);
                 let br = Rect::from_min_size(pic.right_top() + vec2(-g.size().x - 14.0, 6.0), vec2(g.size().x + 8.0, 16.0));
@@ -889,6 +895,12 @@ impl Draw<'_> {
                 let g = fit(ui, &it.right, meta(), FAINT, w * 0.3, 1);
                 right_x -= g.size().x;
                 ui.painter().galley(pos2(right_x, r.center().y - g.size().y / 2.0), g, FAINT);
+                right_x -= 12.0;
+            }
+            if !it.place.is_empty() && it.component_source.is_empty() {
+                let g = fit(ui, &it.place, meta(), DIM, w * 0.25, 1);
+                right_x -= g.size().x;
+                ui.painter().galley(pos2(right_x, r.center().y - g.size().y / 2.0), g, DIM);
                 right_x -= 12.0;
             }
             let ink = if it.dim { FAINT } else { INK };
@@ -1414,12 +1426,12 @@ impl Ui {
                 }
                 if let Some(s) = spec.search.as_ref().filter(|_| spec.id != "start") {
                     let sw = (inner.width() * 0.30).clamp(200.0, 320.0);
-                    let width = if spec.menus.iter().any(|m| m.id == "group") {
-                        let menus: f32 = spec.menus.iter().filter(|m| !m.left).map(|m| {
-                            ui.painter().layout_no_wrap(m.label.clone(), body(), INK).size().x + 36.0 + SPACE_S
-                        }).sum();
-                        sw.min((ui.available_width() - menus - SPACE_M).max(80.0))
-                    } else { sw };
+                    // The search yields to the menus beside it, so a narrow sheet
+                    // with many tabs never overprints them.
+                    let menus: f32 = spec.menus.iter().filter(|m| !m.left).map(|m| {
+                        ui.painter().layout_no_wrap(m.label.clone(), body(), INK).size().x + 36.0 + SPACE_S
+                    }).sum();
+                    let width = sw.min((ui.available_width() - menus - SPACE_M).max(80.0));
                     Self::lsheet_search(ui, st, s, width);
                 }
                 if spec.search.is_some() { ui.add_space(SPACE_XS); }

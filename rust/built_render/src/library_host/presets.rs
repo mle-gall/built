@@ -10,10 +10,16 @@ fn rows(ctx: &Bound<'_, PyAny>) -> PyResult<Vec<(Value, String)>> {
         .filter(|s| s.hasattr("_root").unwrap_or(false));
     let catalog = py
         .import("built_core.command_protocol")?
-        .call_method1("preset_catalog", (scene,))?;
+        .call_method1("preset_catalog", (scene.clone(),))?;
     let mut items: Vec<(Value, String)> = serde_json::from_str(&dumps(py, &catalog)?)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    let saved = super::destinations::saved_ids(py, scene.as_ref(), "presets")?;
     for (_, preset) in saved_presets()? {
+        // Listed from the Library once migration copied it there.
+        let id = preset["uid"].as_str().unwrap_or_default().to_lowercase();
+        if saved.contains(&id) || saved.contains(&crate::library_store::stable_id(&format!("preset:{id}"))) {
+            continue;
+        }
         if !items.iter().any(|(row, _)| row["uid"] == preset["uid"]) {
             items.push((preset, "mine".into()));
         }
@@ -80,12 +86,11 @@ fn shown(value: &Value) -> String {
         .map(str::to_owned)
         .unwrap_or_else(|| value.to_string())
 }
-fn edit(ctx: &Bound<'_, PyAny>, preset: Value, title: &str) -> PyResult<()> {
+fn edit(ctx: &Bound<'_, PyAny>, preset: Value, title: &str, lib: Option<String>) -> PyResult<()> {
     let py = ctx.py();
     let forms = py.import("built_render.chrome_forms")?;
     let field = forms.getattr("Field")?;
     let fields = PyList::empty(py);
-    let capture = title == "Save as preset";
     let personal = title == "Edit saved preset";
     for (key, label) in [
         ("name", "Name"),
@@ -93,63 +98,23 @@ fn edit(ctx: &Bound<'_, PyAny>, preset: Value, title: &str) -> PyResult<()> {
         ("naming", "Naming pattern"),
         ("node", "Filing node"),
     ] {
-        if !capture || matches!(key, "name" | "pack") {
-            fields.append(field.call1((key, "edit", label, shown(&preset[key])))?)?;
-        }
+        fields.append(field.call1((key, "edit", label, shown(&preset[key])))?)?;
     }
-    if !capture {
-        for section in ["values", "record"] {
-            for (key, v) in preset[section].as_object().into_iter().flatten() {
-                fields.append(field.call1((
-                    format!("{section}.{key}"),
-                    "edit",
-                    key,
-                    shown(v),
-                ))?)?;
-                fields.append(field.call1((
-                    format!("lock.{key}"),
-                    "check",
-                    format!("Fix {key}"),
-                    preset["locks"][key] == "fixed",
-                ))?)?;
-            }
+    for section in ["values", "record"] {
+        for (key, v) in preset[section].as_object().into_iter().flatten() {
+            fields.append(field.call1((
+                format!("{section}.{key}"),
+                "edit",
+                key,
+                shown(v),
+            ))?)?;
+            fields.append(field.call1((
+                format!("lock.{key}"),
+                "check",
+                format!("Fix {key}"),
+                preset["locks"][key] == "fixed",
+            ))?)?;
         }
-    }
-    let summary = if preset["primitive"] == "repeat" {
-        shown(&preset["values"]["rule"])
-    } else {
-        format!(
-            "{} · {} · {}",
-            preset["values"]["profile"]["library"]
-                .as_str()
-                .unwrap_or("Drawn profile"),
-            preset["record"]["material"].as_str().unwrap_or(""),
-            preset["record"]["class"].as_str().unwrap_or("")
-        )
-    };
-    if capture {
-        fields.append(field.call(
-            ("destination", "choice", "Save to", 0),
-            Some(&[("options", ["This project", "My presets", "Shared folder"])].into_py_dict(py)?),
-        )?)?;
-        let shared = func(py, |py, args| {
-            obj(
-                py,
-                args.get_item(0)?
-                    .call_method1("value", ("destination",))?
-                    .eq(2)?,
-            )
-        })?;
-        fields.append(field.call(
-            ("folder", "edit", "Shared folder", ""),
-            Some(&[("visible", shared)].into_py_dict(py)?),
-        )?)?;
-        fields.append(field.call1((
-            "record_defaults",
-            "check",
-            "Include record values",
-            true,
-        ))?)?;
     }
     let c = ctx.clone().unbind();
     let done = func(py, move |py, args| {
@@ -161,41 +126,30 @@ fn edit(ctx: &Bound<'_, PyAny>, preset: Value, title: &str) -> PyResult<()> {
                     p[key] = json!(vals.get_item(key)?.extract::<String>()?);
                 }
             }
-            if !capture {
-                for section in ["values", "record"] {
-                    for (key, old) in preset[section].as_object().into_iter().flatten() {
-                        let raw: String = vals.get_item(format!("{section}.{key}"))?.extract()?;
-                        p[section][key] = if old.is_string() {
-                            json!(raw)
+            for section in ["values", "record"] {
+                for (key, old) in preset[section].as_object().into_iter().flatten() {
+                    let raw: String = vals.get_item(format!("{section}.{key}"))?.extract()?;
+                    p[section][key] = if old.is_string() {
+                        json!(raw)
+                    } else {
+                        serde_json::from_str(&raw)
+                            .map_err(|e| PyValueError::new_err(e.to_string()))?
+                    };
+                    p["locks"][key] =
+                        json!(if vals.get_item(format!("lock.{key}"))?.is_truthy()? {
+                            "fixed"
                         } else {
-                            serde_json::from_str(&raw)
-                                .map_err(|e| PyValueError::new_err(e.to_string()))?
-                        };
-                        p["locks"][key] =
-                            json!(if vals.get_item(format!("lock.{key}"))?.is_truthy()? {
-                                "fixed"
-                            } else {
-                                "free"
-                            });
-                    }
+                            "free"
+                        });
                 }
             }
-            if capture && !vals.get_item("record_defaults")?.is_truthy()? {
-                if let Some(record) = p["record"].as_object_mut() {
-                    record.retain(|k, _| {
-                        matches!(
-                            k.as_str(),
-                            "class" | "material" | "predefined_type" | "object_type"
-                        )
-                    });
-                }
-            }
-            let destination = if capture {
-                vals.get_item("destination")?.extract::<usize>()?
-            } else {
-                0
-            };
-            if personal {
+            if let Some(key) = &lib {
+                p["rev"] = json!(p["rev"].as_u64().unwrap_or(0).saturating_add(1));
+                let name = shown(&p["name"]);
+                let place = super::destinations::resave(&c.bind(py).getattr("win")?, key, &name, p)?;
+                flash(c.bind(py), &format!("Preset saved in {place}"))?;
+            } else if personal {
+                // A preset still in the older saved folder.
                 let file = saved_path(&shown(&p["uid"]))?;
                 let temporary = file.with_extension(format!("{}.tmp", uid(py)?));
                 p["rev"] = json!(p["rev"].as_u64().unwrap_or(0).saturating_add(1));
@@ -209,36 +163,46 @@ fn edit(ctx: &Bound<'_, PyAny>, preset: Value, title: &str) -> PyResult<()> {
                 }
                 result?;
                 flash(c.bind(py), "Preset saved")?;
-            } else if destination == 0 {
-                update(c.bind(py), json!([p]))?;
             } else {
-                let folder = if destination == 1 {
-                    let dir = local_dir()?;
-                    std::fs::create_dir_all(&dir)?;
-                    dir
-                } else {
-                    vals.get_item("folder")?.extract::<PathBuf>()?
-                };
-                let file = folder.join(format!("{}.builtpreset", shown(&p["uid"])));
-                use std::io::Write;
-                std::fs::File::create_new(file)?.write_all(p.to_string().as_bytes())?;
-                flash(c.bind(py), "Preset saved")?;
+                update(c.bind(py), json!([p]))?;
             }
         }
         Ok(none(py))
     })?;
     let kw = PyDict::new(py);
-    if capture {
-        kw.set_item("note", summary)?;
-    }
     kw.set_item("on_done", done)?;
     kw.set_item("buttons", [("cancel", "Cancel"), ("ok", "Save")])?;
     let form = forms.getattr("Form")?.call((title, fields), Some(&kw))?;
-    if capture {
-        form.setattr("placement", "cursor")?;
-    }
     forms.call_method1("show", (ctx.getattr("win")?, form))?;
     Ok(())
+}
+/// A preset's values and record defaults as detail rows.
+fn details(p: &Value) -> Vec<(String, String, String)> {
+    let mut details = Vec::new();
+    for section in ["values", "record"] {
+        for (key, v) in p[section].as_object().into_iter().flatten() {
+            details.push((
+                format!(
+                    "{} · {}",
+                    match key.as_str() {
+                        "class" => "IFC class",
+                        "predefined_type" => "Predefined type",
+                        "object_type" => "Object type",
+                        "material" => "Material",
+                        "profile" => "Profile",
+                        "mirror" => "Mirror",
+                        "rotation" => "Rotation",
+                        "attachment" => "Attachment",
+                        _ => key,
+                    },
+                    if p["locks"][key] == "fixed" { "Fixed" } else { "Free" }
+                ),
+                shown(if key == "profile" && v["library"].is_string() { &v["library"] } else { v }),
+                p["locks"][key].as_str().unwrap_or("free").to_owned(),
+            ));
+        }
+    }
+    details
 }
 fn transfer(ctx: &Bound<'_, PyAny>, pack: Option<String>) -> PyResult<()> {
     let py = ctx.py();
@@ -316,40 +280,18 @@ impl PresetsProvider {
             if source == "model" || source == "mine" {
                 verbs.push("delete");
             }
-            let mut details = Vec::new();
-            for section in ["values", "record"] {
-                for (key, v) in p[section].as_object().into_iter().flatten() {
-                    details.push((
-                        format!(
-                            "{} · {}",
-                            match key.as_str() {
-                                "class" => "IFC class",
-                                "predefined_type" => "Predefined type",
-                                "object_type" => "Object type",
-                                "material" => "Material",
-                                "profile" => "Profile",
-                                "mirror" => "Mirror",
-                                "rotation" => "Rotation",
-                                "attachment" => "Attachment",
-                                _ => key,
-                            },
-                            if p["locks"][key] == "fixed" {
-                                "Fixed"
-                            } else {
-                                "Free"
-                            }
-                        ),
-                        shown(if key == "profile" && v["library"].is_string() {
-                            &v["library"]
-                        } else {
-                            v
-                        }),
-                        p["locks"][key].as_str().unwrap_or("free"),
-                    ));
-                }
-            }
+            let details = details(&p);
             items.push(json!({"key":p["uid"],"name":p["name"],"category":p["pack"],"source":source,"preset":p,"verbs":verbs,"defaults":details,
                 "thumb":p["values"]["profile"]["library"].as_str().map(|k|format!("profile:{k}"))}));
+        }
+        // Presets saved to a project, My library or a shared library.
+        let scene = ctx.getattr_opt("scene")?.filter(|s| s.hasattr("_root").unwrap_or(false));
+        for mut row in super::destinations::items(py, scene.as_ref(), &["presets"])? {
+            let mut rows: Vec<Value> = details(&row["preset"]).into_iter().map(|d| json!(d)).collect();
+            rows.extend(row["defaults"].as_array().cloned().unwrap_or_default());
+            row["defaults"] = json!(rows);
+            row["thumb"] = json!(row["preset"]["values"]["profile"]["library"].as_str().map(|k| format!("profile:{k}")));
+            items.push(row);
         }
         json(py)?.call_method1("loads", (json!(items).to_string(),))
     }
@@ -372,7 +314,8 @@ impl PresetsProvider {
         let data = item.get_item("preset")?;
         let mut p: Value = serde_json::from_str(&dumps(py, &data)?)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        let personal = item.get_item("source")?.eq("mine")?;
+        let lib: Option<String> = if item.contains("lib")? { Some(item.get_item("key")?.extract()?) } else { None };
+        let personal = item.get_item("source")?.eq("mine")? || lib.is_some();
         match verb {
             "apply" if p["primitive"] == "repeat" => {
                 let scene = ctx.getattr("scene")?;
@@ -420,6 +363,7 @@ impl PresetsProvider {
                 } else {
                     "Edit project preset"
                 },
+                lib,
             )?,
             "duplicate" => {
                 p["uid"] = json!(uid(py)?);
@@ -500,11 +444,9 @@ pub(crate) fn capture_preset(win: &Bound<'_, PyAny>, group: &Bound<'_, PyAny>) -
         if let Some(fields) = record.as_object_mut() {
             fields.retain(|k, _| matches!(k.as_str(), "class" | "predefined_type" | "object_type" | "material"));
         }
-        return edit(
-            &ctx,
-            json!({"uid":uid(py)?,"name":group.getattr("name")?.extract::<String>()?,"pack":"This project","node":"","primitive":"repeat","values":values,"record":record,"locks":{},"naming":"","rev":1}),
-            "Save as preset",
-        );
+        let name = group.getattr("name")?.extract::<String>()?;
+        let preset = json!({"uid":uid(py)?,"name":name,"pack":"My presets","node":"","primitive":"repeat","values":values,"record":record,"locks":{},"naming":"","rev":1});
+        return super::destinations::save_preset(win, &name, preset);
     }
     let row: Value = serde_json::from_str(&dumps(py, &row)?)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
@@ -550,9 +492,8 @@ pub(crate) fn capture_preset(win: &Bound<'_, PyAny>, group: &Bound<'_, PyAny>) -
             .ok_or_else(|| PyValueError::new_err("Missing sketch"))?;
         values["profile"] = json!({"drawing":drawing});
     }
-    edit(
-        &ctx,
-        json!({"uid":uid(py)?,"name":group.getattr("name")?.str()?.to_string(),"pack":"This project","node":"","primitive":"sweep","values":values,"record":record,"locks":{"profile":"fixed"},"naming":"","rev":1}),
-        "Save as preset",
-    )
+    let name = group.getattr("name")?.str()?.to_string();
+    let id = uid(py)?;
+    let preset = json!({"uid":id,"name":name,"pack":"My presets","node":"","primitive":"sweep","values":values,"record":record,"locks":{"profile":"fixed"},"naming":"","rev":1});
+    super::destinations::save_preset(win, &name, preset)
 }

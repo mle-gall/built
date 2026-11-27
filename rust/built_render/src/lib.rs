@@ -93,6 +93,7 @@ mod settings_rows;
 mod settings_host;
 mod library_host;
 mod library_collections;
+pub(crate) mod library_store;
 mod start_host;
 mod forms_host;
 mod dialogs_host;

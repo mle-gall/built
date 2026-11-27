@@ -10,6 +10,7 @@
 //! where its value lives; `preferences.rs` owns the catalogue, the device
 //! model and the sheet's state (`PreferencesView`).
 use crate::settings_rows::{env, func, none, obj, opt, s, section_groups, tr, trf};
+mod library;
 mod site_requests;
 use pyo3::{
     prelude::*,
@@ -281,6 +282,9 @@ impl SettingsSheet {
         }
         if sid == "keyboard" {
             return Self::keyboard_pane(sheet, &c, keyboard);
+        }
+        if sid == "library" {
+            return library::pane(&c);
         }
         for g in slf.call_method1("groups", (envb, &sid))?.try_iter()? {
             let g = g?;
@@ -1125,6 +1129,7 @@ impl SettingsSheet {
                     let (command, _): (String, String) = py.import("plugins.ai_bridge")?.call_method1("setup_command", (&client,))?.extract()?;
                     let copied = crate::report_sheets::copy_text(py, &command)?;
                     note(slf, &tr(py, if copied { "Setup copied" } else { "Could not reach the clipboard" })?, if copied { "ok" } else { "error" })?;
+                } else if library::act(slf, &arg)? {
                 } else if arg.starts_with("ndof_") {
                     slf.call_method1("_ndof_verb", (&arg,))?;
                 } else if arg == "restore" {

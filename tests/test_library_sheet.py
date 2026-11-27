@@ -89,7 +89,7 @@ def test_browse_all_opens_the_sheet_on_the_models_materials(win):
     assert sh["id"] == "library"
     assert [(t["id"], t["on"], t["enabled"]) for t in sh["tabs"]] == [
         ("materials", True, True), ("components", False, True), ("families", False, True),
-        ("profiles", False, True), ("presets", False, True)]
+        ("profiles", False, True), ("presets", False, True), ("styles", False, True)]
     assert sh["search"]["placeholder"] == "Search all materials"
     side = [(s["id"], s["label"]) for s in sh["side"]]
     assert side[:4] == [("s:model", "In this model"), ("s:recent", "Recently used"), ("s:mine", "My library"),

@@ -1123,6 +1123,19 @@ pub mod molecules {
     pub fn ring(ui: &mut egui::Ui) {
         ui.add(egui::Spinner::new().size(14.0).color(INK_2));
     }
+    /// Where a library item lives ("My library", a shared library's name):
+    /// a small dark chip on the bottom-left corner of its picture.
+    pub fn source_chip(painter: &egui::Painter, picture: Rect, label: &str) {
+        let max = (picture.width() - 12.0).max(24.0);
+        let mut job = egui::text::LayoutJob::single_section(label.to_owned(), egui::TextFormat { font_id: meta(), color: INK, ..Default::default() });
+        job.wrap.max_width = max - 8.0;
+        job.wrap.max_rows = 1;
+        job.wrap.break_anywhere = true;
+        let g = painter.layout_job(job);
+        let chip = Rect::from_min_size(pos2(picture.left() + 6.0, picture.bottom() - 22.0), vec2(g.size().x + 8.0, 16.0));
+        painter.rect_filled(chip, CornerRadius::same(8), IMAGE_BACK);
+        painter.galley(chip.center() - g.size() / 2.0, g, INK);
+    }
     /// Kept for callers: a status chip.
     pub fn badge(ui: &mut egui::Ui, label: &str, tone: Color32) {
         status_chip(ui, label, tone)

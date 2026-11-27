@@ -39,6 +39,9 @@ pub struct Item {
     pub short: Option<String>,
     #[serde(deserialize_with = "lenient")]
     pub source: String,
+    /// Where a saved item lives, as shown ("My library", a shared library's name).
+    #[serde(deserialize_with = "lenient", skip_serializing_if = "String::is_empty")]
+    pub source_label: String,
     #[serde(deserialize_with = "lenient")]
     pub category: String,
     /// colour | image; None: any facet keeps it.
@@ -64,6 +67,55 @@ impl Item {
     fn shown(&self) -> &str {
         self.label.as_deref().filter(|l| !l.is_empty()).unwrap_or(&self.name)
     }
+
+    /// Where it lives, in the words of the Source rows.
+    pub(crate) fn place(&self) -> String {
+        if !self.source_label.is_empty() {
+            return self.source_label.clone();
+        }
+        match self.source.as_str() {
+            "model" => "This model".into(),
+            "project" => "This project".into(),
+            "mine" | "local" => "My library".into(),
+            "bundled" => "Bundled".into(),
+            "linked" => base_name(self.file.as_deref().unwrap_or("Linked file")),
+            s if s.starts_with("shared:") => s["shared:".len()..].to_owned(),
+            s if s.starts_with("collection:") => "My library".into(),
+            _ => String::new(),
+        }
+    }
+}
+
+/// The side list's scopes for these items: the fixed ones, This project and
+/// each shared library when they hold something, Built's bundled last.
+pub fn scopes(items: &[Item]) -> Vec<(String, String)> {
+    let mut out: Vec<(String, String)> = vec![("model".into(), "In this model".into()), ("recent".into(), "Recently used".into())];
+    if items.iter().any(|e| e.source == "project") {
+        out.push(("project".into(), "This project".into()));
+    }
+    out.push(("mine".into(), "My library".into()));
+    let mut shared: Vec<(String, String)> = Vec::new();
+    for e in items.iter().filter(|e| e.source.starts_with("shared:")) {
+        if !shared.iter().any(|s| s.0 == e.source) {
+            shared.push((e.source.clone(), e.place()));
+        }
+    }
+    shared.sort_by(|a, b| by_name(&a.1, &b.1));
+    out.extend(shared);
+    out.push(("bundled".into(), "Bundled".into()));
+    out
+}
+
+/// `c:<scope>:<category>` → (scope, category); a shared library's scope is
+/// `shared:<name>`.
+fn category_scope(rest: &str) -> (&str, &str) {
+    if let Some(after) = rest.strip_prefix("shared:") {
+        if let Some(i) = after.find(':') {
+            return (&rest[..7 + i], &after[i + 1..]);
+        }
+        return (rest, "");
+    }
+    rest.split_once(':').unwrap_or((rest, ""))
 }
 
 #[derive(Deserialize, Default, Debug)]
@@ -89,15 +141,25 @@ pub const SCOPES: [(&str, &str); 4] = [("model", "In this model"), ("recent", "R
 pub const FACETS: [(&str, &str); 3] = [("facet:all", "Every base"), ("facet:colour", "Colour bases"),
     ("facet:image", "Image bases")];
 /// Verb ids and their menu labels (a type relabels "apply").
-pub const VERBS: [(&str, &str); 12] = [("apply", "Use"), ("edit", "Edit in the inspector"), ("duplicate", "Duplicate"),
-    ("rename", "Rename"), ("keep", "Add to My library"), ("unkeep", "Remove from My library"),
+pub const VERBS: [(&str, &str); 20] = [("apply", "Use"), ("edit", "Edit in the inspector"), ("duplicate", "Duplicate"),
+    ("rename", "Rename"), ("keep", "Save to Library…"), ("unkeep", "Remove from My library"),
     ("select", "Select uses"), ("replace", "Replace selection with this"), ("keepfile", "Keep when unused"),
-    ("unkeepfile", "Stop keeping in file"), ("delete", "Delete…"), ("-", "")];
+    ("unkeepfile", "Stop keeping in file"), ("delete", "Delete…"), ("save", "Save to Library…"),
+    ("libedit", "Edit name and tags…"), ("copyto", "Copy to…"), ("moveto", "Move to…"), ("update", "Update to the newer revision"),
+    ("reveal", REVEAL), ("libdelete", "Delete…"), ("export", "Export pack…"), ("-", "")];
+/// Showing a file where the system keeps it.
+#[cfg(target_os = "macos")]
+pub const REVEAL: &str = "Reveal in Finder";
+#[cfg(windows)]
+pub const REVEAL: &str = "Show in Explorer";
+#[cfg(not(any(target_os = "macos", windows)))]
+pub const REVEAL: &str = "Show in folder";
 /// A search lists at most this many items per group (the category shows them all).
 
 
 /// What differs per resource type: (id, apply label, empty text).
-const TYPES: [(&str, &str, &str); 5] = [
+const TYPES: [(&str, &str, &str); 6] = [
+    ("styles", "Use this style", "Save a style from the Display panel: Save style…"),
     ("presets","Use in Sweep","No presets in this collection."),
     ("materials", "Paint with it", "No materials yet."),
     ("components", "Place a copy", "No components yet."),
@@ -216,7 +278,7 @@ pub fn in_scope<'a>(items: &'a [Item], scope: &str, recent: &[String]) -> Vec<&'
         return items.iter().filter(|e| e.source == "linked" && e.file.as_deref() == Some(path)).collect();
     }
     if let Some(rest) = scope.strip_prefix("c:") {
-        let (sec, cat) = rest.split_once(':').unwrap_or((rest, ""));
+        let (sec, cat) = category_scope(rest);
         return items.iter().filter(|e| e.source == sec && e.category == cat).collect();
     }
     let sec = scope.get(2..).unwrap_or("");
@@ -233,10 +295,11 @@ pub type SideRow = (String, String, usize, u8, String, Option<bool>);
 /// The side list. Bundled folds open on its categories.
 pub fn side_rows(items: &[Item], st: &Browse) -> Vec<SideRow> {
     let mut out = vec![];
-    for (sec, title) in SCOPES {
+    for (sec, title) in scopes(items) {
+        let (sec, title) = (sec.as_str(), title.as_str());
         let group = in_scope(items, &format!("s:{sec}"), &st.recent);
         let mut cats: Vec<&str> = vec![];
-        if matches!(sec, "model" | "bundled" | "mine") {
+        if sec != "recent" {
             let set: BTreeSet<&str> = group.iter().map(|e| e.category.as_str()).filter(|c| !c.is_empty()).collect();
             cats = set.into_iter().collect();
             cats.sort_by(|a, b| by_name(a, b));
@@ -275,7 +338,13 @@ pub fn scope_title(scope: &str) -> String {
         return base_name(path);
     }
     if let Some(rest) = scope.strip_prefix("c:") {
-        return rest.split_once(':').map_or("", |x| x.1).to_owned();
+        return category_scope(rest).1.to_owned();
+    }
+    if scope == "s:project" {
+        return "This project".into();
+    }
+    if let Some(name) = scope.strip_prefix("s:shared:") {
+        return name.to_owned();
     }
     SCOPES.iter().find(|s| Some(s.0) == scope.get(2..)).map_or("", |s| s.1).to_owned()
 }
@@ -300,7 +369,8 @@ pub fn groups_for<'a>(items: &'a [Item], st: &Browse) -> Vec<(String, String, Ve
     if searching(st) && !scope.starts_with("s:collection:") && !items.iter().any(|e| e.source.starts_with("collection:")) {
         let mut out = vec![];
         let found = filtered(items, st);
-        for (sec, title) in SCOPES {
+        for (sec, title) in scopes(items) {
+            let (sec, title) = (sec.as_str(), title.as_str());
             if sec == "recent" {
                 continue;
             }
@@ -325,7 +395,7 @@ pub fn groups_for<'a>(items: &'a [Item], st: &Browse) -> Vec<(String, String, Ve
     if scope != "s:recent" {
         members = sorted(members, &st.sort, &st.recent);
     }
-    if matches!(scope, "s:model" | "s:mine" | "s:bundled") {
+    if matches!(scope, "s:model" | "s:mine" | "s:bundled" | "s:project") || scope.starts_with("s:shared:") {
         let cats = categories(&members);
         if cats.len() > 1 || cats.first().is_some_and(|c| !c.is_empty()) {
             return cats.into_iter().map(|c| (c.to_owned(), String::new(),
@@ -470,6 +540,7 @@ fn tile(t: &str, e: &Item, current: Option<&str>, thumbs: &mut Vec<String>, labe
         component_source: if t=="components" {facets::source(e).into()} else {String::new()},
         kind: if matches!(t, "components" | "families") { "placeable".into() } else { String::new() },
         icon: icon(e, thumbs), hex: e.hex.clone().unwrap_or_default(), menu,
+        place: if t == "components" { String::new() } else { e.place() },
         on: current.is_some_and(|c| c == e.name), tip: e.name.clone(), fold: -1, ..Default::default()
     }
 }
@@ -477,6 +548,9 @@ fn tile(t: &str, e: &Item, current: Option<&str>, thumbs: &mut Vec<String>, labe
 pub(crate) fn detail(inp: &Input, e: &Item, thumbs: &mut Vec<String>) -> Vec<Value> {
     let mut out = vec![block("picture", json!({"icon": icon(e, thumbs), "hex": e.hex.clone().unwrap_or_default(),
                                                "size": 180.0}))];
+    if e.key.starts_with("saved:") {
+        return saved_detail(inp, e, out);
+    }
     let where_ = match e.source.as_str() {
         "model" => "In this model".to_owned(),
         "mine" => "My library".to_owned(),
@@ -508,6 +582,11 @@ pub(crate) fn detail(inp: &Input, e: &Item, thumbs: &mut Vec<String>) -> Vec<Val
         out.push(block("kv", json!({"rows":[["IFC class", facets::class(e), ""],["Source", facets::source(e), ""]]})));
         return out;
     }
+    if inp.kind == "styles" {
+        out.push(block("buttons", json!({"buttons": [verb("apply", "Use this style", "↩", PRIMARY)], "align": "fill"})));
+        out.push(block("text", json!({"text": "Built's own style. Change it in the Display panel, then Save style… keeps your version.", "tone": "faint"})));
+        return out;
+    }
     let buttons = |list: Vec<Value>, align: &str| block("buttons", json!({"buttons": list, "align": align}));
     match e.key.split_once(':').map_or("", |x| x.0) {
         "uc" => {
@@ -525,7 +604,7 @@ pub(crate) fn detail(inp: &Input, e: &Item, thumbs: &mut Vec<String>) -> Vec<Val
             out.push(block("kv", json!({"rows": [["Used by", objects(e.uses), ""]]})));
             out.push(buttons(vec![verb("apply", "Paint with it", "↩", PRIMARY), verb("edit", "Edit in inspector", "", 0),
                                   verb("select", "Select uses", "", 0)], "fill"));
-            out.push(buttons(vec![verb("duplicate", "Duplicate", "", QUIET), verb("keep", "Add to My library", "", QUIET),
+            out.push(buttons(vec![verb("duplicate", "Duplicate", "", QUIET), verb("keep", "Save to Library…", "", QUIET),
                                   verb("delete", "Delete…", "", QUIET)], "left"));
         }
         _ => {
@@ -555,9 +634,49 @@ pub(crate) fn detail(inp: &Input, e: &Item, thumbs: &mut Vec<String>) -> Vec<Val
     out
 }
 
+/// A saved item's details: where it is, its words, and what can be done
+/// with it there.
+fn saved_detail(inp: &Input, e: &Item, mut out: Vec<Value>) -> Vec<Value> {
+    let writable = e.verbs.iter().any(|v| v == "libdelete");
+    // "Saved in" names the place; the heading only says what cannot change.
+    let right = if writable { e.place() } else { "Read-only".to_owned() };
+    out.push(block("heading", json!({"text": e.shown(), "right": right})));
+    let primary = match inp.kind.as_str() {
+        "materials" => "Paint with it",
+        "components" => "Place a copy",
+        "styles" => "Use this style",
+        "presets" if e.defaults.iter().any(|r| r.0.starts_with("cutter_kind")) => "Use in Cut",
+        "presets" | "profiles" => "Use in Sweep",
+        _ => "Use",
+    };
+    let mut first = Vec::new();
+    if e.verbs.iter().any(|v| v == "apply") {
+        first.push(verb("apply", primary, "↩", PRIMARY));
+    }
+    if e.verbs.iter().any(|v| v == "edit") {
+        first.push(verb("edit", "Open the drawing", if first.is_empty() { "↩" } else { "" }, if first.is_empty() { PRIMARY } else { 0 }));
+    }
+    if !first.is_empty() {
+        out.push(block("buttons", json!({"buttons": first, "align": "fill"})));
+    }
+    out.push(block("kv", json!({"rows": e.defaults})));
+    // Two short rows: where it goes, then what it is (the pane is narrow).
+    for row in [&[("update", "Update"), ("copyto", "Copy to…"), ("moveto", "Move to…")][..], &[("libedit", "Edit…"), ("reveal", REVEAL), ("libdelete", "Delete…")][..]] {
+        let actions: Vec<Value> = row.iter()
+            .filter(|(id, _)| e.verbs.iter().any(|v| v == id))
+            .map(|(id, title)| verb(id, title, "", QUIET))
+            .collect();
+        if !actions.is_empty() {
+            out.push(block("buttons", json!({"buttons": actions, "align": "left"})));
+        }
+    }
+    out
+}
+
 fn empty_text(t: &str, scope: &str) -> String {
     match scope {
-        "s:mine" => "Keep a material for every project: Add to My library, on a material of this model.".into(),
+        "s:mine" if t == "materials" => "Keep a material for every project: Save to Library…, on a material of this model.".into(),
+        "s:mine" => "Nothing of this type in My library yet: Save to Library… keeps one for every model.".into(),
         "s:recent" => "What you used last shows here.".into(),
         "s:model" => {
             let e = kind(t).2;
@@ -630,7 +749,7 @@ pub(crate) fn sheet_rows(inp: &Input, mut native: Option<&mut RowGroups>) -> Val
             Vec::new()
         } else {
             tiles.map(|it| prune(json!({"id": it.id, "right": it.right, "kind": it.kind, "label": it.label,
-                "sub": it.sub, "component_source":it.component_source, "icon": it.icon, "hex": it.hex, "menu": it.menu, "on": it.on, "tip": it.tip}))).collect()
+                "sub": it.sub, "component_source":it.component_source, "place": it.place, "icon": it.icon, "hex": it.hex, "menu": it.menu, "on": it.on, "tip": it.tip}))).collect()
         };
         json!({"caption": cap, "right": sub, "tiles": wire})
     }).collect();
@@ -735,6 +854,40 @@ mod tests {
     fn it(key: &str, name: &str, source: &str, category: &str, uses: i64) -> Item {
         Item { key: key.into(), name: name.into(), source: source.into(), category: category.into(), uses,
                base: Some("colour".into()), ..Default::default() }
+    }
+
+    #[test]
+    fn saved_items_list_under_their_destination() {
+        let mut team = it("saved:styles:a:shared:Team", "Clay", "shared:Team", "Warm", 0);
+        team.source_label = "Team".into();
+        let items = vec![it("m:a", "Alpha", "model", "", 1), it("saved:styles:b:project", "Site", "project", "", 0), team,
+                         it("saved:styles:c:mine", "Mine", "mine", "", 0), it("style:Default", "Default", "bundled", "", 0)];
+        let ids: Vec<String> = scopes(&items).into_iter().map(|s| s.0).collect();
+        assert_eq!(ids, ["model", "recent", "project", "mine", "shared:Team", "bundled"]);
+        let st = Browse::default();
+        let side = side_rows(&items, &st);
+        assert!(side.iter().any(|r| r.0 == "s:shared:Team" && r.1 == "Team" && r.2 == 1));
+        assert!(side.iter().any(|r| r.0 == "c:shared:Team:Warm" && r.2 == 1));
+        assert_eq!(in_scope(&items, "c:shared:Team:Warm", &[]).len(), 1);
+        assert_eq!(scope_title("s:shared:Team"), "Team");
+        assert_eq!(scope_title("s:project"), "This project");
+        assert_eq!(items[2].place(), "Team");
+        assert_eq!(items[4].place(), "Bundled");
+        let style = detail(&Input { kind: "styles".into(), ..Default::default() }, &items[4], &mut Vec::new());
+        assert_eq!(style[2]["buttons"][0]["label"], "Use this style");
+        // Without project or shared items those rows are not offered.
+        let ids: Vec<String> = scopes(&items[..1]).into_iter().map(|s| s.0).collect();
+        assert_eq!(ids, ["model", "recent", "mine", "bundled"]);
+        // A saved item's details name where it is and what can be done there.
+        let mut saved = items[3].clone();
+        saved.verbs = vec!["apply".into(), "copyto".into(), "moveto".into(), "reveal".into(), "libdelete".into()];
+        let inp = Input { kind: "styles".into(), ..Default::default() };
+        let blocks = detail(&inp, &saved, &mut Vec::new());
+        assert_eq!(blocks[1]["right"], "My library");
+        let ids: Vec<&str> = blocks[blocks.len() - 2..].iter().flat_map(|b| b["buttons"].as_array().unwrap()).map(|b| b["id"].as_str().unwrap()).collect();
+        assert_eq!(ids, ["copyto", "moveto", "reveal", "libdelete"]);
+        saved.verbs = vec!["apply".into(), "copyto".into()];
+        assert_eq!(detail(&inp, &saved, &mut Vec::new())[1]["right"], "Read-only");
     }
 
     #[test]

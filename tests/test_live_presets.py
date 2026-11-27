@@ -180,15 +180,19 @@ def test_starter_presets_file_into_a_new_node():
     assert preset["node"] not in bim_registry.get(scene).get("structure", {}).get("nodes", {})
 
 
-def test_saved_preset_can_be_edited_and_deleted_in_my_library(tmp_path, monkeypatch):
+def test_saved_preset_can_be_edited_and_deleted_in_my_library(native_host, monkeypatch):
+    """A preset saved in the older folder is copied into My library; from
+    then on its Library copy is the one edited (a new revision) and deleted,
+    and the old file stays as it was."""
     import json
     from pathlib import Path
     from types import SimpleNamespace
 
     from built_render import chrome_forms
+    from built_render import wgpu_library as L
     from built_render.wgpu_library import PresetsProvider, ProfilesProvider
 
-    monkeypatch.setenv("BUILT_SETTINGS_DIR", str(tmp_path))
+    win = native_host.window
     folder = Path(ProfilesProvider.saved_directory()).with_name("presets")
     folder.mkdir(parents=True)
     path = folder / "personal.builtpreset"
@@ -196,13 +200,16 @@ def test_saved_preset_can_be_edited_and_deleted_in_my_library(tmp_path, monkeypa
     path.write_text(json.dumps(preset))
     forms = []
     monkeypatch.setattr(chrome_forms, "show", lambda win, form: forms.append(form))
-    ctx = SimpleNamespace(win=None, scene=Scene(), flash=lambda text: None)
+    flashed = []
+    ctx = SimpleNamespace(win=win, view=win.view, vp=win.viewport, scene=win.viewport.scene, flash=flashed.append)
     provider = PresetsProvider()
     mine, = [p for p in provider.items(ctx) if p["source"] == "mine"]
+    assert mine["lib"]["id"] == "0000000100000001"
     provider.run(ctx, "edit", mine)
     form, = forms
     form.on_done("ok", dict(form.values(), name="Personal rafter"))
-    changed = json.loads(path.read_text())
-    assert changed["name"] == "Personal rafter" and changed["rev"] == preset["rev"] + 1
-    provider.confirmed(ctx, "delete_saved", mine["key"], "")
-    assert not path.exists()
+    saved, = L.library_items("presets", win.viewport.scene)
+    assert saved["name"] == "Personal rafter" and saved["lib"]["rev"] == preset.get("rev", 1) + 1
+    assert json.loads(path.read_text()) == preset
+    L.confirmed(win, win.view, ("libdelete", "presets", saved["key"]), "")
+    assert L.library_items("presets", win.viewport.scene) == []

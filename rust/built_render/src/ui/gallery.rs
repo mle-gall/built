@@ -672,6 +672,10 @@ impl Gallery {
         paint_focus(ui, focus, R_INSET);
         let row = Rect::from_min_size(pos2(ax + 92., ay - 4.), vec2(70., ROW_H));
         paint_selected_row(ui, row);
+        // A library tile's source chip (where the item lives).
+        let tile = Rect::from_min_size(pos2(ax + 170., ay - 26.), vec2(84., 48.));
+        ui.painter().rect_filled(tile, R_INSET, CONTROL);
+        source_chip(ui.painter(), tile, "My library");
         put(ui, Rect::from_min_size(pos2(x, ay + 24.), vec2(260., CONTROL_H)), across(), |ui| {
             badge(ui, "Packed", PACKED);
             swatch(ui, &mut self.swatch);

@@ -74,6 +74,7 @@ pub(crate) fn append<'p>(
     let module = py.import("built_core.style")?;
     let rows = PyList::empty(py);
     let names = PyList::empty(py);
+    let mut seen = Vec::new();
     for coll in [
         module.getattr("BUILTIN_STYLES")?,
         module.call_method0("user_styles")?,
@@ -81,6 +82,14 @@ pub(crate) fn append<'p>(
         for item in coll.try_iter()? {
             let name: String = item?.getattr("name")?.extract()?;
             names.append((&name, tr(py, &name)?))?;
+            seen.push(name);
+        }
+    }
+    // Styles saved to the Library (this model, the project, My library, shared ones).
+    for e in crate::library_host::destinations::style_entries(py, Some(&scene))? {
+        if !seen.contains(&e.name) {
+            names.append((&e.name, e.name.clone()))?;
+            seen.push(e.name);
         }
     }
     let read = |key: &'static str| {
@@ -96,9 +105,15 @@ pub(crate) fn append<'p>(
         Some(read("name")?),
         Some(func(py, |py, a| {
             let env = a.get_item(0)?;
-            let style = py
+            let mut style = py
                 .import("built_core.style")?
                 .call_method1("style_by_name", (a.get_item(1)?,))?;
+            if style.is_none() {
+                let name: String = a.get_item(1)?.extract()?;
+                if let Some(saved) = crate::library_host::destinations::style_named(py, Some(&env.getattr("scene")?), &name)? {
+                    style = saved;
+                }
+            }
             if !style.is_none() {
                 let win = env.getattr("win")?;
                 win.call_method1("set_active_style", (&style,))?;
@@ -193,42 +208,19 @@ pub(crate) fn append<'p>(
         &[(
             "press",
             func(py, |py, a| {
+                // The shared Save to Library drawer; a built-in style is saved
+                // under a name of its own.
                 let env = a.get_item(0)?;
-                let style = active(&env)?.call_method0("copy")?.unbind();
-                let owner = env.getattr("win")?.unbind();
-                let done = func(py, move |py, a| {
-                    let raw = a.get_item(0)?;
-                    if let Some(name) = raw
-                        .extract::<Option<String>>()?
-                        .filter(|s| !s.trim().is_empty())
-                    {
-                        style.bind(py).setattr("name", name.trim())?;
-                        let library = py.import("built_core.style")?;
-                        if let Err(error) =
-                            library.call_method1("save_user_style", (style.bind(py),))
-                        {
-                            if !error.is_instance_of::<pyo3::exceptions::PyValueError>(py) {
-                                return Err(error);
-                            }
-                            owner
-                                .bind(py)
-                                .getattr("viewport")?
-                                .call_method1("flash_status", (error.value(py).str()?,))?;
-                        }
-                        crate::sheet_runtime::refresh(owner.bind(py))?;
-                    }
-                    Ok(none(py))
-                })?;
-                py.import("built_render.chrome_forms")?.call_method1(
-                    "ask_text",
-                    (
-                        env.getattr("win")?,
-                        tr(py, "Save style…")?,
-                        tr(py, "Name:")?,
-                        "",
-                        done,
-                    ),
-                )?;
+                let style = active(&env)?;
+                let mut name: String = style.getattr("name")?.extract()?;
+                let builtin = py.import("built_core.style")?.getattr("BUILTIN_STYLES")?.try_iter()?
+                    .any(|s| s.and_then(|s| s.getattr("name")?.eq(&name)).unwrap_or(false));
+                if builtin {
+                    name = format!("{name} {}", tr(py, "copy")?);
+                }
+                let data = py.import("json")?.call_method1("dumps", (style.call_method0("to_dict")?,))?.extract::<String>()?;
+                let id = crate::library_store::stable_id(&format!("style:{name}"));
+                crate::library_host::destinations::save_to_library(&env.getattr("win")?, "styles", &name, &data, Some(id), 1, "", None, None, None, None, None)?;
                 Ok(none(py))
             })?,
         )],
