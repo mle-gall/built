@@ -37,6 +37,9 @@ pub(crate) struct Face {
 #[serde(deny_unknown_fields)]
 pub(crate) struct Topology {
     pub tolerance: f64,
+    /// Display deflection is independent of the model's admission uncertainty.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) display_tolerance: Option<f64>,
     #[serde(default)]
     normal_tolerance: Option<f64>,
     pub(crate) vertices: BTreeMap<u64, DVec3>,
@@ -48,7 +51,7 @@ pub(crate) struct Topology {
 }
 
 impl Curve {
-    fn acceleration(&self, dt: f64) -> Result<f64> {
+    pub(super) fn acceleration(&self, dt: f64) -> Result<f64> {
         Ok(match self {
             Self::Line { .. } => 0.,
             Self::Circle { radius, .. } => radius * dt * dt,
@@ -73,7 +76,12 @@ impl Surface {
         }
     }
 
-    fn angular_steps(&self, a: DVec2, b: DVec2, tolerance: Option<f64>) -> Result<usize> {
+    pub(super) fn angular_steps(
+        &self,
+        a: DVec2,
+        b: DVec2,
+        tolerance: Option<f64>,
+    ) -> Result<usize> {
         let Some(limit) = tolerance else { return Ok(1) };
         let span = self
             .normal_span(a, b)
@@ -88,7 +96,7 @@ impl Surface {
 
     /// Upper bound on the norm of the second derivative along a UV segment,
     /// parameterized from 0 to 1. The cone's radial term varies linearly.
-    fn acceleration(&self, curves: &[Curve], a: DVec2, b: DVec2) -> Result<f64> {
+    pub(super) fn acceleration(&self, curves: &[Curve], a: DVec2, b: DVec2) -> Result<f64> {
         let d = (b - a).abs();
         Ok(match self {
             Self::Plane { .. } => 0.,
@@ -148,7 +156,7 @@ fn lerp(t: [f64; 2], s: f64) -> f64 {
 fn uv_at(a: DVec2, b: DVec2, t: f64) -> DVec2 {
     DVec2::new(lerp([a.x, b.x], t), lerp([a.y, b.y], t))
 }
-fn divisions(bound: f64, tol: f64) -> Result<usize> {
+pub(super) fn divisions(bound: f64, tol: f64) -> Result<usize> {
     let steps = (bound / tol).sqrt().ceil();
     check(
         steps.is_finite() && steps <= 65536.,
@@ -275,7 +283,7 @@ impl Topology {
         serde_json::to_string(&face.loops).map_err(|_| "invalid boundary")
     }
 
-    fn edge_index(&self) -> HashMap<u64, &Edge> {
+    pub(super) fn edge_index(&self) -> HashMap<u64, &Edge> {
         self.edges.iter().map(|e| (e.id, e)).collect()
     }
 
@@ -320,6 +328,11 @@ impl Topology {
                 && self.void_starts.windows(2).all(|w| w[0] < w[1]),
             "invalid void shell partition",
         )?;
+        check(
+            self.display_tolerance
+                .is_none_or(|d| d.is_finite() && d > 0.),
+            "invalid display tolerance",
+        )?;
         let mut ids = std::collections::HashSet::new();
         for f in &self.faces {
             check(ids.insert(f.id), "duplicate exact face id")?;
@@ -329,7 +342,11 @@ impl Topology {
                 .ok_or("missing face support")?;
             check(!f.loops.is_empty(), "missing outer loop")?;
             if f.loops.iter().flatten().any(|c| c.projected) {
-                self.certify_conic_loops(rows, f, s, &index)?;
+                if f.loops.iter().all(|r| r.len() == 1) {
+                    self.certify_conic_loops(rows, f, s, &index)?;
+                } else {
+                    super::projected::certify(self, rows, f, s, &index)?;
+                }
                 continue;
             }
             for ring in &f.loops {
@@ -397,7 +414,7 @@ fn orient(a: DVec2, b: DVec2, p: DVec2) -> f64 {
 fn on_segment(a: DVec2, b: DVec2, p: DVec2) -> bool {
     orient(a, b, p) == 0. && a.min(b).cmple(p).all() && p.cmple(a.max(b)).all()
 }
-fn crosses(a: DVec2, b: DVec2, c: DVec2, d: DVec2) -> bool {
+pub(super) fn crosses(a: DVec2, b: DVec2, c: DVec2, d: DVec2) -> bool {
     let (x, y, z, w) = (
         orient(a, b, c),
         orient(a, b, d),
@@ -410,7 +427,7 @@ fn crosses(a: DVec2, b: DVec2, c: DVec2, d: DVec2) -> bool {
         || on_segment(c, d, a)
         || on_segment(c, d, b)
 }
-fn inside(segments: impl Iterator<Item = [DVec2; 2]>, p: DVec2) -> bool {
+pub(super) fn inside(segments: impl Iterator<Item = [DVec2; 2]>, p: DVec2) -> bool {
     segments
         .filter(|&[a, b]| (a.y > p.y) != (b.y > p.y) && ((b.y > a.y) == (orient(a, b, p) > 0.)))
         .count()
@@ -489,6 +506,17 @@ impl Topology {
     /// Build one conforming mesh for all faces. A reversed coedge reads the
     /// same vertex indices backwards. A full periodic edge ends at its start.
     pub fn mesh(&self, rows: &Rows) -> Result<Mesh> {
+        let deflection = self.display_tolerance.unwrap_or(self.tolerance);
+        if let Some(mesh) =
+            super::ruled_mesh::capped(self, rows, self.normal_tolerance, deflection)?
+        {
+            return Ok(mesh);
+        }
+        if let Some(mesh) =
+            super::ruled_mesh::rectangle(self, rows, self.normal_tolerance, deflection)?
+        {
+            return Ok(mesh);
+        }
         let mut mesh = Mesh::default();
         let mut vertices = HashMap::new();
         for (&id, p) in &self.vertices {
@@ -518,7 +546,7 @@ impl Topology {
             let n = divisions(
                 c.acceleration(e.interval[1] - e.interval[0])?
                     .max(acceleration),
-                self.tolerance / 4.,
+                deflection / 4.,
             )?
             .max(angular_steps);
             check(
@@ -545,7 +573,7 @@ impl Topology {
                 f,
                 &edges,
                 &vertices,
-                self.tolerance,
+                deflection,
                 self.normal_tolerance,
             )?;
         }
@@ -577,6 +605,9 @@ impl Mesh {
         tol: f64,
         angle: Option<f64>,
     ) -> Result<()> {
+        if super::ruled_mesh::strip(self, rows, f, edges, tol, angle)? {
+            return Ok(());
+        }
         use spade::{ConstrainedDelaunayTriangulation, Triangulation};
         let surface = &rows.surfaces[f.surface as usize];
         let mut corners = Vec::new();

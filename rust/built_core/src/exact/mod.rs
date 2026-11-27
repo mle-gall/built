@@ -4,9 +4,11 @@
 pub(crate) mod file;
 pub(crate) mod patch;
 mod spline;
+mod projected;
+mod ruled_mesh;
 use glam::{DQuat, DVec3, DVec4};
 use serde::{Deserialize, Serialize};
-use spline::Axis;
+pub(crate) use spline::Axis;
 use std::f64::consts::FRAC_PI_2;
 
 type Result<T> = std::result::Result<T, &'static str>;

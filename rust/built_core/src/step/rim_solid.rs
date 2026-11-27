@@ -23,6 +23,9 @@ pub(super) fn recover(st: &Store) -> Result<NativePatch, &'static str> {
     let mut count = 0;
     for f in st.live_slots(Kind::Face) {
         if let Some(strip) = st.source_strip(f) {
+            if strip.swept.is_some() {
+                return Err("not a ruled band");
+            }
             if side.is_some_and(|g| g != strip.group) {
                 return Err("multiple independent ruled bands");
             }

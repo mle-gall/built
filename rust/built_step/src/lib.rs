@@ -56,7 +56,7 @@ fn missing_name_offset(source: &[u8]) -> Option<usize> {
 }
 
 pub mod planar;
-mod sheet;
+pub mod sheet;
 #[derive(Clone, Copy, Debug)]
 pub enum Measure {
     Volume(f64),
@@ -85,9 +85,18 @@ pub struct Definition<B = planar::Body> {
 /// Writes planar solids, one product per definition. Validate the file on disk
 /// before replacing an existing destination, including for in-place conversions.
 pub fn write_document(definitions: &[Definition], path: &Path) -> Result<(), String> {
-    write_checked(definitions, path, 1e-7, planar::Body::add, |_, s, m| {
-        Ok(Measure::Volume(planar::Body::from_solid(s, m)?.volume()?))
-    })
+    write_checked(
+        definitions,
+        path,
+        1e-7,
+        planar::Body::add,
+        |_, s, m| Ok(Measure::Volume(planar::Body::from_solid(s, m)?.volume()?)),
+        |_, sh, sense, m| {
+            Ok(Measure::Area(
+                planar::Body::from_shell(sh, sense, m)?.area()?,
+            ))
+        },
+    )
 }
 
 pub fn write_checked<B>(
@@ -96,6 +105,12 @@ pub fn write_checked<B>(
     uncertainty_mm: f64,
     add: impl Fn(&B, &mut step_io::StepBuilder, step_io::build::Part, &str) -> Result<Measure, String>,
     measure: impl Fn(&StepModel, step_io::scene::Solid<'_>, f64) -> Result<Measure, String>,
+    measure_sheet: impl Fn(
+        &StepModel,
+        step_io::scene::Shell<'_>,
+        step_io::Orientation,
+        f64,
+    ) -> Result<Measure, String>,
 ) -> Result<(), String> {
     let mut builder = step_io::StepBuilder::new_with(&step_io::build::UnitsInput {
         uncertainty: uncertainty_mm,
@@ -158,9 +173,7 @@ pub fn write_checked<B>(
     }
     for sheet in scene.all_surface_models() {
         for (shell, sense) in sheet.shells() {
-            restored.push(Measure::Area(
-                planar::Body::from_shell(shell, sense, metres)?.area()?,
-            ));
+            restored.push(measure_sheet(&check.0, shell, sense, metres)?);
         }
     }
     let order = |a: &Measure, b: &Measure| {
@@ -188,4 +201,65 @@ pub fn write_checked<B>(
     }
     tmp.persist(path).map_err(|e| e.to_string())?;
     Ok(())
+}
+
+/// Source labels are diagnostics only. The typed reader packs each simple
+/// entity arena in ascending Part 21 id order after dropping unresolved rows.
+pub struct SourceIds(std::collections::HashMap<String, Vec<u64>>);
+impl SourceIds {
+    pub fn new(bytes: &[u8], exchange: &Exchange) -> Self {
+        use std::collections::{HashMap, HashSet};
+        let mut ids = HashMap::<String, Vec<u64>>::new();
+        let dropped: HashSet<_> = exchange.report.dropped.iter().map(|r| r.0).collect();
+        let offset = exchange
+            .synthetic_file_name
+            .then(|| missing_name_offset(bytes))
+            .flatten();
+        let mut input: Box<dyn Read + '_> = if let Some(i) = offset {
+            Box::new(
+                (&bytes[..i])
+                    .chain(b"\nFILE_NAME('','',(''),(''),'','','');\n".as_slice())
+                    .chain(&bytes[i..]),
+            )
+        } else {
+            Box::new(bytes)
+        };
+        if let Ok(stream) = step_io::parser::stream(&mut input) {
+            for record in stream {
+                if let Ok(step_io::parser::RawEntity::Simple { id, name, .. }) = record {
+                    if !dropped.contains(&id) {
+                        ids.entry(name).or_default().push(id);
+                    }
+                }
+            }
+        }
+        for v in ids.values_mut() {
+            v.sort_unstable();
+        }
+        Self(ids)
+    }
+    pub fn label(&self, model: &StepModel, key: step_io::EntityKey) -> String {
+        use step_io::{model as m, EntityKey as K};
+        macro_rules! slot {
+            ($id:expr,$t:ty) => {
+                ($id.0 as usize, model.all::<$t>().count())
+            };
+        }
+        let (slot, count) = match key {
+            K::ManifoldSolidBrep(i) => slot!(i, m::ManifoldSolidBrep),
+            K::BrepWithVoids(i) => slot!(i, m::BrepWithVoids),
+            K::ClosedShell(i) => slot!(i, m::ClosedShell),
+            K::OpenShell(i) => slot!(i, m::OpenShell),
+            K::ShellBasedSurfaceModel(i) => slot!(i, m::ShellBasedSurfaceModel),
+            K::MappedItem(i) => slot!(i, m::MappedItem),
+            _ => return format!("{key:?}"),
+        };
+        let kind = key.keyword().unwrap_or("ENTITY");
+        if let Some(ids) = self.0.get(kind).filter(|v| v.len() == count) {
+            if let Some(id) = ids.get(slot) {
+                return format!("{kind} #{id}");
+            }
+        }
+        kind.to_string()
+    }
 }

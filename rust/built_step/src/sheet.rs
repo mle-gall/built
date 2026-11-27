@@ -3,11 +3,12 @@ use step_io::{build::Part, model as m, AuthorError, StepBuilder};
 
 /// The high-level builder collects solids. Use the AP242 author for a sheet
 /// and bind its representation to the same product-definition shape.
-pub(crate) fn add(
+pub fn add(
     b: &mut StepBuilder,
     part: Part,
     name: &str,
     faces: Vec<m::AdvancedFaceId>,
+    uncertainty_mm: f64,
 ) -> Result<(), AuthorError> {
     use m::PartialEntity as P;
     let product = b.part_ids(part).shape;
@@ -35,7 +36,7 @@ pub(crate) fn add(
     let precision = a.add_uncertainty_measure_with_unit(
         m::MeasureValue {
             type_name: Some(len),
-            value: m::MeasureScalar::Real(1e-7),
+            value: m::MeasureScalar::Real(uncertainty_mm),
         },
         units[0].clone(),
         "distance_accuracy_value",

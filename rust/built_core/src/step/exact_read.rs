@@ -13,12 +13,13 @@ use std::{collections::HashMap, f64::consts::TAU};
 
 type Result<T> = std::result::Result<T, &'static str>;
 
-struct Geometry<'a> {
-    model: &'a StepModel,
-    metres: f64,
+pub(super) struct Geometry<'a> {
+    pub(super) model: &'a StepModel,
+    pub(super) metres: f64,
+    pub(super) angle: Option<f64>,
 }
 impl Geometry<'_> {
-    fn point(&self, r: &m::CartesianPointRef) -> Result<DVec3> {
+    pub(super) fn point(&self, r: &m::CartesianPointRef) -> Result<DVec3> {
         let m::CartesianPointRef::CartesianPoint(i) = r else {
             return Err("unsupported point");
         };
@@ -29,7 +30,7 @@ impl Geometry<'_> {
             .map_err(|_| "expected 3D point")?;
         Ok(DVec3::from(p) * self.metres)
     }
-    fn direction(&self, r: &m::DirectionRef) -> Result<DVec3> {
+    pub(super) fn direction(&self, r: &m::DirectionRef) -> Result<DVec3> {
         let m::DirectionRef::Direction(i) = r else {
             return Err("unsupported direction");
         };
@@ -73,7 +74,7 @@ impl Geometry<'_> {
         };
         self.frame(*i)
     }
-    fn conic_frame(&self, p: &m::Axis2PlacementRef) -> Result<Frame> {
+    pub(super) fn conic_frame(&self, p: &m::Axis2PlacementRef) -> Result<Frame> {
         let m::Axis2PlacementRef::Axis2Placement3d(i) = p else {
             return Err("expected spatial conic");
         };
@@ -81,12 +82,12 @@ impl Geometry<'_> {
     }
     fn curve(
         &self,
-        c: CurveKind<'_>,
+        handle: built_step::step_io::scene::Curve<'_>,
         a: DVec3,
         b: DVec3,
         closed: bool,
     ) -> Result<(Curve, [f64; 2])> {
-        let (frame, major, minor) = match c {
+        let (frame, major, minor) = match handle.kind() {
             CurveKind::Line(l) => {
                 let origin = self.point(&l.pnt)?;
                 let m::VectorRef::Vector(i) = l.dir else {
@@ -108,6 +109,25 @@ impl Geometry<'_> {
                 c.semi_axis_1 * self.metres,
                 Some(c.semi_axis_2 * self.metres),
             ),
+            CurveKind::BSplineWithKnots(_)
+            | CurveKind::BSpline(_)
+            | CurveKind::Bezier(_)
+            | CurveKind::Uniform(_)
+            | CurveKind::QuasiUniform(_)
+            | CurveKind::Other("COMPLEX" | "RATIONAL_B_SPLINE_CURVE") => {
+                let n = handle.to_nurbs().ok_or("unresolved spline curve")?;
+                if let Some((frame, radius, span)) = super::splines::circular(&n, self.metres) {
+                    return Ok((Curve::Circle { frame, radius }, [0., span]));
+                }
+                let c = super::splines::curve(n, self.metres)?;
+                let Curve::Spline { axis, .. } = &c else {
+                    unreachable!()
+                };
+                let span = super::splines::domain(axis);
+                // STEP may trim the basis to interior vertices. Only a span
+                // with certified endpoints can enter the store.
+                return Ok((c, span));
+            }
             _ => return Err("unsupported STEP curve"),
         };
         let angle = |p: DVec3| {
@@ -135,7 +155,7 @@ impl Geometry<'_> {
         Ok((curve, [t, t + dt]))
     }
 }
-fn uv(s: &Surface, p: DVec3) -> Result<DVec2> {
+fn uv(s: &Surface, p: DVec3, curves: &[Curve], tol: f64) -> Result<DVec2> {
     let (frame, cyl) = match s {
         Surface::Plane { frame } => (frame, false),
         Surface::Cylinder { frame, .. } => (frame, true),
@@ -148,7 +168,34 @@ fn uv(s: &Surface, p: DVec3) -> Result<DVec2> {
                 d.dot(frame.axis) / half_angle.cos(),
             ));
         }
-        _ => return Err("unsupported surface trim"),
+        Surface::Spline { u, v, .. } => {
+            return super::splines::project(
+                s,
+                curves,
+                p,
+                [super::splines::domain(u), super::splines::domain(v)],
+                tol,
+            )
+        }
+        Surface::Torus { frame, major, .. }
+        | Surface::Sphere {
+            frame,
+            radius: major,
+        } => {
+            let d = p - frame.origin;
+            let x = d.dot(frame.reference);
+            let y = d.dot(frame.y());
+            let r = x.hypot(y);
+            let v = if matches!(s, Surface::Torus { .. }) {
+                d.dot(frame.axis).atan2(r - major)
+            } else {
+                d.dot(frame.axis).atan2(r)
+            };
+            return Ok(DVec2::new(y.atan2(x), v));
+        }
+        Surface::Extrusion { .. } | Surface::Revolution { .. } => {
+            return super::swept::uv(s, p, curves)
+        }
     };
     let d = p - frame.origin;
     let x = d.dot(frame.reference);
@@ -160,17 +207,23 @@ fn uv(s: &Surface, p: DVec3) -> Result<DVec2> {
     })
 }
 
-pub(super) fn rows(model: &StepModel, solid: Solid<'_>, metres: f64, tol: f64) -> Result<Rows> {
+pub(super) fn rows(
+    model: &StepModel,
+    solid: Solid<'_>,
+    metres: f64,
+    tol: f64,
+    angle: Option<f64>,
+) -> Result<Rows> {
     let (shell, sense) = solid.outer().ok_or("missing shell")?;
     if !shell.is_closed() {
         return Err("open solid shell");
     }
-    let mut result = shell_rows(model, shell, sense, metres, tol)?;
+    let mut result = shell_rows(model, shell, sense, metres, tol, angle)?;
     for (cavity, orientation) in solid.voids() {
         if !cavity.is_closed() {
             return Err("open interior shell");
         }
-        let cavity = shell_rows(model, cavity, orientation, metres, tol)?;
+        let cavity = shell_rows(model, cavity, orientation, metres, tol, angle)?;
         append_void(&mut result, cavity)?;
     }
     Ok(result)
@@ -221,14 +274,21 @@ pub(super) fn shell_rows(
     sense: Orientation,
     metres: f64,
     tol: f64,
+    angle: Option<f64>,
 ) -> Result<Rows> {
-    let geom = Geometry { model, metres };
+    let geom = Geometry {
+        model,
+        metres,
+        angle,
+    };
     let mut t = Topology::default();
     t.tolerance = tol;
+    t.display_tolerance = Some(tol.max(super::DISPLAY_DEFLECTION));
     let mut rows = Rows::default();
     let mut vertices = HashMap::new();
     let mut edges = HashMap::new();
     let mut surfaces = HashMap::new();
+    let mut flipped = std::collections::HashSet::new();
     let mut incidence = HashMap::<u64, Vec<bool>>::new();
     for face in shell.faces() {
         let s = face.surface();
@@ -246,14 +306,64 @@ pub(super) fn shell_rows(
                 SurfaceKind::Conical(p) => Surface::Cone {
                     frame: geom.surface_frame(&p.position)?,
                     radius: p.radius * metres,
-                    half_angle: p.semi_angle
-                        * model
-                            .scene()
-                            .units()
-                            .angle
-                            .ok_or("missing angle unit")?
-                            .to_si,
+                    half_angle: p.semi_angle * geom.angle.ok_or("missing angle unit")?,
                 },
+                SurfaceKind::LinearExtrusion(p) => {
+                    let generator = rows.curves.len() as u32;
+                    rows.curves.push(geom.profile(&p.swept_curve)?);
+                    let m::VectorRef::Vector(id) = p.extrusion_axis else {
+                        return Err("unresolved sweep vector");
+                    };
+                    let v = &model[id];
+                    Surface::Extrusion {
+                        generator,
+                        vector: geom.direction(&v.orientation)? * v.magnitude * metres,
+                    }
+                }
+                SurfaceKind::Revolution(p) => {
+                    let generator = rows.curves.len() as u32;
+                    rows.curves.push(geom.profile(&p.swept_curve)?);
+                    let m::Axis1PlacementRef::Axis1Placement(id) = p.axis_position else {
+                        return Err("unresolved revolution axis");
+                    };
+                    let frame = &model[id];
+                    flipped.insert(s.key());
+                    Surface::Revolution {
+                        generator,
+                        origin: geom.point(&frame.location)?,
+                        axis: frame
+                            .axis
+                            .as_ref()
+                            .map(|a| geom.direction(a))
+                            .transpose()?
+                            .unwrap_or(DVec3::Z),
+                    }
+                }
+                SurfaceKind::Spherical(p) => Surface::Sphere {
+                    frame: geom.surface_frame(&p.position)?,
+                    radius: p.radius * metres,
+                },
+                SurfaceKind::Toroidal(p) => Surface::Torus {
+                    frame: geom.surface_frame(&p.position)?,
+                    major: p.major_radius * metres,
+                    minor: p.minor_radius * metres,
+                },
+                SurfaceKind::BSpline(_)
+                | SurfaceKind::BSplineWithKnots(_)
+                | SurfaceKind::Uniform(_)
+                | SurfaceKind::QuasiUniform(_)
+                | SurfaceKind::Bezier(_)
+                | SurfaceKind::Other("COMPLEX" | "RATIONAL_B_SPLINE_SURFACE") => {
+                    let n = s.to_nurbs().ok_or("unresolved spline surface")?;
+                    if let Some((surface, flip)) = super::splines::ruled_circle(&n, metres) {
+                        if flip {
+                            flipped.insert(s.key());
+                        }
+                        surface
+                    } else {
+                        super::splines::surface(n, metres)?
+                    }
+                }
                 _ => return Err("unsupported STEP surface"),
             };
             let i = rows.surfaces.len() as u32;
@@ -289,7 +399,7 @@ pub(super) fn shell_rows(
                     }
                     let c = edge.curve();
                     let (curve, interval) = geom.curve(
-                        c.curve_3d().unwrap_or(c).kind(),
+                        c.curve_3d().unwrap_or(c),
                         t.vertices[&pair[0]],
                         t.vertices[&pair[1]],
                         pair[0] == pair[1],
@@ -309,8 +419,13 @@ pub(super) fn shell_rows(
                 incidence.entry(id).or_default().push(reversed);
                 let e = &t.edges[id as usize];
                 let start = reversed as usize;
-                let mut a = uv(support, t.vertices[&e.vertices[start]])?;
-                let mut b = uv(support, t.vertices[&e.vertices[1 - start]])?;
+                let mut a = uv(support, t.vertices[&e.vertices[start]], &rows.curves, tol)?;
+                let mut b = uv(
+                    support,
+                    t.vertices[&e.vertices[1 - start]],
+                    &rows.curves,
+                    tol,
+                )?;
                 let curve = &rows.curves[e.curve as usize];
                 let projected = matches!(support, Surface::Plane { .. })
                     && !matches!(curve, Curve::Line { .. });
@@ -327,12 +442,61 @@ pub(super) fn shell_rows(
                     };
                     b.x += ((a.x + delta - b.x) / TAU).round() * TAU;
                 }
+                let periodic = match support {
+                    Surface::Sphere { .. } => [true, false],
+                    Surface::Torus { .. } => [true, true],
+                    Surface::Extrusion { generator, .. }
+                    | Surface::Revolution { generator, .. } => [
+                        matches!(
+                            rows.curves[*generator as usize],
+                            Curve::Circle { .. } | Curve::Ellipse { .. }
+                        ),
+                        matches!(support, Surface::Revolution { .. }),
+                    ],
+                    _ => [false, false],
+                };
+                if periodic.iter().any(|&p| p) {
+                    let unwrap = |q: &mut DVec2, prev: DVec2| {
+                        for k in 0..2 {
+                            if periodic[k] {
+                                q[k] += ((prev[k] - q[k]) / TAU).round() * TAU;
+                            }
+                        }
+                    };
+                    if let Some(last) = ring.last() {
+                        unwrap(&mut a, last.uv[1]);
+                    }
+                    let mut previous = a;
+                    for i in 1..=8 {
+                        let fraction = if reversed {
+                            1. - i as f64 / 8.
+                        } else {
+                            i as f64 / 8.
+                        };
+                        let mut q = if i == 8 {
+                            b
+                        } else {
+                            uv(
+                                support,
+                                curve.point(
+                                    e.interval[0] + fraction * (e.interval[1] - e.interval[0]),
+                                )?,
+                                &rows.curves,
+                                tol,
+                            )?
+                        };
+                        unwrap(&mut q, previous);
+                        previous = q;
+                    }
+                    b = previous;
+                }
+                let trim = geom.pcurve(edge.curve().kind(), s.key(), support, [a, b])?;
                 ring.push(Coedge {
                     edge: Some(id),
                     pole: None,
                     projected,
                     reversed,
-                    uv: [a, b],
+                    uv: trim,
                     tolerance: tol,
                 });
             }
@@ -348,10 +512,15 @@ pub(super) fn shell_rows(
             .or_else(|| (loops.len() == 1).then_some(0))
             .ok_or("ambiguous outer bound")?;
         loops.swap(0, first);
+        if loops.iter().flatten().any(|c| c.projected) {
+            for c in loops.iter_mut().flatten() {
+                c.projected = true;
+            }
+        }
         t.faces.push(Face {
             id: t.faces.len() as u64,
             surface,
-            reversed: face.orientation() != sense,
+            reversed: (face.orientation() != sense) ^ flipped.contains(&s.key()),
             loops,
         });
     }
@@ -383,6 +552,7 @@ mod tests {
             scene.all_solids().next().unwrap(),
             m,
             units.precision.unwrap() * m,
+            units.angle.map(|u| u.to_si),
         )
         .unwrap();
         let patch = crate::store::native::NativePatch::new(rows).unwrap();

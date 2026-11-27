@@ -6,7 +6,9 @@ use crate::{
 use built_step::{
     planar::Body,
     step_io::{
-        build::{CurveInput, FaceBoundInput, Frame as OutputFrame, Part, SurfaceInput},
+        build::{
+            CurveInput, FaceBoundInput, Frame as OutputFrame, Part, ProfileInput, SurfaceInput,
+        },
         scene::Solid,
         Orientation, StepBuilder, StepModel,
     },
@@ -26,6 +28,22 @@ fn frame(f: &Frame) -> OutputFrame {
         ref_dir: f.reference.to_array(),
     }
 }
+fn profile(c: &Curve) -> ProfileInput {
+    match c {
+        Curve::Line { origin, direction } => {
+            ProfileInput::Line((*origin * 1000.).to_array(), direction.to_array())
+        }
+        Curve::Circle { frame: f, radius } => ProfileInput::Circle(frame(f), radius * 1000.),
+        Curve::Ellipse {
+            frame: f,
+            major,
+            minor,
+        } => ProfileInput::Ellipse(frame(f), major * 1000., minor * 1000.),
+        Curve::Spline { axis, controls } => {
+            ProfileInput::Nurbs(super::splines::output_curve(axis, controls))
+        }
+    }
+}
 fn orient(rev: bool) -> Orientation {
     if rev {
         Orientation::Reversed
@@ -35,7 +53,7 @@ fn orient(rev: bool) -> Orientation {
 }
 fn volume(rows: &Rows, tolerance: f64) -> Result<f64, String> {
     let mut t = rows.topology.clone().ok_or("missing topology")?;
-    t.tolerance = tolerance;
+    t.display_tolerance = Some(tolerance.max(super::DISPLAY_DEFLECTION));
     let mesh = t.mesh(rows)?;
     let base = DVec3::from(*mesh.points.first().ok_or("empty solid")?);
     let mut volumes = vec![0.; t.void_starts.len() + 1];
@@ -87,7 +105,9 @@ impl Geometry {
                     major,
                     minor,
                 } => CurveInput::Ellipse(frame(f), major * 1000., minor * 1000.),
-                _ => return Err("unsupported STEP boundary curve".into()),
+                Curve::Spline { axis, controls } => {
+                    CurveInput::Nurbs(super::splines::output_curve(axis, controls))
+                }
             };
             let [a, z] = e.vertices;
             edges.insert(
@@ -109,7 +129,34 @@ impl Geometry {
                     radius,
                     half_angle,
                 } => SurfaceInput::Cone(frame(f), radius * 1000., *half_angle),
-                _ => return Err("unsupported STEP face support".into()),
+                Surface::Sphere { frame: f, radius } => {
+                    SurfaceInput::Sphere(frame(f), radius * 1000.)
+                }
+                Surface::Torus {
+                    frame: f,
+                    major,
+                    minor,
+                } => SurfaceInput::Torus(frame(f), major * 1000., minor * 1000.),
+                Surface::Spline {
+                    u,
+                    v,
+                    cols,
+                    controls,
+                    ..
+                } => SurfaceInput::Nurbs(super::splines::output_surface(u, v, *cols, controls)),
+                Surface::Extrusion { generator, vector } => SurfaceInput::LinearExtrusion(
+                    profile(&p.rows.curves[*generator as usize]),
+                    (*vector * 1000.).to_array(),
+                ),
+                Surface::Revolution {
+                    generator,
+                    origin,
+                    axis,
+                } => SurfaceInput::Revolution(
+                    profile(&p.rows.curves[*generator as usize]),
+                    (*origin * 1000.).to_array(),
+                    axis.to_array(),
+                ),
             };
             let mut bounds = Vec::new();
             for (i, ring) in f.loops.iter().enumerate() {
@@ -126,12 +173,36 @@ impl Geometry {
                 })
             }
             faces.push(
-                b.face(surface, orient(f.reversed), bounds)
-                    .map_err(|e| e.to_string())?,
+                b.face(
+                    surface,
+                    orient(
+                        f.reversed
+                            ^ matches!(
+                                p.rows.surfaces[f.surface as usize],
+                                Surface::Revolution { .. }
+                            ),
+                    ),
+                    bounds,
+                )
+                .map_err(|e| e.to_string())?,
             );
         }
-        if uses.len() != edges.len() || uses.values().any(|v| v.len() != 2 || v[0] == v[1]) {
-            return Err("STEP solid requires a closed, oriented shell".into());
+        if uses.len() != edges.len()
+            || uses.values().any(|u| match u.as_slice() {
+                [_] => false,
+                [a, b] => a == b,
+                _ => true,
+            })
+        {
+            return Err("nonmanifold or inconsistently oriented STEP shell".into());
+        }
+        if uses.values().any(|u| u.len() == 1) {
+            if !t.void_starts.is_empty() {
+                return Err("open boundary in a void solid".into());
+            }
+            built_step::sheet::add(b, part, name, faces, p.topology().tolerance * 1000.)
+                .map_err(|e| e.to_string())?;
+            return Ok(built_step::Measure::Area(area(p, tol)?));
         }
         if t.void_starts.is_empty() {
             b.solid(part, name, faces).map_err(|e| e.to_string())?;
@@ -157,7 +228,38 @@ pub(super) fn reopened(model: &StepModel, s: Solid<'_>, m: f64, tol: f64) -> Res
     if let Ok(body) = Body::from_solid(s, m) {
         return body.volume();
     }
-    let rows = super::exact_read::rows(model, s, m, tol)?;
+    let rows = super::exact_read::rows(model, s, m, tol, Some(1.))?;
     let patch = NativePatch::new(rows)?;
     volume(&patch.rows, tol)
+}
+
+fn area(p: &NativePatch, tol: f64) -> Result<f64, String> {
+    let mut t = p.topology().clone();
+    t.display_tolerance = Some(tol.max(super::DISPLAY_DEFLECTION));
+    let mesh = t.mesh(&p.rows)?;
+    let area = mesh
+        .triangles
+        .iter()
+        .map(|t| {
+            let [a, b, c] = t.map(|i| DVec3::from(mesh.points[i]));
+            (b - a).cross(c - a).length() * 0.5
+        })
+        .sum::<f64>();
+    if !area.is_finite() || area <= 0. {
+        return Err("invalid trimmed sheet area".into());
+    }
+    Ok(area)
+}
+pub(super) fn reopened_sheet(
+    model: &StepModel,
+    s: built_step::step_io::scene::Shell<'_>,
+    sense: Orientation,
+    m: f64,
+    tol: f64,
+) -> Result<f64, String> {
+    if let Ok(body) = Body::from_shell(s, sense, m) {
+        return body.area();
+    }
+    let rows = super::exact_read::shell_rows(model, s, sense, m, tol, Some(1.))?;
+    area(&NativePatch::new(rows)?, tol)
 }

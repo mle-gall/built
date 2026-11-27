@@ -36,8 +36,22 @@ pub(super) fn make_mesh<'p>(
     Ok(mesh)
 }
 
+fn native_mesh<'p>(py: Python<'p>, rows: crate::exact::Rows) -> PyResult<Bound<'p, PyAny>> {
+    let patch = crate::store::native::NativePatch::new(rows).map_err(bad)?;
+    let mesh = py.import("built_core.mesh")?.call_method0("Mesh")?;
+    let store = mesh.getattr("_store")?.cast_into::<PyMeshStore>()?;
+    store
+        .try_borrow_mut()?
+        .inner
+        .install_patch(std::sync::Arc::new(patch))
+        .map_err(bad)?;
+    mesh.call_method0("_bump")?;
+    Ok(mesh)
+}
+
 pub(super) struct Node<'p> {
     pub(super) name: String,
+    assembly_mesh: Bound<'p, PyAny>,
     pub(super) meshes: Vec<Bound<'p, PyAny>>,
     children: Vec<(m::EntityKey, DMat4)>,
 }
@@ -58,7 +72,7 @@ fn instance<'p>(
     let mesh = if n.meshes.len() == 1 {
         n.meshes[0].clone()
     } else {
-        py.import("built_core.mesh")?.call_method0("Mesh")?
+        n.assembly_mesh.clone()
     };
     let g = group.call1((mesh, &n.name))?;
     g.setattr("component", true)?;
@@ -88,47 +102,13 @@ pub(super) fn prepare_step(py: Python<'_>, path: PathBuf) -> PyResult<Bound<'_, 
     let exchange = py.detach(|| built_step::read(&bytes)).map_err(bad)?;
     let model = &exchange.model;
     let scene = model.scene();
-    let metres = scene
-        .units()
-        .length
-        .ok_or_else(|| bad("missing STEP length unit"))?
-        .to_si;
-    if !metres.is_finite() || metres <= 0. {
-        return Err(bad("invalid STEP length unit"));
-    }
-    // The scene helper resolves the first context. Refuse a different length
-    // unit until representation-local conversion is available.
-    let contexts = model
-        .all::<m::ComplexEntity>()
-        .flat_map(|(_, c)| &c.parts)
-        .filter_map(|p| match p {
-            m::PartialEntity::GlobalUnitAssignedContext { units } => Some(units),
-            _ => None,
-        })
-        .chain(
-            model
-                .all::<m::GlobalUnitAssignedContext>()
-                .map(|(_, c)| &c.units),
-        );
-    let mut units = None;
-    for context in contexts {
-        if units.replace(context).is_some_and(|previous| {
-            previous.len() != context.len()
-                || !previous.iter().all(|a| {
-                    context.iter().any(|b| {
-                        a == b
-                            || match (a, b) {
-                                (m::UnitRef::Complex(x), m::UnitRef::Complex(y)) => {
-                                    model[*x] == model[*y]
-                                }
-                                _ => false,
-                            }
-                    })
-                })
-        }) {
-            return Err(bad("multiple distinct STEP unit contexts"));
-        }
-    }
+    let source_ids = std::cell::OnceCell::new();
+    let label_entity = |key| {
+        source_ids
+            .get_or_init(|| built_step::SourceIds::new(&bytes, &exchange))
+            .label(model, key)
+    };
+    let contexts = super::units::Contexts::new(model).map_err(bad)?;
     let mut problems: Vec<String> = exchange
         .report
         .dropped
@@ -146,21 +126,10 @@ pub(super) fn prepare_step(py: Python<'_>, path: PathBuf) -> PyResult<Bound<'_, 
         let mut meshes = Vec::new();
         for solid in def.solids() {
             owned.insert(solid.key());
-            let tol = scene.units().precision.unwrap_or(1e-6) * metres;
-            let result = super::exact_read::rows(model, solid, metres, tol)
-                .and_then(crate::store::native::NativePatch::new)
+            let u = contexts.item(solid.key()).map_err(bad)?;
+            let result = super::exact_read::rows(model, solid, u.metres, u.tolerance, u.angle)
                 .map_err(bad)
-                .and_then(|patch| {
-                    let mesh = py.import("built_core.mesh")?.call_method0("Mesh")?;
-                    let store = mesh.getattr("_store")?.cast_into::<PyMeshStore>()?;
-                    store
-                        .try_borrow_mut()?
-                        .inner
-                        .install_patch(std::sync::Arc::new(patch))
-                        .map_err(bad)?;
-                    mesh.call_method0("_bump")?;
-                    Ok(mesh)
-                });
+                .and_then(|rows| native_mesh(py, rows));
             match result {
                 Ok(mesh) => {
                     accepted_solids.insert(solid.key());
@@ -168,7 +137,7 @@ pub(super) fn prepare_step(py: Python<'_>, path: PathBuf) -> PyResult<Bound<'_, 
                     exact += 1
                 }
                 Err(e) => {
-                    problems.push(format!("{name} ({:?}): {e}", solid.key()));
+                    problems.push(format!("{name} ({}): {e}", label_entity(solid.key())));
                     rejected += 1
                 }
             }
@@ -176,12 +145,23 @@ pub(super) fn prepare_step(py: Python<'_>, path: PathBuf) -> PyResult<Bound<'_, 
         for sheet in def.surface_models() {
             owned.insert(sheet.key());
             for (shell, sense) in sheet.shells() {
-                let tol = scene.units().precision.unwrap_or(1e-6) * metres;
-                let result = super::exact_read::shell_rows(model, shell, sense, metres, tol)
-                    .and_then(|r| crate::store::native::NativePatch::new(r).map(|_| ()))
-                    .map_err(bad)
-                    .and_then(|_| Body::from_shell(shell, sense, metres).map_err(bad))
-                    .and_then(|body| make_mesh(py, &body, true));
+                let u = contexts.item(sheet.key()).map_err(bad)?;
+                let result = super::exact_read::shell_rows(
+                    model,
+                    shell,
+                    sense,
+                    u.metres,
+                    u.tolerance,
+                    u.angle,
+                )
+                .map_err(bad)
+                .and_then(|rows| match Body::from_shell(shell, sense, u.metres) {
+                    Ok(body) => {
+                        crate::store::native::NativePatch::new(rows).map_err(bad)?;
+                        make_mesh(py, &body, true)
+                    }
+                    Err(_) => native_mesh(py, rows),
+                });
                 match result {
                     Ok(mesh) => {
                         meshes.push(mesh);
@@ -189,29 +169,33 @@ pub(super) fn prepare_step(py: Python<'_>, path: PathBuf) -> PyResult<Bound<'_, 
                     }
                     Err(e) => {
                         rejected += 1;
-                        problems.push(format!("{name} ({:?}): {e}", shell.key()));
+                        problems.push(format!("{name} ({}): {e}", label_entity(shell.key())));
                     }
                 }
             }
         }
         let mut children = Vec::new();
         for occurrence in def.occurrences() {
-            let Some((child, mut rows)) = occurrence
-                .definition()
-                .zip(occurrence.transform().and_then(|t| t.matrix()))
-            else {
+            let Some((child, mut xf)) = occurrence.definition().zip(occurrence.transform()) else {
                 missing += 1;
                 problems.push(format!("{name}: unresolved occurrence"));
                 continue;
             };
-            for row in &mut rows[..3] {
-                row[3] *= metres
-            }
+            let parent_unit = contexts.definition(def.key()).map_err(bad)?;
+            let child_unit = contexts.definition(child.key()).map_err(bad)?;
+            xf.from.origin = xf.from.origin.map(|v| v * child_unit.metres);
+            xf.to.origin = xf.to.origin.map(|v| v * parent_unit.metres);
+            let Some(rows) = xf.matrix() else {
+                missing += 1;
+                problems.push(format!("{name}: invalid occurrence frame"));
+                continue;
+            };
             children.push((child.key(), DMat4::from_cols_array_2d(&rows).transpose()));
         }
         nodes.insert(
             def.key(),
             Node {
+                assembly_mesh: py.import("built_core.mesh")?.call_method0("Mesh")?,
                 name,
                 meshes,
                 children,
@@ -220,28 +204,47 @@ pub(super) fn prepare_step(py: Python<'_>, path: PathBuf) -> PyResult<Bound<'_, 
     }
     for solid in scene.all_solids().filter(|s| !owned.contains(&s.key())) {
         missing += 1;
-        problems.push(format!("Unresolved solid {:?}", solid.key()));
+        problems.push(format!("Unresolved solid {}", label_entity(solid.key())));
     }
     for sheet in scene
         .all_surface_models()
         .filter(|s| !owned.contains(&s.key()))
     {
         rejected += 1;
-        problems.push(format!("Unsupported sheet {:?}", sheet.key()));
+        problems.push(format!("Unsupported sheet {}", label_entity(sheet.key())));
     }
     for mapped in scene.all_mapped_instances() {
         missing += 1;
-        problems.push(format!("Unresolved mapped placement {:?}", mapped.key()));
+        problems.push(format!(
+            "Unresolved mapped placement {}",
+            label_entity(mapped.key())
+        ));
     }
     let (faceted, invalid_meshes) = super::display_mesh::read(
         py,
         model,
-        metres,
+        &contexts,
         &accepted_solids,
         &mut nodes,
         &mut problems,
     );
     rejected += invalid_meshes;
+    for node in nodes
+        .values()
+        .filter(|n| n.children.is_empty() && n.meshes.is_empty())
+    {
+        // A rejected solid already carries a more specific diagnostic.
+        if !problems
+            .iter()
+            .any(|p| p.starts_with(&format!("{} (", node.name)))
+        {
+            missing += 1;
+            problems.push(format!(
+                "{}: product definition has no admitted geometry",
+                node.name
+            ));
+        }
+    }
     problems.extend(scene.warnings().iter().map(ToString::to_string));
     if exact + faceted == 0 {
         return Err(bad(format!(

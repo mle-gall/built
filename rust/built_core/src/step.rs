@@ -1,10 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+mod bands;
 mod display_mesh;
 mod exact_read;
+const DISPLAY_DEFLECTION: f64 = 0.00005;
 mod exact_write;
 use exact_write::Geometry;
 mod import;
+mod pcurve;
 mod rim_solid;
+mod splines;
+mod swept;
+mod units;
 use crate::math::mat;
 use crate::store::py::PyMeshStore;
 use built_step::{planar::Body, step_io::build::Frame, Definition};
@@ -24,7 +30,9 @@ fn bodies(mesh: &Bound<'_, PyAny>) -> PyResult<Vec<Geometry>> {
         return Ok(vec![Geometry::Exact(patch.clone())]);
     }
     if s.state.exact.arcs.is_some() {
-        let patch = rim_solid::recover(s).map_err(bad)?;
+        let patch = rim_solid::recover(s)
+            .or_else(|_| bands::recover(s))
+            .map_err(bad)?;
         return Ok(vec![Geometry::Exact(std::sync::Arc::new(patch))]);
     }
     let d = s.dense();
@@ -116,67 +124,76 @@ fn placement(m: DMat4) -> PyResult<Frame> {
         ref_dir: x.to_array(),
     })
 }
+type BranchKey = (usize, Vec<(usize, [u64; 9])>);
 fn children(
     groups: &Bound<'_, PyAny>,
     defs: &mut Vec<Definition<Geometry>>,
-    meshes: &mut HashMap<usize, usize>,
-    parent: usize,
+    known: &mut HashMap<BranchKey, usize>,
     depth: u32,
-) -> PyResult<()> {
+) -> PyResult<Vec<(usize, Frame)>> {
     if depth > 256 {
         return Err(bad("STEP assembly nesting limit exceeded"));
     }
+    let mut placements = Vec::new();
     for g in groups.try_iter()? {
         let g = g?;
         let mesh = g.getattr("mesh")?;
-        let nested = g.getattr("children")?;
-        let key = mesh.as_ptr() as usize;
-        let leaf = nested.len()? == 0;
-        let known = leaf.then(|| meshes.get(&key).copied()).flatten();
-        let id = if let Some(id) = known {
+        let nested = children(&g.getattr("children")?, defs, known, depth + 1)?;
+        let key = (
+            mesh.as_ptr() as usize,
+            nested
+                .iter()
+                .map(|(child, frame)| {
+                    let mut bits = [0; 9];
+                    for (i, x) in frame
+                        .origin
+                        .into_iter()
+                        .chain(frame.axis)
+                        .chain(frame.ref_dir)
+                        .enumerate()
+                    {
+                        bits[i] = if x == 0. { 0 } else { x.to_bits() };
+                    }
+                    (*child, bits)
+                })
+                .collect(),
+        );
+        let id = if let Some(&id) = known.get(&key) {
             id
         } else {
             let id = defs.len();
             defs.push(Definition {
                 name: g.getattr("name")?.extract()?,
                 bodies: bodies(&mesh)?,
-                children: vec![],
+                children: nested,
             });
-            if leaf {
-                meshes.insert(key, id);
-            } else {
-                children(&nested, defs, meshes, id, depth + 1)?;
-            }
+            known.insert(key, id);
             id
         };
         let xf = g.getattr("xform")?;
-        let matrix = if xf.is_none() {
+        let m = if xf.is_none() {
             DMat4::IDENTITY
         } else {
             mat(&xf)?
         };
-        defs[parent].children.push((id, placement(matrix)?));
+        placements.push((id, placement(m)?));
     }
-    Ok(())
+    Ok(placements)
 }
-
 #[pyfunction]
 fn save_step(scene: &Bound<'_, PyAny>, path: PathBuf) -> PyResult<()> {
     let mut defs = vec![Definition {
         name: "Model".into(),
-        bodies: bodies(&scene.getattr("loose_mesh")?)?,
+        bodies: bodies(&match scene.getattr_opt("loose_mesh")? {
+            Some(m) => m,
+            None => scene.getattr("mesh")?,
+        })?,
         children: vec![],
     }];
-    children(
-        &scene.getattr("groups")?,
-        &mut defs,
-        &mut HashMap::new(),
-        0,
-        0,
-    )?;
+    defs[0].children = children(&scene.getattr("groups")?, &mut defs, &mut HashMap::new(), 0)?;
     // An imported assembly already has its product root. Promote a single
     // identity placement to avoid adding a wrapper on every round trip.
-    if let [(1, at)] = defs[0].children.as_slice() {
+    if let [(_, at)] = defs[0].children.as_slice() {
         if defs[0].bodies.is_empty()
             && at.origin == [0.; 3]
             && at.axis == [0., 0., 1.]
@@ -208,6 +225,10 @@ fn save_step(scene: &Bound<'_, PyAny>, path: PathBuf) -> PyResult<()> {
                 |g, b, p, name| g.add(b, p, name, tol),
                 |m, s, scale| {
                     exact_write::reopened(m, s, scale, tol).map(built_step::Measure::Volume)
+                },
+                |m, s, sense, scale| {
+                    exact_write::reopened_sheet(m, s, sense, scale, tol)
+                        .map(built_step::Measure::Area)
                 },
             )
         })

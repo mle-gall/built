@@ -9,7 +9,7 @@ use std::collections::{HashMap, HashSet};
 pub(super) fn read<'p>(
     py: Python<'p>,
     model: &StepModel,
-    metres: f64,
+    contexts: &super::units::Contexts,
     exact: &HashSet<m::EntityKey>,
     nodes: &mut HashMap<m::EntityKey, super::import::Node<'p>>,
     problems: &mut Vec<String>,
@@ -68,6 +68,7 @@ pub(super) fn read<'p>(
                 continue;
             }
             let result = (|| -> PyResult<_> {
+                let metres = contexts.item(key).map_err(bad)?.metres;
                 let mut body = Body::default();
                 for m in parts {
                     let points = m.points();

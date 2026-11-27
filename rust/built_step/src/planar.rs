@@ -150,7 +150,7 @@ impl Body {
             b.solid(part, name, faces).map_err(|e| e.to_string())?;
             Ok(crate::Measure::Volume(volume))
         } else {
-            crate::sheet::add(b, part, name, faces).map_err(|e| e.to_string())?;
+            crate::sheet::add(b, part, name, faces, 1e-7).map_err(|e| e.to_string())?;
             Ok(crate::Measure::Area(self.area()?))
         }
     }
