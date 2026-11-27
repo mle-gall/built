@@ -189,32 +189,81 @@ fn recover_exact_geometry<'p>(
         .cast_into::<PyMeshStore>()?;
     let st = h.try_borrow()?;
     let slots = slots(&st.inner, faces)?;
-    let mut fit = fit(&st.inner, &slots, tolerance)?;
+    let mut remaining: HashSet<_> = slots.iter().copied().collect();
+    let mut parts = Vec::new();
+    let mut planes = Vec::new();
     let mut arcs = Vec::new();
-    let mut method = "Planar supports";
-    let mut output = fit.volume;
-    let count = fit.faces.len();
-    if let Some(round) = fit
-        .volume
-        .and_then(|v| super::recover_round::cylinder(&st.inner, &slots, tolerance, v))
-    {
-        fit.faces.retain(|(f, _)| round.caps.contains(f));
-        method = "Coaxial circular rims and planar end cuts";
-        output = Some(round.volume);
-        fit.max_residual = round.residual;
-        arcs = round.rings;
+    let mut reasons = Vec::new();
+    let mut count = 0;
+    let mut max_residual = 0f64;
+    let mut total_input = Some(0.);
+    let mut total_output = Some(0.);
+    let mut methods = Vec::new();
+    for &root in &slots {
+        if !remaining.remove(&root) {
+            continue;
+        }
+        let mut stack = vec![root];
+        let mut component = Vec::new();
+        while let Some(f) = stack.pop() {
+            component.push(f);
+            for (edge, _) in st.inner.boundary_edges(f).into_iter().flatten().flatten() {
+                stack.extend(
+                    st.inner
+                        .edge_faces(edge)
+                        .into_iter()
+                        .filter(|n| remaining.remove(n)),
+                );
+            }
+        }
+        let mut part = fit(&st.inner, &component, tolerance)?;
+        let mut method = "Planar supports";
+        let mut output = part.volume;
+        let faces = part.faces.len();
+        let mut curved = 0;
+        if let Some(round) = part
+            .volume
+            .and_then(|v| super::recover_round::cylinder(&st.inner, &component, tolerance, v))
+        {
+            part.faces.retain(|(f, _)| !round.curved.contains(f));
+            method = round.method;
+            output = Some(round.volume);
+            part.max_residual = round.residual;
+            arcs.extend(round.rings);
+            curved = round.supports;
+        }
+        let row = PyDict::new(py);
+        row.set_item("first_face", st.inner.pid(Kind::Face, root))?;
+        row.set_item("method", method)?;
+        row.set_item("faces", faces)?;
+        row.set_item("planar_faces", part.faces.len())?;
+        row.set_item("curved_supports", curved)?;
+        row.set_item("max_residual_m", part.max_residual)?;
+        row.set_item("input_volume_m3", part.volume)?;
+        row.set_item("output_volume_m3", output)?;
+        row.set_item("untouched", &part.reasons)?;
+        parts.push(row);
+        if !methods.contains(&method) {
+            methods.push(method);
+        }
+        total_input = total_input.zip(part.volume).map(|(a, b)| a + b);
+        total_output = total_output.zip(output).map(|(a, b)| a + b);
+        planes.extend(part.faces);
+        reasons.extend(part.reasons);
+        count += faces;
+        max_residual = max_residual.max(part.max_residual);
     }
     let edit = Edit {
         slots,
         arcs,
         revision: st.inner.revision,
-        planes: Some(fit.faces.clone()),
+        planes: Some(planes),
     };
     drop(st);
     let report = if preview {
         PyDict::new(py)
     } else {
-        if fit.faces.is_empty() {
+        if count == 0 {
             return Err(PyValueError::new_err("No verified planar faces"));
         }
         execute(
@@ -222,12 +271,13 @@ fn recover_exact_geometry<'p>(
             &history_command(py, "SnapshotMutation", (Bound::new(py, edit)?,))?,
         )?
     };
-    report.set_item("method", method)?;
+    report.set_item("parts", parts)?;
+    report.set_item("method", methods.join(", "))?;
     report.set_item("faces", count)?;
-    report.set_item("max_residual_m", fit.max_residual)?;
-    report.set_item("input_volume_m3", fit.volume)?;
-    report.set_item("output_volume_m3", output)?;
-    report.set_item("untouched", fit.reasons)?;
+    report.set_item("max_residual_m", max_residual)?;
+    report.set_item("input_volume_m3", total_input)?;
+    report.set_item("output_volume_m3", total_output)?;
+    report.set_item("untouched", reasons)?;
     Ok(report)
 }
 #[pyfunction]
