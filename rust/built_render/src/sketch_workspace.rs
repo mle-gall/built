@@ -239,18 +239,6 @@ pub fn enter(win: &Obj<'_>, how: &str, arg: &str) -> PyResult<bool> {
                 }),
             )
         }
-        "import" if arg.is_empty() => {
-            use pyo3::types::IntoPyDict;
-            let handle=win.clone().unbind();
-            let callback=crate::settings_rows::func(py,move |py,args|{
-                if let Some(path)=args.get_item(0)?.extract::<Option<String>>()? {
-                    enter(handle.bind(py),"import",&path)?;
-                }
-                Ok(py.None())
-            })?;
-            py.import("built_render.chrome_forms")?.getattr("ask_text")?.call((win,"Import drawing…","DXF, SVG or DWG path"),Some(&[("done",callback)].into_py_dict(py)?))?;
-            Ok(true)
-        }
         "import" => {
             let path = PathBuf::from(arg);
             let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
@@ -279,7 +267,7 @@ pub fn enter(win: &Obj<'_>, how: &str, arg: &str) -> PyResult<bool> {
             };
             let mut crumbs = crumbs(win)?;
             crumbs.push(tr(py, "Import"));
-            let done = enter_with(win, serde_json::json!({"use": if win.getattr_opt("_sketch_tool_return")?.is_some_and(|t|t.eq("cut").unwrap_or(false)) {"section"}else{"profile"}, "import": readable, "import_name": shown, "crumbs": crumbs}));
+            let done = enter_with(win, serde_json::json!({"import": readable, "import_name": shown, "crumbs": crumbs}));
             if let Some(t) = temp {
                 // The workspace read it on entering.
                 let _ = py.import("built_core.formats.dwg_bridge")?.call_method1("discard_temp_dxf", (t,));
@@ -340,19 +328,6 @@ pub fn action(win: &Obj<'_>, arg: &str) -> PyResult<()> {
                     let rows = to_value(&protocol(py)?.call_method1("live_rows", (vp.getattr("scene")?,))?)?;
                     let rows = rows.as_array().cloned().unwrap_or_default();
                     let state = rows.iter().find(|r| r["uid"] == uid.as_str()).and_then(|r| r["state"].as_str()).unwrap_or("").to_owned();
-                    if let Some(tool)=win.getattr_opt("_sketch_tool_return")?.and_then(|t|t.extract::<String>().ok()) {
-                        win.setattr("_sketch_tool_return",py.None())?;
-                        if let Some(source)=rows.iter().find(|r|r["uid"]==uid.as_str() && r["state"]=="ok") {
-                            let machine=win.getattr("_tools")?.get_item(&tool)?.getattr("_machine")?;
-                            if tool=="sweep" {machine.call_method1("set",("sketch",json(py,source)?))?;}
-                            if tool=="cut" {
-                                win.setattr("_cut_section",&uid)?;
-                                if let Some(target)=win.getattr_opt("_sketch_cut_target")?.filter(|v|!v.is_none()) {
-                                    machine.call_method1("set",("section_target",target))?;
-                                }
-                            }
-                        }
-                    }
                     let users = users_text(py, &rows, &uid);
                     let name = row["name"].as_str().filter(|n| !n.is_empty()).map(str::to_owned).unwrap_or_else(|| tr(py, "Sketch"));
                     let text = match (state.as_str(), users.is_empty()) {
@@ -377,7 +352,6 @@ pub fn action(win: &Obj<'_>, arg: &str) -> PyResult<()> {
             }
         }
         "cancel" => {
-            win.setattr("_sketch_tool_return",py.None())?;
             let w = win.clone().unbind();
             let back = pyo3::types::PyCFunction::new_closure(py, None, None, move |args, _| -> PyResult<()> {
                 let py = args.py();

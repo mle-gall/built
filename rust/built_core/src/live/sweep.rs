@@ -269,8 +269,7 @@ pub fn generate(
     let namespace = sweep
         .profile
         .sketch
-        .as_deref()
-        .or_else(|| sweep.profile.drawing.as_ref()?.get("uid")?.as_str())
+        .as_ref()
         .map(|id| format!("sketch/{id}"))
         .unwrap_or_else(|| outline.family.clone());
     let mut roles = Vec::new();

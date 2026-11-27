@@ -656,6 +656,14 @@ impl Mutation {
                     let mut spec = spec.clone();
                     let mut destination = String::new();
                     if let Some(p) = presets::link(&mut t, &mut spec)? {
+                        if spec.cut_definitions.is_empty() {
+                            spec.cut_definitions = p
+                                .values
+                                .get("cut_definitions")
+                                .and_then(|cuts| cuts.as_array())
+                                .cloned()
+                                .unwrap_or_default();
+                        }
                         destination = p.node.clone();
                         crate::structure::sweep_default(scene, Some(&p.uid))?;
                         p.record(&g, false)?;
@@ -769,28 +777,7 @@ impl Mutation {
                 }
                 if let Some(spec) = row.sweep.as_mut() {
                     spec.preset_definition = None;
-                    if !spec
-                        .profile
-                        .drawing
-                        .as_ref()
-                        .is_some_and(|v| v["kind"] == "sketch" && v["uid"].is_string())
-                    {
-                        bind_drawing(&mut t, &mut spec.profile)?;
-                    }
-                }
-                if row.kind == "sketch" {
-                    row.sketch_fields.last_closed = None;
-                    if sketch::evaluate(&row).is_some()
-                        || drawn_profile::outline(&serde_json::json!(&row), 24).is_err()
-                    {
-                        if let Some(old) = t.rows.get(&row.uid) {
-                            row.sketch_fields.last_closed = if old.state == "ok" {
-                                Some(serde_json::json!(old))
-                            } else {
-                                old.sketch_fields.last_closed.clone()
-                            };
-                        }
-                    }
+                    bind_drawing(&mut t, &mut spec.profile)?;
                 }
                 row.state.clear();
                 t.insert(row.clone()).map_err(PyValueError::new_err)?;
@@ -856,28 +843,7 @@ impl Mutation {
                     }
                 }
                 let users: Vec<_> = t.users(&Key::Row(id.clone())).cloned().collect();
-                for uid in users {
-                    let mut member = (*t.rows[&uid]).clone();
-                    if let Some(spec) = member
-                        .sweep
-                        .as_mut()
-                        .filter(|s| s.profile.sketch.as_ref() == Some(id))
-                    {
-                        let drawing = if row.state == "ok" {
-                            serde_json::json!(&*row)
-                        } else {
-                            row.sketch_fields.last_closed.clone().ok_or_else(|| {
-                                PyValueError::new_err("The sketch has no closed profile")
-                            })?
-                        };
-                        spec.profile.sketch = None;
-                        spec.profile.drawing = Some(drawing);
-                        t.insert(member).map_err(PyValueError::new_err)?;
-                        reference::bind_frames(&mut t, &uid);
-                    } else {
-                        t.pending.insert(uid);
-                    }
-                }
+                t.pending.extend(users);
             }
             Edit::Reevaluate(id) => {
                 if !t.rows.contains_key(id) {
@@ -1106,18 +1072,9 @@ fn sketch_profile<'p>(scene: &Obj<'p>, uid: &str) -> PyResult<Obj<'p>> {
     };
     let s = sketch::body(row).map_err(PyValueError::new_err)?;
     let p = built_draft2d::profile(&s);
-    let names: Vec<String> = built_draft2d::sketch::ATTACH
-        .iter()
-        .map(|n| n.to_string())
-        .chain(s.points.iter().map(|p| p.name.clone()))
-        .collect();
-    let attach: serde_json::Map<String, serde_json::Value> = names
-        .iter()
-        .filter_map(|n| {
-            s.attachment(n)
-                .map(|at| (n.clone(), serde_json::json!([at.x, at.y])))
-        })
-        .collect();
+    let names: Vec<String> = built_draft2d::sketch::ATTACH.iter().map(|n| n.to_string()).chain(s.points.iter().map(|p| p.name.clone())).collect();
+    let attach: serde_json::Map<String, serde_json::Value> =
+        names.iter().filter_map(|n| s.attachment(n).map(|at| (n.clone(), serde_json::json!([at.x, at.y])))).collect();
     to_py(
         py,
         &serde_json::json!({
@@ -1230,38 +1187,6 @@ pub(crate) fn finish_migration(scene: &Obj<'_>) -> PyResult<()> {
         put(scene, t)?;
     }
     Ok(())
-}
-
-pub(crate) fn profile_cap(
-    scene: &Obj<'_>,
-    g: &Obj<'_>,
-    face: &Obj<'_>,
-) -> PyResult<Option<String>> {
-    if face.is_none() || g.is_none() {
-        return Ok(None);
-    }
-    let Some(t) = current(scene.py(), root(scene)?) else {
-        return Ok(None);
-    };
-    let uid: String = g.getattr("uid")?.extract()?;
-    let Some(profile) = t
-        .owners
-        .get(&uid)
-        .and_then(|id| t.rows.get(id))
-        .and_then(|r| r.sweep.as_ref())
-        .and_then(|s| s.profile.sketch.clone())
-    else {
-        return Ok(None);
-    };
-    let pid = g
-        .getattr("mesh")?
-        .getattr("_store")?
-        .call_method1("id_of", ("face", face.getattr("key")?))?
-        .extract()?;
-    Ok(
-        (geometry::matches_role(pid, "cap/start") || geometry::matches_role(pid, "cap/end"))
-            .then_some(profile),
-    )
 }
 
 #[pyfunction]

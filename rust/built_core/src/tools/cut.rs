@@ -18,6 +18,8 @@ pub struct CutTool {
     hover: Json,
     point: Option<P3>,
     face: Json,
+    existing_sections: Option<Vec<String>>,
+    section: Option<String>,
     ring: Vec<P3>,
     end: Option<String>,
     anchor: Json,
@@ -37,11 +39,6 @@ impl Tool for CutTool {
         self.target.is_some()
     }
     fn set(&mut self, key: &str, value: &Json) -> bool {
-        if key == "section_target" {
-            self.target = value.as_str().map(str::to_owned);
-            self.preset = json!({"name":"Opening","values":{"cutter_kind":"section"}});
-            return true;
-        }
         if key != "preset" {
             return false;
         }
@@ -92,12 +89,20 @@ impl Tool for CutTool {
                 host.call("cut_picker", Json::Null);
             }
             ToolEvent::Key { key, .. } if key.eq_ignore_ascii_case("d") => {
-                host.call(
-                    "tool_sketch",
-                    json!({"tool":"cut","target":self.target,"face":self.face}),
-                );
+                self.existing_sections =
+                    serde_json::from_value(host.call("cut_sections", Json::Null)).ok();
+                host.call("cut_draw_section", json!({"face":self.face}));
             }
             ToolEvent::Hover(p) | ToolEvent::Click(p) => {
+                if let Some(previous) = self.existing_sections.take() {
+                    let sections: Vec<String> =
+                        serde_json::from_value(host.call("cut_sections", Json::Null))
+                            .unwrap_or_default();
+                    if let Some(id) = sections.into_iter().rev().find(|id| !previous.contains(id)) {
+                        self.section = Some(id);
+                        self.preset = json!({"name":"Opening","values":{"cutter_kind":"section"}});
+                    }
+                }
                 self.point = p.world;
                 let pick = host.call("cut_pick", json!(p.px));
                 self.face = pick["face"].clone();
@@ -137,7 +142,11 @@ impl Tool for CutTool {
                             json!({"plane":{}})
                         }
                     }
-                    "section" => host.call("cut_section", Json::Null),
+                    "section" => self
+                        .section
+                        .as_ref()
+                        .map(|id| json!({"section":id}))
+                        .unwrap_or(Json::Null),
                     _ if placed.is_string() && placed.as_str() != Some(target) => {
                         json!({(kind):placed})
                     }

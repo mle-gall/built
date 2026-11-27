@@ -642,7 +642,7 @@ pub(crate) fn sheet_rows(inp: &Input, mut native: Option<&mut RowGroups>) -> Val
     let blocks = cursor.as_deref().and_then(|k| inp.items.iter().find(|e| e.key == k))
         .map(|e| detail(inp, e, &mut thumbs)).unwrap_or_default();
     json!({"scope": if faceted {"s:all"} else {&scope}, "tokens":tokens, "matches":faceted.then(||shown.iter().map(|e|&e.key).collect::<Vec<_>>()), "online": online, "searching": search, "search": format!("Search all {t}"), "sort": sort, "show": show,
-           "side": side, "content": content, "groups": groups, "type_actions": inp.kind=="profiles" || inp.kind=="presets" || faceted || (!search && scope.starts_with("s:model")),
+           "side": side, "content": content, "groups": groups, "type_actions": inp.kind=="presets" || faceted || (!search && scope.starts_with("s:model")),
            "cursor": cursor, "detail": blocks, "thumbs": thumbs})
 }
 

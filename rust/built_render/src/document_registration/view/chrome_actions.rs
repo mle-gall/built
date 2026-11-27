@@ -748,12 +748,7 @@ fn command_action<'py>(a: &Args<'py>) -> Reply<'py> {
                     if verb == "cmdrun" {
                         let tool=win.getattr("_tools")?.get_item(if cut {"cut"} else {"sweep"})?;
                         let machine=tool.getattr("_machine")?;
-                        if let Ok(entry)=action.get_item("sketch_action") {
-                            win.setattr("_sketch_tool_return","cut")?;
-                            win.setattr("_sketch_cut_target",tool.call_method1("_state",("target",))?)?;
-                            let how=entry.extract::<String>()?;
-                            crate::sketch_workspace::enter(&win,&how,if how=="new" {"section"}else{""})?;
-                        }else if let Ok(preset)=action.get_item("preset"){
+                        if let Ok(preset)=action.get_item("preset"){
                             machine.call_method1("set",("preset",preset))?;
                             py.import("built_render.wgpu_library")?.call_method1("_remember",(&view,action.get_item("key")?))?;
                         }else if let Ok(sketch)=action.get_item("sketch"){
@@ -813,14 +808,6 @@ pub(super) fn command_query<'py>(a: &Args<'py>) -> Reply<'py> {
         for (_,group,name,detail,entry) in matches{
             results.append((name,group,detail,true))?;
             actions.append(entry)?;
-        }
-        if cut {
-            for (label,how) in [("New sketch","new"),("Import drawing…","import")] {
-                if label.to_lowercase().contains(&needle) {
-                    results.append((label,"Sections","",true))?;
-                    actions.append(fields!(py; "sketch_action"=>how))?;
-                }
-            }
         }
         if !cut { for profile in provider.call_method1("items",(ctx,))?.try_iter()?{
             let profile=profile?;

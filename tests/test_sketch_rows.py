@@ -174,16 +174,7 @@ def test_release_removes_the_sketch_and_its_members_keep_their_geometry():
     apply(h, "live_release", uid=s["uid"])
     assert rows_of(scene, "sketch") == []
     assert g.mesh is kept
-    frozen, = rows_of(scene, "sweep")
-    assert frozen["state"] == "ok"
-    assert "sketch" not in frozen["profile"]
-    assert frozen["profile"]["drawing"]["curves"] == s["curves"]
-    ids = all_ids(kept)
-    apply(h, "live_set", row=dict(frozen, path={"points": [[0, 0, 0], [3, 0, 0]]}))
-    assert extent(g) == [3., 0.2, 0.1]
-    assert all_ids(g.mesh) == ids
-    assert not rows_of(scene, "sketch")
-    apply(h, "undo")
+    assert rows_of(scene, "sweep")[0]["state"] == "profile_missing"
     apply(h, "undo")
     assert rows_of(scene, "sketch")[0]["state"] == "ok"
 

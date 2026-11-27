@@ -757,9 +757,7 @@ in the document. A copied placement gets its own cut rows.
 
 The Cut tool takes a target and then a cutter. Tab cycles the operation, L
 opens preset search, A picks a separate anchor and D draws a section on the
-hovered face. The preset search also offers drawing import. Release on a cut
-bakes the stack through that row. Releasing a sketch embeds its last closed
-profile in each swept member that uses it.
+hovered face. Release on a cut bakes the stack through that row.
 
 IFC4 Design Transfer exports analytic member end planes as clipping results.
 It composes supported single-span sweeps and planar solids as CSG. Rounded

@@ -40,8 +40,6 @@ pub enum Station {
 
 #[derive(Clone, Default, Debug, Serialize, Deserialize)]
 pub struct SketchFields {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub last_closed: Option<serde_json::Value>,
     #[serde(
         default,
         skip_serializing_if = "serde_json::Value::is_null",
