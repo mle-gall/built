@@ -687,8 +687,7 @@ fn scene_set_active_section<'py>(me: &Obj<'py>, plane: &Obj<'py>) -> PyResult<()
 
 // -------------------------------------------------- the group-edit context
 
-/// The axes drawing happens on (issue #44): the world's (None) at the top
-/// level, the open group's own axes inside it.
+/// The document drawing frame, or the current open occurrence's frame.
 #[pyfunction]
 fn scene_drawing_frame<'py>(me: &Obj<'py>) -> PyResult<Obj<'py>> {
     let py = me.py();
@@ -697,6 +696,22 @@ fn scene_drawing_frame<'py>(me: &Obj<'py>) -> PyResult<Obj<'py>> {
         return levels.get_item(-1)?.call_method1(intern!(py, "get"), (intern!(py, "frame"),));
     }
     me.getattr("world_drawing_frame")
+}
+
+/// Drawing tools receive points relative to the temporary precision origin.
+#[pyfunction]
+fn scene_tool_drawing_frame<'py>(me: &Obj<'py>) -> PyResult<Obj<'py>> {
+    let frame = scene_drawing_frame(me)?;
+    let mesh = me.getattr(intern!(me.py(), "mesh"))?;
+    if let Some(store) = mesh.getattr_opt(intern!(me.py(), "_store"))? {
+        let shift: [f64; 3] = store.getattr(intern!(me.py(), "frame_origin"))?.extract()?;
+        if shift != [0.; 3] {
+            let mut matrix = if frame.is_none() { glam::DMat4::IDENTITY } else { crate::math::mat(&frame)? };
+            matrix.w_axis -= glam::DVec3::from(shift).extend(0.);
+            return Ok(Bound::new(me.py(), crate::math::Matrix4::from(matrix))?.into_any());
+        }
+    }
+    Ok(frame)
 }
 
 /// The real loose mesh regardless of the edit context.
@@ -1130,7 +1145,6 @@ fn build_scene<'py>(m: &Bound<'py, PyModule>) -> PyResult<Obj<'py>> {
         ("show_hidden_objects", f.clone()),
         ("show_hidden_geometry", f.clone()),
         ("show_axes", t.clone()),
-        ("world_drawing_frame", nothing.clone()),
         ("north_deg", 0.0f64.into_pyobject(py)?.into_any()),
         ("hide_similar_components", f.clone()),
         ("show_section_cuts", t.clone()),
@@ -1144,6 +1158,7 @@ fn build_scene<'py>(m: &Bound<'py, PyModule>) -> PyResult<Obj<'py>> {
         // restore. `edit_group` is the INNERMOST open group.
         ("edit_group", nothing.clone()),
         ("_loose_mesh", nothing.clone()),
+        ("world_drawing_frame", nothing.clone()),
     ];
     let fields = PyList::empty(py);
     for (name, default) in spec {
@@ -1195,6 +1210,7 @@ fn build_scene<'py>(m: &Bound<'py, PyModule>) -> PyResult<Obj<'py>> {
         method(&ns, name, rs.getattr(native_name)?)?;
     }
     property(&ns, "drawing_frame", wrap_pyfunction!(scene_drawing_frame, m)?.into_any(), None)?;
+    property(&ns, "tool_drawing_frame", wrap_pyfunction!(scene_tool_drawing_frame, m)?.into_any(), None)?;
     property(&ns, "loose_mesh", wrap_pyfunction!(scene_loose_mesh, m)?.into_any(), None)?;
     method(&ns, "placements", wrap_pyfunction!(scene_placements, m)?)?;
     method(&ns, "render_edges", wrap_pyfunction!(scene_render_edges, m)?)?;

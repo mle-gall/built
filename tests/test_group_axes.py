@@ -530,3 +530,24 @@ def test_world_axes_leave_ifc_and_step_coordinates_unchanged(tmp_path):
     assert commands.run(History(scene), "set_group_axes", placement=None,
                         origin=[125, -22, 4], red=[126, -21, 4], green=[124, -21, 4])["ok"]
     assert coordinates() == before
+
+
+def test_open_occurrence_axes_use_model_coordinates_in_a_precision_frame():
+    from built_core.command_protocol import run
+    from built_core.coordinate_frame import mesh_frame
+
+    scene = Scene()
+    history = History(scene)
+    g = _slab()
+    shift = V(650000, 4200000)
+    g.xform = _frame_at(shift, 25)
+    scene.groups.append(g)
+    before = _world_pts(g)
+    scene.begin_group_edit(g)
+    origin = shift + V(2, 1)
+    with mesh_frame(scene.mesh, shift.toTuple()):
+        assert (frame_axes(scene.tool_drawing_frame)[0] - V(0, 0)).length() < 1e-6
+        assert run(history, "set_group_axes", placement=None, origin=origin.toTuple(),
+                   red=(origin + V(0, 1)).toTuple(), green=(origin - V(1, 0)).toTuple())["ok"]
+    assert _close(frame_axes(scene.drawing_frame)[0], origin)
+    assert before == _world_pts(g)

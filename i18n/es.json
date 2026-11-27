@@ -3848,5 +3848,8 @@
  "A pill at the bottom of the model shows the keys you press, the value you type and the tool a key picks, for screen recordings.": "Una píldora abajo del modelo muestra las teclas que pulsa, el valor que escribe y la herramienta que elige una tecla, para grabaciones de pantalla.",
  "Recording": "Grabación",
  "Animate camera moves": "Animar los movimientos de cámara",
- "Standard views, Look at Face, Zoom Extents, Zoom Selection and scene changes glide into place in a quarter second; off, they jump.": "Las vistas estándar, Mirar la cara, Zoom extensión, Zoom a la selección y los cambios de escena se deslizan en un cuarto de segundo; desactivado, saltan."
+ "Standard views, Look at Face, Zoom Extents, Zoom Selection and scene changes glide into place in a quarter second; off, they jump.": "Las vistas estándar, Mirar la cara, Zoom extensión, Zoom a la selección y los cambios de escena se deslizan en un cuarto de segundo; desactivado, saltan.",
+ "Click the new origin or type X;Y;Z.": "Haz clic en el nuevo origen o escribe X;Y;Z.",
+ "Click along red or type its angle in the drawing plane.": "Haz clic en la dirección del eje rojo o escribe su ángulo en el plano de dibujo.",
+ "Click toward green or type its tilt about red.": "Haz clic en la dirección del eje verde o escribe su inclinación alrededor del eje rojo."
 }

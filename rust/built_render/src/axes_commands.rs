@@ -23,21 +23,13 @@ fn frame(scene: &Obj<'_>) -> PyResult<[DVec3; 4]> {
 }
 fn apply(vp: &Obj<'_>, origin: DVec3, x: DVec3, y: DVec3) -> PyResult<()> {
     let py = vp.py();
-    let scene = vp.getattr("scene")?;
     let args = PyDict::new(py);
     args.set_item("placement", py.None())?;
-    let shift = scene
-        .getattr("mesh")?
-        .getattr_opt("_store")?
-        .map(|s| s.getattr("frame_origin")?.extract::<[f64; 3]>())
-        .transpose()?
-        .unwrap_or_default();
-    let o = if scene.getattr("edit_group")?.is_none() {
-        origin
-    } else {
-        origin + DVec3::from(shift)
-    };
-    for (key, point) in [("origin", o), ("red", o + x), ("green", o + y)] {
+    for (key, point) in [
+        ("origin", origin),
+        ("red", origin + x),
+        ("green", origin + y),
+    ] {
         args.set_item(key, point.to_array())?;
     }
     py.import("built_core.command_protocol")?.call_method(
@@ -161,6 +153,13 @@ pub(crate) fn hit(view: &Obj<'_>, scene: &Obj<'_>, x: f64, y: f64) -> PyResult<b
         return Ok(false);
     }
     let [o, i, j, k] = frame(scene)?;
+    let shift = view
+        .getattr_opt("packed")?
+        .filter(|p| !p.is_none())
+        .map(|p| p.getattr("origin")?.extract::<[f64; 3]>())
+        .transpose()?
+        .unwrap_or_default();
+    let o = o - DVec3::from(shift);
     let project = |p| {
         view.call_method1("_world_to_pixel", (vec3(view.py(), p)?,))?
             .extract::<Option<(f64, f64)>>()

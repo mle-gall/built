@@ -3848,5 +3848,8 @@
  "A pill at the bottom of the model shows the keys you press, the value you type and the tool a key picks, for screen recordings.": "モデルの下部のピルに、押したキー、入力した値、キーで選んだツールを表示します。画面収録用です。",
  "Recording": "収録",
  "Animate camera moves": "カメラの移動をアニメーション",
- "Standard views, Look at Face, Zoom Extents, Zoom Selection and scene changes glide into place in a quarter second; off, they jump.": "標準ビュー、面を正面から見る、全体表示、選択範囲を表示、シーンの切り替えが 4 分の 1 秒で滑らかに移動します。オフにすると瞬時に切り替わります。"
+ "Standard views, Look at Face, Zoom Extents, Zoom Selection and scene changes glide into place in a quarter second; off, they jump.": "標準ビュー、面を正面から見る、全体表示、選択範囲を表示、シーンの切り替えが 4 分の 1 秒で滑らかに移動します。オフにすると瞬時に切り替わります。",
+ "Click the new origin or type X;Y;Z.": "新しい原点をクリックするか、X;Y;Z を入力します。",
+ "Click along red or type its angle in the drawing plane.": "赤軸の方向をクリックするか、作図平面内での角度を入力します。",
+ "Click toward green or type its tilt about red.": "緑軸の方向をクリックするか、赤軸周りの傾き角を入力します。"
 }

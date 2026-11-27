@@ -40,11 +40,7 @@ fn set_group_axes<'py>(
     let frame = py.import("built_core.axes")?.call_method1(
         "frame_matrix",
         (
-            if placement.is_none() && scene.getattr("edit_group")?.is_none() {
-                vec3(origin)?
-            } else {
-                local(history, origin)?
-            },
+            vec3(origin)?,
             vec3(&basis.get_item(0)?)?,
             vec3(&basis.get_item(1)?)?,
             vec3(&basis.get_item(2)?)?,
@@ -84,10 +80,9 @@ fn set_group_axes<'py>(
         py,
         crate::math::Matrix4::from(parent.inverse() * crate::math::mat(&frame)?),
     )?;
-    execute(
-        history,
-        &history_command(py, "ChangeAxesCommand", (group, frame))?,
-    )
+    let command = history_command(py, "ChangeAxesCommand", (group, frame))?;
+    let model = py.import("built_core.coordinate_frame")?.call_method0("model_frame")?;
+    crate::doc::history::in_frame(&model, || execute(history, &command))
 }
 #[pyfunction]
 #[pyo3(signature=(history,offset,*,clipboard))]

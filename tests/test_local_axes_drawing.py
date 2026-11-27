@@ -193,6 +193,7 @@ def test_typed_world_axes_control_viewport_inference_and_arrow_lock():
     from built_core.snap import _detect_axis_alignment
 
     vp = ControllerSurface(None)
+    vp.flash_status = lambda *args: None
     vp.resize(1000, 700)
     vp.camera.set_aspect(1000, 700)
     vp.camera.set_view("top")

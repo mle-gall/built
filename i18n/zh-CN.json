@@ -3849,5 +3849,8 @@
  "A pill at the bottom of the model shows the keys you press, the value you type and the tool a key picks, for screen recordings.": "模型底部的胶囊显示你按下的键、输入的数值和按键选取的工具，用于屏幕录制。",
  "Recording": "录制",
  "Animate camera moves": "相机移动动画",
- "Standard views, Look at Face, Zoom Extents, Zoom Selection and scene changes glide into place in a quarter second; off, they jump.": "标准视图、正视面、充满视窗、缩放选择和场景切换在四分之一秒内平滑到位；关闭时直接跳转。"
+ "Standard views, Look at Face, Zoom Extents, Zoom Selection and scene changes glide into place in a quarter second; off, they jump.": "标准视图、正视面、充满视窗、缩放选择和场景切换在四分之一秒内平滑到位；关闭时直接跳转。",
+ "Click the new origin or type X;Y;Z.": "单击新原点，或输入 X;Y;Z。",
+ "Click along red or type its angle in the drawing plane.": "沿红轴方向单击，或输入红轴在绘图平面内的角度。",
+ "Click toward green or type its tilt about red.": "朝绿轴方向单击，或输入绿轴绕红轴的倾角。"
 }

@@ -14,7 +14,7 @@ fn host_axes_target<'py>(a: &Args<'py>) -> Reply<'py> {
 fn host_axes_frame<'py>(a: &Args<'py>) -> Reply<'py> {
     let scene = a.get_item(1)?.getattr("scene")?;
     let frame = imported(a.py(), "built_core.group")?
-        .call_method1("frame_axes", (scene.getattr("drawing_frame")?,))?;
+        .call_method1("frame_axes", (scene.getattr("tool_drawing_frame")?,))?;
     let values = frame
         .try_iter()?
         .map(|p| p?.call_method0("toTuple"))

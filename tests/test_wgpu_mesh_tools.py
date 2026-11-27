@@ -180,3 +180,69 @@ def test_rectangle_vcb_dimensions_and_units():
     assert max(p.y() for p in points) == pytest.approx(3.)
     assert not native.value_buffer
     assert history.undo_stack
+
+
+def test_typed_rectangle_uses_moved_document_axes():
+    from built_core import Matrix4
+    from built_render import KeyEvent
+
+    scene, _, native, _ = harness(RectangleTool())
+    frame = Matrix4()
+    frame.translate(4, 3, 1)
+    frame.rotate(30, 0, 0, 1)
+    scene.world_drawing_frame = frame
+    origin = frame.map(QVector3D())
+    click(native, origin.toTuple())
+    native.view.last_snap = SimpleNamespace(
+        point=frame.map(QVector3D(1, 1, 0)), kind='endpoint', context=None)
+    native.hover(event())
+    for char in '2;3':
+        assert native.key(KeyEvent(True, 0, 0, char))
+    assert native.key(KeyEvent(True, Qt.Key_Return.value, 0))
+    assert len(scene.mesh.faces) == 1
+    points = [v.position for v in scene.mesh.vertices]
+    for x, y in [(0, 0), (2, 0), (0, 3), (2, 3)]:
+        corner = frame.map(QVector3D(x, y, 0))
+        assert any((p - corner).length() < 1e-5 for p in points)
+
+
+def test_axes_align_to_a_picked_occurrence_face():
+    from built_core import Matrix4
+    from built_core.group import frame_axes
+    from tools.change_axes import ChangeAxesTool
+
+    tool = ChangeAxesTool()
+    scene, history, native, _ = harness(tool)
+    mesh = Mesh()
+    face = mesh.add_face([QVector3D(0, 0, 0), QVector3D(0, 1, 0),
+                          QVector3D(0, 1, 4), QVector3D(0, 0, 4)])
+    group = Group(mesh)
+    group.xform = Matrix4()
+    group.xform.translate(4, 8, 5)
+    group.xform.rotate(90, 0, 0, 1)
+    scene.groups.append(group)
+    native.pick_face_placement = lambda *args: (face, group)
+    tool.align_face = True
+    click(native, (4, 8, 5))
+    origin, red, _, blue = frame_axes(scene.drawing_frame)
+    assert (origin - QVector3D(3, 8, 5)).length() < 1e-6
+    assert (blue - QVector3D(0, 1, 0)).length() < 1e-6
+    assert (red - QVector3D(0, 0, 1)).length() < 1e-6
+    assert history.undo() and scene.drawing_frame is None
+
+
+def test_protractor_follows_a_tilted_drawing_plane():
+    from built_core import Matrix4
+    from tools.protractor import ProtractorTool
+
+    scene, _, native, _ = harness(ProtractorTool())
+    frame = Matrix4()
+    frame.rotate(38, 1, 0, 0)
+    frame.rotate(25, 0, 0, 1)
+    scene.world_drawing_frame = frame
+    native.sync()
+    u, v = native.tool._basis()
+    for value, direction in [(QVector3D(*u), QVector3D(1, 0, 0)),
+                             (QVector3D(*v), QVector3D(0, 1, 0)),
+                             (native.tool._axis(), QVector3D(0, 0, 1))]:
+        assert (value - frame.mapVector(direction)).length() < 1e-6

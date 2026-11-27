@@ -3851,5 +3851,8 @@
  "A pill at the bottom of the model shows the keys you press, the value you type and the tool a key picks, for screen recordings.": "Pil di bagian bawah model menampilkan tombol yang Anda tekan, nilai yang Anda ketik, dan alat yang dipilih tombol, untuk rekaman layar.",
  "Recording": "Perekaman",
  "Animate camera moves": "Animasikan gerakan kamera",
- "Standard views, Look at Face, Zoom Extents, Zoom Selection and scene changes glide into place in a quarter second; off, they jump.": "Tampilan standar, Lihat Bidang, Zoom Semua, Zoom Pilihan, dan perpindahan adegan meluncur ke tempatnya dalam seperempat detik; jika mati, langsung melompat."
+ "Standard views, Look at Face, Zoom Extents, Zoom Selection and scene changes glide into place in a quarter second; off, they jump.": "Tampilan standar, Lihat Bidang, Zoom Semua, Zoom Pilihan, dan perpindahan adegan meluncur ke tempatnya dalam seperempat detik; jika mati, langsung melompat.",
+ "Click the new origin or type X;Y;Z.": "Klik titik asal baru atau masukkan X;Y;Z.",
+ "Click along red or type its angle in the drawing plane.": "Klik searah sumbu merah atau masukkan sudutnya pada bidang gambar.",
+ "Click toward green or type its tilt about red.": "Klik searah sumbu hijau atau masukkan sudut kemiringannya terhadap sumbu putar merah."
 }
