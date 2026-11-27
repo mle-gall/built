@@ -299,7 +299,6 @@ fn read_facts_of<'py>(
     f.makes_faces = geometry && win.call_method1("_makes_faces", (&selection,))?.is_truthy()?;
     f.textured_face = faces.len() == 1 && sel.len() == 1 && !win.call_method0("_single_textured_face")?.is_none();
     f.bridgeable = geometry && win.call_method1("_bridgeable", (&selection,))?.is_truthy()?;
-    f.weldable = edges.len() == sel.len() && crate::context_edits::can_weld(scene).unwrap_or(false);
     f.context = context_path(py, scene)?;
     let store = opt(&scene.getattr("mesh")?, "_store").filter(|s| s.hasattr("stale_keys").unwrap_or(false) && s.hasattr("curved_edges").unwrap_or(false));
     match store {
@@ -327,6 +326,9 @@ fn read_facts_of<'py>(
             f.curve = loose.iter().any(|e| opt(e, "curve").is_some());
         }
     }
+    // Weld Edges (Join Segments folded in): one chain, or straight pieces.
+    f.weldable = edges.len() == sel.len() && f.loose_edges > 1
+        && crate::edge_commands::weld_offered(scene).unwrap_or(false);
     if let Some(one) = one.filter(|o| o.is_instance(&group_cls).unwrap_or(false)) {
         let editable = crate::context_tools::text_editable(scene, one)?;
         f.name = text(one, "name");
@@ -905,7 +907,13 @@ pub fn run(
                 other => Some(vec![other.into_pyobject(py)?.into_any()]),
             };
             let Some(args) = args else { return Ok(false) };
-            slot.call1(PyTuple::new(py, args)?)?;
+            let args = PyTuple::new(py, args)?;
+            if matches!(name.as_str(), "_on_zoom_selection" | "_on_zoom_extents") {
+                // Zoom to / Zoom extents glide as the View menu's do.
+                crate::native_view_actions::glide_after(win, |_| slot.call1(&args).map(drop))?;
+            } else {
+                slot.call1(args)?;
+            }
         }
         "tree" => {
             let Some(first) = sel.first() else { return Ok(false) };

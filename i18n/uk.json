@@ -3842,5 +3842,18 @@
  "Korean translation of the interface, and the AI key from an environment variable. In 0.6.2, soft shadows and fixes for macOS.": "Переклад інтерфейсу корейською, а також ключ ШІ зі змінної середовища. У 0.6.2 — м’які тіні та виправлення для macOS.",
  "Exact Move+Ctrl copies, overlapping rotated copies, faster box selection on huge models and the reviewed Indonesian translation.": "Точні копії через Переміщення+Ctrl, повернуті копії, що перекриваються, швидший вибір рамкою у величезних моделях і вивірений індонезійський переклад.",
  "Snapping to the rest of the model from inside a group or component.": "Прив’язка до решти моделі зсередини групи чи компонента.",
- "“{name}” is no longer linked: its geometry is now part of this model": "«{name}» більше не пов'язаний: його геометрія тепер є частиною цієї моделі"
+ "“{name}” is no longer linked: its geometry is now part of this model": "«{name}» більше не пов'язаний: його геометрія тепер є частиною цієї моделі",
+ "Weld": "Зварити",
+ "Select connected edges to weld.": "Виберіть пов'язані ребра для зварювання.",
+ "Join connected edges into one curve, or into one straight edge when they line up; with nothing selected, join the model's collinear pieces.": "Об'єднує пов'язані ребра в одну криву або, якщо вони на одній прямій, в одне пряме ребро; без виділення об'єднує колінеарні відрізки моделі.",
+ "Look at Face": "Дивитися на грань",
+ "Look straight at the face under the cursor, from the side you see it, in parallel projection until the next orbit.": "Дивитися прямо на грань під курсором, з того боку, звідки ви її бачите, у паралельній проекції до наступного обертання.",
+ "Point at a face, then press V to look at it.": "Наведіть на грань і натисніть V, щоб подивитися на неї.",
+ "Show Keystrokes": "Показувати клавіші",
+ "Show the keys you press, the values you type and the tool a key picks at the bottom of the model, for screen recordings.": "Показує внизу моделі натиснуті клавіші, введені значення та інструмент, вибраний клавішею, для запису екрана.",
+ "Show keystrokes": "Показувати клавіші",
+ "A pill at the bottom of the model shows the keys you press, the value you type and the tool a key picks, for screen recordings.": "Плашка внизу моделі показує натиснуті клавіші, введене значення та інструмент, вибраний клавішею, для запису екрана.",
+ "Recording": "Запис",
+ "Animate camera moves": "Анімувати рухи камери",
+ "Standard views, Look at Face, Zoom Extents, Zoom Selection and scene changes glide into place in a quarter second; off, they jump.": "Стандартні види, Дивитися на грань, Показати все, Показати виділене та зміна сцен плавно переходять за чверть секунди; якщо вимкнено, перемикаються одразу."
 }

@@ -379,7 +379,7 @@ pub fn menu_rows(f: &Facts, kind: &str) -> Vec<Row> {
                 r.one(vec![e("simplify", "Simplify mesh…")]);
                 r.family("Flip along", flip());
                 if !edges && f.faces == 1 {
-                    r.one(vec![e("alignview", "Align view")]);
+                    r.one(vec![ek("alignview", "Look at Face", "V")]);
                     if f.textured_face {
                         r.family("Texture", vec![e("texpos", "Position"), e("texreset", "Reset")]);
                     }
@@ -390,14 +390,9 @@ pub fn menu_rows(f: &Facts, kind: &str) -> Vec<Row> {
                 }
                 if f.loose_edges > 0 {
                     r.one(vec![e("divide", "Divide…")]);
-                    let mut row = Vec::new();
-                    if f.loose_edges > 1 {
-                        row.push(e("join", "Join segments"));
-                    }
                     if f.curve {
-                        row.push(e("explodecurve", "Explode curve"));
+                        r.one(vec![e("explodecurve", "Explode curve")]);
                     }
-                    r.one(row);
                 }
                 r.one(vec![soften()]);
                 r.family("Flip along", flip());
@@ -712,7 +707,7 @@ pub fn dispatch(kind: &str, id: &str) -> (&'static str, String, String) {
         "texpos" => slot("_on_texture_position", ""),
         "texreset" => slot("_on_texture_reset", ""),
         "divide" => slot("_on_divide", ""),
-        "join" => slot("_on_join_segments", ""),
+        "join" => slot("_on_weld_edges", ""),
         "weld_edges" => slot("_on_weld_edges", ""),
         "explodecurve" => slot("_on_explode_curve", ""),
         "bridge" => slot("_on_bridge", ""),

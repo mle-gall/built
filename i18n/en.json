@@ -30,5 +30,18 @@
  "Moderate": "Moderate",
  "Strong": "Strong",
  "Shadow edges that soften away from what casts them, as in daylight. They cost the graphics card more while the sun casts shadows.": "Shadow edges that soften away from what casts them, as in daylight. They cost the graphics card more while the sun casts shadows.",
- "“{name}” is no longer linked: its geometry is now part of this model": "“{name}” is no longer linked: its geometry is now part of this model"
+ "“{name}” is no longer linked: its geometry is now part of this model": "“{name}” is no longer linked: its geometry is now part of this model",
+ "Weld": "Weld",
+ "Select connected edges to weld.": "Select connected edges to weld.",
+ "Join connected edges into one curve, or into one straight edge when they line up; with nothing selected, join the model's collinear pieces.": "Join connected edges into one curve, or into one straight edge when they line up; with nothing selected, join the model's collinear pieces.",
+ "Look at Face": "Look at Face",
+ "Look straight at the face under the cursor, from the side you see it, in parallel projection until the next orbit.": "Look straight at the face under the cursor, from the side you see it, in parallel projection until the next orbit.",
+ "Point at a face, then press V to look at it.": "Point at a face, then press V to look at it.",
+ "Show Keystrokes": "Show Keystrokes",
+ "Show the keys you press, the values you type and the tool a key picks at the bottom of the model, for screen recordings.": "Show the keys you press, the values you type and the tool a key picks at the bottom of the model, for screen recordings.",
+ "Show keystrokes": "Show keystrokes",
+ "A pill at the bottom of the model shows the keys you press, the value you type and the tool a key picks, for screen recordings.": "A pill at the bottom of the model shows the keys you press, the value you type and the tool a key picks, for screen recordings.",
+ "Recording": "Recording",
+ "Animate camera moves": "Animate camera moves",
+ "Standard views, Look at Face, Zoom Extents, Zoom Selection and scene changes glide into place in a quarter second; off, they jump.": "Standard views, Look at Face, Zoom Extents, Zoom Selection and scene changes glide into place in a quarter second; off, they jump."
 }

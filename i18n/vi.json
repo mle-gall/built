@@ -3861,5 +3861,18 @@
  "Korean translation of the interface, and the AI key from an environment variable. In 0.6.2, soft shadows and fixes for macOS.": "Bản dịch giao diện tiếng Hàn, và khóa AI lấy từ biến môi trường. Ở 0.6.2, bóng đổ mềm và các bản sửa cho macOS.",
  "Exact Move+Ctrl copies, overlapping rotated copies, faster box selection on huge models and the reviewed Indonesian translation.": "Bản sao chính xác bằng Di chuyển+Ctrl, bản sao xoay chồng lên nhau, chọn bằng khung nhanh hơn trên mô hình rất lớn và bản dịch tiếng Indonesia đã được rà soát.",
  "Snapping to the rest of the model from inside a group or component.": "Bắt điểm vào phần còn lại của mô hình từ bên trong nhóm hoặc thành phần.",
- "“{name}” is no longer linked: its geometry is now part of this model": "“{name}” không còn được liên kết: hình học của nó giờ là một phần của mô hình này"
+ "“{name}” is no longer linked: its geometry is now part of this model": "“{name}” không còn được liên kết: hình học của nó giờ là một phần của mô hình này",
+ "Weld": "Hàn",
+ "Select connected edges to weld.": "Chọn các cạnh nối liền để hàn.",
+ "Join connected edges into one curve, or into one straight edge when they line up; with nothing selected, join the model's collinear pieces.": "Gộp các cạnh nối liền thành một đường cong, hoặc một cạnh thẳng khi chúng thẳng hàng; khi không chọn gì, gộp các đoạn thẳng hàng của mô hình.",
+ "Look at Face": "Nhìn thẳng vào mặt",
+ "Look straight at the face under the cursor, from the side you see it, in parallel projection until the next orbit.": "Nhìn thẳng vào mặt dưới con trỏ, từ phía bạn đang thấy, ở phép chiếu song song cho đến lần xoay tiếp theo.",
+ "Point at a face, then press V to look at it.": "Trỏ vào một mặt rồi nhấn V để nhìn thẳng vào nó.",
+ "Show Keystrokes": "Hiện phím bấm",
+ "Show the keys you press, the values you type and the tool a key picks at the bottom of the model, for screen recordings.": "Hiện ở dưới mô hình các phím bạn bấm, giá trị bạn gõ và công cụ một phím chọn, cho việc quay màn hình.",
+ "Show keystrokes": "Hiện phím bấm",
+ "A pill at the bottom of the model shows the keys you press, the value you type and the tool a key picks, for screen recordings.": "Một viên nhãn ở dưới mô hình hiện các phím bạn bấm, giá trị bạn gõ và công cụ một phím chọn, cho việc quay màn hình.",
+ "Recording": "Quay màn hình",
+ "Animate camera moves": "Tạo chuyển động cho camera",
+ "Standard views, Look at Face, Zoom Extents, Zoom Selection and scene changes glide into place in a quarter second; off, they jump.": "Các góc nhìn chuẩn, Nhìn thẳng vào mặt, Thu phóng toàn bộ, Thu phóng vùng chọn và chuyển cảnh trượt vào chỗ trong một phần tư giây; khi tắt, chúng nhảy ngay."
 }

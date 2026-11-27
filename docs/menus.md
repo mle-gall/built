@@ -301,7 +301,7 @@ Generated from the fixture (`(system …)` rows are AppKit's own).
 | Edit | Orient Faces | `orient_faces` |  |
 | Edit | Heal Overlapping Faces | `heal_overlaps` |  |
 | Edit | Rebuild Faces (Planar) | `rebuild_planar` |  |
-| Edit | Join Segments | `join_segments` |  |
+| Edit | Weld Edges | `weld_edges` | `join_segments` is an alias kept for scripts |
 | Edit | Simplify Mesh… | `verb:simplify_mesh` |  |
 | Edit | Convert Path to Geometry | `convert_path` |  |
 | View | Orbit | `orbit` |  |
@@ -310,6 +310,7 @@ Generated from the fixture (`(system …)` rows are AppKit's own).
 | View | Zoom Window | `zoom_window` |  |
 | View | Zoom Extents | `zoom_extents` | ⇧⌘E |
 | View | Zoom Selection | `zoom_selection` | ⌥⌘Z |
+| View | Look at Face | `look_at_face` | V (the face under the cursor; right-click a face for the same) |
 | View | Standard Views ▸ |  |  |
 | View ▸ Standard Views | Top | `view_top` | ⌘1 |
 | View ▸ Standard Views | Front | `view_front` | ⌘2 |
@@ -376,6 +377,7 @@ Generated from the fixture (`(system …)` rows are AppKit's own).
 | View ▸ Model Views | Three views, the large one on the right | `layout:three_mirror` |  |
 | View ▸ Model Views | Two views, one wider | `layout:two_wide` |  |
 | View ▸ Model Views | Maximize / Restore View | `maximize_model_view` |  |
+| View | Show Keystrokes | `show_keystrokes` | check; the overlay for recordings (docs/recording-beats.md) |
 | View | Toggle Full Screen | `(system toggleFullScreen:)` | ⌃⌘F |
 | Model | Site Placement… | `site_placement` |  |
 | Model | Units… | `units` | ⌘U |

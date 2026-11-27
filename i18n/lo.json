@@ -3838,5 +3838,18 @@
  "Korean translation of the interface, and the AI key from an environment variable. In 0.6.2, soft shadows and fixes for macOS.": "ການແປສ່ວນຕິດຕໍ່ເປັນພາສາເກົາຫຼີ, ແລະ ກະແຈ AI ຈາກຕົວແປສະພາບແວດລ້ອມ. ໃນ 0.6.2, ເງົາອ່ອນ ແລະ ການແກ້ໄຂສຳລັບ macOS.",
  "Exact Move+Ctrl copies, overlapping rotated copies, faster box selection on huge models and the reviewed Indonesian translation.": "ການສຳເນົາດ້ວຍ ຍ້າຍ+Ctrl ທີ່ຖືກຕ້ອງ, ສຳເນົາທີ່ໝູນແລ້ວຊ້ອນກັນ, ການເລືອກແບບກອບທີ່ໄວຂຶ້ນໃນແບບຈຳລອງຂະໜາດໃຫຍ່ ແລະ ການແປພາສາອິນໂດເນເຊຍທີ່ທົບທວນແລ້ວ.",
  "Snapping to the rest of the model from inside a group or component.": "ການຍຶດຕິດກັບສ່ວນອື່ນຂອງແບບຈຳລອງຈາກພາຍໃນກຸ່ມ ຫຼື ອົງປະກອບ.",
- "“{name}” is no longer linked: its geometry is now part of this model": "“{name}” is no longer linked: its geometry is now part of this model"
+ "“{name}” is no longer linked: its geometry is now part of this model": "“{name}” is no longer linked: its geometry is now part of this model",
+ "Weld": "ເຊື່ອມ",
+ "Select connected edges to weld.": "ເລືອກຂອບທີ່ຕໍ່ກັນເພື່ອເຊື່ອມ.",
+ "Join connected edges into one curve, or into one straight edge when they line up; with nothing selected, join the model's collinear pieces.": "ລວມຂອບທີ່ຕໍ່ກັນເປັນເສັ້ນໂຄ້ງດຽວ ຫຼື ເປັນຂອບຊື່ເສັ້ນດຽວເມື່ອຢູ່ໃນແນວດຽວກັນ; ຖ້າບໍ່ໄດ້ເລືອກຫຍັງ, ຈະລວມທ່ອນທີ່ຢູ່ໃນແນວດຽວກັນຂອງແບບຈຳລອງ.",
+ "Look at Face": "ເບິ່ງໜ້າຊື່ໆ",
+ "Look straight at the face under the cursor, from the side you see it, in parallel projection until the next orbit.": "ເບິ່ງໜ້າທີ່ຢູ່ກ້ອງເຄີເຊີຊື່ໆ ຈາກດ້ານທີ່ທ່ານເຫັນ, ໃນພາບສາຍຂະໜານຈົນກວ່າການໝູນຮອບຄັ້ງຕໍ່ໄປ.",
+ "Point at a face, then press V to look at it.": "ຊີ້ໄປທີ່ໜ້າໃດໜຶ່ງ ແລ້ວກົດ V ເພື່ອເບິ່ງມັນຊື່ໆ.",
+ "Show Keystrokes": "ສະແດງປຸ່ມທີ່ກົດ",
+ "Show the keys you press, the values you type and the tool a key picks at the bottom of the model, for screen recordings.": "ສະແດງປຸ່ມທີ່ທ່ານກົດ, ຄ່າທີ່ທ່ານພິມ ແລະ ເຄື່ອງມືທີ່ປຸ່ມເລືອກ ຢູ່ລຸ່ມແບບຈຳລອງ, ສຳລັບການບັນທຶກໜ້າຈໍ.",
+ "Show keystrokes": "ສະແດງປຸ່ມທີ່ກົດ",
+ "A pill at the bottom of the model shows the keys you press, the value you type and the tool a key picks, for screen recordings.": "ປ້າຍຢູ່ລຸ່ມແບບຈຳລອງສະແດງປຸ່ມທີ່ທ່ານກົດ, ຄ່າທີ່ທ່ານພິມ ແລະ ເຄື່ອງມືທີ່ປຸ່ມເລືອກ, ສຳລັບການບັນທຶກໜ້າຈໍ.",
+ "Recording": "ການບັນທຶກ",
+ "Animate camera moves": "ເຄື່ອນກ້ອງແບບນຸ່ມນວນ",
+ "Standard views, Look at Face, Zoom Extents, Zoom Selection and scene changes glide into place in a quarter second; off, they jump.": "ມຸມມອງມາດຕະຖານ, ເບິ່ງໜ້າຊື່ໆ, ຂະຫຍາຍທັງໝົດ, ຂະຫຍາຍສ່ວນທີ່ເລືອກ ແລະ ການປ່ຽນສາກ ຈະເລື່ອນເຂົ້າບ່ອນພາຍໃນໜຶ່ງສ່ວນສີ່ວິນາທີ; ຖ້າປິດ, ຈະກະໂດດທັນທີ."
 }
