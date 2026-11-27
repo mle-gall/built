@@ -125,6 +125,7 @@ pub struct Pane {
 #[derive(Deserialize, Default, Clone, Debug, PartialEq)]
 #[serde(default)]
 pub struct Block {
+    pub expanded: bool,
     pub kind: String,
     pub id: String,
     pub text: String,
@@ -516,6 +517,11 @@ impl Draw<'_> {
                                 ui.end_row();
                             }
                         });
+                }
+                "disclosure" => {
+                    if kit::disclosure_toggle(ui, &b.text, b.expanded) {
+                        self.out.push(format!("verb{SEP}{}", b.id));
+                    }
                 }
                 "caption" => {
                     ui.add_space(if i == 0 { SPACE_XS } else { SPACE_M });

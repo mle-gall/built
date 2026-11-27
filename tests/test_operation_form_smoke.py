@@ -93,6 +93,46 @@ def fixture_venv(tmp_path, code):
 
 @pytest.mark.skipif(os.environ.get("BUILT_WINDOW_TESTS") != "1" or not BIN.exists(),
                     reason="requires a built window and BUILT_WINDOW_TESTS=1")
+@pytest.mark.parametrize("size,blank,new", [
+    pytest.param("1600x1000", (280, 283), (1240, 166), marks=pytest.mark.window_size(1600, 1000)),
+    pytest.param("1280x800", (150, 244), (1052, 127), marks=pytest.mark.window_size(1280, 800)),
+])
+def test_populated_start_page_creation(tmp_path, size, blank, new):
+    from built_core import NativeSettings
+    from built_core.scene import Scene
+    from formats.igz import save_scene
+
+    profile = english(tmp_path / "profile")
+    files = [tmp_path / f"Workshop {n:02d}.igz" for n in range(18)]
+    for path in files[:15]:
+        save_scene(Scene(), path)
+    settings = NativeSettings(profile)
+    settings.setValue("home/recent_files", json.dumps([{"path": str(p)} for p in files]))
+    settings.sync()
+    venv = fixture_venv(tmp_path, """from built_render import Host
+original_state = Host.state
+def state(self):
+    return dict(original_state(self), focus=self.renderer.ui_large_sheet_state()[1])
+Host.state = state
+""")
+    steps = tmp_path / "steps"
+    steps.write_text(f"wait 800\nstate\nclick {blank[0]} {blank[1]}\nwait 180\nstate\n"
+                     f"click {new[0]} {new[1]}\nwait 300\nstate\nmenu home\nwait 300\n"
+                     "state\nkey n cmd\nwait 300\nstate\nquit\n")
+    result = run([BIN, "--new-instance", "--root", ROOT, "--venv", venv, "--size", size,
+                  "--script", steps], settings=profile, capture_output=True, text=True, timeout=60)
+    log = result.stdout + result.stderr
+    states = [json.loads(line.removeprefix("[built] state ")) for line in log.splitlines()
+              if line.startswith("[built] state ")]
+    assert result.returncode == 0 and all(not s["errors"] for s in states), log
+    assert states[0]["focus"].startswith("file:") and states[1]["focus"] == "tpl:blank", log
+    assert [s["start_page"] for s in states[:5]] == [True, True, False, True, False], log
+    for state in (states[2], states[4]):
+        assert state["documents"] == ["Untitled"] and not state["dirty"] and state["path"] is None
+
+
+@pytest.mark.skipif(os.environ.get("BUILT_WINDOW_TESTS") != "1" or not BIN.exists(),
+                    reason="requires a built window and BUILT_WINDOW_TESTS=1")
 def test_native_release_review(tmp_path):
     """Install a release backend fixture in the embedded interpreter only."""
     from built_core.scene import Scene
