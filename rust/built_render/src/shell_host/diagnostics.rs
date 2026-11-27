@@ -238,5 +238,16 @@ pub(super) fn snapshot<'p>(h: &Bound<'p, Host>) -> PyResult<Bound<'p, PyDict>> {
             w.call_method0("query_worksession")?
         },
     )?;
+    // The Sketch workspace: shown, the working row; and the model's sketch rows.
+    d.set_item("sketch", crate::sketch_workspace::state(&w)?)?;
+    let rows = py.import("built_core.command_protocol")?.call_method1("live_rows", (&scene,))?;
+    let sketches = PyList::empty(py);
+    for r in rows.try_iter()? {
+        let r = r?;
+        if r.get_item("kind")?.eq("sketch")? {
+            sketches.append(r)?;
+        }
+    }
+    d.set_item("sketch_rows", sketches)?;
     Ok(d)
 }

@@ -2879,6 +2879,23 @@ impl Renderer {
         self.last_cpu = cpu;
         Ok((cpu, None))
     }
+    /// The Sketch workspace (ui/sketch.rs): `spec` is JSON with the sketch,
+    /// its uid, the breadcrumb, the plane's context and an import path.
+    fn ui_sketch_enter(&mut self, spec: &str) -> PyResult<()> {
+        match self.ui.as_mut() {
+            Some(ui) => ui.sketch_open(spec).map_err(pyo3::exceptions::PyValueError::new_err),
+            None => Err(pyo3::exceptions::PyRuntimeError::new_err("no chrome")),
+        }
+    }
+    fn ui_sketch_shown(&self) -> bool { self.ui.as_ref().is_some_and(|ui| ui.sketch_shown()) }
+    /// A window command while sketching (undo, redo, done, cancel): true when the sketch took it.
+    fn ui_sketch_command(&mut self, cmd: &str) -> bool { self.ui.as_mut().is_some_and(|ui| ui.sketch_run(cmd)) }
+    fn ui_sketch_leave(&mut self) { if let Some(ui) = self.ui.as_mut() { ui.sketch_close(); } }
+    fn ui_sketch_message(&mut self, text: &str) { if let Some(ui) = self.ui.as_mut() { ui.sketch_message(text); } }
+    /// What Cancel discarded, as an enter spec (the toast's Undo).
+    fn ui_sketch_discarded(&mut self) -> Option<String> { self.ui.as_mut().and_then(|ui| ui.sketch_discarded()) }
+    /// The working sketch as a row (tests and scripts).
+    fn ui_sketch_row(&self) -> Option<String> { self.ui.as_ref().filter(|ui| ui.sketch_shown()).map(|ui| ui.sketch_row()) }
     /// The Sheets workspace on (the page replaces the model) or off.
     fn ui_show_sheets(&mut self, shown: bool) {
         if let Some(ui) = self.ui.as_mut() { ui.show_sheets(shown); }
@@ -3743,6 +3760,7 @@ mod preferences;
 mod about;
 mod sheet_host;
 mod sheet_workspace;
+pub mod sketch_workspace;
 mod sheet_frames;
 mod start_view;
 mod library_view;
@@ -3927,6 +3945,7 @@ pub fn built_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     library_view::register(m)?;
     m.add_class::<resident_rows::ResidentRows>()?;
     sheet_workspace::register(m)?;
+    sketch_workspace::register(m)?;
     sheet_frames::register(m)?;
     m.add_function(wrap_pyfunction!(sheet_host::show_delivery_form, m)?)?;
     m.add_function(wrap_pyfunction!(sheet_host::show_view_export, m)?)?;

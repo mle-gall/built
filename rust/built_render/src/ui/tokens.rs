@@ -88,6 +88,17 @@ palette! {
     // The view gizmo's hover disc: a dark wash that shows on a white sky
     // and on a dark background alike.
     GIZMO_DISC = Color32::from_black_alpha(36);
+    // The Sketch workspace (ui/sketch.rs): grid, ghosted and sliced
+    // context, a closed region's wash, the plane in the inset, the
+    // midpoint inference, the inset while it peeks the model.
+    SKETCH_GRID = Color32::from_rgba_premultiplied(8, 8, 8, 8);
+    SKETCH_GRID_MAJOR = Color32::from_rgba_premultiplied(16, 16, 16, 16);
+    SKETCH_BEHIND = Color32::from_rgba_premultiplied(22, 22, 22, 22);
+    SKETCH_GHOST = Color32::from_rgba_premultiplied(70, 70, 70, 70);
+    SKETCH_REGION = Color32::from_rgba_premultiplied(7, 12, 18, 18);
+    SKETCH_PLANE = Color32::from_rgba_premultiplied(38, 29, 12, 40);
+    SNAP_MID = Color32::from_rgb(0x4F, 0xC3, 0xF7);
+    PEEK_SCRIM = Color32::from_black_alpha(40);
 }
 
 #[cfg(test)]

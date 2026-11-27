@@ -15,6 +15,7 @@ pub mod operation_form;
 mod library_previews;
 /// Sheets, a workspace of the window (sheet_workspace).
 mod sheets;
+mod sketch;
 thread_local! {
     static LABELS: std::cell::RefCell<(String, std::collections::HashMap<String, String>)> = Default::default();
 }
@@ -248,6 +249,9 @@ pub struct Ui {
     cursor_shape: &'static str,
     /// The Sheets workspace: while on, the page replaces the model (ui/sheets.rs).
     sheets: sheets::Sheets,
+    /// The Sketch workspace: while on, a flat drawing space replaces the
+    /// model (ui/sketch.rs).
+    sketch: sketch::SketchWs,
     /// The page of the Sheets workspace (ui/page.rs).
     pub page: crate::sheet_page::Page,
     /// The project tabs (ui/tabs.rs): drawn instead of the document ▾
@@ -457,6 +461,7 @@ impl Ui {
             background_plugins: Default::default(),
             cursor_shape: "",
             sheets: Default::default(),
+            sketch: Default::default(),
             page: Default::default(),
             menu_hits: Vec::new(), strip: Default::default(),
             ctx_menu: None,
@@ -972,6 +977,7 @@ impl Ui {
         // window's ⌘ shortcuts, sheet_runtime.rs).
         if self.lsheet.open { return true; }
         if self.sheets.shown { return self.sheets_claims_key(name); }
+        if self.sketch_claims_key() { return true; }
         if self.scene_move_key(name, mods).is_some() { return true; }
         if self.fillet_key(name) { return true; }
         let filing = self.column.as_ref().is_some_and(|c| c.filing.is_some() || c.row_menu.is_some()
@@ -1048,6 +1054,7 @@ impl Ui {
         }
         if self.lsheet.open && !self.cmd_open { return self.lsheet_key(name, pressed, mods); }
         if self.sheets.shown { return self.sheets_key(name, pressed, mods); }
+        if self.sketch_claims_key() { return self.sketch_key(name, pressed, mods); }
         if let Some(earlier) = self.scene_move_key(name, mods) {
             if pressed && self.can_move_scene(earlier) {
                 self.actions.push(if earlier { "tab:scene:up" } else { "tab:scene:down" }.into());
@@ -1163,6 +1170,10 @@ impl Ui {
     /// enabled, preedit (the text being composed, drawn underlined in
     /// place by egui), commit or disabled.
     pub fn ime(&mut self, kind: &str, text: String) -> bool {
+        if self.sketch_claims_key() && !self.ctx.wants_keyboard_input() {
+            if kind == "commit" { self.sketch.texts.push(text); }
+            return true;
+        }
         if !self.ctx.wants_keyboard_input() {
             return false;
         }
@@ -1177,6 +1188,9 @@ impl Ui {
     }
     pub fn ime_rect(&self) -> Option<(f32, f32, f32, f32)> { self.ime_rect }
     pub fn text(&mut self, text: String) -> bool {
+        if self.sketch_claims_key() && self.font_picker.is_none() {
+            return self.sketch_text(text);
+        }
         if let Some(picker) = &mut self.font_picker {
             if !self.ctx.wants_keyboard_input() {
                 picker.type_filter(&text);
@@ -1254,6 +1268,16 @@ impl Ui {
         self.ctx.memory(|m| m.area_rect(egui::Id::new(name))).map(|r| (r.min.x, r.min.y, r.width(), r.height()))
     }
     pub fn take_actions(&mut self) -> Vec<String> { std::mem::take(&mut self.actions) }
+    /// The Sketch workspace (ui/sketch.rs): enter with a JSON spec, ask, run
+    /// a window command in it, leave, show a message, reopen what Cancel
+    /// discarded.
+    pub fn sketch_open(&mut self, spec: &str) -> Result<(), String> { self.sketch_enter(spec) }
+    pub fn sketch_shown(&self) -> bool { self.sketch.shown }
+    pub fn sketch_run(&mut self, cmd: &str) -> bool { self.sketch_command(cmd) }
+    pub fn sketch_close(&mut self) { self.sketch.shown = false; }
+    pub fn sketch_message(&mut self, text: &str) { self.sketch.say(text.to_owned(), None); }
+    pub fn sketch_discarded(&mut self) -> Option<String> { self.sketch_reopen_discarded() }
+    pub fn sketch_row(&self) -> String { self.sketch.row_json().to_string() }
     pub fn repaint_after_ms(&self) -> Option<f64> { self.repaint_ms }
 
     /// Only the interactive chrome takes the pointer; labels pass it through.
@@ -1456,6 +1480,10 @@ impl Ui {
                                 bar_divider(ui);
                             }
                             if sheet_up { return; }
+                            if self.sketch.shown {
+                                self.sketch_crumbs(ui);
+                                return;
+                            }
                             let controls_left = ui.cursor().left();
                             if self.review {
                                 let exit = text_button_response(ui, "Exit review", "Show the panels again", true);
@@ -1482,6 +1510,12 @@ impl Ui {
                         });
                         groups.push(left.response.rect);
                         if sheet_up { return; }
+                        if self.sketch.shown {
+                            ui.add_space((ui.available_width() - self.top_right_w).max(0.0));
+                            let right = ui.horizontal(|ui| self.sketch_bar_right(ui));
+                            groups.push(right.response.rect);
+                            return;
+                        }
                         // The right group, laid out left to right and pushed to
                         // the right edge by its width from the last frame.
                         ui.add_space((ui.available_width() - self.top_right_w).max(0.0));
@@ -3181,7 +3215,9 @@ impl Ui {
             self.top_bar(ctx, screen);
             let retract = ctx.animate_bool_with_time(egui::Id::new("retract_model_chrome"),
                                                       self.review || sheet_up, large_sheet::ANIM_S);
-            if self.sheets.shown {
+            if self.sketch.shown && retract < 1.0 {
+                self.sketch_frame(ctx, screen);
+            } else if self.sheets.shown {
                 let free = self.page_free(ctx, screen);
                 if self.page.tool != self.sheets.active {
                     self.page.set_tool(self.sheets.active.clone());
@@ -3239,7 +3275,7 @@ impl Ui {
         let work = !self.review && !sheet_up;
         // The model's own areas are not drawn in the Sheets workspace: their
         // last rects must not take the pointer there.
-        let model = !self.sheets.shown && !sheet_up;
+        let model = !self.sheets.shown && !self.sketch.shown && !sheet_up;
         let shown = [("top", true), ("palette", work && model && !self.groups.is_empty()),
                      ("view_menu", self.view_open), ("menu", self.menu.is_some()), ("form", self.form.is_some()),
                      ("drawer", work && model && self.drawer_mode().is_some()), ("column", work && model && self.column.is_some()), ("bottom", work),
@@ -3260,8 +3296,9 @@ impl Ui {
                      ("dock_grip", work && model && self.column.is_some()),
                      ("insp_color", work && model && self.column.as_ref().is_some_and(|c| c.edits.contains_key("\u{1d}pick")))];
         let sheet_areas = self.sheets_areas();
+        let sketch_areas = self.sketch_areas();
         let large = self.lsheet_areas();
-        self.hit = shown.iter().chain(sheet_areas.iter()).chain(large.iter())
+        self.hit = shown.iter().chain(sheet_areas.iter()).chain(sketch_areas.iter()).chain(large.iter())
             .filter(|(_, on)| *on)
             .filter_map(|(n, _)| ctx.memory(|m| m.area_rect(egui::Id::new(*n))))
             .collect();

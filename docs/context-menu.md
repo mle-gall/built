@@ -73,7 +73,7 @@ Isolate is left out: it shows placements, and loose geometry has none.
 | 9 | Rebuild faces (planar) | Bridge *(two loops)* | Heal overlapping faces |
 | 10 | Simplify mesh… | Flip along: Red \| Green \| Blue | Rebuild faces (planar) |
 | 11 | Flip along: Red \| Green \| Blue | | Simplify mesh… |
-| 12 | Look at Face *(one face; V)* | | Flip along: Red \| Green \| Blue |
+| 12 | Look at Face *(one face; V)* \| Sketch on face | | Flip along: Red \| Green \| Blue |
 | 13 | Texture: Position \| Reset *(a textured face)* | | |
 | 14 | Select: Connected \| Boundary \| Same material \| Same tag | Select: Connected \| Same tag | Select: Connected \| Boundary \| Same material \| Same tag |
 

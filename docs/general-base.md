@@ -681,3 +681,64 @@ atomic pack edit, and `preset_delete(history, uid)` for an unused project
 preset. The active node remembers `recipe.default_preset`. Cut and Repeat can
 use the same preset row with `primitive` set to `cut` or `repeat` and their
 own fields in `values`.
+
+## Notes from lane 2 (feat/sketch-workspace)
+
+Interfaces lanes 1 and 3 build on:
+
+- **One kind of profile.** A drawn profile is a `built_draft2d::Sketch`
+  (`rust/built_draft2d`, a pure Rust crate linked by `built_core` and
+  `built_render`). The same JSON is a document's `sketch` row body and the
+  `sketch` of a Library `.builtprofile` file (`built_draft2d::file::ProfileFile`:
+  `{"format": "built.profile", "v": 1, "name", "use", "family"?,
+  "provenance"?, "sketch" | "table"}`). Catalogue families fill `table`
+  (lane 1's generator); a family size opened in the Sketch workspace becomes
+  a drawn copy (follow-up: the families could emit sketches whose curve ids
+  are their edge roles, so a size opened as a drawing keeps its roles).
+  `tests/test_sketch_rows.py` sweeps a drawn 45 × 145 rectangle as a model
+  sketch row, as a saved Library file and as the catalogue's
+  `basic/timber`, and checks the three members are the same.
+- **Regions.** `built_draft2d::profile(&sketch)` returns outer loops (CCW)
+  with holes (CW), exact lines and arcs per edge with the curve id and
+  direction, the net area and the problems (open ends, branches,
+  crossings); the attachment points are
+  `Sketch::attachment(name)` (nine bounding-box names, `origin`, named
+  extras such as `shear_centre`), the default in `Sketch::attach`.
+- **Rows.** `kind: "sketch"`, no owner, the body in lane 1's typed fields
+  (`curves` and `SketchFields`: `use, name, plane, points, origin, attach,
+  dims, extrude, next_id`). `live_set` and `sketch_commit` check the body
+  with `built_draft2d` first; `size` and `open_top` are written only when
+  they differ from the defaults. A sweep names its sketch with
+  `profile.sketch`; the scheduler re-evaluates it in the step that commits
+  the sketch. A sketch with open ends, branches or crossings is
+  `profile_open` (draft2d), then `drawn_profile::outline` decides what a
+  sweep needs (`multiple_regions`, `invalid_profile`); users of a failed
+  sketch are left as they were (`unchanged`), or marked `profile_open`
+  when they have no result yet. Releasing a sketch removes the row; its
+  sweeps keep their geometry as `profile_missing`.
+- **Verbs.** `sketch_commit(row)` (protocol command; Done is one History
+  step; a row without `uid` gets one), `sketch_profile(scene, uid)`
+  (query), `command_protocol.sketch_plane(scene, face, path=None)` (plane
+  frame, element reference and loops of a face) and
+  `command_protocol.sketch_context(scene, origin, x, y, reach, limit)`
+  (section lines, edges behind, inset edges).
+- **Entering.** The window command `sketch:<how>[:<arg>]`
+  (`rust/built_render/src/sketch_workspace.rs`): `new[:section]`, `face`
+  (selection, or `<uid>/<uid>|f:<id>`), `section:<…>` (a cutter section on
+  a face: Cut › D and a member end in lane 3 call this), `import:<path>`
+  (DXF, SVG; DWG through `dwg_convert`), `open:<path.builtprofile>`
+  (Library › Profiles › Edit), `edit:<uid>` (double-click a sweep's
+  profile or a section cutter in lanes 1 and 3). The viewport menu on faces
+  has Sketch on face. Save to Library writes the `.builtprofile` into
+  `ProfilesProvider.saved_directory()` (`sketch_workspace.profiles_dir()`
+  is the same folder), where the Profiles tab lists drawn profiles beside
+  the families; sections are written there too and filtered out by `use`.
+
+Files both lanes touch (resolved on the rebase onto lane 1):
+`rust/built_core/src/live/{mod.rs,table.rs}` (the sketch checks in
+`evaluate` and `live_set`, `sketch_commit`, the `unchanged` handling in
+`run`), `rust/built_core/src/protocol/api/mod.rs` (`VERBS`),
+`tests/fixtures/commands_modules_python.json`, `rust/built_render/src/ui.rs`
+(the workspace hooks sit next to the Sheets ones), `rust/built_render/Cargo.toml`
+and `rust/built_core/Cargo.toml` (the `built_draft2d` path dependency).
+Sheets has not adopted `draft2d` yet (its tools keep their own geometry).

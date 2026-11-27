@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+  <!-- Trim: a line cut back to the one it crosses, the cut-off piece dashed -->
+  <path d="M30 6 V42"/>
+  <path d="M7 24 H30"/>
+  <path d="M34 24 H37 M41 24 H43" stroke-width="2.4"/>
+  <path d="M36 15 L44 9 M36 9 L44 15" stroke-width="2.4"/>
+</svg>

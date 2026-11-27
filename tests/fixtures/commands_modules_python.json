@@ -6,6 +6,7 @@
     "live_set",
     "live_release",
     "live_reevaluate",
+    "sketch_commit",
     "set_location",
     "set_model_units",
     "set_annotation_font",

@@ -1512,14 +1512,14 @@ impl ProfilesProvider {
                 let name=data["name"].as_str().unwrap_or("Drawn profile");
                 let mut sketch=data["sketch"].clone();
                 sketch["name"]=serde_json::json!(name);
-                items.push(serde_json::json!({"key":format!("local:{}",file.file_name().unwrap_or_default().to_string_lossy()),"name":name,"category":"My profiles","source":"local","sketch":sketch,"verbs":["apply"]}));
+                items.push(serde_json::json!({"key":format!("local:{}",file.file_name().unwrap_or_default().to_string_lossy()),"name":name,"category":"My profiles","source":"local","sketch":sketch,"verbs":["apply","edit"]}));
             }
         }
         if let Some(scene)=ctx.getattr_opt("scene")?.filter(|s|!s.is_none() && s.hasattr("_root").unwrap_or(false)){
             let rows=py.import("built_core.command_protocol")?.call_method1("live_rows",(scene,))?;
             let rows:Vec<serde_json::Value>=serde_json::from_str(&json(py)?.call_method1("dumps",(rows,))?.extract::<String>()?).unwrap_or_default();
             for row in rows.iter().filter(|r|r["kind"]=="sketch" && r["use"]!="section" && r["state"]=="ok"){
-                items.push(serde_json::json!({"key":format!("sketch:{}",row["uid"].as_str().unwrap_or_default()),"name":row["name"].as_str().unwrap_or("Drawn profile"),"category":"This project","source":"project","sketch":row,"verbs":["apply"]}));
+                items.push(serde_json::json!({"key":format!("sketch:{}",row["uid"].as_str().unwrap_or_default()),"name":row["name"].as_str().unwrap_or("Drawn profile"),"category":"This project","source":"project","sketch":row,"verbs":["apply","edit"]}));
             }
         }
         json(py)?.call_method1("loads",(serde_json::to_string(&items).unwrap(),))
@@ -1532,6 +1532,17 @@ impl ProfilesProvider {
             let machine=win.getattr("_tools")?.get_item("sweep")?.getattr("_machine")?;
             if item.contains("sketch")? {machine.call_method1("set",("sketch",item.get_item("sketch")?))?;}
             else {machine.call_method1("set",("profile",item.get_item("key")?))?;}
+        }
+        if verb=="edit" {
+            // Drawn profiles open in the Sketch workspace (sketch_workspace.rs).
+            let key:String=item.get_item("key")?.extract()?;
+            let win=ctx.getattr("win")?;
+            if let Some(file)=key.strip_prefix("local:") {
+                let path=Self::saved_directory()?.join(file);
+                crate::sketch_workspace::enter(&win,"open",&path.to_string_lossy())?;
+            } else if let Some(uid)=key.strip_prefix("sketch:") {
+                crate::sketch_workspace::enter(&win,"edit",uid)?;
+            }
         }
         Ok(())
     }

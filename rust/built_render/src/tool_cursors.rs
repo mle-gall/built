@@ -121,6 +121,14 @@ pub fn tool_cursor_art<'py>(
 /// Rail art drawn as SVG on the same 48-unit grid, 3-unit round strokes and
 /// 45 % fills as the atlas (the Sheets tools that had none, P10).
 const RAIL_SVG: &[(&str, &str)] = &[
+    ("sketch_trim", include_str!("../assets/sketch_icons/sketch_trim.svg")),
+    ("sketch_extend", include_str!("../assets/sketch_icons/sketch_extend.svg")),
+    ("sketch_origin", include_str!("../assets/sketch_icons/sketch_origin.svg")),
+    ("sketch_attach", include_str!("../assets/sketch_icons/sketch_attach.svg")),
+    ("sketch_scale_edge", include_str!("../assets/sketch_icons/sketch_scale_edge.svg")),
+    ("sketch_merge_arcs", include_str!("../assets/sketch_icons/sketch_merge_arcs.svg")),
+    ("sketch_drop_fillets", include_str!("../assets/sketch_icons/sketch_drop_fillets.svg")),
+    ("sketch_close_gaps", include_str!("../assets/sketch_icons/sketch_close_gaps.svg")),
     ("change_axes", include_str!("../assets/axes.svg")),
     ("sweep", include_str!("../assets/sweep.svg")),
     ("line_on_surface", include_str!("../assets/line_on_surface.svg")),

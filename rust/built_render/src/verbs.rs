@@ -388,7 +388,7 @@ pub fn menu_rows(f: &Facts, kind: &str) -> Vec<Row> {
                 r.one(vec![e("simplify", "Simplify mesh…")]);
                 r.family("Flip along", flip());
                 if !edges && f.faces == 1 {
-                    r.one(vec![ek("alignview", "Look at Face", "V")]);
+                    r.one(vec![ek("alignview", "Look at Face", "V"), e("sketchface", "Sketch on face")]);
                     if f.textured_face {
                         r.family("Texture", vec![e("texpos", "Position"), e("texreset", "Reset")]);
                     }
@@ -674,6 +674,9 @@ pub fn dispatch(kind: &str, id: &str) -> (&'static str, String, String) {
     let one = matches!(kind, "group" | "component");
     if let Some(mode) = id.strip_prefix("intersect:") {
         return glue("intersect", mode);
+    }
+    if id == "sketchface" {
+        return glue("sketch", "face");
     }
     if let Some(axis) = id.strip_prefix("flip:") {
         return slot("_on_flip_along", axis);

@@ -222,6 +222,12 @@ fn command<'py>(py: Python<'py>, win: &Any<'py>, name: &str, args: &Bound<'py, P
         }
         "library-import" => { crate::library_host::collection_form(win)?; return Ok(b(py, true)); }
         "library-tab" => return r.getattr("wgpu_library")?.call_method1("open_library", (win, arg)),
+        // The Sketch workspace: sketch:new[:section], sketch:face, sketch:import:<path>,
+        // sketch:open:<path.builtprofile>, sketch:edit:<uid> (sketch_workspace.rs).
+        "sketch" => {
+            let (how, rest) = arg.split_once(':').unwrap_or((arg, ""));
+            return Ok(b(py, crate::sketch_workspace::enter(win, how, rest)?));
+        }
         "ctx_demo" => return r.call_method1("context_menu_demo", (win, arg)),
         "close_doc" => {
             let doc = if arg.is_empty() { nil(py) } else { docs()?.get_item(py.import("builtins")?.getattr("int")?.call1((arg,))?)? };

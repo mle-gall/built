@@ -301,6 +301,10 @@ fn unlinks(
 
 #[pyfunction]
 pub fn history_step(win: &Bound<'_, PyAny>, redo: bool) -> PyResult<()> {
+    // The Sketch workspace steps through its own edits until Done.
+    if crate::sketch_workspace::command(win, if redo { "redo" } else { "undo" })? {
+        return Ok(());
+    }
     let vp = win.getattr("viewport")?;
     let tool = vp.getattr("active_tool")?;
     let handler = tool
