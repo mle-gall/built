@@ -14,6 +14,7 @@ pub(super) struct Geometry {
     pub shifts: Vec<i64>,
     pub bounds: Vec<u8>,
     pub codes: Vec<u32>,
+    pub memos: Vec<(usize, crate::edge_memo::Memo)>,
 }
 
 #[pyclass]
@@ -90,10 +91,11 @@ impl Geometry {
             start += capacity;
         }
         // Preserve the scene ABI; pack unique edges separately from face vertices.
+        let mut memos = Vec::new();
         let (expanded_v, expanded_ix, mut expanded_cmd) =
-            edges::expand(v, ix, cmd, count).map_err(PyValueError::new_err)?;
+            edges::expand_with_memos(v, ix, cmd, count, Some(&mut memos)).map_err(PyValueError::new_err)?;
         let (face_v, face_ix, material_shifts) =
-            faces::compact(v, &expanded_ix, &mut expanded_cmd, count);
+            faces::compact_with_slack(v, &expanded_ix, &mut expanded_cmd, count, &memos);
         Ok(Self {
             edges: expanded_v,
             vertices: face_v,
@@ -102,6 +104,7 @@ impl Geometry {
             shifts: material_shifts,
             bounds: p.to_vec(),
             codes,
+            memos,
         })
     }
 }

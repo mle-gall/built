@@ -18,33 +18,36 @@ use crate::edges::{key, shard_of, words, FastMap, Words};
 
 /// Past this many triangles a prototype's expansion is kept.
 pub(crate) const KEEP_PAST: usize = 1 << 16;
+// Bound all retained adjacency and vertex history on one renderer. A
+// model larger than the cache can still use the ordinary upload path.
+pub(crate) const CACHE_BYTES: usize = 256 * 1024 * 1024;
+pub(crate) const MAX_VERTICES: usize = 4 * 1024 * 1024;
 const R: usize = 48; // one edge record
 const WINDOW: usize = 512;
 
 #[derive(Default, Clone)]
 struct Entry {
-    key: [u8; 24],
     /// The normals of the triangles on this side with their triangles'
     /// ranks (stream order), ascending; the first two inline.
     ns: [(u64, [f32; 3]); 2],
     len: u32,
-    more: Vec<(u64, [f32; 3])>,
+    more: Option<Box<Vec<(u64, [f32; 3])>>>,
     /// Hard edges with this key.
     hard: u32,
 }
 
 impl Entry {
     fn get(&self, i: usize) -> (u64, [f32; 3]) {
-        if i < 2 { self.ns[i] } else { self.more[i - 2] }
+        if i < 2 { self.ns[i] } else { self.more.as_ref().unwrap()[i - 2] }
     }
     fn set(&mut self, i: usize, v: (u64, [f32; 3])) {
-        if i < 2 { self.ns[i] = v } else { self.more[i - 2] = v }
+        if i < 2 { self.ns[i] = v } else { self.more.as_mut().unwrap()[i - 2] = v }
     }
     /// In rank order (a rebuild meets triangles in that order).
     fn push(&mut self, rank: u64, n: [f32; 3]) {
         let len = self.len as usize;
         if len >= 2 {
-            self.more.push((0, [0.; 3]));
+            self.more.get_or_insert_with(Default::default).push((0, [0.; 3]));
         }
         self.len += 1;
         let mut at = len;
@@ -63,7 +66,7 @@ impl Entry {
             self.set(i, next);
         }
         if len > 2 {
-            self.more.pop();
+            self.more.as_mut().unwrap().pop();
         } else {
             self.ns[len - 1] = (0, [0.; 3]);
         }
@@ -91,13 +94,13 @@ const SPACING: u64 = 1 << 24;
 struct Shard {
     lookup: FastMap<Words, u32>,
     entries: Vec<Entry>,
+    free: Vec<u32>,
 }
 
 pub(crate) struct Memo {
     /// The expanded input's positions: each face triangle's three corners,
     /// each hard edge's two ends (what the records follow from).
-    tris: Vec<[u8; 36]>,
-    pairs: Vec<[u8; 24]>,
+    face_vertices: Vec<u8>,
     shards: Vec<Shard>,
     /// The edge records: one per hard edge in input order, then the
     /// profile candidates (`soft`, by key).
@@ -121,13 +124,6 @@ fn corners(v: &[u8], t: usize) -> [u8; 36] {
     out
 }
 
-fn ends(v: &[u8], faces: usize, e: usize) -> [u8; 24] {
-    let mut out = [0u8; 24];
-    out[..12].copy_from_slice(&v[(faces + 2 * e) * 28..(faces + 2 * e) * 28 + 12]);
-    out[12..].copy_from_slice(&v[(faces + 2 * e + 1) * 28..(faces + 2 * e + 1) * 28 + 12]);
-    out
-}
-
 fn normal(points: &[[u8; 12]; 3]) -> [f32; 3] {
     let p = |i: usize| glam::Vec3::from_array(bytemuck::pod_read_unaligned::<[f32; 3]>(&points[i]));
     (p(1) - p(0)).cross(p(2) - p(0)).normalize_or_zero().to_array()
@@ -142,6 +138,41 @@ fn record(out: &mut [u8], k: &[u8; 24], ends: (&[u8], &[u8]), normals: [[f32; 3]
     out[36..48].copy_from_slice(bytemuck::cast_slice(&normals[1]));
 }
 
+/// Copies use prototype-relative byte offsets. Each source comes from the
+/// previous draw and must be read before any destination is overwritten.
+#[derive(Default)]
+pub(crate) struct Writes {
+    pub upload: Vec<std::ops::Range<usize>>,
+    pub moves: Vec<(usize, usize, usize)>,
+}
+
+impl Writes {
+    fn from_runs(old: &[u8], new: &[u8], runs: &[(usize,usize,usize)], stride: usize) -> Self {
+        let mut plan = Self::default();
+        let mut at = 0;
+        for &(o, n, len) in runs {
+            let (o, n, size) = (o * stride, n * stride, len * stride);
+            if at < n { plan.upload.push(at..n); }
+            for (i, page) in new[n..n+size].chunks(128 * stride).enumerate() {
+                let offset = i * 128 * stride;
+                let (src, dst, bytes) = (o + offset, n + offset, page.len());
+                if old[src..src+bytes] != *page || (src != dst && bytes < 4096) {
+                    if let Some(last) = plan.upload.last_mut().filter(|r| r.end == dst) {
+                        last.end += bytes;
+                    } else { plan.upload.push(dst..dst+bytes); }
+                } else if src != dst {
+                    if let Some((_,_,k)) = plan.moves.last_mut().filter(|(a,b,k)| a+k == src && b+k == dst) {
+                        *k += bytes;
+                    } else { plan.moves.push((src,dst,bytes)); }
+                }
+            }
+            at = n + size;
+        }
+        if at < new.len() { plan.upload.push(at..new.len()); }
+        plan
+    }
+}
+
 impl Memo {
     fn find(&self, w: &Words) -> Option<&Entry> {
         let s = &self.shards[shard_of(w, self.shards.len())];
@@ -153,10 +184,26 @@ impl Memo {
         let n = self.shards.len();
         let s = &mut self.shards[shard_of(&w, n)];
         let at = *s.lookup.entry(w).or_insert_with(|| {
-            s.entries.push(Entry { key: *k, ..Entry::default() });
+            if let Some(slot) = s.free.pop() { return slot; }
+            s.entries.push(Entry::default());
             (s.entries.len() - 1) as u32
         });
         &mut s.entries[at as usize]
+    }
+
+    pub(crate) fn retained_bytes(&self) -> usize {
+        let sides: usize = self.shards.iter().map(|s| {
+            // HashMap exposes usable slots; reserve for the empty control
+            // group and the 7/8 load factor in the backing allocation.
+            let buckets = (s.lookup.capacity() + 1).next_power_of_two();
+            s.free.capacity() * 4 + buckets * (std::mem::size_of::<(Words,u32)>() + 1)
+                + s.entries.capacity() * std::mem::size_of::<Entry>()
+                + s.entries.iter().filter_map(|e| e.more.as_ref()).map(|v|
+                    std::mem::size_of_val(v.as_ref()) + v.capacity() * std::mem::size_of::<(u64,[f32;3])>()
+                ).sum::<usize>()
+        }).sum();
+        sides + self.face_vertices.capacity() + self.records.capacity() + self.ranks.capacity() * 8
+            + self.soft.capacity() * 24 + (self.soft_at.capacity() + 1).next_power_of_two() * 33
     }
 
     /// The expansion of `v` (`faces` face vertices, the rest hard-edge
@@ -167,8 +214,9 @@ impl Memo {
         let pairs = (v.len() / 28 - faces) / 2;
         let build = |shard: usize| -> Shard {
             let mut own = Shard {
-                lookup: FastMap::with_capacity_and_hasher(tris * 2 / shards + 16, Default::default()),
-                entries: Vec::with_capacity(tris * 2 / shards + 16),
+                free: Vec::new(),
+                lookup: FastMap::with_capacity_and_hasher(tris * 3 / 2 / shards + 16, Default::default()),
+                entries: Vec::with_capacity(tris * 3 / 2 / shards + 1024),
             };
             for t in 0..tris {
                 let pts = [point(v, 3 * t), point(v, 3 * t + 1), point(v, 3 * t + 2)];
@@ -181,7 +229,7 @@ impl Memo {
                     }
                     let n = *n.get_or_insert_with(|| normal(&pts));
                     let at = *own.lookup.entry(w).or_insert_with(|| {
-                        own.entries.push(Entry { key: k, ..Entry::default() });
+                        own.entries.push(Entry::default());
                         (own.entries.len() - 1) as u32
                     });
                     own.entries[at as usize].push(t as u64 * SPACING, n);
@@ -191,9 +239,11 @@ impl Memo {
                 let k = key(&point(v, faces + 2 * e), &point(v, faces + 2 * e + 1));
                 let w = words(&k);
                 if shard_of(&w, shards) == shard {
-                    if let Some(&at) = own.lookup.get(&w) {
-                        own.entries[at as usize].hard += 1;
-                    }
+                    let at = *own.lookup.entry(w).or_insert_with(|| {
+                        own.entries.push(Entry::default());
+                        (own.entries.len() - 1) as u32
+                    });
+                    own.entries[at as usize].hard += 1;
                 }
             }
             own
@@ -203,8 +253,7 @@ impl Memo {
             handles.into_iter().map(|h| h.join().expect("an edge shard")).collect()
         });
         let mut memo = Memo {
-            tris: (0..tris).map(|t| corners(v, t)).collect(),
-            pairs: (0..pairs).map(|e| ends(v, faces, e)).collect(),
+            face_vertices: v[..faces * 28].to_vec(),
             shards,
             records: Vec::new(),
             hard: pairs,
@@ -212,7 +261,14 @@ impl Memo {
             soft_at: FastMap::default(),
             ranks: (0..tris as u64).map(|t| t * SPACING).collect(),
         };
-        let soft: Vec<[u8; 24]> = memo.shards.iter().flat_map(|s| s.entries.iter()).filter(|e| e.profile()).map(|e| e.key).collect();
+        let mut soft = Vec::new();
+        for shard in &memo.shards {
+            let mut candidates: Vec<_> = shard.lookup.iter()
+                .filter(|(_, slot)| shard.entries[**slot as usize].profile())
+                .map(|(w, slot)| (*slot, w.bytes())).collect();
+            candidates.sort_unstable_by_key(|(slot, _)| *slot);
+            soft.extend(candidates.into_iter().map(|(_, k)| k));
+        }
         for (i, k) in soft.iter().enumerate() {
             memo.soft_at.insert(words(k), i as u32);
         }
@@ -236,21 +292,24 @@ impl Memo {
     /// byte ranges of the records that differ from what was there before at
     /// the same offsets (what an upload into the same buffer range must
     /// write), or None when too much changed.
-    pub(crate) fn update(&mut self, v: &[u8], faces: usize) -> Option<Vec<std::ops::Range<usize>>> {
-        let (nto, ntn, npo) = (self.tris.len(), faces / 3, self.pairs.len());
+    pub(crate) fn update(&mut self, v: &[u8], faces: usize) -> Option<(Writes, Writes)> {
+        let (nto, ntn, npo) = (self.ranks.len(), faces / 3, self.hard);
         let npn = (v.len() / 28 - faces) / 2;
-        let same_tri = |i: usize, j: usize| (0..3).all(|k| self.tris[i][k * 12..k * 12 + 12] == v[(3 * j + k) * 28..(3 * j + k) * 28 + 12]);
-        let same_pair = |i: usize, j: usize| self.pairs[i][..12] == v[(faces + 2 * j) * 28..(faces + 2 * j) * 28 + 12]
-            && self.pairs[i][12..] == v[(faces + 2 * j + 1) * 28..(faces + 2 * j + 1) * 28 + 12];
+        let same_tri = |i: usize, j: usize| (0..3).all(|k| self.face_vertices[(3 * i + k) * 28..(3 * i + k) * 28 + 12] == v[(3 * j + k) * 28..(3 * j + k) * 28 + 12]);
+        let same_pair = |i: usize, j: usize| self.records[i * R..i * R + 12] == v[(faces + 2 * j) * 28..(faces + 2 * j) * 28 + 12]
+            && self.records[i * R + 12..i * R + 24] == v[(faces + 2 * j + 1) * 28..(faces + 2 * j + 1) * 28 + 12];
         let tri_runs = crate::align::runs_by(nto, ntn, same_tri, WINDOW, 4)?;
         let pair_runs = crate::align::runs_by(npo, npn, same_pair, WINDOW, 4)?;
         let unpaired = |n: usize, runs: &[(usize, usize, usize)], old: bool| -> Vec<usize> {
-            let mut paired = vec![false; n];
+            let mut absent = Vec::new();
+            let mut end = 0;
             for &(o, k, len) in runs {
                 let at = if old { o } else { k };
-                paired[at..at + len].iter_mut().for_each(|p| *p = true);
+                absent.extend(end..at);
+                end = at + len;
             }
-            (0..n).filter(|&i| !paired[i]).collect()
+            absent.extend(end..n);
+            absent
         };
         let (gone_t, new_ts) = (unpaired(nto, &tri_runs, true), unpaired(ntn, &tri_runs, false));
         let (gone_p, new_ps) = (unpaired(npo, &pair_runs, true), unpaired(npn, &pair_runs, false));
@@ -298,10 +357,8 @@ impl Memo {
             let pts: [[u8; 12]; 3] = std::array::from_fn(|k| c[k * 12..k * 12 + 12].try_into().unwrap());
             (pts, [key(&pts[0], &pts[1]), key(&pts[1], &pts[2]), key(&pts[2], &pts[0])])
         };
-        let old_tris = std::mem::take(&mut self.tris);
-        let old_pairs = std::mem::take(&mut self.pairs);
         for &t in &gone_t {
-            let (_, ks) = sides(&old_tris[t]);
+            let (_, ks) = sides(&corners(&self.face_vertices, t));
             let rank = self.ranks[t];
             for k in &ks {
                 touch(self, k);
@@ -318,7 +375,7 @@ impl Memo {
         }
         let pair_key = |s: &[u8], first: usize, e: usize| key(&point(s, first + 2 * e), &point(s, first + 2 * e + 1));
         for &e in &gone_p {
-            let k = key(&old_pairs[e][..12], &old_pairs[e][12..]);
+            let k = key(&self.records[e * R..e * R + 12], &self.records[e * R + 12..e * R + 24]);
             touch(self, &k);
             let entry = self.entry(&k);
             entry.hard = entry.hard.saturating_sub(1);
@@ -335,7 +392,7 @@ impl Memo {
         let mut join: Vec<[u8; 24]> = Vec::new();
         for (w, (was, soft)) in &before {
             let (now, profile, k) = match self.find(w) {
-                Some(e) => (e.normals(), e.profile(), e.key),
+                Some(e) => (e.normals(), e.profile(), w.bytes()),
                 None => ([[0.; 3]; 2], false, [0; 24]),
             };
             if now.map(|n| n.map(f32::to_bits)) != was.map(|n| n.map(f32::to_bits)) {
@@ -345,6 +402,18 @@ impl Memo {
                 (true, false) => leave.push(*w),
                 (false, true) => join.push(k),
                 _ => {}
+            }
+        }
+        for w in before.keys() {
+            let index = shard_of(w, self.shards.len());
+            let shard = &mut self.shards[index];
+            if let Some(&at) = shard.lookup.get(w) {
+                let e = &shard.entries[at as usize];
+                if e.len == 0 && e.hard == 0 {
+                    shard.lookup.remove(w);
+                    shard.entries[at as usize] = Entry::default();
+                    shard.free.push(at);
+                }
             }
         }
         // The hard records, in the new input order.
@@ -403,54 +472,23 @@ impl Memo {
         }
         records.extend_from_slice(&soft_records);
         // What an upload over the old ranges must write.
-        let changed = |old: &[u8], new: &[u8], unit: usize| -> Vec<std::ops::Range<usize>> {
-            let mut out: Vec<std::ops::Range<usize>> = Vec::new();
-            let n = new.len() / unit;
-            let mut i = 0;
-            while i < n {
-                let same = |i: usize| (i + 1) * unit <= old.len() && old[i * unit..(i + 1) * unit] == new[i * unit..(i + 1) * unit];
-                if same(i) {
-                    i += 1;
-                    continue;
-                }
-                let start = i;
-                while i < n && !same(i) {
-                    i += 1;
-                }
-                match out.last_mut() {
-                    Some(last) if start * unit <= last.end + 4096 => last.end = i * unit,
-                    _ => out.push(start * unit..i * unit),
-                }
-            }
-            out
-        };
-        let record_changes = changed(&old_records, &records, R);
-        let mut tris = vec![[0u8; 36]; ntn];
-        let mut fresh_t = vec![true; ntn];
-        for &(o, k, len) in &tri_runs {
-            tris[k..k + len].copy_from_slice(&old_tris[o..o + len]);
-            fresh_t[k..k + len].iter_mut().for_each(|f| *f = false);
+        let mut record_runs = pair_runs;
+        let common_soft = (old_soft.len() / R).min(soft_records.len() / R);
+        if common_soft != 0 { record_runs.push((self.hard, npn, common_soft)); }
+        let record_changes = Writes::from_runs(&old_records, &records, &record_runs, R);
+        let new_faces = &v[..faces * 28];
+        let face_changes = Writes::from_runs(&self.face_vertices, new_faces, &tri_runs, 84);
+        self.face_vertices.resize(new_faces.len(), 0);
+        for &(_, dst, size) in &face_changes.moves {
+            self.face_vertices[dst..dst+size].copy_from_slice(&new_faces[dst..dst+size]);
         }
-        for t in 0..ntn {
-            if fresh_t[t] {
-                tris[t] = corners(v, t);
-            }
+        for span in &face_changes.upload {
+            self.face_vertices[span.clone()].copy_from_slice(&new_faces[span.clone()]);
         }
-        let mut pairs = vec![[0u8; 24]; npn];
-        for &(o, k, len) in &pair_runs {
-            pairs[k..k + len].copy_from_slice(&old_pairs[o..o + len]);
-        }
-        for e in 0..npn {
-            if fresh[e] {
-                pairs[e] = ends(v, faces, e);
-            }
-        }
-        self.tris = tris;
-        self.pairs = pairs;
         self.hard = npn;
         self.records = records;
         self.ranks = ranks;
-        Some(record_changes)
+        Some((face_changes, record_changes))
     }
 }
 
@@ -522,7 +560,12 @@ mod tests {
         }
         assert_eq!(a.1.len(), b.1.len(), "profile candidates");
         assert!(a.1 == b.1, "profile candidates differ");
-        assert!(!rc.is_empty());
+        assert!(!rc.1.upload.is_empty() || !rc.1.moves.is_empty());
+        let mut replay = v[..faces * 28].to_vec();
+        replay.resize(faces2 * 28, 0);
+        for &(src,dst,size) in &rc.0.moves { replay[dst..dst+size].copy_from_slice(&v[src..src+size]); }
+        for span in rc.0.upload { replay[span.clone()].copy_from_slice(&v2[span]); }
+        assert_eq!(replay, v2[..faces2 * 28]);
         // And back.
         memo.update(&v, faces).expect("undo carries");
         assert_eq!(split(&memo.records, memo.hard), split(&expanded(&v, faces), memo.hard));

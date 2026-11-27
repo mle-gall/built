@@ -2,10 +2,15 @@
 //! Per-prototype vertex translation is also applied to sparse material headers.
 pub fn compact(vertices: &[u8], indices: &[u8], commands: &mut [u8], prototypes: usize)
     -> (Vec<u8>, Vec<u8>, Vec<i64>) {
+    compact_with_slack(vertices, indices, commands, prototypes, &[])
+}
+
+pub(super) fn compact_with_slack(vertices: &[u8], indices: &[u8], commands: &mut [u8], prototypes: usize,
+    memos: &[(usize, crate::edge_memo::Memo)]) -> (Vec<u8>, Vec<u8>, Vec<i64>) {
     let mut v = Vec::new();
     let mut ix = Vec::new();
     let mut shifts = Vec::new();
-    for row in commands.chunks_exact_mut(20).take(prototypes) {
+    for (code, row) in commands.chunks_exact_mut(20).take(prototypes).enumerate() {
         let mut c: crate::Command = bytemuck::pod_read_unaligned(row);
         let source = &indices[c.first as usize * 4..(c.first + c.count) as usize * 4];
         let mut lo = usize::MAX;
@@ -20,6 +25,11 @@ pub fn compact(vertices: &[u8], indices: &[u8], commands: &mut [u8], prototypes:
         c.base = (i64::from(c.base) + shift) as i32;
         c.first = (ix.len() / 4) as u32;
         ix.extend_from_slice(source);
+        if memos.iter().any(|entry| entry.0 == code) {
+            let slack = crate::edit_slack(c.count as usize);
+            v.resize(v.len() + slack * 28, 0);
+            ix.resize(ix.len() + slack * 4, 0);
+        }
         shifts.push(shift);
         row.copy_from_slice(bytemuck::bytes_of(&c));
     }

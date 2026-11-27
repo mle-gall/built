@@ -5,6 +5,29 @@ pub fn expand(
     commands: &[u8],
     prototypes: usize,
 ) -> Result<(Vec<u8>, Vec<u8>, Vec<u8>), &'static str> {
+    expand_with_memos(vertices, indices, commands, prototypes, None)
+}
+
+/// Reclaim edit gaps if the unpadded scene fits a smaller GPU. Edge draws
+/// are in physical record order and use six indices per record.
+pub(super) fn remove_slack(records: &mut Vec<u8>, commands: &mut [u8], prototypes: usize) {
+    let mut used = 0;
+    for row in commands.chunks_exact_mut(20).skip(prototypes) {
+        let mut cmd: crate::Command = bytemuck::pod_read_unaligned(row);
+        let start = cmd.first as usize / 6 * 48;
+        let bytes = cmd.count as usize / 6 * 48;
+        records.copy_within(start..start + bytes, used);
+        cmd.first = (used / 48 * 6) as u32;
+        row.copy_from_slice(bytemuck::bytes_of(&cmd));
+        used += bytes;
+    }
+    records.truncate(used);
+}
+
+pub(super) fn expand_with_memos(
+    vertices: &[u8], indices: &[u8], commands: &[u8], prototypes: usize,
+    mut memos: Option<&mut Vec<(usize, crate::edge_memo::Memo)>>,
+) -> Result<(Vec<u8>, Vec<u8>, Vec<u8>), &'static str> {
     let mut v = Vec::new();
     let ix = indices.to_vec();
     let mut cmd = commands.to_vec();
@@ -16,6 +39,32 @@ pub fn expand(
             return Err("edge command must contain endpoint pairs");
         }
         let first = v.len() / 48;
+        // Prepare the same adjacency state used by interactive replacements
+        // during scene upload. Indexed or disjoint ranges use normal expansion.
+        let faces = face.count as usize;
+        if let Some(cache) = memos.as_deref_mut() {
+            let count = faces + c.count as usize;
+            if cache.len() < 2 && count <= crate::edge_memo::MAX_VERTICES && faces / 3 >= crate::edge_memo::KEEP_PAST && faces % 3 == 0
+                && c.base == face.base && face.base >= 0 && c.first as u64 == face.first as u64 + faces as u64
+                && indices[face.first as usize * 4..(face.first as usize + count) * 4]
+                    .chunks_exact(4).enumerate().all(|(i, word)| word == (i as u32).to_le_bytes())
+            {
+                let start = face.base as usize * 28;
+                let memo = crate::edge_memo::Memo::build(&vertices[start..start + count * 28], faces);
+                let records = memo.records.len() / 48;
+                v.extend_from_slice(&memo.records);
+                c.first = u32::try_from(first * 6).map_err(|_| "edge buffer too large")?;
+                c.count = u32::try_from(records * 6).map_err(|_| "edge buffer too large")?;
+                c.base = c.start as i32;
+                c.start = u32::try_from(memo.hard * 6).map_err(|_| "edge buffer too large")?;
+                row.copy_from_slice(bytemuck::bytes_of(&c));
+                if memo.retained_bytes() + cache.iter().map(|m| m.1.retained_bytes()).sum::<usize>() <= crate::edge_memo::CACHE_BYTES {
+                    v.resize(v.len() + crate::edit_slack(records) * 48, 0);
+                    cache.push((prototype, memo));
+                }
+                continue;
+            }
+        }
         let endpoint = |pair: &[u8], offset: usize| -> [u8; 12] {
             let index = u32::from_le_bytes(pair[offset..offset + 4].try_into().unwrap());
             let start = (i64::from(index) + i64::from(c.base)) as usize * 28;
@@ -156,6 +205,13 @@ pub(crate) fn key(a: &[u8], b: &[u8]) -> [u8; 24] {
 /// prefix or a byte loop.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Words(pub(crate) [u64; 3]);
+impl Words {
+    pub(crate) fn bytes(self) -> [u8;24] {
+        let mut out = [0;24];
+        for (dst, w) in out.chunks_exact_mut(8).zip(self.0) { dst.copy_from_slice(&w.to_le_bytes()); }
+        out
+    }
+}
 impl std::hash::Hash for Words {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         for word in self.0 {
