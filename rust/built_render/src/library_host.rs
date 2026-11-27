@@ -1481,6 +1481,13 @@ impl ProfilesProvider {
         "Profiles"
     }
 
+    fn type_action(&self,ctx:&Bound<'_,PyAny>,action:&str)->PyResult<()> {
+        let win=ctx.getattr("win")?;
+        cs(ctx.py())?.call_method1("close",(&win,))?;
+        crate::sketch_workspace::enter(&win,action,"")?;
+        Ok(())
+    }
+
     /// Shared with the sketch workspace's Save to Library action.
     #[staticmethod]
     fn saved_directory()->PyResult<PathBuf>{
@@ -2120,6 +2127,9 @@ impl LibrarySheet {
         let collections = manifests.as_ref().map_or(&[][..], |m| m.0.as_slice());
         if prov_id=="presets" {
             sheet.call_method1("verb",("typeact:import","Import pack…"))?;
+        }else if prov_id=="profiles" {
+            sheet.call_method1("verb",("typeact:new","New sketch"))?;
+            sheet.call_method1("verb",("typeact:import","Import drawing…"))?;
         }else if !has_target {
             sheet.call_method1("verb", ("import-collection", "Import collection…"))?;
         }

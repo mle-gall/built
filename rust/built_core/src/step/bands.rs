@@ -174,7 +174,10 @@ impl Builder<'_> {
                     edge: Some(id),
                     pole: None,
                     reversed,
-                    projected: false,
+                    // An oblique end traces an ellipse on a cylinder. Its
+                    // height varies along the arc in the unwrapped chart.
+                    projected: matches!(support.surface, Surface::Cylinder { .. })
+                        && self.st.curved_edge(e).is_some_and(|b|matches!(b.curve, Curve::Ellipse{..})),
                     uv: [uv[i], uv[j]],
                     tolerance: TOL,
                 });

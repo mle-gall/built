@@ -494,6 +494,9 @@ fn igz_load_into_inner<'p>(
     } else {
         scene.setattr("doc_ext", py.None())?;
     }
+    if !scene.getattr("doc_ext")?.contains("built.live").unwrap_or(false) {
+        crate::hosted_openings::migrate(scene)?;
+    }
     let total = repairs.get_item(0)?.add(new)?;
     repairs.set_item(0, &total)?;
     scene.setattr("load_repairs", total)?;

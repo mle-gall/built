@@ -73,7 +73,12 @@ pub(crate) fn open_plan(plan: &Obj) -> PyResult<bool> {
     Ok(starts.windows(2).any(|w| w[1] - w[0] != 2))
 }
 fn store(mesh: &Obj) -> PyResult<bool> {
-    mesh.is_instance(&mesh.py().import("built_core.store_mesh")?.getattr("StoreMesh")?)
+    mesh.is_instance(
+        &mesh
+            .py()
+            .import("built_core.store_mesh")?
+            .getattr("StoreMesh")?,
+    )
 }
 fn installed_hypot<'p>(mesh: &Obj<'p>) -> PyResult<Option<Obj<'p>>> {
     if !store(mesh)? {
@@ -132,10 +137,15 @@ fn solid_volume(group: &Obj) -> PyResult<Option<f64>> {
     }
     let mesh = group.getattr("mesh")?;
     let transform = group.getattr("xform")?;
-    let scale = if transform.is_none() { 1. } else {
+    let scale = if transform.is_none() {
+        1.
+    } else {
         crate::math::mat(&transform)?.determinant().abs()
     };
-    Ok(solid_report(&mesh)?.1.map(|v| v * scale).filter(|v| *v > 1e-12))
+    Ok(solid_report(&mesh)?
+        .1
+        .map(|v| v * scale)
+        .filter(|v| *v > 1e-12))
 }
 #[pyfunction]
 fn is_solid(group: &Obj) -> PyResult<bool> {
@@ -150,6 +160,8 @@ struct EdgeFlag<'p> {
 }
 #[derive(Default)]
 struct Sources<'p> {
+    live: Option<(String, usize)>,
+    roles: Vec<(String, u64, bool)>,
     attrs: Vec<Bound<'p, PyDict>>,
     donors: Vec<bindings::Donor>,
     soft: HashSet<(usize, usize)>,
@@ -166,17 +178,48 @@ impl<'p> Sources<'p> {
     fn operand(&mut self, group: &Obj<'p>, operand: usize) -> PyResult<Obj<'p>> {
         let py = group.py();
         let definition = group.getattr("mesh")?;
+        if let Some((uid, tool)) = &self.live {
+            use crate::store::{keys::Kind, py::PyMeshStore};
+            let handle = definition.getattr("_store")?.cast_into::<PyMeshStore>()?;
+            let borrow = handle.try_borrow()?;
+            let st = &borrow.inner;
+            for slot in st.live_slots(Kind::Face) {
+                if st.state.fflags.get(slot as usize) & crate::store::INTERIOR != 0 {
+                    continue;
+                }
+                let pid = st.pid(Kind::Face, slot);
+                let role = crate::element_ids::to_text('f', pid);
+                self.roles.push((
+                    if operand == *tool {
+                        format!("cut/{uid}/{role}")
+                    } else {
+                        role
+                    },
+                    pid,
+                    operand == *tool,
+                ));
+            }
+        }
         let xf = group.getattr("xform")?;
         let placement = (!xf.is_none()).then(|| crate::math::mat(&xf)).transpose()?;
-        let native = definition.getattr_opt("_store")?
-            .is_some_and(|st| st.getattr("native_exact").and_then(|v| v.extract::<bool>()).unwrap_or(false));
+        let native = definition.getattr_opt("_store")?.is_some_and(|st| {
+            st.getattr("native_exact")
+                .and_then(|v| v.extract::<bool>())
+                .unwrap_or(false)
+        });
         let sample_placement = native.then_some(placement).flatten();
-        let mesh = if native { definition.clone() } else { world(group)? };
+        let mesh = if native {
+            definition.clone()
+        } else {
+            world(group)?
+        };
         let mut donors = bindings::donors(&definition, placement)?.into_iter();
         let mat = py
             .import("built_core.group")?
             .call_method1("effective_material", (group,))?;
-        let paint = py.import("built_core.materials")?.getattr("effective_attrs")?;
+        let paint = py
+            .import("built_core.materials")?
+            .getattr("effective_attrs")?;
         let mut soup = Surface::empty();
         let ids = PyDict::new(py);
         let mut index = HashMap::new();
@@ -256,7 +299,9 @@ impl<'p> Sources<'p> {
                 }
                 if let [a, b] = faces[..] {
                     self.soft.insert(order(a, b));
-                    if e.getattr("flat")?.is_truthy()? { self.flat.insert(order(a,b)); }
+                    if e.getattr("flat")?.is_truthy()? {
+                        self.flat.insert(order(a, b));
+                    }
                 }
             }
             let curve = e
@@ -267,8 +312,12 @@ impl<'p> Sources<'p> {
             let hidden = e.getattr("hidden")?.is_truthy()?;
             if curve.is_some() || !layer.is_none() || hidden {
                 self.edges.push(EdgeFlag {
-                    a: sample_placement.unwrap_or(glam::DMat4::IDENTITY).transform_point3(xyz(&e.getattr("a")?)?),
-                    b: sample_placement.unwrap_or(glam::DMat4::IDENTITY).transform_point3(xyz(&e.getattr("b")?)?),
+                    a: sample_placement
+                        .unwrap_or(glam::DMat4::IDENTITY)
+                        .transform_point3(xyz(&e.getattr("a")?)?),
+                    b: sample_placement
+                        .unwrap_or(glam::DMat4::IDENTITY)
+                        .transform_point3(xyz(&e.getattr("b")?)?),
                     curve,
                     layer,
                     hidden,
@@ -276,9 +325,13 @@ impl<'p> Sources<'p> {
             }
         }
         if let Some(m) = sample_placement {
-            for p in &mut soup.points { *p = m.transform_point3(*p); }
+            for p in &mut soup.points {
+                *p = m.transform_point3(*p);
+            }
             if m.determinant() < 0. {
-                for t in &mut soup.triangles { t.swap(1, 2); }
+                for t in &mut soup.triangles {
+                    t.swap(1, 2);
+                }
             }
         }
         soup.manifold(py)
@@ -286,6 +339,80 @@ impl<'p> Sources<'p> {
 }
 #[pyfunction]
 fn run<'p>(op: &str, groups: &Obj<'p>) -> PyResult<(Bound<'p, PyList>, Bound<'p, PyList>)> {
+    operation(op, groups, None, 0.)
+}
+
+/// Keep intermediates in the manifold kernel. Only the final solid needs
+/// editable polygon faces, exact donor bindings and persistent element IDs.
+pub(crate) fn body_stack<'p>(
+    subject: &Obj<'p>,
+    tools: Vec<(String, String, f64, Obj<'p>)>,
+    active: &mut Option<String>,
+    skipped: &mut Vec<(String, &'static str)>,
+) -> PyResult<Result<Obj<'p>, &'static str>> {
+    let py = subject.py();
+    let mut sources = Sources {
+        live: Some((String::new(), usize::MAX)),
+        ..Default::default()
+    };
+    let mut result = sources.operand(subject, 0)?;
+    for (index, (uid, op, gap, tool)) in tools.into_iter().enumerate() {
+        *active = Some(uid.clone());
+        if !is_solid(&tool)? {
+            skipped.push((uid, "boolean_failed"));
+            continue;
+        }
+        sources.live = Some((uid.clone(), index + 1));
+        let mut cutter = sources.operand(&tool, index + 1)?;
+        if gap > 0. {
+            let ball = py
+                .import("manifold3d")?
+                .getattr("Manifold")?
+                .call_method1("sphere", (gap / 1000., 12))?;
+            cutter = cutter.call_method1("minkowski_sum", (ball,))?;
+        }
+        let next = match op.as_str() {
+            "union" => result.add(&cutter)?,
+            "intersect" => result.bitxor(&cutter)?,
+            _ => {
+                if result
+                    .bitxor(&cutter)?
+                    .call_method0("is_empty")?
+                    .is_truthy()?
+                {
+                    skipped.push((uid, "cut_misses"));
+                    continue;
+                }
+                result.sub(&cutter)?
+            }
+        };
+        if next.call_method0("is_empty")?.is_truthy()? {
+            skipped.push((
+                uid,
+                if op == "intersect" {
+                    "cut_misses"
+                } else {
+                    "empty_cut"
+                },
+            ));
+            continue;
+        }
+        result = next;
+    }
+    let name = subject.getattr("name")?;
+    let mesh = output::group(&result, &sources, &name, &subject.getattr("layer")?, false)?;
+    match mesh {
+        Some(g) => Ok(Ok(g.getattr("mesh")?)),
+        None => Ok(Err("empty_cut")),
+    }
+}
+
+pub(crate) fn operation<'p>(
+    op: &str,
+    groups: &Obj<'p>,
+    cut: Option<&str>,
+    clearance: f64,
+) -> PyResult<(Bound<'p, PyList>, Bound<'p, PyList>)> {
     let py = groups.py();
     let Some((_, label)) = OPERATIONS.iter().find(|(k, _)| *k == op) else {
         return Err(PyValueError::new_err(op.to_owned()));
@@ -294,19 +421,33 @@ fn run<'p>(op: &str, groups: &Obj<'p>) -> PyResult<(Bound<'p, PyList>, Bound<'p,
     if gs.len() < 2 {
         return Err(error(py, "two solids"));
     }
-    let mut sources = Sources::default();
+    let tool = usize::from(!matches!(op, "subtract" | "trim"));
+    let mut sources = Sources {
+        live: cut.map(|id| (id.to_owned(), tool)),
+        ..Default::default()
+    };
+
     for g in &gs {
         if !is_solid(g)? {
             return Err(error(py, "not a solid"));
         }
     }
-    let mans = gs
+    let mut mans = gs
         .iter()
         .enumerate()
         .map(|(i, g)| sources.operand(g, i))
         .collect::<PyResult<Vec<_>>>()?;
+    if clearance > 0. {
+        let ball = py
+            .import("manifold3d")?
+            .getattr("Manifold")?
+            .call_method1("sphere", (clearance / 1000., 12))?;
+        mans[tool] = mans[tool].call_method1("minkowski_sum", (ball,))?;
+    }
     let result = PyList::empty(py);
-    let name = py.import("built_core.i18n")?.call_method1("tr", (*label,))?;
+    let name = py
+        .import("built_core.i18n")?
+        .call_method1("tr", (*label,))?;
     let add = |man: &Obj, operand: usize, outer: bool| -> PyResult<bool> {
         if let Some(g) = output::group(man, &sources, &name, &gs[operand].getattr("layer")?, outer)?
         {

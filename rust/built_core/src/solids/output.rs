@@ -198,6 +198,16 @@ pub(super) fn group<'p>(
         for face in made {
             face.getattr("attrs")?.call_method1("update", (&attrs,))?;
             ids.set_item(face.getattr("key")?, &src)?;
+            if let Some(role) = src
+                .extract::<usize>()
+                .ok()
+                .and_then(|i| sources.roles.get(i))
+                .filter(|role| role.2)
+            {
+                if let Some(uid) = role.0.split('/').nth(1) {
+                    face.getattr("attrs")?.set_item("built.cut_face", uid)?;
+                }
+            }
         }
     }
     for edge in mesh.getattr("edges")?.try_iter()? {
@@ -213,7 +223,7 @@ pub(super) fn group<'p>(
             };
             if let (Some(a), Some(b)) = (owner(a)?, owner(b)?) {
                 if sources.soft.contains(&order(a, b))
-                    || (a == b && sources.donors[a].native_smooth)
+                    || (a == b && sources.donors.get(a).is_some_and(|d| d.native_smooth))
                 {
                     e.setattr("soft", true)?;
                     if sources.flat.contains(&order(a, b)) {
@@ -225,6 +235,9 @@ pub(super) fn group<'p>(
     }
     propagate(&mesh, &sources.edges)?;
     bindings::apply(&mesh, &ids, &sources.donors)?;
+    if let Some((uid, _)) = &sources.live {
+        crate::live::assign_cut_roles(&mesh, &ids, &sources.roles, uid)?;
+    }
     let kw = PyDict::new(py);
     kw.set_item("name", name)?;
     let group = py

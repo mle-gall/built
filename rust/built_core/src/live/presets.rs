@@ -61,7 +61,7 @@ impl Preset {
         for (key, val) in &self.values {
             if !matches!(
                 key.as_str(),
-                "profile" | "attachment" | "rotation" | "mirror" | "segments" | "corner"
+                "profile" | "attachment" | "rotation" | "mirror" | "segments" | "corner" | "cut_definitions"
             ) {
                 return Err(error("Unknown sweep preset field"));
             }

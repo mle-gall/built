@@ -14,6 +14,8 @@ use std::{collections::HashMap, sync::Arc};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Path {
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub definition_space: bool,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub points: Vec<[f64; 3]>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -72,6 +74,8 @@ impl Path {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Sweep {
     pub profile: Profile,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cut_definitions: Vec<serde_json::Value>,
     pub path: Path,
     #[serde(default = "centre")]
     pub attachment: String,
@@ -106,10 +110,67 @@ pub struct SpanGeometry {
     pub butt_planes: Vec<[super::joints::Plane; 2]>,
     pub zones: Vec<[[f64; 2]; 3]>,
 }
+/// Cache end sections in local coordinates. Placements with the same section,
+/// axis and clipping plane reuse the projected ring and its analytic frame.
+fn project_end(
+    station: &mut crate::store::sweep::Station,
+    at: DVec3,
+    axis: DVec3,
+    origin: DVec3,
+    normal: DVec3,
+) {
+    use std::{cell::RefCell, collections::HashMap};
+    type Station = crate::store::sweep::Station;
+    thread_local! {static ENDS: RefCell<HashMap<Vec<u64>, Station>> = RefCell::default();}
+    let height = (origin - at).dot(normal);
+    let local: Station = station
+        .iter()
+        .map(|ring| {
+            ring.iter()
+                .map(|p| (DVec3::from(*p) - at).to_array())
+                .collect()
+        })
+        .collect();
+    let mut key: Vec<u64> = axis
+        .to_array()
+        .into_iter()
+        .chain(normal.to_array())
+        .chain([height])
+        .map(f64::to_bits)
+        .collect();
+    for ring in &local {
+        key.push(ring.len() as u64);
+        key.extend(ring.iter().flatten().map(|x| x.to_bits()));
+    }
+    ENDS.with(|cache| {
+        let mut cache = cache.borrow_mut();
+        if cache.len() >= 256 && !cache.contains_key(&key) {
+            cache.clear();
+        }
+        let projected = cache.entry(key).or_insert_with(|| {
+            local
+                .into_iter()
+                .map(|ring| {
+                    ring.into_iter()
+                        .map(|v| {
+                            let p = DVec3::from(v);
+                            (p + axis * ((height - p.dot(normal)) / axis.dot(normal))).to_array()
+                        })
+                        .collect()
+                })
+                .collect()
+        });
+        for (dst, p) in station.iter_mut().flatten().zip(projected.iter().flatten()) {
+            *dst = (at + DVec3::from(*p)).to_array();
+        }
+    });
+}
+
 pub fn generate(
     store: &mut Store,
     sweep: &Sweep,
     path: &[[f64; 3]],
+    planes: &[super::cut::EndPlane],
 ) -> Result<SpanGeometry, &'static str> {
     let outline = sweep.profile.outline(sweep.segments)?;
     if path.len() < 2 {
@@ -158,6 +219,40 @@ pub fn generate(
         (stations, trims) =
             super::joints::butt_stations(&stations, &directions, path, sweep.path.closed)?;
     }
+    if !planes.is_empty() {
+        if sweep.path.closed || directions.len() != 1 {
+            return Err("unsupported_cut_path");
+        }
+        if trims.is_empty() {
+            trims.push([[path[0], directions[0]], [path[1], directions[0]]]);
+        }
+        for plane in planes {
+            let end = usize::from(plane.end);
+            let axis = DVec3::from(directions[0]);
+            let denom = axis.dot(plane.normal);
+            if denom.abs() < 1e-9 {
+                return Err("end_unresolved");
+            }
+            project_end(
+                &mut stations[end],
+                path[end].into(),
+                axis,
+                plane.origin,
+                plane.normal,
+            );
+            trims[0][end] = [
+                plane.origin.to_array(),
+                (plane.normal * denom.signum()).to_array(),
+            ];
+        }
+        if stations[0][0]
+            .iter()
+            .zip(&stations[1][0])
+            .any(|(a, b)| (DVec3::from(*b) - DVec3::from(*a)).dot(directions[0].into()) <= 1e-9)
+        {
+            return Err("empty_cut");
+        }
+    }
     let zones = super::joints::span_zones(&stations, &directions, path, butt);
     let frames: Vec<_> = stations
         .iter_mut()
@@ -174,7 +269,8 @@ pub fn generate(
     let namespace = sweep
         .profile
         .sketch
-        .as_ref()
+        .as_deref()
+        .or_else(|| sweep.profile.drawing.as_ref()?.get("uid")?.as_str())
         .map(|id| format!("sketch/{id}"))
         .unwrap_or_else(|| outline.family.clone());
     let mut roles = Vec::new();
@@ -286,7 +382,9 @@ pub fn generate(
                 .add_welded_face(&cap, &mut change)
                 .map_err(|_| "invalid_profile")?;
             roles.push((
-                if s == 0 {
+                if let Some(p) = planes.iter().rev().find(|p| usize::from(p.end) == s) {
+                    format!("cut/{}/plane", p.uid)
+                } else if s == 0 {
                     "cap/start".into()
                 } else if s + 1 == slots.len() {
                     "cap/end".into()

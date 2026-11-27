@@ -103,14 +103,11 @@ fn optional<'p>(dict: &Obj<'p>, key: &str) -> PyResult<Option<Obj<'p>>> {
     }
     Ok(Some(dict.call_method1("get", (key,))?).filter(|v| !v.is_none()))
 }
-// Construct the local-to-definition frame only for a closed six-face box.
+// Measure the wall envelope in the selected face frame.
 fn initial_frame(wall: &Obj, n: DVec3) -> PyResult<DMat4> {
     let mesh = wall.getattr("mesh")?;
     let faces = mesh.getattr("faces")?;
-    if faces.len()? != 6
-        || mesh.getattr("vertices")?.len()? != 8
-        || wall.getattr("children")?.is_truthy()?
-    {
+    if !faces.is_truthy()? || wall.getattr("children")?.is_truthy()? {
         return Err(err());
     }
     let w = pose(wall)?;
@@ -134,32 +131,7 @@ fn initial_frame(wall: &Obj, n: DVec3) -> PyResult<DMat4> {
     if !frame.inverse().is_finite() {
         return Err(err());
     }
-    let mut seen = [false; 6];
-    for face in faces.try_iter()? {
-        let f = face?;
-        let idx = face_role(&f, frame.inverse())?.ok_or_else(err)?;
-        if seen[idx] || f.getattr("vertices")?.len()? != 4 || f.getattr("holes")?.len()? > 0 {
-            return Err(err());
-        }
-        for p in f.getattr("vertices")?.try_iter()? {
-            let q = frame.inverse().transform_point3(xyz(&p?)?);
-            if (q - q.round()).abs().max_element() > EPS {
-                return Err(err());
-            }
-        }
-        seen[idx] = true;
-    }
     Ok(frame)
-}
-fn face_role(face: &Obj, to_frame: DMat4) -> PyResult<Option<usize>> {
-    let p = face
-        .getattr("vertices")?
-        .try_iter()?
-        .map(|p| Ok(to_frame.transform_point3(xyz(&p?)?)))
-        .collect::<PyResult<Vec<_>>>()?;
-    Ok([(1, 0.), (1, 1.), (2, 0.), (0, 1.), (2, 1.), (0, 0.)]
-        .iter()
-        .position(|&(axis, value)| p.iter().all(|q| (q[axis] - value).abs() < EPS)))
 }
 fn vertices(r: &[DVec3], m: DMat4) -> Vec<Vec3> {
     r.iter().map(|&p| m.transform_point3(p).into()).collect()
@@ -312,15 +284,11 @@ fn update(scene: &Obj, g: &Obj, remove: bool) -> PyResult<()> {
     let ifc = wall.getattr("ifc")?;
     let entries = PyList::empty(py);
     let mut cuts = Vec::new();
-    let mut before = Vec::new();
     let uid = g.getattr("uid")?;
     let mut guid = None;
     if let Some(old) = optional(&ifc, "openings")? {
         for o in old.try_iter()? {
             let o = o?;
-            if let Some(r) = optional(&o, "wall_rect")? {
-                before.push(r.extract()?);
-            }
             if optional(&o, "fill_uid")?.is_some_and(|v| v.eq(&uid).unwrap_or(false)) {
                 guid = Some(o.get_item("guid")?);
                 continue;
@@ -343,18 +311,13 @@ fn update(scene: &Obj, g: &Obj, remove: bool) -> PyResult<()> {
         let id = py
             .import("core.ifc_identity")?
             .call_method1("ensure_guid", (&entry,))?;
-        let faces = PyList::empty(py);
-        for ring in prism(r) {
-            let record = PyDict::new(py);
-            record.set_item(
-                "outer",
-                ring.into_iter()
-                    .map(|p| world.transform_point3(p).to_array())
-                    .collect::<Vec<_>>(),
-            )?;
-            faces.append(record)?;
-        }
-        entry.set_item("faces", faces)?;
+        let cut =
+            crate::live::hosted(scene, &wall, g, Some((id.extract()?, f.to_cols_array(), r)))?;
+        entry.set_item("cut", cut)?;
+        host.set_item(
+            "relative",
+            (pose(&wall)?.inverse() * placement).to_cols_array(),
+        )?;
         entry.set_item("wall_rect", r)?;
         entry.set_item("fill_uid", uid)?;
         entries.append(entry)?;
@@ -382,8 +345,9 @@ fn update(scene: &Obj, g: &Obj, remove: bool) -> PyResult<()> {
             placement.transform_vector3(facing).dot(front.into()) < 0.,
         )?;
     }
-    let mesh = mesh_for(&wall, f, &before, &cuts)?;
-    wall.setattr("mesh", mesh)?;
+    if remove {
+        crate::live::hosted(scene, &wall, g, None)?;
+    }
     if wall.getattr("ext")?.is_none() {
         wall.setattr("ext", PyDict::new(py))?;
     }
@@ -397,6 +361,31 @@ fn update(scene: &Obj, g: &Obj, remove: bool) -> PyResult<()> {
     Ok(())
 }
 pub(crate) fn regenerate(scene: &Obj, g: &Obj) -> PyResult<()> {
+    if let Some(entries) = optional(&g.getattr("ifc")?, "openings")? {
+        for entry in entries.try_iter()? {
+            let entry = entry?;
+            if optional(&entry, "cut")?.is_none() {
+                continue;
+            }
+            let Some(uid) = optional(&entry, "fill_uid")? else {
+                continue;
+            };
+            let fill =
+                scene.call_method1("resolve_occurrence", (vec![uid.extract::<String>()?],))?;
+            if fill.is_none() {
+                continue;
+            }
+            if let Some(host) = optional(&fill.getattr("ext")?, "wall_host")? {
+                if let Some(relative) = optional(&host, "relative")? {
+                    let xf = pose(g)? * DMat4::from_cols_array(&relative.extract()?);
+                    fill.setattr(
+                        "xform",
+                        Py::new(scene.py(), crate::math::Matrix4::from(xf))?,
+                    )?;
+                }
+            }
+        }
+    }
     update(scene, g, false)
 }
 pub(crate) fn detach(scene: &Obj, g: &Obj) -> PyResult<()> {
@@ -517,4 +506,94 @@ mod tests {
             assert!(!valid([0., 0., 0.15, 0.5], &[]));
         }
     }
+}
+
+/// Convert legacy box walls only when their evaluated skin matches every
+/// saved aperture. A hand-edited legacy wall retains its original records.
+pub(crate) fn migrate(scene: &Obj<'_>) -> PyResult<()> {
+    use crate::doc;
+    let Some(root) = scene
+        .getattr_opt("_root")?
+        .and_then(|r| r.getattr("_doc_key").ok())
+        .and_then(|k| k.extract().ok())
+    else {
+        return Ok(());
+    };
+    let attr = doc::attr_id("ext").map_err(PyValueError::new_err)?;
+    let walls = {
+        let d = doc::lock();
+        let Some(root) = d.node(root) else {
+            return Ok(());
+        };
+        root.children
+            .iter()
+            .filter_map(|k| {
+                let doc::value::Value::Dict(items) = d.node(*k)?.attr(attr)? else {
+                    return None;
+                };
+                items
+                    .iter()
+                    .any(|(k, _)| matches!(k,doc::value::Value::Str(s) if s=="opening_frame"))
+                    .then(|| d.handle_ref(scene.py(), *k))
+                    .flatten()
+            })
+            .collect::<Vec<_>>()
+    };
+    for wall in walls {
+        let wall = wall.bind(scene.py());
+        let Some(entries) = optional(&wall.getattr("ifc")?, "openings")? else {
+            continue;
+        };
+        let frame = optional(&wall.getattr("ext")?, "opening_frame")?
+            .unwrap()
+            .extract()?;
+        let mut saved = Vec::new();
+        let mut rects = Vec::new();
+        for entry in entries.try_iter()? {
+            let entry = entry?;
+            if optional(&entry, "cut")?.is_some() {
+                continue;
+            }
+            let (Some(uid), Some(r), Some(guid)) = (
+                optional(&entry, "fill_uid")?,
+                optional(&entry, "wall_rect")?,
+                optional(&entry, "guid")?,
+            ) else {
+                continue;
+            };
+            let fill =
+                scene.call_method1("resolve_occurrence", (vec![uid.extract::<String>()?],))?;
+            if fill.is_none() {
+                continue;
+            }
+            let rect = r.extract()?;
+            rects.push(rect);
+            saved.push((entry, fill, guid.extract()?, rect));
+        }
+        if saved.is_empty() || saved.len() != entries.len()? {
+            continue;
+        }
+        let baked = wall.getattr("mesh")?;
+        let Ok(base) = mesh_for(wall, DMat4::from_cols_array(&frame), &rects, &[]) else {
+            continue;
+        };
+        wall.setattr("mesh", base)?;
+        crate::live::migrate_wall(scene, wall, frame)?;
+        for (entry, fill, guid, rect) in saved {
+            let id = crate::live::hosted(scene, wall, &fill, Some((guid, frame, rect)))?;
+            entry.set_item("cut", id)?;
+            if optional(&entry, "faces")?.is_some() {
+                entry.del_item("faces")?;
+            }
+            if let Some(host) = optional(&fill.getattr("ext")?, "wall_host")? {
+                host.set_item(
+                    "relative",
+                    (pose(wall)?.inverse() * pose(&fill)?).to_cols_array(),
+                )?;
+            }
+        }
+        wall.setattr("mesh", baked)?;
+        crate::live::finish_migration(scene)?;
+    }
+    Ok(())
 }

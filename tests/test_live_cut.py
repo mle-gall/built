@@ -1,0 +1,228 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+import pytest
+
+from built_core.history import History
+from built_core.scene import Scene
+from built_core.solids import solid_volume
+from formats import igz
+from tests.test_persistent_ids import all_ids
+from tests.test_sketch_rows import apply, extent, member, rows_of
+
+
+def make_member(history, points):
+    apply(history, "create_sweeps", sweeps=[member({"library": "basic/timber"}, points)])
+
+
+def test_oblique_cut_edit_disable_undo_save_open_and_release(tmp_path):
+    scene = Scene()
+    h = History(scene)
+    make_member(h, [[0, 0, 0], [2, 0, 0]])
+    target = scene.groups[0]
+    base = target.mesh
+    row = dict(kind="cut", owner=target.uid, uid="c070000000000001",
+               operation="trim", cutter={"plane": {"origin": [1, 0, 0], "normal": [1, 1, 0]}})
+    apply(h, "live_set", row=row)
+    cut_ids = all_ids(target.mesh)
+    assert extent(target)[0] == pytest.approx(1.0225)
+    assert extent(target)[1:] == [0.045, 0.145]
+    apply(h, "undo")
+    assert target.mesh is base and not rows_of(scene, "cut")
+    apply(h, "redo")
+    assert all_ids(target.mesh) == cut_ids
+    apply(h, "live_set", row=dict(row, on=False))
+    assert extent(target)[0] == 2
+    apply(h, "undo")
+    path = tmp_path / "end.built"
+    igz.save_scene(scene, path)
+    back = Scene()
+    igz.load_into(back, path)
+    assert rows_of(back, "cut")[0]["state"] == "ok"
+    h = History(back)
+    row["cutter"]["plane"]["origin"] = [1.25, 0, 0]
+    apply(h, "live_set", row=row)
+    assert all_ids(back.groups[0].mesh) == cut_ids
+    assert extent(back.groups[0])[0] == pytest.approx(1.2725)
+    apply(h, "live_release", uid=row["uid"])
+    assert not rows_of(back, "cut")
+    assert extent(back.groups[0])[0] == pytest.approx(1.2725)
+
+
+@pytest.mark.parametrize("operation", ["union", "subtract", "trim", "intersect"])
+def test_body_operations_preserve_both_placements(operation):
+    scene = Scene()
+    h = History(scene)
+    make_member(h, [[0, 0, 0], [2, 0, 0]])
+    make_member(h, [[1, -1, 0], [1, 1, 0]])
+    target, body = scene.groups
+    original = solid_volume(target)
+    tool = solid_volume(body)
+    overlap = 0.045 ** 2 * 0.145
+    apply(h, "live_set", row=dict(kind="cut", owner=target.uid, uid="c070000000000002",
+                                  operation=operation, cutter={"body": body.uid}))
+    assert rows_of(scene, "sweep")[0]["state"] == "ok"
+    expected = {"union": original + tool - overlap, "intersect": overlap}.get(operation, original - overlap)
+    assert solid_volume(target) == pytest.approx(expected)
+    assert solid_volume(body) == pytest.approx(tool)
+    apply(h, "undo")
+    assert solid_volume(target) == pytest.approx(original)
+
+
+def test_end_plate_follows_a_separate_host(tmp_path):
+    scene = Scene()
+    h = History(scene)
+    make_member(h, [[0, 0, 0], [2, 0, 0]])
+    make_member(h, [[0, 1, 0], [0, 2, 0]])
+    target, host = scene.groups
+    apply(h, "move_placements", placements=[host.uid], delta=[1, 0, 0])
+    row = dict(kind="cut", owner=target.uid, uid="c070000000000003", operation="trim",
+               cutter={"plane": {"normal": [1, 0, 0]}},
+               anchor={"ref": {"placement": host.uid}, "offset": 20})
+    apply(h, "live_set", row=row)
+    assert extent(target)[0] == pytest.approx(1.02)
+    ids = all_ids(target.mesh)
+    apply(h, "move_placements", placements=[host.uid], delta=[0.3, 0, 0])
+    assert extent(target)[0] == pytest.approx(1.32)
+    assert all_ids(target.mesh) == ids
+    apply(h, "undo")
+    assert extent(target)[0] == pytest.approx(1.02)
+    apply(h, "delete_placements", placements=[host.uid])
+    assert rows_of(scene, "sweep")[0]["state"] == "ref_lost"
+    assert extent(target)[0] == pytest.approx(1.02)
+
+
+def test_plain_solid_source_survives_save_open(tmp_path):
+    from tests.test_geometry_arrays import cube
+    scene = Scene()
+    h = History(scene)
+    target = cube()
+    body = cube()
+    scene.groups.extend([target, body])
+    apply(h, "move_placements", placements=[body.uid], delta=[0.5, 0, 0])
+    original = solid_volume(target)
+    row = dict(kind="cut", owner=target.uid, uid="c070000000000005",
+               cutter={"body": body.uid}, operation="subtract")
+    apply(h, "live_set", row=row)
+    assert solid_volume(target) == pytest.approx(original / 2)
+    file = tmp_path / "plain.built"
+    igz.save_scene(scene, file)
+    back = Scene()
+    igz.load_into(back, file)
+    apply(History(back), "live_set", row=dict(row, on=False))
+    assert solid_volume(back.groups[0]) == pytest.approx(original)
+
+
+def test_section_cutter_uses_sketch_curves_and_keeps_tool_out_of_model():
+    from tests.test_sketch_rows import sketch, rect
+    scene = Scene()
+    h = History(scene)
+    make_member(h, [[0, 0, 0], [2, 0, 0]])
+    target = scene.groups[0]
+    before = solid_volume(target)
+    outline = sketch(rect(100, 100))
+    outline["use"] = "section"
+    for curve in outline["curves"]:
+        for point in ("a", "b"):
+            x, y = curve[point]
+            curve[point] = [x + 1000, y - 50]
+    apply(h, "sketch_commit", row=outline)
+    apply(h, "live_set", row=dict(kind="cut", owner=target.uid, uid="c070000000000006",
+                                  cutter={"section": outline["uid"]}, operation="subtract"))
+    assert solid_volume(target) == pytest.approx(before * 0.95)
+    assert list(scene.groups) == [target]
+
+
+def test_plain_plane_and_exact_body_cut_interchange(tmp_path):
+    from tests.test_geometry_arrays import cube
+    from formats.ifc import save_ifc
+    import ifcopenshell
+    import ifcopenshell.geom
+    from ifcopenshell.util.shape import get_volume
+
+    scene = Scene()
+    history = History(scene)
+    target = cube()
+    target.ifc = {"class": "IfcWall", "name": "Panel"}
+    scene.groups.append(target)
+    row = dict(kind="cut", uid="c070000000000007", owner=target.uid, operation="trim",
+               cutter={"plane": {"origin": [.5, 0, 0], "normal": [1, 0, 0]}})
+    apply(history, "live_set", row=row)
+    assert solid_volume(target) == pytest.approx(.5)
+
+    make_member(history, [[0, .5, .5], [1, .5, .5]])
+    body = scene.groups[-1]
+    apply(history, "live_set", row=dict(row, uid="c070000000000008",
+                                       operation="subtract", cutter={"body": body.uid}))
+    path = tmp_path / "panel.ifc"
+    save_ifc(scene, path)
+    model = ifcopenshell.open(path)
+    wall, = model.by_type("IfcWall")
+    rep, = wall.Representation.Representations
+    assert rep.RepresentationType == "CSG"
+    assert rep.Items[0].is_a("IfcBooleanResult")
+    assert len(wall.HasOpenings) == 1
+    shape = ifcopenshell.geom.create_shape(ifcopenshell.geom.settings(), wall)
+    assert get_volume(shape.geometry) == pytest.approx(solid_volume(target), abs=1e-7)
+
+
+def test_mitred_round_member_preserves_analytic_step_and_ifc(tmp_path):
+    import ifcopenshell
+    from formats import step
+    from formats.ifc import save_ifc
+
+    scene = Scene()
+    h = History(scene)
+    apply(h, "create_sweeps", sweeps=[member({"library": "en/chs114.3x5"})])
+    apply(h, "live_set", row=dict(kind="cut", owner=scene.groups[0].uid, uid="c070000000000009",
+                                  operation="trim", cutter={"plane": {"origin": [1., 0., 0.],
+                                                                     "normal": [1., 1., 0.]}}))
+    path = tmp_path / "mitre.ifc"
+    save_ifc(scene, path)
+    assert ifcopenshell.open(path).by_type("IfcBooleanClippingResult")
+    path = tmp_path / "mitre.step"
+    step.save_step(scene, path)
+    assert "CYLINDRICAL_SURFACE" in path.read_text()
+
+
+def test_bisector_reacts_to_member_move_and_copy_has_its_own_cut():
+    scene = Scene()
+    h = History(scene)
+    make_member(h, [[0, 0, 0], [2, 0, 0]])
+    make_member(h, [[2, 0, 0], [2, 1, 0]])
+    target, other = scene.groups
+    cut = dict(kind="cut", owner=target.uid, uid="c070000000000011",
+               operation="trim", cutter={"bisector": other.uid})
+    apply(h, "live_set", row=cut)
+    ids = all_ids(target.mesh)
+    assert extent(target)[0] == pytest.approx(2.0225)
+    apply(h, "move_placements", placements=[other.uid], delta=[-.4, 0, 0])
+    assert extent(target)[0] == pytest.approx(1.6225)
+    assert all_ids(target.mesh) == ids
+    apply(h, "copy_placements", placements=[target.uid], delta=[0, .1, 0])
+    clone = scene.groups[-1]
+    original, copied = rows_of(scene, "cut")
+    assert original["uid"] == cut["uid"] and copied["uid"] != original["uid"]
+    assert copied["owner"] == clone.uid
+    apply(h, "live_set", row=dict(copied, on=False))
+    assert extent(clone)[0] == 2 and extent(target)[0] == pytest.approx(1.6225)
+
+
+def test_four_body_cuts_keep_donor_ids_and_identify_a_miss():
+    s = Scene()
+    h = History(s)
+    make_member(h, [[0, 0, 0], [4, 0, 0]])
+    target = s.groups[0]
+    before = solid_volume(target)
+    for i in range(4):
+        x = .6 + .8*i
+        make_member(h, [[x, -1, 0], [x, 1, 0]])
+        body = s.groups[-1]
+        apply(h, "live_set", row=dict(kind="cut", uid=f"c0700000000010{i:02x}", owner=target.uid,
+                                      cutter={"body": body.uid}, operation="subtract"))
+    ids = {r["uid"] for r in rows_of(s, "cut")}
+    assert {f.attrs.get("built.cut_face") for f in target.mesh.faces} == {None, *ids}
+    assert solid_volume(target) == pytest.approx(before - 4*.045**2*.145)
+    apply(h, "move_placements", placements=[body.uid], delta=[30, 0, 0])
+    assert solid_volume(target) == pytest.approx(before - 3*.045**2*.145)
+    assert [r["state"] for r in rows_of(s, "cut")].count("cut_misses") == 1
+    apply(h, "undo")
+    assert all(r["state"] == "ok" for r in rows_of(s, "cut"))

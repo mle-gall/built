@@ -753,7 +753,8 @@ fn cursor_value<'py>(a: &Args<'py>) -> Reply<'py> {
     };
     let display = tools.getattr_opt("view")?.unwrap_or_else(|| view.clone());
     let sweep=attr(&tool,"kind")?.eq("sweep")?;
-    let at = if sweep && !attr(&tool,"hover_point")?.is_none(){
+    let cut=attr(&tool,"kind")?.eq("cut")?;
+    let at = if (sweep || cut) && !attr(&tool,"hover_point")?.is_none(){
         display.call_method1("_world_to_pixel",(tool.getattr("hover_point")?,))?
     }else if label.is_none() { none(py) } else { display.call_method1("_world_to_pixel", (label.get_item(1)?,))? };
     let history = attr(&attr(&win, "viewport")?, "history")?;
@@ -790,6 +791,10 @@ fn cursor_value<'py>(a: &Args<'py>) -> Reply<'py> {
             Some(n)=>(chip,py.import("built_core.units")?.call_method1("fmt_len",(n,))?.extract::<String>()?),
             None=>(tr.call1(("Sweep",))?,chip.extract::<String>()?),
         }
+    } else if cut && !typing {
+        let chip=tool.call_method1("_state",("chip",))?;
+        let offset:f64=tool.call_method1("_state",("offset",))?.extract()?;
+        (chip,py.import("built_core.units")?.call_method1("fmt_len",(offset/1000.,))?.extract::<String>()?)
     } else {(tr.call1((&caption,))?,value)};
     // The tool's refusal reads in the error colour (Fillet: a size that
     // does not fit the selection).

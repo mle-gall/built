@@ -205,6 +205,7 @@ impl SelectTool {
     fn double(&mut self, p: &Pointer, host: &mut dyn ToolHost) -> Reply {
         self.cycle = None;
         let Some(pick) = pick(host, p.px, true) else { return self.click(p, host) };
+        if matches!(pick.kind,PickKind::Face|PickKind::Group) && host.call("edit_member_profile",serde_json::json!(p.px))==serde_json::json!(true) {return Reply::redraw();}
         match pick.kind {
             PickKind::Group => host.open_placement(pick.id),
             PickKind::SectionPlane => host.host_verb("toggle_section", pick.id),

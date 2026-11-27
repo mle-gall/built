@@ -421,6 +421,126 @@
       "node": ""
     },
     {
+      "uid": "78d69d1a1cd30f54",
+      "name": "Cope",
+      "pack": "Steel EN 10365",
+      "primitive": "cut",
+      "rev": 1,
+      "values": {
+        "operation": "subtract",
+        "role": "body",
+        "cutter_kind": "body",
+        "on": true,
+        "clearance": 2
+      },
+      "record": {},
+      "locks": {
+        "operation": "fixed",
+        "role": "fixed",
+        "cutter_kind": "free",
+        "on": "free",
+        "clearance": "free"
+      },
+      "naming": "",
+      "node": ""
+    },
+    {
+      "uid": "5392afd385895e8a",
+      "name": "Notch",
+      "pack": "Steel EN 10365",
+      "primitive": "cut",
+      "rev": 1,
+      "values": {
+        "operation": "subtract",
+        "role": "body",
+        "cutter_kind": "section",
+        "on": true,
+        "depth": 40
+      },
+      "record": {},
+      "locks": {
+        "operation": "fixed",
+        "role": "fixed",
+        "cutter_kind": "free",
+        "on": "free",
+        "depth": "free"
+      },
+      "naming": "",
+      "node": ""
+    },
+    {
+      "uid": "95f3d998bf6c7707",
+      "name": "End plate",
+      "pack": "Steel EN 10365",
+      "primitive": "cut",
+      "rev": 1,
+      "values": {
+        "operation": "trim",
+        "role": "end",
+        "cutter_kind": "plane",
+        "on": true,
+        "offset": 0
+      },
+      "record": {},
+      "locks": {
+        "operation": "fixed",
+        "role": "fixed",
+        "cutter_kind": "free",
+        "on": "free",
+        "offset": "free"
+      },
+      "naming": "",
+      "node": ""
+    },
+    {
+      "uid": "bc53c618674d0e15",
+      "name": "Opening",
+      "pack": "Construction",
+      "primitive": "cut",
+      "rev": 1,
+      "values": {
+        "operation": "subtract",
+        "role": "body",
+        "cutter_kind": "section",
+        "on": true,
+        "extent": "through"
+      },
+      "record": {},
+      "locks": {
+        "operation": "fixed",
+        "role": "fixed",
+        "cutter_kind": "free",
+        "on": "free",
+        "extent": "free"
+      },
+      "naming": "",
+      "node": ""
+    },
+    {
+      "uid": "f21af74966307f91",
+      "name": "Penetration",
+      "pack": "Construction",
+      "primitive": "cut",
+      "rev": 1,
+      "values": {
+        "operation": "subtract",
+        "role": "body",
+        "cutter_kind": "body",
+        "on": true,
+        "clearance": 0
+      },
+      "record": {},
+      "locks": {
+        "operation": "fixed",
+        "role": "fixed",
+        "cutter_kind": "free",
+        "on": "free",
+        "clearance": "free"
+      },
+      "naming": "",
+      "node": ""
+    },
+    {
       "uid": "d514908360f1b4c2",
       "name": "Purlins at 1200 mm maximum",
       "pack": "Steel EN 10365",

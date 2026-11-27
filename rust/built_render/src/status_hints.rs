@@ -50,6 +50,7 @@ const TOOLS: &[(&str, Phases)] = &[
     ("paint", &[
         ("idle", "Click a face to paint it. Alt = sample the material under the cursor."),
     ]),
+    ("cut", &[("idle","Pick the target, then its cutter. Tab changes operation, L picks a preset, D draws a section.")]),
     ("sweep", &[
         ("idle","Pick a start, or press Enter to sweep selected edges."),
         ("started","Pick the end or enter a length. Alt keeps the end free."),

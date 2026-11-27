@@ -306,7 +306,7 @@ impl PresetsProvider {
         let mut items = Vec::new();
         for (p, source) in rows(ctx)? {
             let mut verbs = vec!["edit", "duplicate", "export"];
-            if p["primitive"] == "sweep" {
+            if matches!(p["primitive"].as_str(),Some("sweep"|"cut")) {
                 verbs.insert(0, "apply");
             }
             if source == "model" || source == "mine" {
@@ -370,11 +370,11 @@ impl PresetsProvider {
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
         let personal = item.get_item("source")?.eq("mine")?;
         match verb {
-            "apply" if p["primitive"] == "sweep" => {
+            "apply" if matches!(p["primitive"].as_str(),Some("sweep"|"cut")) => {
                 let win = ctx.getattr("win")?;
-                win.call_method1("_activate_tool", ("sweep",))?;
+                win.call_method1("_activate_tool", (p["primitive"].as_str().unwrap(),))?;
                 win.getattr("_tools")?
-                    .get_item("sweep")?
+                    .get_item(p["primitive"].as_str().unwrap())?
                     .getattr("_machine")?
                     .call_method1("set", ("preset", data))?;
             }
@@ -477,6 +477,13 @@ pub(crate) fn capture_preset(win: &Bound<'_, PyAny>, group: &Bound<'_, PyAny>) -
         "segments",
     ] {
         values[key] = row[key].clone();
+    }
+    if let Some(cuts)=row["cut_rows"].as_array().filter(|c|!c.is_empty()) {
+        let mut cuts=cuts.clone();
+        for cut in &mut cuts {
+            if let Some(obj)=cut.as_object_mut(){for key in ["uid","owner","state","inputs"] {obj.remove(key);}}
+        }
+        values["cut_definitions"]=json!(cuts);
     }
     if let Some(sketch) = row["profile"]["sketch"].as_str() {
         let sketches = api.call_method1("live_rows", (&scene,))?;

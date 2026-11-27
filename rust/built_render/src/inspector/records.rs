@@ -8,6 +8,7 @@ pub(super) struct Records {
     pub(super) editor: super::record_editor::Editor,
     pub rows: BTreeMap<Vec<String>, Row>,
     sweep:Value,
+    cuts:Value,
     sweep_editable:bool,
     total: usize,
     writable: Vec<String>,
@@ -35,6 +36,7 @@ impl Records {
         for object in data.as_array().into_iter().flatten() {
             if selection_count==1{
                 result.sweep=object["sweep"].clone();
+                result.cuts=object["cut_rows"].clone();
                 result.sweep_editable=object["editable"]==true;
             }
             result.total += 1;
@@ -151,6 +153,29 @@ impl Records {
                     }
                     if kit::quiet(ui,"Release").clicked(){send(out,"sweep.release",self.sweep["owner"].clone());}
                 }));
+            });
+        }
+        if let Some(cuts)=self.cuts.as_array().filter(|v|!v.is_empty()){
+            kit::disclosure(ui,"cut record","Cuts",true,|ui|{
+                for cut in cuts{
+                    let kind=cut["cutter"].as_object().and_then(|c|c.keys().next()).map(String::as_str).unwrap_or("Cut");
+                    let title=format!("{} · {kind}",cut["name"].as_str().or(cut["operation"].as_str()).unwrap_or("subtract"));
+                    kit::property_control(ui,&title,|ui|{
+                        let on=cut["on"]!=false;
+                        ui.add_enabled_ui(self.sweep_editable,|ui|{
+                            let (rect,eye)=ui.allocate_exact_size(egui::vec2(20.,20.),egui::Sense::click());
+                            kit::paint_eye(ui,rect,on);
+                            if eye.on_hover_text("Enable or disable cut").clicked(){
+                                let mut edited=cut.clone();edited["on"]=json!(!on);
+                                send(out,"cut.edit",edited);
+                            }
+                        });
+                        ui.add_enabled_ui(self.sweep_editable,|ui|{
+                            if kit::quiet(ui,"Release").on_hover_text("Bake through this cut").clicked(){send(out,"cut.release",cut["uid"].clone());}
+                        });
+                        if let Some(state)=cut["state"].as_str().filter(|s|*s!="ok"){ui.label(state);}
+                    });
+                }
             });
         }
         kit::disclosure(ui, "record identity", "Identity", true, |ui| {

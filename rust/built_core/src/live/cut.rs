@@ -1,0 +1,843 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+//! Resolve a cutter in the target definition's coordinates before generating the sweep.
+use super::*;
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Cutter {
+    Plane(Plane),
+    Bisector(String),
+    Body(String),
+    Section(String),
+    Opening(Opening),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Opening {
+    pub fill: String,
+    pub guid: String,
+    pub frame: [f64; 16],
+    pub rect: [f64; 4],
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Plane {
+    #[serde(default)]
+    pub origin: [f64; 3],
+    #[serde(default)]
+    pub normal: Option<[f64; 3]>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Anchor {
+    #[serde(rename = "ref")]
+    pub reference: Reference,
+    #[serde(default)]
+    pub offset: f64,
+}
+
+pub struct EndPlane {
+    pub uid: String,
+    pub end: bool,
+    pub origin: DVec3,
+    pub normal: DVec3,
+}
+
+pub(super) fn keep_source(scene: &Obj<'_>, mesh: &Obj<'_>) -> PyResult<String> {
+    let py = scene.py();
+    let source = py
+        .import("built_core.group")?
+        .getattr("Group")?
+        .call1((mesh,))?;
+    source.setattr("xform", py.import("built_core")?.call_method0("Matrix4")?)?;
+    source.setattr("name", "Cut source")?;
+    source.setattr("component", false)?;
+    let ext = metadata(&source)?;
+    ext.set_item("built.cut_source", true)?;
+    source.setattr("ext", ext)?;
+    scene
+        .getattr("kept_components")?
+        .call_method1("append", (&source,))?;
+    source.getattr("uid")?.extract()
+}
+
+pub(super) fn source<'p>(scene: &Obj<'p>, uid: &str) -> PyResult<Option<Obj<'p>>> {
+    for source in scene.getattr("kept_components")?.try_iter()? {
+        let source = source?;
+        if source.getattr("uid")?.eq(uid)? {
+            return Ok(Some(source));
+        }
+    }
+    Ok(None)
+}
+
+pub(super) fn attach(scene: &Obj<'_>, t: &mut LiveTable, row: &mut Row) -> PyResult<()> {
+    let mut target = if let Some(id) = t.owners.get(&row.owner) {
+        (*t.rows[id]).clone()
+    } else {
+        let g = group(scene.py(), t, &row.owner)
+            .ok_or_else(|| PyValueError::new_err("Unknown cut target"))?;
+        if g.getattr("children")?.is_truthy()?
+            || !scene
+                .py()
+                .import("built_core.solids")?
+                .call_method1("is_solid", (&g,))?
+                .is_truthy()?
+        {
+            return Err(PyValueError::new_err("Select a solid target"));
+        }
+        let uid = keep_source(scene, &g.getattr("mesh")?)?;
+        serde_json::from_value(serde_json::json!({"uid":eid::new_uid(),"kind":"cut_stack","owner":row.owner,"source":uid})).map_err(|e|PyValueError::new_err(e.to_string()))?
+    };
+    if !matches!(target.kind.as_str(), "sweep" | "cut_stack") {
+        return Err(PyValueError::new_err("Select a sweep or solid target"));
+    }
+    if target.kind == "cut_stack" && matches!(row.cutter, Some(Cutter::Bisector(_))) {
+        return Err(PyValueError::new_err("End fittings require a sweep target"));
+    }
+    if !row.cuts.is_empty() {
+        return Err(PyValueError::new_err("A cut cannot own cuts"));
+    }
+    row.inputs.clear();
+    let op = row.operation.as_deref().unwrap_or("subtract");
+    match &row.cutter {
+        Some(Cutter::Body(uid)) if matches!(op, "union" | "subtract" | "trim" | "intersect") => {
+            row.inputs.push(Reference::Placement {
+                placement: uid.clone(),
+            });
+        }
+        Some(Cutter::Opening(o)) if op == "subtract" => {
+            row.inputs.push(Reference::Placement {
+                placement: o.fill.clone(),
+            });
+        }
+        Some(Cutter::Section(uid)) if matches!(op, "union" | "subtract" | "trim" | "intersect") => {
+            let source = t
+                .rows
+                .get(uid)
+                .filter(|s| s.kind == "sketch")
+                .ok_or_else(|| PyValueError::new_err("Select a sketch section"))?;
+            row.inputs.push(Reference::Row { row: uid.clone() });
+            if let Some(v) = source.sketch_fields.plane.get("ref") {
+                let plane: Reference = serde_json::from_value(v.clone())
+                    .map_err(|e| PyValueError::new_err(e.to_string()))?;
+                if matches!(&plane, Reference::Element{path,..} if path.last()==Some(&row.owner)) {
+                    if row.sketch_fields.plane.get("local").is_none() {
+                        let pose = section_pose(scene, t, &row.owner, v)?
+                            .ok_or_else(|| PyValueError::new_err("Sketch plane is unavailable"))?;
+                        row.sketch_fields.plane = serde_json::json!({"local":pose.to_cols_array()});
+                    }
+                } else {
+                    row.inputs.push(plane);
+                }
+            }
+        }
+        Some(Cutter::Bisector(uid)) if matches!(op, "trim" | "subtract") => {
+            row.inputs.push(Reference::Placement {
+                placement: uid.clone(),
+            });
+        }
+        Some(Cutter::Plane(_)) if matches!(op, "trim" | "subtract") => (),
+        _ => return Err(PyValueError::new_err("Invalid cutter or operation")),
+    }
+    if !matches!(row.end.as_deref(), None | Some("start" | "end")) {
+        return Err(PyValueError::new_err("Unknown member end"));
+    }
+    if !target.cuts.contains(&row.uid) {
+        if let Some(sweep) = &mut target.sweep {
+            if !sweep.path.definition_space {
+                let g = group(scene.py(), t, &row.owner)
+                    .ok_or_else(|| PyValueError::new_err("Missing cut target"))?;
+                let xf = g.getattr("xform")?;
+                let inverse = if xf.is_none() {
+                    DMat4::IDENTITY
+                } else {
+                    crate::math::mat(&xf)?.inverse()
+                };
+                for p in &mut sweep.path.points {
+                    *p = inverse.transform_point3((*p).into()).to_array();
+                }
+                for end in sweep.path.ends.iter_mut().flatten() {
+                    if let sweep::End::Point(p) = end {
+                        *p = inverse.transform_point3((*p).into()).to_array();
+                    }
+                }
+                sweep.path.definition_space = true;
+            }
+        }
+        target.cuts.push(row.uid.clone());
+        t.insert(target).map_err(PyValueError::new_err)?;
+    }
+    Ok(())
+}
+
+pub(super) fn end_planes(
+    scene: &Obj<'_>,
+    t: &LiveTable,
+    target: &Row,
+    path: &[[f64; 3]],
+    active: &mut Option<String>,
+) -> PyResult<Result<Vec<EndPlane>, &'static str>> {
+    let mut result = Vec::new();
+    for id in &target.cuts {
+        let Some(row) = t.rows.get(id) else {
+            return Ok(Err("ref_lost"));
+        };
+        if row.on == Some(false)
+            || matches!(
+                row.cutter,
+                Some(Cutter::Body(_) | Cutter::Section(_) | Cutter::Opening(_))
+            )
+        {
+            continue;
+        }
+        *active = Some(id.clone());
+        if path.len() != 2 {
+            return Ok(Err("unsupported_cut_path"));
+        }
+        let end = row.end.as_deref() != Some("start");
+        let tip = DVec3::from(path[usize::from(end)]);
+        let along = (DVec3::from(path[1]) - DVec3::from(path[0])).normalize_or_zero();
+        let (mut origin, mut normal) = match &row.cutter {
+            Some(Cutter::Plane(p)) => (
+                DVec3::from(p.origin),
+                p.normal.map(DVec3::from).unwrap_or(along),
+            ),
+            Some(Cutter::Bisector(uid)) => {
+                let Some(host) = group(scene.py(), t, uid) else {
+                    return Ok(Err("ref_lost"));
+                };
+                let Some(points) = metadata(&host)?
+                    .get_item(EXT)?
+                    .and_then(|m| m.get_item("path").ok())
+                    .and_then(|p| p.extract::<Vec<[f64; 3]>>().ok())
+                    .filter(|p| p.len() == 2)
+                else {
+                    return Ok(Err("end_unresolved"));
+                };
+                let m = reference::frame(t.groups[&target.owner]).inverse()
+                    * reference::frame(t.groups[uid]);
+                let a = m.transform_point3(points[0].into());
+                let b = m.transform_point3(points[1].into());
+                let (near, far) = if tip.distance_squared(a) <= tip.distance_squared(b) {
+                    (a, b)
+                } else {
+                    (b, a)
+                };
+                let outward = if end { along } else { -along };
+                (near, outward + (far - near).normalize_or_zero())
+            }
+            _ => return Ok(Err("unsupported")),
+        };
+        if let Some(anchor) = &row.anchor {
+            let Some(p) = reference::origin(scene, t, &anchor.reference, row)? else {
+                return Ok(Err("ref_lost"));
+            };
+            origin = p;
+            if let Some(face) =
+                reference::element_points(scene, t, row, &anchor.reference, Kind::Face)?
+            {
+                let Some((_, n)) =
+                    crate::snap_planes::face_plane(face.iter().map(|p| p.to_array()).collect())
+                else {
+                    return Ok(Err("end_unresolved"));
+                };
+                normal = n.into();
+            }
+        }
+        let Some(normal) = normal.try_normalize() else {
+            return Ok(Err("end_unresolved"));
+        };
+        origin += normal * row.anchor.as_ref().map_or(0., |a| a.offset / 1000.);
+        result.push(EndPlane {
+            uid: id.clone(),
+            end,
+            origin,
+            normal,
+        });
+    }
+    Ok(Ok(result))
+}
+
+fn section_pose(
+    scene: &Obj<'_>,
+    t: &LiveTable,
+    owner: &str,
+    plane: &serde_json::Value,
+) -> PyResult<Option<DMat4>> {
+    let Some(id) = plane["id"].as_str() else {
+        return Ok(None);
+    };
+    let path = serde_json::from_value(plane["path"].clone())
+        .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    let world = sketch_scene::sketch_plane(scene, id, Some(path))?;
+    if world.is_none() {
+        return Ok(None);
+    }
+    let axis = |key| -> PyResult<DVec3> { Ok(world.get_item(key)?.extract::<[f64; 3]>()?.into()) };
+    Ok(Some(
+        reference::frame(t.groups[owner]).inverse()
+            * DMat4::from_cols(
+                axis("x")?.extend(0.),
+                axis("y")?.extend(0.),
+                axis("n")?.extend(0.),
+                axis("origin")?.extend(1.),
+            ),
+    ))
+}
+fn operand<'p>(
+    scene: &Obj<'p>,
+    t: &LiveTable,
+    target: &Row,
+    cut: &Row,
+    mesh: &Obj<'p>,
+) -> PyResult<Result<Obj<'p>, &'static str>> {
+    let py = scene.py();
+    let (tool_mesh, mut pose) = match &cut.cutter {
+        Some(Cutter::Plane(plane)) => {
+            let mut origin = DVec3::from(plane.origin);
+            let mut normal = plane.normal.map(DVec3::from).unwrap_or(DVec3::Z);
+            if let Some(anchor) = &cut.anchor {
+                let Some(point) = reference::origin(scene, t, &anchor.reference, cut)? else {
+                    return Ok(Err("ref_lost"));
+                };
+                origin = point;
+                if let Some(points) =
+                    reference::element_points(scene, t, cut, &anchor.reference, Kind::Face)?
+                {
+                    let Some((_, n)) = crate::snap_planes::face_plane(
+                        points.iter().map(|p| p.to_array()).collect(),
+                    ) else {
+                        return Ok(Err("end_unresolved"));
+                    };
+                    normal = n.into();
+                }
+            }
+            let Some(mut n) = normal.try_normalize() else {
+                return Ok(Err("end_unresolved"));
+            };
+            origin += n * cut.anchor.as_ref().map_or(0., |a| a.offset / 1000.);
+            if cut.end.as_deref() == Some("start") {
+                n = -n;
+            }
+            let store = mesh.getattr("_store")?.cast_into::<PyMeshStore>()?;
+            let store = store.try_borrow()?;
+            let s = &store.inner;
+            let radius = s
+                .live_slots(Kind::Vertex)
+                .into_iter()
+                .map(|i| {
+                    DVec3::from(
+                        s.state
+                            .frame
+                            .definition_point(*s.state.vpos.get(i as usize)),
+                    )
+                    .distance(origin)
+                })
+                .fold(0., f64::max)
+                + 1.;
+            let x = n.any_orthonormal_vector() * radius;
+            let y = n.cross(x);
+            let frame = DMat4::from_cols(
+                (2. * x).extend(0.),
+                (2. * y).extend(0.),
+                (radius * n).extend(0.),
+                (origin - x - y).extend(1.),
+            );
+            let m = py.import("built_core.mesh")?.call_method0("Mesh")?;
+            let handle = m.getattr("_store")?.cast_into::<PyMeshStore>()?;
+            geometry::generate(&mut handle.try_borrow_mut()?.inner, cut, [0.; 3])
+                .map_err(PyValueError::new_err)?;
+            (m, frame)
+        }
+        Some(Cutter::Body(uid)) => {
+            let Some(body) = group(py, t, uid) else {
+                return Ok(Err("ref_lost"));
+            };
+            (
+                body.getattr("mesh")?,
+                reference::frame(t.groups[&target.owner]).inverse()
+                    * reference::frame(t.groups[uid]),
+            )
+        }
+        Some(Cutter::Opening(opening)) => {
+            let [l, b, r, t] = opening.rect;
+            let m = py.import("built_core.mesh")?.call_method0("Mesh")?;
+            let handle = m.getattr("_store")?.cast_into::<PyMeshStore>()?;
+            geometry::generate(&mut handle.try_borrow_mut()?.inner, cut, [0.; 3])
+                .map_err(PyValueError::new_err)?;
+            let frame = DMat4::from_cols_array(&opening.frame)
+                * DMat4::from_translation(DVec3::new(l, 0., b))
+                * DMat4::from_scale(DVec3::new(r - l, 1., t - b));
+            (m, frame)
+        }
+        Some(Cutter::Section(uid)) => {
+            let Some(section) = t.rows.get(uid) else {
+                return Ok(Err("ref_lost"));
+            };
+            if section.state != "ok" {
+                return Ok(Err("profile_open"));
+            }
+            let mut pose = DMat4::IDENTITY;
+            if let Some(plane) = section.sketch_fields.plane.get("ref") {
+                if let Some(local) = cut.sketch_fields.plane.get("local") {
+                    pose = DMat4::from_cols_array(
+                        &serde_json::from_value(local.clone())
+                            .map_err(|e| PyValueError::new_err(e.to_string()))?,
+                    );
+                } else if let Some(frame) = section_pose(scene, t, &target.owner, plane)? {
+                    pose = frame;
+                } else {
+                    return Ok(Err("ref_lost"));
+                }
+            }
+            let extrusion = if cut.sketch_fields.extrude.is_object() {
+                &cut.sketch_fields.extrude
+            } else {
+                &section.sketch_fields.extrude
+            };
+            let depth = extrusion["depth"].as_f64().unwrap_or(100.) / 1000.;
+            let (from, to) = match extrusion["extent"].as_str().unwrap_or("through") {
+                "depth" => (0., depth),
+                "both" => (-depth, depth),
+                "through" => {
+                    let inverse = pose.inverse();
+                    let mut lo = f64::INFINITY;
+                    let mut hi = f64::NEG_INFINITY;
+                    let store = mesh.getattr("_store")?.cast_into::<PyMeshStore>()?;
+                    let borrow = store.try_borrow()?;
+                    let s = &borrow.inner;
+                    for slot in s.live_slots(Kind::Vertex) {
+                        let p = s
+                            .state
+                            .frame
+                            .definition_point(*s.state.vpos.get(slot as usize));
+                        let z = inverse.transform_point3(p.into()).z;
+                        lo = lo.min(z);
+                        hi = hi.max(z);
+                    }
+                    (lo - 0.001, hi + 0.001)
+                }
+                _ => return Ok(Err("extent_unresolved")),
+            };
+            let path = [[0., 0., from], [0., 0., to]];
+            let spec:sweep::Sweep=serde_json::from_value(serde_json::json!({"profile":{"drawing":section},"attachment":"origin","path":{"points":path}})).map_err(|e|PyValueError::new_err(e.to_string()))?;
+            let mesh = py.import("built_core.mesh")?.call_method0("Mesh")?;
+            let store = mesh.getattr("_store")?.cast_into::<PyMeshStore>()?;
+            if let Err(state) =
+                sweep::generate(&mut store.try_borrow_mut()?.inner, &spec, &path, &[])
+            {
+                return Ok(Err(state));
+            }
+            (mesh, pose)
+        }
+        _ => return Ok(Err("unsupported")),
+    };
+    if let Some(anchor) = cut
+        .anchor
+        .as_ref()
+        .filter(|_| !matches!(cut.cutter, Some(Cutter::Plane(_))))
+    {
+        let Some(point) = reference::origin(scene, t, &anchor.reference, cut)? else {
+            return Ok(Err("ref_lost"));
+        };
+        pose.w_axis =
+            (point + pose.z_axis.truncate().normalize_or_zero() * anchor.offset / 1000.).extend(1.);
+    }
+    let group_type = py.import("built_core.group")?.getattr("Group")?;
+    let tool = group_type.call0()?;
+    tool.setattr("mesh", tool_mesh)?;
+    tool.setattr("xform", Py::new(py, crate::math::Matrix4::from(pose))?)?;
+    Ok(Ok(tool))
+}
+
+/// Opening geometry for interchange, in the target's definition frame.
+/// Regenerate the tool on demand, so a moving wall never saves world faces.
+#[pyfunction(signature=(scene,owner,all_operations=false))]
+pub(super) fn live_openings<'p>(
+    scene: &Obj<'p>,
+    owner: &str,
+    all_operations: bool,
+) -> PyResult<Bound<'p, pyo3::types::PyList>> {
+    let py = scene.py();
+    let result = pyo3::types::PyList::empty(py);
+    let Some(t) = current(py, root(scene)?) else {
+        return Ok(result);
+    };
+    let Some(target) = t.owners.get(owner).and_then(|id| t.rows.get(id)) else {
+        return Ok(result);
+    };
+    if target.state != "ok" {
+        return Ok(result);
+    }
+    let Some(g) = group(py, &t, owner) else {
+        return Ok(result);
+    };
+    for id in &target.cuts {
+        let Some(cut) = t.rows.get(id) else {
+            continue;
+        };
+        if cut.on == Some(false)
+            || cut.state != "ok"
+            || (!all_operations
+                && !matches!(cut.operation.as_deref(), None | Some("trim" | "subtract")))
+            || !(matches!(
+                cut.cutter,
+                Some(Cutter::Body(_) | Cutter::Section(_) | Cutter::Opening(_))
+            ) || all_operations
+                && target.kind == "cut_stack"
+                && matches!(cut.cutter, Some(Cutter::Plane(_))))
+        {
+            continue;
+        }
+        if let Ok(tool) = operand(scene, &t, target, cut, &g.getattr("mesh")?)? {
+            let guid = if let Some(Cutter::Opening(o)) = &cut.cutter {
+                Some(&o.guid)
+            } else {
+                None
+            };
+            result.append((id, tool, guid))?;
+        }
+    }
+    Ok(result)
+}
+pub(super) fn bodies<'p>(
+    scene: &Obj<'p>,
+    t: &LiveTable,
+    target: &Row,
+    mut mesh: Obj<'p>,
+    active: &mut Option<String>,
+    skipped: &mut Vec<(String, &'static str)>,
+) -> PyResult<Result<Obj<'p>, &'static str>> {
+    let py = scene.py();
+    let rows: Vec<_> = target
+        .cuts
+        .iter()
+        .filter_map(|id| t.rows.get(id))
+        .filter(|r| r.on != Some(false))
+        .collect();
+    let body_count = rows
+        .iter()
+        .filter(|r| matches!(r.cutter, Some(Cutter::Body(_))))
+        .count();
+    if body_count > 1
+        && rows.iter().all(|r| {
+            matches!(r.cutter, Some(Cutter::Body(_) | Cutter::Bisector(_)))
+                || (target.kind == "sweep" && matches!(r.cutter, Some(Cutter::Plane(_))))
+        })
+    {
+        let mut tools = Vec::with_capacity(body_count);
+        for cut in rows
+            .into_iter()
+            .filter(|r| matches!(r.cutter, Some(Cutter::Body(_))))
+        {
+            *active = Some(cut.uid.clone());
+            let tool = match operand(scene, t, target, cut, &mesh)? {
+                Ok(t) => t,
+                Err(state) => return Ok(Err(state)),
+            };
+            tools.push((
+                cut.uid.clone(),
+                cut.operation.clone().unwrap_or_else(|| "subtract".into()),
+                cut.clearance.unwrap_or(0.),
+                tool,
+            ));
+        }
+        let subject = py
+            .import("built_core.group")?
+            .getattr("Group")?
+            .call1((&mesh,))?;
+        return crate::solids::body_stack(&subject, tools, active, skipped);
+    }
+    for id in &target.cuts {
+        let Some(cut) = t.rows.get(id) else {
+            return Ok(Err("ref_lost"));
+        };
+        if cut.on == Some(false) {
+            continue;
+        }
+        if !(target.kind == "cut_stack" && matches!(cut.cutter, Some(Cutter::Plane(_))))
+            && !matches!(
+                cut.cutter,
+                Some(Cutter::Body(_) | Cutter::Section(_) | Cutter::Opening(_))
+            )
+        {
+            continue;
+        }
+        *active = Some(id.clone());
+        let tool = match operand(scene, t, target, cut, &mesh)? {
+            Ok(tool) => tool,
+            Err(state) => return Ok(Err(state)),
+        };
+        let subject = py
+            .import("built_core.group")?
+            .getattr("Group")?
+            .call1((&mesh,))?;
+        let op = cut.operation.as_deref().unwrap_or("subtract");
+        let args = if matches!(op, "trim" | "subtract") {
+            [tool, subject]
+        } else {
+            [subject, tool]
+        };
+        match crate::solids::operation(
+            op,
+            pyo3::types::PyList::new(py, args)?.as_any(),
+            Some(id),
+            cut.clearance.unwrap_or(0.),
+        ) {
+            Ok((_, results)) => mesh = results.get_item(0)?.getattr("mesh")?,
+            Err(e) if e.is_instance_of::<crate::solids::SolidError>(py) => {
+                skipped.push((
+                    id.clone(),
+                    match e.value(py).str()?.to_str()? {
+                        "no overlap" => "cut_misses",
+                        "empty" => "empty_cut",
+                        _ => "boolean_failed",
+                    },
+                ));
+            }
+            Err(e) => return Err(e),
+        }
+    }
+    Ok(Ok(mesh))
+}
+
+/// A surviving donor keeps its face ID. For split donors, sort the pieces
+/// spatially to distinguish them. Edges and vertices use the bounding roles.
+pub(crate) fn assign_cut_roles(
+    mesh: &Obj<'_>,
+    ids: &Bound<'_, PyDict>,
+    donors: &[(String, u64, bool)],
+    uid: &str,
+) -> PyResult<()> {
+    let store = mesh.getattr("_store")?.cast_into::<PyMeshStore>()?;
+    let mut borrow = store.try_borrow_mut()?;
+    let st = &mut borrow.inner;
+    let mut pieces = std::collections::BTreeMap::<String, Vec<(u32, DVec3, Option<u64>)>>::new();
+    for (key, donor) in ids.iter() {
+        let Some(f) = st.slot(Kind::Face, key.extract()?) else {
+            continue;
+        };
+        let donor = donor.extract::<usize>().ok().and_then(|i| donors.get(i));
+        let role = donor
+            .map(|r| r.0.clone())
+            .unwrap_or_else(|| format!("cut/{uid}/clearance"));
+        let ring = st.face_rings(f).remove(0);
+        let centre = ring
+            .iter()
+            .map(|v| DVec3::from(*st.state.vpos.get(*v as usize)))
+            .sum::<DVec3>()
+            / (ring.len() as f64);
+        pieces
+            .entry(role)
+            .or_default()
+            .push((f, centre, donor.filter(|r| !r.2).map(|r| r.1)));
+    }
+    let mut roles = Vec::new();
+    let mut inherited = Vec::new();
+    let mut faces = HashMap::new();
+    for (role, mut list) in pieces {
+        list.sort_by(|a, b| {
+            a.1.x
+                .total_cmp(&b.1.x)
+                .then(a.1.y.total_cmp(&b.1.y))
+                .then(a.1.z.total_cmp(&b.1.z))
+        });
+        for (index, (f, _, pid)) in list.into_iter().enumerate() {
+            let label = format!("{role}/{index}");
+            faces.insert(f, label.clone());
+            if let Some(pid) = pid.filter(|_| index == 0) {
+                inherited.push((f, pid));
+            } else {
+                roles.push((label, Kind::Face, f));
+            }
+        }
+    }
+    let mut vertices = HashMap::new();
+    for v in st.live_slots(Kind::Vertex) {
+        let mut sides: Vec<_> = st
+            .faces_around(&[v])
+            .iter()
+            .filter_map(|f| faces.get(f))
+            .collect();
+        sides.sort();
+        let role = format!("corner/{sides:?}");
+        vertices.insert(v, role.clone());
+        roles.push((role, Kind::Vertex, v));
+    }
+    for e in st.live_slots(Kind::Edge) {
+        let mut ends = st.state.ends.get(e as usize).map(|v| &vertices[&v]);
+        ends.sort();
+        roles.push((format!("rim/{ends:?}"), Kind::Edge, e));
+    }
+    geometry::assign_roles(st, roles).map_err(PyValueError::new_err)?;
+    for (f, pid) in inherited {
+        st.set_pid(Kind::Face, f, pid);
+    }
+    Ok(())
+}
+
+pub(crate) fn pushed_row<'p>(
+    scene: &Obj<'p>,
+    group: &Obj<'p>,
+    face: &Obj<'p>,
+    distance: f64,
+) -> PyResult<Option<Obj<'p>>> {
+    if group.is_none() || face.is_none() {
+        return Ok(None);
+    }
+    let Some(t) = current(scene.py(), root(scene)?) else {
+        return Ok(None);
+    };
+    let owner: String = group.getattr("uid")?.extract()?;
+    let Some(row) = t.owners.get(&owner).and_then(|id| t.rows.get(id)) else {
+        return Ok(None);
+    };
+    if row.cuts.is_empty() {
+        return Ok(None);
+    }
+    let face_pid = group
+        .getattr("mesh")?
+        .getattr("_store")?
+        .call_method1("id_of", ("face", face.getattr("key")?));
+    let pid = face_pid.and_then(|i| i.extract::<u64>()).ok();
+    let tag = face
+        .getattr("attrs")?
+        .call_method1("get", ("built.cut_face",))?
+        .extract::<Option<String>>()?;
+    for id in &row.cuts {
+        let Some(cut) = t.rows.get(id) else {
+            continue;
+        };
+        if cut.on == Some(false) {
+            continue;
+        }
+        let plane = matches!(cut.cutter, Some(Cutter::Plane(_) | Cutter::Bisector(_)));
+        if !(plane
+            && pid.is_some_and(|pid| geometry::matches_role(pid, &format!("cut/{id}/plane"))))
+            && tag.as_ref() != Some(id)
+        {
+            continue;
+        }
+        let mut edit = (**cut).clone();
+        let delta = distance * 1000.;
+        match edit.cutter.as_mut() {
+            Some(Cutter::Plane(p)) if edit.anchor.is_none() => {
+                let normal = crate::math::xyz(&face.call_method0("normal")?)?;
+                p.origin = (DVec3::from(p.origin) + distance * normal).to_array();
+            }
+            Some(Cutter::Section(uid)) => {
+                let original = t.rows.get(uid).map(|r| &r.sketch_fields.extrude);
+                if !edit.sketch_fields.extrude.is_object() {
+                    edit.sketch_fields.extrude = original.cloned().unwrap_or_default();
+                }
+                let depth = edit.sketch_fields.extrude["depth"].as_f64().unwrap_or(100.);
+                edit.sketch_fields.extrude =
+                    serde_json::json!({"extent":"depth","depth":(depth+delta).max(0.001)});
+            }
+            Some(Cutter::Body(_)) => {
+                edit.clearance = Some((edit.clearance.unwrap_or(0.) - delta).max(0.));
+            }
+            _ if edit.anchor.is_some() => {
+                edit.anchor.as_mut().unwrap().offset += delta;
+            }
+            _ => return Ok(None),
+        }
+        return Ok(Some(to_py(scene.py(), &edit)?));
+    }
+    Ok(None)
+}
+
+/// A legacy wall stored its extents as a unit-cube transform. A rectangle
+/// swept along its centreline reproduces that box in definition coordinates.
+pub(crate) fn migrate_wall(scene: &Obj<'_>, wall: &Obj<'_>, frame: [f64; 16]) -> PyResult<()> {
+    let root = root(scene)?;
+    let mut t = current(scene.py(), root).unwrap_or_else(|| LiveTable {
+        groups: Arc::new(index(root)),
+        ..Default::default()
+    });
+    let owner: String = wall.getattr("uid")?.extract()?;
+    if t.owners.contains_key(&owner) {
+        return Ok(());
+    }
+    let frame = DMat4::from_cols_array(&frame);
+    let (x, y, z) = (
+        frame.x_axis.truncate(),
+        frame.y_axis.truncate(),
+        frame.z_axis.truncate(),
+    );
+    let axis = x.normalize_or_zero();
+    if axis.dot(y.normalize_or_zero()).abs() > 1e-8
+        || axis.dot(z.normalize_or_zero()).abs() > 1e-8
+        || y.normalize_or_zero().dot(z.normalize_or_zero()).abs() > 1e-8
+    {
+        return Ok(());
+    }
+    let across = DVec3::Z.cross(axis).try_normalize().unwrap_or(DVec3::X);
+    let rotation = y.dot(axis.cross(across)).atan2(y.dot(across)).to_degrees();
+    let a = frame.transform_point3(DVec3::new(0., 0.5, 0.5));
+    let row:Row=serde_json::from_value(serde_json::json!({
+        "uid":eid::derived_uid(&format!("built:wall:v1:{owner}")),"owner":owner,"kind":"sweep",
+        "preset":"f76ea921edc2e55d","attachment":"centre","rotation":rotation,
+        "profile":{"library":"basic/wall","params":{"width":y.length()*1000.,"height":z.length()*1000.}},
+        "path":{"points":[a.to_array(),(a+x).to_array()],"definition_space":true}
+    })).map_err(|e|PyValueError::new_err(e.to_string()))?;
+    t.insert(row).map_err(PyValueError::new_err)?;
+    put(scene, t)
+}
+
+pub(crate) fn hosted(
+    scene: &Obj<'_>,
+    wall: &Obj<'_>,
+    fill: &Obj<'_>,
+    opening: Option<(String, [f64; 16], [f64; 4])>,
+) -> PyResult<String> {
+    let document = root(scene)?;
+    let mut t = current(scene.py(), document).unwrap_or_else(|| LiveTable {
+        groups: Arc::new(index(document)),
+        ..Default::default()
+    });
+    let owner: String = wall.getattr("uid")?.extract()?;
+    let fill_uid: String = fill.getattr("uid")?.extract()?;
+    let groups = Arc::make_mut(&mut t.groups);
+    groups.insert(owner.clone(), wall.getattr("_doc_key")?.extract()?);
+    groups.insert(fill_uid.clone(), fill.getattr("_doc_key")?.extract()?);
+    let uid = eid::derived_uid(&format!("built:opening:v1:{owner}:{fill_uid}"));
+    if let Some((guid, frame, rect)) = opening {
+        let mut row:Row=serde_json::from_value(serde_json::json!({
+            "uid":uid,"owner":owner,"kind":"cut","operation":"subtract","cutter":{"opening":{ "fill":fill_uid,"guid":guid,"frame":frame,"rect":rect }}
+        })).map_err(|e|PyValueError::new_err(e.to_string()))?;
+        if let Some(old) = t.rows.get(&uid) {
+            row.on = old.on;
+        }
+        attach(scene, &mut t, &mut row)?;
+        t.insert(row).map_err(PyValueError::new_err)?;
+        t.pending.insert(uid.clone());
+    } else if t.remove(&uid).is_some() {
+        let target = t.owners[&owner].clone();
+        let mut row = (*t.rows[&target]).clone();
+        row.cuts.retain(|id| id != &uid);
+        if row.cuts.is_empty() && row.kind == "cut_stack" {
+            let source = source(scene, row.source.as_deref().unwrap_or(""))?
+                .ok_or_else(|| PyValueError::new_err("Missing cut source"))?;
+            wall.setattr("mesh", source.getattr("mesh")?)?;
+            t.remove(&target);
+            if !t.rows.values().any(|r| r.source == row.source) {
+                scene
+                    .getattr("kept_components")?
+                    .call_method1("remove", (source,))?;
+            }
+            let ext = metadata(wall)?;
+            if ext.contains(EXT)? {
+                ext.del_item(EXT)?;
+                wall.setattr("ext", ext)?;
+            }
+        } else {
+            t.insert(row).map_err(PyValueError::new_err)?;
+            t.pending.insert(target);
+        }
+    }
+    put(scene, t)?;
+    Ok(uid)
+}

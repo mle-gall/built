@@ -178,7 +178,7 @@ impl SweepTool {
             return false;
         }
         let specs:Vec<_>=paths.into_iter().map(|path|json!({
-            "preset":self.preset(),"preset_definition":self.chosen,"preset_uid":self.chosen.as_ref().map(|p|&p["uid"]),"profile":self.profile,"path":path,
+            "cut_definitions":self.chosen.as_ref().and_then(|p|p["values"]["cut_definitions"].as_array()).cloned().unwrap_or_default(),"preset":self.preset(),"preset_definition":self.chosen,"preset_uid":self.chosen.as_ref().map(|p|&p["uid"]),"profile":self.profile,"path":path,
             "rotation":self.rotation,"mirror":self.mirror,"attachment":self.attachment_name()
         })).collect();
         host.run(&Command {
@@ -439,6 +439,7 @@ impl Tool for SweepTool {
                 }
                 "r" => self.rotation = (self.rotation + 90.) % 360.,
                 "f" => self.mirror = !self.mirror,
+                "d" => {host.call("tool_sketch",json!({"tool":"sweep"}));}
                 "l" => {
                     host.call("sweep_picker", Json::Null);
                 }

@@ -80,12 +80,14 @@ pub(crate) fn load(scene: &Obj<'_>, ext: &Bound<'_, PyDict>) -> PyResult<()> {
     for mut row in rows {
         let id = row.uid.clone();
         if row.v != 1
-            || !matches!(row.kind.as_str(), "test_box" | "sweep" | "sketch")
+            || !matches!(row.kind.as_str(), "test_box" | "sweep" | "sketch" | "cut" | "cut_stack")
             || t.rows.contains_key(&id)
         {
             return Ok(());
         }
-        if let Some(k) = t.groups.get(&row.owner) {
+        if row.kind == "cut" {
+            if !t.groups.contains_key(&row.owner) { row.state = "ref_lost".into(); }
+        } else if let Some(k) = t.groups.get(&row.owner) {
             if let Some((stamp, mesh)) = marker(py, *k, attr, &id) {
                 let mesh = mesh.bind(py);
                 let actual = match stamps.entry(mesh.as_ptr() as usize) {

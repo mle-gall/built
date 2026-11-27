@@ -743,11 +743,17 @@ fn command_action<'py>(a: &Args<'py>) -> Reply<'py> {
             let index: i64 = py.get_type::<pyo3::types::PyInt>().call1((arg,))?.extract()?;
             if 0 <= index && (index as usize) < hits.len()? {
                 let action = hits.get_item(index)?;
-                if attr(&view, "_ui_command_scope")?.eq("Sweep presets")? {
+                let cut=attr(&view, "_ui_command_scope")?.eq("Cut presets")?;
+                if cut || attr(&view, "_ui_command_scope")?.eq("Sweep presets")? {
                     if verb == "cmdrun" {
-                        let tool=win.getattr("_tools")?.get_item("sweep")?;
+                        let tool=win.getattr("_tools")?.get_item(if cut {"cut"} else {"sweep"})?;
                         let machine=tool.getattr("_machine")?;
-                        if let Ok(preset)=action.get_item("preset"){
+                        if let Ok(entry)=action.get_item("sketch_action") {
+                            win.setattr("_sketch_tool_return","cut")?;
+                            win.setattr("_sketch_cut_target",tool.call_method1("_state",("target",))?)?;
+                            let how=entry.extract::<String>()?;
+                            crate::sketch_workspace::enter(&win,&how,if how=="new" {"section"}else{""})?;
+                        }else if let Ok(preset)=action.get_item("preset"){
                             machine.call_method1("set",("preset",preset))?;
                             py.import("built_render.wgpu_library")?.call_method1("_remember",(&view,action.get_item("key")?))?;
                         }else if let Ok(sketch)=action.get_item("sketch"){
@@ -775,7 +781,8 @@ fn command_action<'py>(a: &Args<'py>) -> Reply<'py> {
 pub(super) fn command_query<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let (view, win, query) = (a.get_item(0)?, a.get_item(1)?, a.get_item(2)?);
-    if attr(&view,"_ui_command_scope")?.eq("Sweep presets")? {
+    let cut=attr(&view,"_ui_command_scope")?.eq("Cut presets")?;
+    if cut || attr(&view,"_ui_command_scope")?.eq("Sweep presets")? {
         let provider=py.import("built_render.wgpu_library")?.getattr("ProfilesProvider")?.call0()?;
         let ctx=py.import("types")?.getattr("SimpleNamespace")?.call((),Some(&fields!(py;"scene"=>win.getattr("viewport")?.getattr("scene")?)))?;
         let needle=query.extract::<String>()?.to_lowercase();
@@ -786,11 +793,11 @@ pub(super) fn command_query<'py>(a: &Args<'py>) -> Reply<'py> {
         for entry in presets.call_method1("items",(&ctx,))?.try_iter()?{
             let entry=entry?;
             let p=entry.get_item("preset")?;
-            if !p.get_item("primitive")?.eq("sweep")?{continue;}
+            if !p.get_item("primitive")?.eq(if cut {"cut"}else{"sweep"})?{continue;}
             let name=entry.get_item("name")?.str()?.to_string();
             let pack=entry.get_item("category")?.str()?.to_string();
             let record=p.get_item("record")?;
-            let profile=p.get_item("values")?.get_item("profile")?.call_method1("get",("library","Drawn profile"))?.str()?.to_string();
+            let profile=if cut {p.get_item("values")?.get_item("cutter_kind")?.str()?.to_string()} else {p.get_item("values")?.get_item("profile")?.call_method1("get",("library","Drawn profile"))?.str()?.to_string()};
             let class=record.call_method1("get",("class",""))?.str()?.to_string();
             let subtype=record.call_method1("get",("predefined_type",""))?.str()?.to_string();
             let detail=format!("{} · {} · {} {}",profile,record.call_method1("get",("material",""))?.str()?,class,subtype);
@@ -807,7 +814,15 @@ pub(super) fn command_query<'py>(a: &Args<'py>) -> Reply<'py> {
             results.append((name,group,detail,true))?;
             actions.append(entry)?;
         }
-        for profile in provider.call_method1("items",(ctx,))?.try_iter()?{
+        if cut {
+            for (label,how) in [("New sketch","new"),("Import drawing…","import")] {
+                if label.to_lowercase().contains(&needle) {
+                    results.append((label,"Sections","",true))?;
+                    actions.append(fields!(py; "sketch_action"=>how))?;
+                }
+            }
+        }
+        if !cut { for profile in provider.call_method1("items",(ctx,))?.try_iter()?{
             let profile=profile?;
             let name:String=profile.get_item("name")?.extract()?;
             let family:String=profile.get_item("category")?.extract()?;
@@ -816,6 +831,7 @@ pub(super) fn command_query<'py>(a: &Args<'py>) -> Reply<'py> {
                 results.append((name,family,class,true))?;
                 actions.append(profile)?;
             }
+        }
         }
         view.setattr("_ui_cmd_hits",actions)?;
         view.getattr("renderer")?.call_method1("ui_set_command_results",(results,))?;

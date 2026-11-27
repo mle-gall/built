@@ -132,10 +132,62 @@ impl ViewportToolHost {
                 let id=mesh.getattr("_store")?.call_method1("id_of",("face",face.getattr("key")?))?.extract()?;
                 json!({"to":{"path":path,"id":crate::element_ids::to_text('f',id)},"normal":normal})
             }
+            "edit_member_profile" => {
+                let scene=view.getattr("scene")?;
+                let Some(pair)=hit(view,"pick_face_placement",args(arg)?)? else{return Ok(Some(Value::Bool(false)));};
+                let face=pair.get_item(0)?; let group=pair.get_item(1)?;
+                let g=if group.is_none(){scene.getattr("edit_group")?}else{group.getattr_opt("source_occurrence")?.unwrap_or(group)};
+                let uid=crate::live::profile_cap(&scene,&g,&face)?;
+                if let Some(uid)=uid{
+                    py.import("built_render.sketch_workspace")?.call_method1("enter",(view.call_method0("window")?,"edit",uid))?;
+                    Value::Bool(true)
+                }else{Value::Bool(false)}
+            }
+            "cut_error" => {view.call_method1("flash_status",(arg.as_str().unwrap_or("Cut failed"),))?; Value::Null}
+            "cut_section" => view.call_method0("window")?.getattr_opt("_cut_section")?.filter(|s|!s.is_none()).map(|uid| uid.extract::<String>().map(|uid|json!({"section":uid}))).transpose()?.unwrap_or(Value::Null),
+            "cut_pick" => {
+                let px:(f64,f64)=args(arg)?;
+                let Some(pair)=hit(view,"pick_face_placement",px)? else{return Ok(Some(Value::Null));};
+                let face=pair.get_item(0)?;let placed=pair.get_item(1)?;
+                if face.is_none() || placed.is_none(){return Ok(Some(Value::Null));}
+                let matrix=placed.getattr("xform")?;
+                let xf=if matrix.is_none(){DMat4::IDENTITY}else{DMat4::from_cols_array(&matrix.call_method0("data")?.extract()?)};
+                let group=placed.getattr_opt("source_occurrence")?.unwrap_or(placed);
+                let scene=view.getattr("scene")?;
+                let path:Vec<String>=scene.call_method1("occurrence_path",(&group,))?.extract()?;
+                let id=group.getattr("mesh")?.getattr("_store")?.call_method1("id_of",("face",face.getattr("key")?))?.extract()?;
+                let ring=face.getattr("vertices")?.try_iter()?.map(|v|Ok(xf.transform_point3(xyz(&v?)?).to_array())).collect::<PyResult<Vec<_>>>()?;
+                let local=xyz(&face.call_method0("centroid")?)?;
+                let ends=group.getattr("ext")?.call_method1("get",("built.live",))?;
+                let points=ends.get_item("path").and_then(|p|p.extract::<Vec<[f64;3]>>()).unwrap_or_default();
+                let start=points.first().zip(points.last()).is_some_and(|(a,b)|local.distance_squared((*a).into())<local.distance_squared((*b).into()));
+                json!({"placement":group.getattr("uid")?.extract::<String>()?,"ring":ring,"face":{"path":path,"id":crate::element_ids::to_text('f',id)},"end":if start {"start"}else{"end"}})
+            }
+            "cut_selection" => {
+                let selected=view.getattr("scene")?.getattr("selection")?;
+                if selected.len()?==1 {
+                    let g=selected.try_iter()?.next().transpose()?;
+                    json!(g.and_then(|g|g.getattr("uid").ok()).and_then(|v|v.extract::<String>().ok()))
+                } else {Value::Null}
+            }
+            "tool_sketch" => {
+                let win=view.call_method0("window")?;
+                let tool=arg["tool"].as_str().unwrap_or("sweep");
+                win.setattr("_sketch_tool_return",tool)?;
+                win.setattr("_sketch_cut_target",arg["target"].as_str())?;
+                let workspace=py.import("built_render.sketch_workspace")?;
+                if let (Some(path),Some(id))=(arg["face"]["path"].as_array(),arg["face"]["id"].as_str()){
+                    let path=path.iter().filter_map(|p|p.as_str()).collect::<Vec<_>>().join("/");
+                    workspace.call_method1("enter",(win,"section",format!("{path}|{id}")))?;
+                }else{
+                    workspace.call_method1("enter",(win,"new",if tool=="cut" {"section"} else {"profile"}))?;
+                }
+                Value::Null
+            }
             "sweep_default" => crate::live::default_preset(&view.getattr("scene")?)?,
-            "sweep_picker" => {
+            "sweep_picker" | "cut_picker" => {
                 let canvas=view.call_method0("window")?.getattr("_host")?.getattr("view")?;
-                canvas.getattr("renderer")?.call_method1("ui_open_commands",("", "Sweep presets"))?;
+                canvas.getattr("renderer")?.call_method1("ui_open_commands",("", if verb=="cut_picker" {"Cut presets"} else {"Sweep presets"}))?;
                 canvas.call_method0("update")?;
                 Value::Null
             }

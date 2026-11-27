@@ -684,6 +684,19 @@ impl<'a, 'py> Row<'a, 'py> {
                 py.import("built_core.project")?.call_method1("create", (&scene, path, win.getattr("_current_path")?))?;
                 win.call_method1("_relink_done", ("Project registry updated",))?;
             }
+        } else if self.is(&["eye"]) && rk.starts_with("cut:") {
+            let api=py.import("built_core.command_protocol")?;
+            for row in api.call_method1("live_rows",(&scene,))?.try_iter()? {
+                let row=row?;
+                if row.get_item("uid")?.eq(&rk[4..])? {
+                    let on=row.call_method1("get",("on",true))?.is_truthy()?;
+                    row.set_item("on",!on)?;
+                    self.core("live_set",fields!(py;"row"=>row))?;
+                    self.changed()?;
+                    self.rebuild()?;
+                    break;
+                }
+            }
         } else if self.is(&["eye", "lock"]) && rk == "geometry:loose" {
             self.core("edit_loose_geometry", fields!(py; "field" => &self.verb))?;
             let kept = empty(py);

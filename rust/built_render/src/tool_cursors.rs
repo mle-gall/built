@@ -130,6 +130,7 @@ const RAIL_SVG: &[(&str, &str)] = &[
     ("sketch_drop_fillets", include_str!("../assets/sketch_icons/sketch_drop_fillets.svg")),
     ("sketch_close_gaps", include_str!("../assets/sketch_icons/sketch_close_gaps.svg")),
     ("change_axes", include_str!("../assets/axes.svg")),
+    ("cut", include_str!("../assets/cut.svg")),
     ("sweep", include_str!("../assets/sweep.svg")),
     ("line_on_surface", include_str!("../assets/line_on_surface.svg")),
     ("comp_vista", include_str!("../assets/sheet_icons/comp_vista.svg")),
