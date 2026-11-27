@@ -52,7 +52,7 @@ fn materialize(mesh: &Obj<'_>) -> PyResult<()> {
         }
     }
     let built = if block {
-        Some(super::block::store_from_source(&source, false)?)
+        Some(super::block::store_from_source(&source, false, None)?)
     } else {
         None
     };

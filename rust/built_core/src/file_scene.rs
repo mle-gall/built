@@ -340,6 +340,14 @@ fn archive_settings(scene: &Obj<'_>, out: &Dict<'_>, stream: &Obj<'_>) -> PyResu
 #[pyfunction]
 pub fn igz_archive_scene_fields(scene: &Obj<'_>, out: &Dict<'_>, stream: &Obj<'_>) -> PyResult<()> {
     let py = scene.py();
+    // Persistent ids go to format-2 files only (an .igz copy keeps none).
+    let built = flag(stream, "built", false)?;
+    if let Some(id) = scene.getattr_opt("doc_id")?.and_then(|v| v.extract::<String>().ok()) {
+        out.set_item("_doc_id", id)?;
+    }
+    if let Some(ext) = scene.getattr_opt("doc_ext")?.filter(|v| v.is_instance_of::<PyDict>() && v.is_truthy().unwrap_or(false)) {
+        out.set_item("_doc_ext", py.import("copy")?.call_method1("deepcopy", (ext,))?)?;
+    }
     archive_styles(scene, out)?;
     let views = attr(scene, "saved_views")?;
     if views.is_truthy()? {
@@ -440,15 +448,21 @@ pub fn igz_archive_scene_fields(scene: &Obj<'_>, out: &Dict<'_>, stream: &Obj<'_
     if guides.is_truthy()? {
         let lines = PyList::empty(py);
         let circles = PyList::empty(py);
+        let mut guide_uids = std::collections::HashSet::new();
         for guide in guides.try_iter()? {
             let g = guide?;
             if g.hasattr("is_finite")? && !g.call_method0("is_finite")?.is_truthy()? {
                 continue;
             }
+            let row = record(&g)?;
+            if let (true, Ok(d)) = (built, row.cast::<PyDict>()) {
+                let fallback = crate::element_ids::derived_uid(&format!("built:legacy:v1:guides:{}", lines.len() + circles.len()));
+                d.set_item("uid", crate::file_ids::row_uid(&g, &mut guide_uids, &fallback)?)?;
+            }
             if flag(&g, "is_circle", false)? {
-                circles.append(record(&g)?)?;
+                circles.append(row)?;
             } else {
-                lines.append(record(&g)?)?;
+                lines.append(row)?;
             }
         }
         put(out, "guides", &lines)?;
@@ -457,6 +471,36 @@ pub fn igz_archive_scene_fields(scene: &Obj<'_>, out: &Dict<'_>, stream: &Obj<'_
     let images = attr(scene, "image_planes")?;
     if images.is_truthy()? {
         out.set_item("image_planes", rows(&images, record)?)?;
+    }
+    // Persistent row uids (docs/persistent-ids.md §2.2).
+    if built {
+        // Material uids unique in the file: a material made under a name a
+        // renamed one had takes a new uid.
+        if let (Some(rows), Ok(objs)) = (out.get_item("materials")?.and_then(|m| m.cast_into::<PyList>().ok()), mats.call_method0("values")) {
+            let mut seen = std::collections::HashSet::new();
+            for (row, m) in rows.iter().zip(objs.try_iter()?) {
+                let (Ok(row), m) = (row.cast_into::<PyDict>(), m?) else { continue };
+                let Some(uid) = row.get_item("uid")?.and_then(|u| u.extract::<String>().ok()) else { continue };
+                if !seen.insert(uid) {
+                    let fresh = crate::element_ids::new_uid();
+                    let _ = m.setattr("uid", &fresh);
+                    row.set_item("uid", &fresh)?;
+                    seen.insert(fresh);
+                }
+            }
+        }
+        for table in ["saved_views", "dimensions", "text_labels", "image_planes", "geo_paths"] {
+            crate::file_ids::archive_row_uids(scene, out, table)?;
+        }
+        crate::file_ids::archive_sheet_uids(scene, out)?;
+    } else if let Some(mats) = out.get_item("materials")?.and_then(|m| m.cast_into::<PyList>().ok()) {
+        for m in mats.iter() {
+            if let Ok(d) = m.cast_into::<PyDict>() {
+                if d.contains("uid")? {
+                    d.del_item("uid")?;
+                }
+            }
+        }
     }
     Ok(())
 }
@@ -895,7 +939,12 @@ pub fn igz_finish_scene(scene: &Obj<'_>, payload: &Dict<'_>) -> PyResult<usize> 
                     }
                 }
                 if ok {
-                    guides.call_method1("append", (factory.call1((raw,))?,))?;
+                    let g = factory.call1((&raw,))?;
+                    let uid = raw.get_item("uid")?.and_then(|u| u.extract::<String>().ok()).unwrap_or_else(|| {
+                        crate::element_ids::derived_uid(&format!("built:legacy:v1:guides:{}", guides.len().unwrap_or(0)))
+                    });
+                    let _ = g.setattr("uid", uid);
+                    guides.call_method1("append", (g,))?;
                 } else {
                     repairs += 1;
                 }
@@ -910,5 +959,10 @@ pub fn igz_finish_scene(scene: &Obj<'_>, payload: &Dict<'_>) -> PyResult<usize> 
         "built_core.image_plane",
         "ImagePlane",
     )?;
+    // Persistent row uids (docs/persistent-ids.md §2.2, §5.3).
+    for table in ["saved_views", "dimensions", "text_labels", "image_planes", "geo_paths"] {
+        crate::file_ids::restore_row_uids(scene, payload, table)?;
+    }
+    crate::file_ids::restore_sheet_views(scene, payload)?;
     Ok(repairs)
 }

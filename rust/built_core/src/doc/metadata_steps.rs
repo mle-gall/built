@@ -191,7 +191,13 @@ impl RecordPatchStep {
                     new.set_item("guid", guid)?;
                 } else {
                     new.call_method1("pop", ("guid", py.None()))?;
-                    ensure.call1((&new,))?;
+                    // A new record gets its GUID now; an existing one
+                    // without keeps the GlobalId its uid path derives
+                    // (docs/persistent-ids.md §7.1): one assigned later
+                    // would change what earlier exports wrote.
+                    if !old.is_truthy()? {
+                        ensure.call1((&new,))?;
+                    }
                 }
                 if s.getattr("normalize_values")?.is_truthy()? {
                     after.append(normalize.call1((new,))?)?;

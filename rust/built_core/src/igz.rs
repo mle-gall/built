@@ -37,6 +37,7 @@ enum Dtype {
     I4,
     I8,
     U1,
+    U8,
 }
 
 impl Dtype {
@@ -46,6 +47,7 @@ impl Dtype {
             "<i4" => Some(Dtype::I4),
             "<i8" => Some(Dtype::I8),
             "|u1" => Some(Dtype::U1),
+            "<u8" => Some(Dtype::U8),
             _ => None,
         }
     }
@@ -53,7 +55,7 @@ impl Dtype {
     fn size(self) -> usize {
         match self {
             Dtype::F4 | Dtype::I4 => 4,
-            Dtype::I8 | Dtype::F8 => 8,
+            Dtype::I8 | Dtype::F8 | Dtype::U8 => 8,
             Dtype::U1 => 1,
         }
     }
@@ -220,6 +222,14 @@ fn block_ok(blob: &[u8], check: &Check) -> bool {
     for name in ["edge_flags", "edge_curve", "edge_layer"] {
         if let Some(s) = get(name) {
             if s.shape.len() != 1 || s.len() != ne {
+                return false;
+            }
+        }
+    }
+    // Persistent ids (format 2): one per element, `<u8` differences.
+    for (name, n) in [("vertex_id", pos.len()), ("edge_id", ne), ("face_id", counts.len())] {
+        if let Some(s) = get(name) {
+            if s.dtype != Dtype::U8 || s.shape.len() != 1 || s.len() != n {
                 return false;
             }
         }

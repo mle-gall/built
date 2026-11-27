@@ -28,6 +28,17 @@ fn mesh<'p>(s: &Obj<'p>) -> PyResult<Obj<'p>> {
         Ok(s.clone())
     }
 }
+/// A geometry block names its definition (docs/persistent-ids.md §5.2).
+pub(crate) fn name_definition(block: &Obj<'_>, mesh: &Obj<'_>) -> PyResult<()> {
+    if let Ok(d) = block.cast::<PyDict>() {
+        if let Some(g) = d.get_item("geom")? {
+            if let Ok(g) = g.cast::<PyDict>() {
+                g.set_item("uid", crate::element_ids::definition_uid(mesh)?)?;
+            }
+        }
+    }
+    Ok(())
+}
 #[pyclass]
 struct FileBlock {
     geom: Owned,
@@ -47,6 +58,13 @@ impl FileBlock {
             )?
         }
         let block = codec.call_method1("_mesh_json", (m, self.geom.bind(py)))?;
+        let built = match &self.stream {
+            Some(s) => s.bind(py).getattr_opt("built")?.map(|b| b.is_truthy()).transpose()?.unwrap_or(false),
+            None => false,
+        };
+        if built {
+            name_definition(&block, m)?;
+        }
         if let Some(s) = &self.stream {
             let spool = codec.getattr("_spool_json")?;
             for (k, v) in block.cast::<PyDict>()?.iter() {
@@ -317,7 +335,9 @@ fn igz_prepare_scene_steps(
                 indices: HashMap::new(),
                 writer: None,
             };
-            Ok((state, mesh(s)?.unbind(), large, geom.unbind()))
+            let root = mesh(s)?;
+            crate::element_ids::set_definition_uid(&root, crate::element_ids::ROOT_DEFINITION)?;
+            Ok((state, root.unbind(), large, geom.unbind()))
         })?;
         let payload = state.block(m).await?;
         let groups = Python::attach(|py| -> PyResult<_> {

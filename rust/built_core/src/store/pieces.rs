@@ -436,10 +436,14 @@ impl Store {
         let st = &self.state;
         let position = |v: u32| *st.vpos.get(v as usize);
         let mut pos: Vec<[f64; 3]> = Vec::with_capacity(edges.len() * 2 + faces.len() * 4);
+        // Split into Pieces keeps every element's id (a new definition).
+        let mut vids: Vec<u64> = Vec::with_capacity(pos.capacity());
         for &e in edges {
             let [a, b] = *st.ends.get(e as usize);
             pos.push(position(a));
             pos.push(position(b));
+            vids.push(self.pid(Kind::Vertex, a));
+            vids.push(self.pid(Kind::Vertex, b));
         }
         let (mut rings, mut sizes, mut counts) = (Vec::new(), Vec::new(), Vec::new());
         for &f in faces {
@@ -454,6 +458,7 @@ impl Store {
                 for &v in ring {
                     rings.push(pos.len() as i64);
                     pos.push(position(v));
+                    vids.push(self.pid(Kind::Vertex, v));
                 }
                 n += 1;
             }
@@ -490,6 +495,8 @@ impl Store {
                 }
             });
         }
+        let eids: Vec<u64> = edges.iter().map(|&e| self.pid(Kind::Edge, e)).collect();
+        let fids: Vec<u64> = faces.iter().map(|&f| self.pid(Kind::Face, f)).collect();
         let block = Block {
             pos: super::build::Points::Double(&pos),
             edges: &eix,
@@ -502,6 +509,11 @@ impl Store {
             counts: &counts,
             face_attr: Some(face_attr),
             sequential: false,
+            ids: [
+                super::ids::IdSource::Array(&vids),
+                super::ids::IdSource::Array(&eids),
+                super::ids::IdSource::Array(&fids),
+            ],
         };
         Store::from_block(ns, &block, w)
     }

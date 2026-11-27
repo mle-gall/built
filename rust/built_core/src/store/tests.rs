@@ -33,6 +33,7 @@ fn block<'a>(
         counts,
         face_attr: None,
         sequential: false,
+        ids: Default::default(),
     }
 }
 

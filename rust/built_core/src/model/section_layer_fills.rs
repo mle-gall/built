@@ -186,16 +186,15 @@ fn init(
     plane.setattr("hidden", hidden)?;
     plane.setattr("fill", py.None())?;
     plane.setattr("layer", py.None())?;
-    let module = py.import(MODULE)?;
-    let last = module.getattr("_last_uid")?;
-    let id = if let Some(value) = uid {
-        py.get_type::<pyo3::types::PyInt>().call1((value,))?
-    } else {
-        last.add(1)?
+    // A new plane gets a random persistent uid (16 hex: concurrent
+    // documents never collide). Older files numbered planes 1, 2, …: those
+    // integers are kept as they are, unique and stable within their file
+    // (docs/persistent-ids.md §2.2).
+    let id = match uid.filter(|v| !v.is_none()) {
+        Some(value) if value.is_instance_of::<pyo3::types::PyString>() => value.clone(),
+        Some(value) => py.get_type::<pyo3::types::PyInt>().call1((value,))?,
+        None => pyo3::types::PyString::new(py, &crate::element_ids::fresh_uid(py)?).into_any(),
     };
-    if id.gt(last)? {
-        module.setattr("_last_uid", &id)?;
-    }
     plane.setattr("uid", id)
 }
 #[pyfunction]
@@ -256,7 +255,6 @@ fn lazy<'p>(py: Python<'p>, name: &str) -> PyResult<Obj<'p>> {
 pub(super) fn register(m: &Bound<PyModule>) -> PyResult<()> {
     let py = m.py();
     let sub = PyModule::new(py, MODULE)?;
-    sub.add("_last_uid", 0)?;
     sub.add("FILL_PATTERNS", PyTuple::new(py, FILL_PATTERNS)?)?;
     sub.add("DEFAULT_HATCH_SPACING", 0.05)?;
     sub.add("LAYER_HATCH_SCALE", SCALE)?;

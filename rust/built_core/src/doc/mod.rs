@@ -363,6 +363,8 @@ pub struct TagData {
 #[derive(Default)]
 pub struct MaterialData {
     pub name: Option<String>,
+    /// Persistent uid, kept on rename and edits (docs/persistent-ids.md).
+    pub uid: Option<String>,
     pub color: Option<Value>,
     pub texture: Option<Value>,
     pub opacity: Option<Value>,
@@ -536,6 +538,7 @@ impl Node {
             (Data::Tag(t), Field::Color) => FVal::Val(t.color.clone()),
             (Data::Tag(t), Field::Folder) => FVal::Str(t.folder.clone()),
             (Data::Material(m), Field::Name) => FVal::Str(m.name.clone()),
+            (Data::Material(m), Field::Uid) => FVal::Str(m.uid.clone()),
             (Data::Material(m), Field::Color) => FVal::Val(m.color.clone()),
             (Data::Material(m), Field::Texture) => FVal::Val(m.texture.clone()),
             (Data::Material(m), Field::Opacity) => FVal::Val(m.opacity.clone()),
@@ -592,6 +595,7 @@ impl Node {
             (Data::Tag(t), Field::Color, FVal::Val(x)) => FVal::Val(std::mem::replace(&mut t.color, x)),
             (Data::Tag(t), Field::Folder, FVal::Str(s)) => FVal::Str(std::mem::replace(&mut t.folder, s)),
             (Data::Material(m), Field::Name, FVal::Str(s)) => FVal::Str(std::mem::replace(&mut m.name, s)),
+            (Data::Material(m), Field::Uid, FVal::Str(s)) => FVal::Str(std::mem::replace(&mut m.uid, s)),
             (Data::Material(m), Field::Color, FVal::Val(x)) => FVal::Val(std::mem::replace(&mut m.color, x)),
             (Data::Material(m), Field::Texture, FVal::Val(x)) => FVal::Val(std::mem::replace(&mut m.texture, x)),
             (Data::Material(m), Field::Opacity, FVal::Val(x)) => FVal::Val(std::mem::replace(&mut m.opacity, x)),

@@ -16,10 +16,11 @@ fn rows<'py>(meta: &Obj<'py>, key: &str) -> PyResult<Bound<'py, PyList>> {
 }
 
 #[pyfunction]
-#[pyo3(signature=(src,*,precise=false))]
+#[pyo3(signature=(src,*,precise=false,namespace=None))]
 pub(crate) fn store_from_source<'py>(
     src: &Obj<'py>,
     precise: bool,
+    namespace: Option<u64>,
 ) -> PyResult<(Obj<'py>, Bound<'py, PyList>)> {
     let py = src.py();
     let kernel = py.import("built_core")?;
@@ -82,10 +83,11 @@ pub(crate) fn store_from_source<'py>(
     } else {
         np.call_method1("ascontiguousarray", (flags, np.getattr("uint8")?))?
     };
-    let ns = py
-        .import("built_core.mesh")?
-        .getattr("_KEY_NAMESPACES")?
-        .call_method0("__next__")?;
+    let ns = match namespace {
+        // The very keys another build of this source made (id succession).
+        Some(ns) => ns.into_pyobject(py)?.into_any(),
+        None => py.import("built_core.mesh")?.getattr("_KEY_NAMESPACES")?.call_method0("__next__")?,
+    };
     let kw = py
         .import("built_core.store_mesh")?
         .call_method0("_weld_args")?
@@ -95,6 +97,9 @@ pub(crate) fn store_from_source<'py>(
         src.call_method1("get", ("sequential", false))?
             .is_truthy()?,
     )?;
+    if src.is_instance_of::<PyDict>() {
+        kw.set_item("ids", crate::file_ids::source_ids_of(src)?)?;
+    }
     let store = kernel.getattr("MeshStore")?.call_method(
         "from_block",
         (

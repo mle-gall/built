@@ -79,6 +79,13 @@ impl Store {
         for (i, &v) in vl.iter().enumerate() {
             dense[v as usize] = i as u32;
         }
+        // Explode keeps each element's id where the destination has none
+        // like it (docs/persistent-ids.md §4: keep if free).
+        let mut taken: [std::collections::HashSet<u64>; 3] = Default::default();
+        for kind in Kind::ALL {
+            taken[kind as usize] = self.live_slots(kind).into_iter().map(|s| self.pid(kind, s)).collect();
+        }
+        let made_before: [usize; 3] = [ch.created[0].len(), ch.created[1].len(), ch.created[2].len()];
         let at = |v: u32| mapped[dense[v as usize] as usize];
         let mut faces = Vec::with_capacity(fl.len());
         for (i, &f) in fl.iter().enumerate() {
@@ -140,6 +147,27 @@ impl Store {
                 }
             })
             .collect();
+        // Ids: an element this paste made takes its source's id if free.
+        let made: [std::collections::HashSet<u32>; 3] = std::array::from_fn(|k| {
+            ch.created[k][made_before[k]..].iter().filter_map(|&key| super::keys::split_key(key).map(|t| t.3)).collect()
+        });
+        let pairs: [Vec<(u32, u32)>; 3] = [
+            vl.iter().copied().zip(vertices.iter().copied()).collect(),
+            el.iter().copied().zip(edges.iter().copied()).collect(),
+            fl.iter().copied().zip(faces.iter().copied()).collect(),
+        ];
+        for kind in Kind::ALL {
+            let k = kind as usize;
+            for &(from, to) in &pairs[k] {
+                if to == NONE || !made[k].contains(&to) {
+                    continue;
+                }
+                let id = src.pid(kind, from);
+                if taken[k].insert(id) {
+                    self.set_pid(kind, to, id);
+                }
+            }
+        }
         Ok(Pasted { faces, vertices, edges })
     }
 

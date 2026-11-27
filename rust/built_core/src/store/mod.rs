@@ -57,6 +57,10 @@ pub(crate) mod geometry;
 mod frame;
 pub mod explode;
 pub mod keys;
+pub mod ids;
+pub(crate) mod ids_py;
+pub mod succession;
+pub mod exact;
 pub mod intersect;
 pub mod offset;
 pub mod pieces;
@@ -180,6 +184,14 @@ pub struct State {
     pub extra: Arc<FxHashMap<u32, Vec<Cell>>>,
     /// Edge tag keys (`Edge.layer` strings), interned per store.
     pub layers: Arc<Vec<String>>,
+    /// Persistent element ids per kind (`ids.rs`). Kept out of the
+    /// serialized state (its layout predates them: recorded pickles read
+    /// on); the mesh pickle carries them after it.
+    #[serde(skip)]
+    pub ids: [ids::IdColumn; 3],
+    /// Reserved: exact surfaces and curves (`exact.rs`), `None` = faceted.
+    #[serde(skip)]
+    pub exact: exact::ExactColumns,
 }
 
 /// A frozen state: what history keeps for undo and what native readers

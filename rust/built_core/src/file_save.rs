@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! Prepare and publish explicit saves and detached autosave snapshots.
+use pyo3::types::PyList;
 use pyo3::{
     exceptions::{PyStopIteration, PyTypeError, PyUnicodeEncodeError, PyValueError},
     prelude::*,
@@ -61,6 +62,9 @@ fn igz_save_scene_inner<'p>(
     progress: Option<&Obj<'p>>,
 ) -> PyResult<Obj<'p>> {
     let api = api(py)?;
+    if !compatibility {
+        crate::file_ids::ensure_doc_id(scene)?;
+    }
     if scene.hasattr("plugin_data")? && !compatibility {
         let project = py.import("built_core.project")?;
         project.call_method1("refresh_reference", (scene, path))?;
@@ -307,10 +311,26 @@ fn igz_write_prepared_inner<'p>(
     data.set_item("app_version", api.getattr("__version__")?)?;
     data.set_item("scene", &payload)?;
     let mut container = version != 1;
+    // The document id rides in the payload from the scene to here.
+    let (doc_id, doc_ext): (Option<String>, Option<Obj<'p>>) = match payload.cast::<PyDict>() {
+        Ok(d) => (
+            d.call_method1("pop", ("_doc_id", py.None()))?.extract()?,
+            Some(d.call_method1("pop", ("_doc_ext", py.None()))?).filter(|v| !v.is_none()),
+        ),
+        Err(_) => (None, None),
+    };
     if let Some(s) = stream {
         if s.hasattr("built")? && s.getattr("built")?.is_truthy()? {
-            data.del_item("igz_format")?;
-            data.set_item("built_format", 1)?;
+            // Format 2: persistent ids (docs/persistent-ids.md §5).
+            data.clear();
+            data.set_item("built_format", crate::file_ids::FORMAT)?;
+            data.set_item("requires", PyList::empty(py))?;
+            data.set_item("doc", crate::file_ids::document_header(py, doc_id, Some(s))?)?;
+            if let Some(ext) = &doc_ext {
+                data.set_item("ext", ext)?;
+            }
+            data.set_item("app_version", api.getattr("__version__")?)?;
+            data.set_item("scene", &payload)?;
             container = true;
         } else if s.hasattr("compatibility")? && s.getattr("compatibility")?.is_truthy()? {
             data.set_item("igz_format", 3)?;

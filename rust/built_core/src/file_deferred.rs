@@ -62,6 +62,7 @@ fn igz_geometry_arrays<'p>(
             }
             let dtype = spec.get_item(0)?.extract::<String>()?;
             if !matches!(dtype.as_str(), "<f4" | "<i4" | "<i8" | "|u1")
+                && !(dtype == "<u8" && key.ends_with("_id"))
                 && !(dtype == "<f8" && (checked || built_format && key == "pos"))
             {
                 return Err(bad(&key));
@@ -78,7 +79,7 @@ fn igz_geometry_arrays<'p>(
             let offset: usize = int.call1((spec.get_item(2)?,))?.extract()?;
             let width = match dtype.as_str() {
                 "<f4" | "<i4" => 4,
-                "<f8" | "<i8" => 8,
+                "<f8" | "<i8" | "<u8" => 8,
                 _ => 1,
             };
             if count
@@ -152,6 +153,11 @@ fn igz_geometry_arrays<'p>(
     }
     if out.contains("edge_layer")? {
         check_range("edge_layer", -1, rows(meta, "edge_layers")?.len()?)?
+    }
+    for (k, n) in [("vertex_id", nv), ("edge_id", ne), ("face_id", item("ring_counts")?.len()?)] {
+        if out.contains(k)? && item(k)?.len()? != n {
+            return Err(bad(k));
+        }
     }
     Ok(out)
 }
@@ -384,6 +390,7 @@ impl Builder {
                 "_load_mesh_json",
                 (mesh, codec.call_method1("_payload_from_arrays", (s,))?),
             )?;
+            crate::store::ids_py::apply_source_ids(mesh, s)?;
         } else {
             let empty = || -> PyResult<bool> {
                 for k in ["vertices", "edges", "faces"] {
@@ -395,7 +402,7 @@ impl Builder {
             };
             if self.precise || empty()? {
                 let (st, table) =
-                    crate::kernel::store_views::block::store_from_source(s, self.precise)?;
+                    crate::kernel::store_views::block::store_from_source(s, self.precise, None)?;
                 crate::kernel::store_views::lifecycle::become_store(
                     mesh,
                     &st,
@@ -407,6 +414,7 @@ impl Builder {
                     "_load_mesh_small",
                     (mesh, codec.call_method1("_payload_from_arrays", (s,))?),
                 )?;
+                crate::store::ids_py::apply_source_ids(mesh, s)?;
             } else {
                 codec.call_method(
                     "_build_geometry",
@@ -425,6 +433,7 @@ impl Builder {
                     ),
                     None,
                 )?;
+                crate::store::ids_py::apply_source_ids(mesh, s)?;
             }
         }
         Ok(())
@@ -462,6 +471,10 @@ fn igz_load_mesh(mesh: &Obj<'_>, payload: &Obj<'_>, geom: Option<&Obj<'_>>) -> P
         if !arrays {
             src = codec.call_method1("_json_arrays", (&p,))?
         }
+        if !src.is_none() && src.call_method1("get", ("ids",))?.is_none() {
+            // A JSON mesh has no ids: the migration numbering.
+            src.set_item("ids", "legacy")?;
+        }
         if !src.is_none() {
             update_curves(&module, &src.get_item("curves")?)?;
             let builder = Py::new(
@@ -488,6 +501,11 @@ fn igz_load_mesh(mesh: &Obj<'_>, payload: &Obj<'_>, geom: Option<&Obj<'_>>) -> P
         }
     }
     codec.call_method1("_load_mesh_json", (mesh, p))?;
+    if let Some(st) = mesh.getattr_opt("_store")?.filter(|s| !s.is_none()) {
+        if st.hasattr("number_ids_legacy")? {
+            st.call_method0("number_ids_legacy")?;
+        }
+    }
     Ok(())
 }
 fn update_curves(module: &Bound<'_, PyModule>, curves: &Obj<'_>) -> PyResult<()> {
@@ -518,6 +536,13 @@ fn igz_load_geometry<'p>(mesh: &Obj<'p>, meta: &Obj<'p>, geom: &Obj<'p>) -> PyRe
     ] {
         s.set_item(k, get(&a, v)?)?
     }
+    // Persistent ids (format 2), in process space; "legacy" without.
+    let id_map = geom
+        .getattr_opt("id_map")?
+        .filter(|m| !m.is_none())
+        .map(|m| m.extract::<Vec<u32>>())
+        .transpose()?;
+    s.set_item("ids", crate::file_ids::source_ids(meta, &a, id_map)?)?;
     let item = |k: &str| s.as_any().get_item(k);
     let pos = item("pos")?;
     let bad = np
@@ -573,7 +598,21 @@ fn igz_load_geometry<'p>(mesh: &Obj<'p>, meta: &Obj<'p>, geom: &Obj<'p>) -> PyRe
         )?;
         s.set_item("sizes", sizes.get_item(keep_r)?)?;
         s.set_item("counts", counts.get_item(&keep_f)?)?;
-        s.set_item("face_attr", item("face_attr")?.get_item(keep_f)?)?;
+        s.set_item("face_attr", item("face_attr")?.get_item(&keep_f)?)?;
+        // Edge and face ids follow the elements dropped with bad points.
+        let ids = item("ids")?;
+        if let Ok(t) = ids.cast::<PyTuple>() {
+            let mut parts = Vec::new();
+            for (k, keep) in [(0, None), (1, Some(&keep_e)), (2, Some(&keep_f))] {
+                let v = t.get_item(k)?;
+                let numeric = v.hasattr("shape")?;
+                parts.push(match keep {
+                    Some(mask) if numeric => v.get_item(mask)?,
+                    _ => v,
+                });
+            }
+            s.set_item("ids", PyTuple::new(py, parts)?)?;
+        }
     }
     if pos.len()? == 0 || item("edges")?.len()? + item("counts")?.len()? == 0 {
         return Ok(());

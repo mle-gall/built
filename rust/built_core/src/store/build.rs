@@ -18,6 +18,7 @@
 //!   face on the edge — multiplicity kept.
 
 use super::cow::{CellMap, CowVec, FxBuild, FxHashMap};
+use super::ids::{build_column, IdColumn, IdSource};
 use super::keys::{Order, Slots, NONE};
 use super::{FaceRings, Inc, State, Store, Weld};
 use crate::weld;
@@ -62,12 +63,15 @@ pub struct Block<'a> {
     pub counts: &'a [i64],
     pub face_attr: Option<&'a [i64]>,
     pub sequential: bool,
+    /// Persistent ids of the source's vertices, edges and faces.
+    pub ids: [IdSource<'a>; 3],
 }
 
 impl Default for Block<'_> {
     fn default() -> Self {
         Self { pos: Points::Double(&[]), edges: &[], flags: None, curves: None, layers: None,
-            layer_names: vec![], rings: &[], sizes: &[], counts: &[], face_attr: None, sequential: false }
+            layer_names: vec![], rings: &[], sizes: &[], counts: &[], face_attr: None, sequential: false,
+            ids: Default::default() }
     }
 }
 
@@ -112,6 +116,11 @@ fn check(b: &Block, points: usize) -> Result<(), String> {
             return Err("face_attr: one entry per face".into());
         }
     }
+    for (k, n) in [(0, points), (1, ne), (2, b.counts.len())] {
+        if !b.ids[k].len_ok(n) {
+            return Err(format!("{} ids for {n} elements", ["vertex", "edge", "face"][k]));
+        }
+    }
     if points >= super::keys::MAX_SLOTS as usize {
         return Err("more points than a store has vertex slots".into());
     }
@@ -152,7 +161,7 @@ impl Store {
 
     pub(super) fn from_block_indices(ns: u64, b: &Block, weld_c: Weld) -> Result<(Store, Vec<i64>), String> {
         check(b, b.pos.len())?;
-        let (mut vpos, mut ids, origin) = b.pos.weld(weld_c);
+        let (mut vpos, mut ids, mut origin) = b.pos.weld(weld_c);
         if b.sequential && !vpos.is_empty() {
             // `lazy_mesh.weld(sequential=True)`: vertices in the order of
             // the point each was made at.
@@ -163,11 +172,14 @@ impl Store {
                 rank[i] = r as i64;
             }
             vpos = order.iter().map(|&i| vpos[i]).collect();
+            origin = order.iter().map(|&i| origin[i]).collect();
             for id in ids.iter_mut() {
                 *id = rank[*id as usize];
             }
         }
-        let store = Self::assemble(ns, b, weld_c, CowVec::from_vec(vpos), None, |i| ids[i as usize] as u32)?;
+        let vsrc: Vec<Option<usize>> = origin.iter().map(|&o| Some(o as usize)).collect();
+        let vids = build_column(0, b.ids[0], &vsrc, b.pos.len());
+        let store = Self::assemble(ns, b, weld_c, CowVec::from_vec(vpos), None, vids, |i| ids[i as usize] as u32)?;
         Ok((store, ids))
     }
 
@@ -176,22 +188,27 @@ impl Store {
     pub(super) fn staged_block(&self, b: &Block) -> Result<Store, String> {
         check(b, self.state.vpos.len())?;
         Self::assemble(self.state.ns, b, self.weld, self.state.vpos.clone(),
-                       Some(self.state.registry.clone()), |i| i as u32)
+                       Some(self.state.registry.clone()), self.state.ids[0].clone(), |i| i as u32)
     }
 
     fn assemble(ns: u64, b: &Block, weld_c: Weld, vpos: CowVec<[f64;3]>,
-                registry: Option<CellMap>, slot: impl Fn(i64) -> u32) -> Result<Store, String> {
+                registry: Option<CellMap>, vids: IdColumn, slot: impl Fn(i64) -> u32) -> Result<Store, String> {
         let nv = vpos.len();
         let mut emap: FxHashMap<u64, u32> =
             FxHashMap::with_capacity_and_hasher(b.edges.len() + b.rings.len() / 2, FxBuild::default());
         let mut ed = Edges::default();
+        // Source edge of each built edge (None: only a ring names it).
+        let mut esrc: Vec<Option<usize>> = Vec::with_capacity(b.edges.len());
         for (i, e) in b.edges.iter().enumerate() {
             let a = slot(e[0]);
             let c = slot(e[1]);
             if a == c {
                 continue; // welded shut: add_edge's ValueError case
             }
-            let ei = *emap.entry(pair(a, c)).or_insert_with(|| ed.push(a, c)) as usize;
+            let ei = *emap.entry(pair(a, c)).or_insert_with(|| {
+                esrc.push(Some(i));
+                ed.push(a, c)
+            }) as usize;
             if let Some(f) = b.flags {
                 ed.flags[ei] |= f[i] & (super::SOFT | super::HIDDEN | super::FLAT);
             }
@@ -225,7 +242,10 @@ impl Store {
                 for k in 0..size {
                     let a = ring[k];
                     let c = ring[(k + 1) % size];
-                    let ei = *emap.entry(pair(a, c)).or_insert_with(|| ed.push(a, c)) as usize;
+                    let ei = *emap.entry(pair(a, c)).or_insert_with(|| {
+                        esrc.push(None);
+                        ed.push(a, c)
+                    }) as usize;
                     ed.faces[ei].push(f as u32);
                 }
                 ci += size;
@@ -236,6 +256,9 @@ impl Store {
             return Err("more elements than a store has slots".into());
         }
         let ne = ed.ends.len();
+        let eids = build_column(1, b.ids[1], &esrc, b.edges.len());
+        let fsrc: Vec<Option<usize>> = (0..nf).map(Some).collect();
+        let fids = build_column(2, b.ids[2], &fsrc, nf);
         // Disk cycles: each edge prepended at both ends (once for a loop).
         let mut vedge = vec![NONE; nv];
         let mut enext = vec![[NONE, NONE]; ne];
@@ -301,6 +324,8 @@ impl Store {
             displaced: Arc::new(FxHashMap::default()),
             extra: Arc::new(FxHashMap::default()),
             layers: Arc::new(b.layer_names.clone()),
+            ids: [vids, eids, fids],
+            exact: Default::default(),
         };
         Ok(store)
     }

@@ -72,7 +72,9 @@ fn from_dict<'p>(cls: &Obj<'p>, raw: &Obj<'p>) -> PyResult<Obj<'p>> {
 fn reduce<'p>(this: &Obj<'p>) -> PyResult<Obj<'p>> {
     let py = this.py();
     let dm = py.import("built_core.doc_model")?;
-    let state = dm.call_method1("handle_state", (this, PyTuple::new(py, FIELDS)?))?;
+    // Pickles and deep copies (undo records) keep the persistent uid too.
+    let names: Vec<&str> = FIELDS.iter().copied().chain(["uid"]).collect();
+    let state = dm.call_method1("handle_state", (this, PyTuple::new(py, names)?))?;
     Ok((dm.getattr("new_handle")?, (this.get_type(),), state)
         .into_pyobject(py)?
         .into_any())

@@ -23,16 +23,19 @@ fn index(i: i64, len: usize) -> PyResult<usize> {
 #[derive(Default)]
 struct Edge {
     ends: [i64; 2],
+    /// The source edge row it came from, −1 when only a ring names it.
+    src: i64,
     flags: i64,
     curve: Option<i64>,
     layer: Option<i64>,
     faces: Vec<i64>,
 }
-fn edge_id(edges: &mut Vec<Edge>, by_pair: &mut HashMap<[i64; 2], usize>, a: i64, b: i64) -> usize {
+fn edge_id(edges: &mut Vec<Edge>, by_pair: &mut HashMap<[i64; 2], usize>, a: i64, b: i64, src: i64) -> usize {
     *by_pair.entry([a.min(b), a.max(b)]).or_insert_with(|| {
         let i = edges.len();
         edges.push(Edge {
             ends: [a, b],
+            src,
             ..Edge::default()
         });
         i
@@ -72,7 +75,7 @@ pub(crate) fn deferred_incidence<'py>(
             if a == b {
                 continue;
             }
-            let e = edge_id(&mut all, &mut by_pair, a, b);
+            let e = edge_id(&mut all, &mut by_pair, a, b, i as i64);
             if let Some(f) = flags {
                 all[e].flags |= *f
                     .get(i)
@@ -115,7 +118,7 @@ pub(crate) fn deferred_incidence<'py>(
                     .ok_or_else(|| PyValueError::new_err("invalid ring size"))?;
                 let pts = &corners[corner..end];
                 for j in 0..n {
-                    let e = edge_id(&mut all, &mut by_pair, pts[j], pts[(j + 1) % n]);
+                    let e = edge_id(&mut all, &mut by_pair, pts[j], pts[(j + 1) % n], -1);
                     all[e].faces.push(face as i64);
                 }
                 corner = end;
@@ -136,8 +139,10 @@ pub(crate) fn deferred_incidence<'py>(
     let layer = PyList::empty(py);
     let mut start = vec![0i64];
     let mut incident = Vec::new();
+    let mut edge_src = Vec::with_capacity(n);
     for e in all {
         ends.extend(e.ends);
+        edge_src.push(e.src);
         soft.push(e.flags & 1 != 0);
         hidden.push(e.flags & 2 != 0);
         flat.push(e.flags & 4 != 0);
@@ -156,6 +161,7 @@ pub(crate) fn deferred_incidence<'py>(
     out.set_item("corners", corners.into_pyarray(py))?;
     out.set_item("ef_start", start.into_pyarray(py))?;
     out.set_item("ef_face", incident.into_pyarray(py))?;
+    out.set_item("edge_src", edge_src.into_pyarray(py))?;
     Ok(out.into_any())
 }
 

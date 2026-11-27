@@ -2,6 +2,7 @@
 //! Read a deferred block without building its live geometry.
 use super::{deferred_incidence, deferred_weld, Obj};
 use crate::math::{xyz, Vec3};
+use numpy::IntoPyArray;
 use pyo3::{
     prelude::*,
     types::{PyDict, PyInt, PyList},
@@ -47,12 +48,29 @@ pub(super) fn deferred_plan<'py>(
         counts.extract()?,
     )?
     .cast_into::<PyDict>()?;
+    // Which source row each planned element comes from: persistent ids
+    // follow them (docs/persistent-ids.md §5.3).
+    let edge_src = data.as_any().get_item("edge_src")?;
+    data.del_item("edge_src")?;
+    let inverse: numpy::PyReadonlyArray1<i64> = ids.extract()?;
+    let inverse = inverse.as_slice()?;
+    let mut vertex_src = vec![-1i64; numpy::PyUntypedArrayMethods::shape(&pos)[0]];
+    for (i, &v) in inverse.iter().enumerate() {
+        let slot = &mut vertex_src[v as usize];
+        if *slot < 0 {
+            *slot = i as i64;
+        }
+    }
     data.set_item("pos", pos)?;
     data.set_item("ring_sizes", sizes)?;
     data.set_item("ring_counts", counts)?;
-    crate::model::module(py, "built_core.lazy_mesh")?
+    let plan = crate::model::module(py, "built_core.lazy_mesh")?
         .getattr("Plan")?
-        .call((), Some(&data))
+        .call((), Some(&data))?;
+    let extra = plan.getattr("extra")?;
+    extra.set_item("vertex_src", vertex_src.into_pyarray(py))?;
+    extra.set_item("edge_src", edge_src)?;
+    Ok(plan)
 }
 #[pyfunction]
 pub(super) fn plan_of<'py>(mesh: &Obj<'py>) -> PyResult<Option<Obj<'py>>> {

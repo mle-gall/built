@@ -712,6 +712,8 @@ pub(crate) struct Vertices {
     precise: bool,
     indices: HashMap<u128, i32>,
     pos: Vec<f64>,
+    /// Keys in index order (their persistent ids go with the block).
+    pub(crate) keys: Vec<u128>,
 }
 impl Vertices {
     pub(crate) fn new(precise: bool) -> Self {
@@ -719,6 +721,7 @@ impl Vertices {
             precise,
             indices: HashMap::new(),
             pos: Vec::new(),
+            keys: Vec::new(),
         }
     }
     pub(crate) fn positions(self) -> Vec<f64> {
@@ -738,8 +741,31 @@ impl Vertices {
         };
         self.pos.extend(crate::math::xyz(&point)?.to_array());
         self.indices.insert(key, index);
+        self.keys.push(key);
         Ok(index)
     }
+}
+/// The persistent ids of elements written element by element, by key,
+/// when the mesh has a store (`vertex_id` / `edge_id` / `face_id`).
+pub(crate) fn object_ids<'py>(
+    mesh: &Obj<'py>,
+    keys: [&[u128]; 3],
+    arrays: &Bound<'py, PyDict>,
+) -> PyResult<()> {
+    let Some(store) = mesh.getattr_opt("_store")?.filter(|s| !s.is_none()) else {
+        return Ok(());
+    };
+    if !store.hasattr("ids_of")? {
+        return Ok(());
+    }
+    for (k, keys) in ["vertex", "edge", "face"].iter().zip(keys) {
+        let ids: Vec<u64> = match store.call_method1("ids_of", (*k, keys.to_vec())) {
+            Ok(v) => v.extract()?,
+            Err(_) => return Ok(()),
+        };
+        arrays.set_item(format!("{k}_id"), numpy::IntoPyArray::into_pyarray(ids, mesh.py()))?;
+    }
+    Ok(())
 }
 pub(crate) fn maximal_vertex_holes<'py>(holes: &Obj<'py>) -> PyResult<Vec<Obj<'py>>> {
     let py = holes.py();
@@ -790,19 +816,18 @@ fn igz_pack_geometry<'py>(mesh: &Obj<'py>, sink: &Obj<'py>) -> PyResult<Obj<'py>
             ),
         );
     }
-    let mut vertices = Vertices {
-        precise,
-        indices: HashMap::new(),
-        pos: Vec::new(),
-    };
+    let mut vertices = Vertices::new(precise);
     let mut edges = Vec::new();
     let mut flags = Vec::new();
     let mut curves = Vec::new();
     let mut layers = Vec::new();
     let layer_table = PyDict::new(py);
     let mut has_curves = false;
+    let mut edge_keys: Vec<u128> = Vec::new();
+    let mut face_keys: Vec<u128> = Vec::new();
     for edge in mesh.getattr("edges")?.try_iter()? {
         let edge = edge?;
+        edge_keys.push(edge.getattr("key")?.extract()?);
         edges.push(vertices.index(&edge.getattr("v0")?)?);
         edges.push(vertices.index(&edge.getattr("v1")?)?);
         let s = edge.getattr("soft")?.is_truthy()?;
@@ -834,6 +859,7 @@ fn igz_pack_geometry<'py>(mesh: &Obj<'py>, sink: &Obj<'py>) -> PyResult<Obj<'py>
     let key_of = codec.getattr("_attrs_key")?;
     for face in mesh.getattr("faces")?.try_iter()? {
         let face = face?;
+        face_keys.push(face.getattr("key")?.extract()?);
         let mut loops = vec![face.getattr("loop")?];
         let holes = face.getattr("hole_loops")?;
         if holes.is_truthy()? {
@@ -861,6 +887,7 @@ fn igz_pack_geometry<'py>(mesh: &Obj<'py>, sink: &Obj<'py>) -> PyResult<Obj<'py>
     let n = vertices.pos.len() / 3;
     let ne = edges.len() / 2;
     let arrays = PyDict::new(py);
+    object_ids(mesh, [&vertices.keys, &edge_keys, &face_keys], &arrays)?;
     let pos = Array2::from_shape_vec((n, 3), vertices.pos).unwrap();
     if precise {
         arrays.set_item("pos", pos.into_pyarray(py))?;

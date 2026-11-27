@@ -132,7 +132,10 @@ impl Store {
     pub(super) fn new_slot(&mut self, kind: Kind) -> Result<u32, OpError> {
         let k = kind as usize;
         let st = &mut self.state;
+        let len = st.slots[k].len();
         let (slot, _gen, on_top) = st.slots[k].alloc(&mut self.hwm[k]).ok_or(OpError::Full)?;
+        st.ids[k].put(slot, len, crate::element_ids::mint(k));
+        st.exact.alloc(kind, slot);
         match kind {
             Kind::Vertex => {
                 put(&mut st.vpos, slot, [0.0; 3], [0.0; 3]);

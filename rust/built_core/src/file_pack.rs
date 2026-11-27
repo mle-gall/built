@@ -114,6 +114,8 @@ fn igz_write_geometry<'p>(
     let np = py.import("numpy")?;
     let codec = api(py)?;
     let builtin = py.import("builtins")?;
+    let id_meta = PyDict::new(py);
+    crate::file_ids::encode_block_ids(arrays, &id_meta, sink)?;
     arrays.set_item(
         "pos",
         py.import("built_core.formats.built")?
@@ -163,6 +165,7 @@ fn igz_write_geometry<'p>(
     if layer_table.is_truthy()? {
         meta.set_item("edge_layers", layer_table)?
     }
+    meta.call_method1("update", (id_meta,))?;
     Ok(meta)
 }
 fn kept_loops<'p>(
@@ -294,7 +297,7 @@ fn igz_pack_plan<'p>(mesh: &Obj<'p>, plan: &Obj<'p>, sink: &Obj<'p>) -> PyResult
         ring_counts.push(retained)
     }
     let pos = points
-        .get_item(order.into_pyarray(py))?
+        .get_item(order.clone().into_pyarray(py))?
         .call_method1("reshape", (-1, 3))?;
     if !np
         .call_method1("isfinite", (&pos,))?
@@ -310,6 +313,23 @@ fn igz_pack_plan<'p>(mesh: &Obj<'p>, plan: &Obj<'p>, sink: &Obj<'p>) -> PyResult
         .call_method1("get", ("face_attrs", PyList::empty(py)))?;
     let (table, fa) = face_table(&src.get_item("face_attr")?, &raw, true)?;
     let arrays = PyDict::new(py);
+    // Persistent ids, in the order this block is written.
+    let extra = plan.getattr("extra")?;
+    let (vsrc, esrc) = (extra.call_method1("get", ("vertex_src",))?, extra.call_method1("get", ("edge_src",))?);
+    if !vsrc.is_none() && !esrc.is_none() && src.cast::<PyDict>().is_ok() {
+        let ids = crate::file_ids::source_ids_of(&src)?;
+        let n_points = np.call_method1("shape", (src.get_item("pos")?,))?.get_item(0)?.extract::<usize>()?;
+        let n_edges = np.call_method1("shape", (src.get_item("edges")?,))?.get_item(0)?.extract::<usize>()?;
+        let planned = crate::file_ids::plan_ids(
+            py, &ids, vsrc.extract()?, esrc.extract()?, n_points, n_edges, counts.len(),
+        )?;
+        let vids: numpy::PyReadonlyArray1<u64> = planned.get_item(0)?.extract()?;
+        let vids = vids.as_slice()?;
+        let out: Vec<u64> = order.iter().map(|&i| vids[i as usize]).collect();
+        arrays.set_item("vertex_id", out.into_pyarray(py))?;
+        arrays.set_item("edge_id", planned.get_item(1)?)?;
+        arrays.set_item("face_id", planned.get_item(2)?)?;
+    }
     arrays.set_item("pos", pos)?;
     arrays.set_item(
         "edges",

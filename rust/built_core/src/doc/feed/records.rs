@@ -68,6 +68,13 @@ impl FeedMeshRecord {
             out.set_item(name, d)?;
         }
         out.set_item("moved", json_ids(&slf.getattr("moved")?)?)?;
+        // Persistent identities: the definition uid, each listed key's
+        // element id, and what the step derived (docs/persistent-ids.md §6).
+        for name in ["definition", "ids", "derived", "merged"] {
+            if let Ok(v) = slf.getattr(name) {
+                out.set_item(name, v)?;
+            }
+        }
         Ok(out)
     }
 }
@@ -92,6 +99,9 @@ impl FeedStepRecord {
     fn to_json<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyDict>> {
         let py = slf.py();
         let out = fields(slf.as_any(), &["revision", "phase", "command", "complete"])?;
+        if let Ok(d) = slf.getattr("document") {
+            out.set_item("document", d)?;
+        }
         let meshes = PyList::empty(py);
         for m in slf.getattr("meshes")?.try_iter()? {
             meshes.append(m?.call_method0("to_json")?)?;

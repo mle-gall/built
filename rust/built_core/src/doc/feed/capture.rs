@@ -100,6 +100,58 @@ pub(in crate::doc) fn tokens<'py>(
     }
     Ok(out)
 }
+/// The persistent id of every key the record lists, and the step's
+/// succession lineage (`doc/history/dispatch.rs`).
+fn element_ids<'py>(kw: &Bound<'py, PyDict>, store: &Obj<'py>, mesh: &Obj<'py>) -> PyResult<()> {
+    let py = kw.py();
+    if !store.hasattr("ids_of")? {
+        return Ok(());
+    }
+    let ids = PyDict::new(py);
+    for (kind, letter) in [("vertex", 'v'), ("edge", 'e'), ("face", 'f')] {
+        let mut keys: Vec<u128> = Vec::new();
+        for name in ["created", "removed", "modified"] {
+            if let Some(d) = kw.get_item(name)? {
+                if let Some(l) = d.get_item(kind).ok() {
+                    keys.extend(l.extract::<Vec<u128>>()?);
+                }
+            }
+        }
+        if kind == "vertex" {
+            if let Some(m) = kw.get_item("moved")? {
+                keys.extend(m.extract::<Vec<u128>>()?);
+            }
+        }
+        let out = PyDict::new(py);
+        for k in keys {
+            if let Ok(id) = store.call_method1("id_of", (kind, k)) {
+                out.set_item(crate::protocol::keys::to_json_key(&k.into_pyobject(py)?.into_any())?, crate::element_ids::to_text(letter, id.extract()?))?;
+            }
+        }
+        ids.set_item(kind, out)?;
+    }
+    kw.set_item("ids", ids)?;
+    if let Some(l) = mesh.getattr("__dict__")?.cast::<PyDict>()?.get_item("_id_lineage")? {
+        if l.get_item(0)?.eq(store.getattr("revision")?)? {
+            let pair = l.get_item(1)?;
+            let rows = |v: Obj<'py>| -> PyResult<Bound<'py, PyList>> {
+                let out = PyList::empty(py);
+                for t in v.try_iter()? {
+                    let t = t?;
+                    let row = PyDict::new(py);
+                    row.set_item("kind", t.get_item(0)?)?;
+                    row.set_item("id", t.get_item(1)?)?;
+                    row.set_item("parent", t.get_item(2)?)?;
+                    out.append(row)?;
+                }
+                Ok(out)
+            };
+            kw.set_item("derived", rows(pair.get_item(0)?)?)?;
+            kw.set_item("merged", rows(pair.get_item(1)?)?)?;
+        }
+    }
+    Ok(())
+}
 pub(super) fn mesh_change<'py>(
     class: &Obj<'py>,
     m: &Obj<'py>,
@@ -134,6 +186,7 @@ pub(super) fn mesh_change<'py>(
                     for name in ["created", "removed", "modified", "moved"] {
                         kw.set_item(name, ch.getattr(name)?)?;
                     }
+                    element_ids(&kw, st, m)?;
                 }
                 Err(e) if e.is_instance_of::<PyValueError>(py) => kw.set_item("replaced", true)?,
                 Err(e) => return Err(e),

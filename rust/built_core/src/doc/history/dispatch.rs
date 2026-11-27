@@ -102,6 +102,52 @@ fn notify(
     })
 }
 
+/// The mesh a step will edit and its state before (docs/persistent-ids.md
+/// §4: which new element inherits a removed one's id).
+fn succession_mark<'py>(host: &Obj<'py>, cmd: &Obj<'py>) -> PyResult<Option<(Obj<'py>, Obj<'py>)>> {
+    let mesh = match cmd.getattr_opt("_history_mesh")? {
+        Some(v) if v.is_truthy()? => v,
+        _ => host.getattr("scene")?.getattr("mesh")?,
+    };
+    let d = mesh.getattr("__dict__")?.cast_into::<PyDict>()?;
+    let Some(store) = d.get_item("_store")? else {
+        // A deferred block the step may build: rebuilt for comparison
+        // only if it does (`succeed`).
+        return Ok(match d.get_item("_deferred_source")? {
+            Some(src) if src.is_instance_of::<PyDict>() && src.cast::<PyDict>()?.contains("pos")? => {
+                let t = PyTuple::new(mesh.py(), [src])?.into_any();
+                Some((mesh, t))
+            }
+            _ => None,
+        });
+    };
+    if !store.hasattr("succeed")? {
+        return Ok(None);
+    }
+    Ok(Some((mesh, store.call_method0("snapshot")?)))
+}
+
+fn succeed(mesh: &Obj<'_>, mark: &Obj<'_>) -> PyResult<()> {
+    let d = mesh.getattr("__dict__")?.cast_into::<PyDict>()?;
+    let Some(store) = d.get_item("_store")? else { return Ok(()) };
+    if !store.hasattr("succeed")? {
+        return Ok(());
+    }
+    // A step that swapped the store (a foreign restore) has another
+    // namespace: `succeed` sees it and does nothing.
+    let mark = if let Ok(t) = mark.cast::<PyTuple>() {
+        // The block was built by this step: the same build, same keys.
+        let ns: u64 = store.getattr("namespace")?.extract()?;
+        let (before, _) = crate::kernel::store_views::block::store_from_source(&t.get_item(0)?, false, Some(ns))?;
+        before.call_method0("snapshot")?
+    } else {
+        mark.clone()
+    };
+    let lineage = store.call_method1("succeed", (&mark,))?;
+    d.set_item("_id_lineage", (store.getattr("revision")?, lineage))?;
+    Ok(())
+}
+
 fn dispatch<'py>(host: &Obj<'py>, cmd: &Obj<'py>, phase: &str) -> PyResult<Obj<'py>> {
     let py = host.py();
     let nested = host.getattr("_running")?.is_truthy()?;
@@ -112,6 +158,7 @@ fn dispatch<'py>(host: &Obj<'py>, cmd: &Obj<'py>, phase: &str) -> PyResult<Obj<'
         .get_type::<PyTuple>()
         .call1((host.getattr("_listeners")?,))?;
     notify(&listeners, 0, cmd, phase, false)?;
+    let succession = if nested || phase == "undo" { None } else { succession_mark(host, cmd)? };
     host.setattr("_running", true)?;
     let mut ran = false;
     let result = (|| {
@@ -125,6 +172,11 @@ fn dispatch<'py>(host: &Obj<'py>, cmd: &Obj<'py>, phase: &str) -> PyResult<Obj<'
             ran = v.is_truthy()?;
             v
         };
+        if ran {
+            if let Some((mesh, mark)) = &succession {
+                succeed(mesh, mark)?;
+            }
+        }
         if ran && !nested {
             let name = match cmd.getattr_opt("history_name")? {
                 Some(name) => name,

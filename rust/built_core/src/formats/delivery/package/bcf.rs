@@ -94,7 +94,24 @@ pub(super) fn write(scene: &Obj<'_>, path: &Path, selected: &Value) -> PyResult<
                     {
                         vis.push_str("<Components><Selection>");
                         for item in selection {
-                            vis.push_str("<Component>");
+                            // BCF's IfcGuid: the placement's GlobalId, the one
+                            // the IFC export writes (docs/persistent-ids.md §7.2).
+                            let mut ifc = label(item, "ifc_guid");
+                            let tool = label(item, "authoring_tool_id");
+                            if ifc.is_empty() && !tool.is_empty() {
+                                ifc = py
+                                    .import("core.ifc_identity")
+                                    .and_then(|m| m.call_method1("component_guid", (scene, tool.as_str())))
+                                    .and_then(|v| v.extract::<Option<String>>())
+                                    .ok()
+                                    .flatten()
+                                    .unwrap_or_default();
+                            }
+                            if ifc.is_empty() {
+                                vis.push_str("<Component>");
+                            } else {
+                                vis.push_str(&format!(r#"<Component IfcGuid="{}">"#, escape(&ifc)));
+                            }
                             element(
                                 &mut vis,
                                 "OriginatingSystem",

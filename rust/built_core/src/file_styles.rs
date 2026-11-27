@@ -143,7 +143,16 @@ pub fn igz_load_material<'py>(
             kwargs.set_item(key, value)?;
         }
     }
-    class.call((), Some(&kwargs))
+    let m = class.call((), Some(&kwargs))?;
+    // Format 2 names materials; older files derive a stable uid from the name.
+    let uid = match raw.get_item("uid")?.and_then(|v| v.extract::<String>().ok()) {
+        Some(u) => u,
+        None => crate::element_ids::derived_uid(&format!("built:legacy:v1:material:{}", m.getattr("name")?.str()?)),
+    };
+    if m.hasattr("uid")? {
+        m.setattr("uid", uid)?;
+    }
+    Ok(m)
 }
 
 #[pyfunction]
@@ -151,6 +160,9 @@ pub fn igz_archive_material<'py>(mat: &Bound<'py, PyAny>) -> PyResult<Bound<'py,
     let py = mat.py();
     let out = PyDict::new(py);
     out.set_item("name", mat.getattr("name")?)?;
+    if mat.hasattr("uid")? {
+        out.set_item("uid", crate::element_ids::material_uid(mat)?)?;
+    }
     for key in ["color", "texture", "opacity", "finish", "pbr"] {
         let v = mat.getattr(key)?;
         if !v.is_none() {

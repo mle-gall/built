@@ -72,7 +72,7 @@ use meth;
 const KEYS: &str =
     "mesh_key known_mesh resolve_mesh kind_of store_of element elements to_json_key from_json_key";
 const QUERIES: &str =
-    "mesh_info faces edges vertices selection select feed solid_report triangles face_set_volume";
+    "mesh_info faces edges vertices selection select feed solid_report triangles face_set_volume resolve";
 #[pyfunction(name = "__getattr__")]
 fn child<'p>(py: Python<'p>, name: &str) -> PyResult<Obj<'p>> {
     if matches!(name, "commands" | "records" | "queries" | "keys" | "feed") {
@@ -101,7 +101,23 @@ pub(super) fn run<'p>(
         }
         Err(e) => return Err(e),
     };
-    fun.call((history,), args)
+    // Elements may be named by persistent id (`f:…`) as well as by key.
+    let args = match args {
+        Some(a) => {
+            let mesh = history.getattr("scene")?.getattr("mesh")?;
+            let out = PyDict::new(py);
+            for (k, v) in a.iter() {
+                let element = matches!(
+                    k.extract::<String>()?.as_str(),
+                    "face" | "faces" | "edge" | "edges" | "vertex" | "vertices" | "keys" | "anchor"
+                );
+                out.set_item(&k, if element { crate::protocol::keys::translate_ids(&mesh, &v)? } else { v })?;
+            }
+            Some(out)
+        }
+        None => None,
+    };
+    fun.call((history,), args.as_ref())
 }
 #[pyclass]
 pub(super) struct Headless {

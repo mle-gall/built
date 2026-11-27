@@ -72,8 +72,23 @@ fn restamp(s: &RecordStep, py: Python<'_>, me: &Obj<'_>, scene: &Obj<'_>, kind: 
     Ok(())
 }
 
+/// A material replaced under a name (an edit, a rename) is the same
+/// material: it keeps the persistent uid (docs/persistent-ids.md §2.2).
+fn carry_uid(py: Python<'_>, scene: &Obj<'_>, name: &Obj<'_>, new: &Obj<'_>) -> PyResult<()> {
+    let old = scene.getattr("materials")?.call_method1("get", (name,))?;
+    if old.is_none() || new.is_none() || !new.hasattr("uid")? || !old.hasattr("uid")? {
+        return Ok(());
+    }
+    let _ = py;
+    if new.getattr("uid")?.is_none() && !old.getattr("uid")?.is_none() {
+        new.setattr("uid", old.getattr("uid")?)?;
+    }
+    Ok(())
+}
+
 fn run_restamp(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResult<()> {
     let me = running(py).expect("a running step");
+    carry_uid(py, scene, &s.arg(py, 0), &s.arg(py, 1))?;
     restamp(s, py, &me, scene, "stamp")
 }
 
@@ -101,6 +116,7 @@ fn run_edit_textured(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResul
         kw.set_item("finish", old.getattr("finish")?)?;
         kw.set_item("pbr", old.getattr("pbr")?)?;
         let new = py.import("built_core.materials")?.getattr("Material")?.call((&name,), Some(&kw))?;
+        carry_uid(py, scene, &name, &new)?;
         me.setattr("_new", new)?;
     }
     restamp(s, py, &me, scene, "texture")

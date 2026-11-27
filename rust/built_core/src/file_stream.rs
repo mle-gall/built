@@ -251,6 +251,9 @@ fn igz_stream_start(
 ) -> PyResult<()> {
     let py = stream.py();
     stream.setattr("built", built)?;
+    // Format 2 element ids: the file's origin table, as process indices
+    // (index 0 is the migration origin). `.igz` streams write no ids.
+    stream.setattr("id_origins", if built { Some(PyList::new(py, [0u32])?) } else { None })?;
     stream.setattr("compatibility", compatibility)?;
     stream.setattr("destination", destination)?;
     stream.setattr("displacement_mm", 0.)?;

@@ -99,6 +99,9 @@ pub fn scene_clear(scene: &Obj<'_>) -> PyResult<()> {
     scene.setattr("units", units)?;
     scene.setattr("plugin_data", PyDict::new(py))?;
     scene.setattr("link_registry", PyDict::new(py))?;
+    // A new document: a new identity at its first save.
+    scene.setattr("doc_id", py.None())?;
+    scene.setattr("doc_ext", py.None())?;
     Ok(())
 }
 

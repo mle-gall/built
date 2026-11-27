@@ -71,10 +71,59 @@ fn meter<'p>(
     })
     .transpose()
 }
+/// SHA-256 over the CRCs and sizes of every ZIP member (or of the whole
+/// file for plain JSON), as 32 hex.
+fn legacy_doc_id(path: &Obj<'_>) -> PyResult<Option<String>> {
+    use sha2::{Digest, Sha256};
+    let py = path.py();
+    let mut h = Sha256::new();
+    h.update(b"built:legacy:v1:doc:");
+    let zipfile = py.import("zipfile")?;
+    if zipfile.call_method1("is_zipfile", (path,))?.is_truthy()? {
+        let z = zipfile.call_method1("ZipFile", (path,))?;
+        let infos = z.call_method0("infolist")?;
+        for info in infos.try_iter()? {
+            let info = info?;
+            let name: String = info.getattr("filename")?.extract()?;
+            let crc: u64 = info.getattr("CRC")?.extract()?;
+            let size: u64 = info.getattr("file_size")?.extract()?;
+            h.update(name.as_bytes());
+            h.update(crc.to_le_bytes());
+            h.update(size.to_le_bytes());
+        }
+        z.call_method0("close")?;
+    } else {
+        let p: std::path::PathBuf = path.extract()?;
+        match std::fs::read(&p) {
+            Ok(bytes) => h.update(&bytes),
+            Err(_) => return Ok(None),
+        }
+    }
+    Ok(Some(h.finalize()[..16].iter().map(|b| format!("{b:02x}")).collect()))
+}
+
 #[pyclass]
 struct ReadMesh {
     geom: Py<PyAny>,
     links: Option<Py<PyAny>>,
+    /// The document read (a linked file's definitions are named after it).
+    doc_id: Option<String>,
+}
+
+/// The definition uid a block names, or the migration one
+/// (docs/persistent-ids.md §5.3): the loose geometry is the root.
+fn block_definition_uid(block: &Obj<'_>, identity: &Obj<'_>) -> PyResult<String> {
+    if let Ok(g) = block.get_item("geom") {
+        if let Some(u) = g.call_method1("get", ("uid",)).ok().and_then(|u| u.extract::<String>().ok()) {
+            return Ok(u);
+        }
+    }
+    let kind: String = identity.get_item(0)?.extract()?;
+    if kind == "loose" {
+        return Ok(crate::element_ids::ROOT_DEFINITION.to_string());
+    }
+    let index = identity.get_item(1)?.str()?.to_string();
+    Ok(crate::element_ids::derived_uid(&format!("built:legacy:v1:def:{index}")))
 }
 #[pymethods]
 impl ReadMesh {
@@ -86,12 +135,23 @@ impl ReadMesh {
     ) -> PyResult<Obj<'p>> {
         let py = mesh.py();
         let geom = self.geom.bind(py);
+        let uid = block_definition_uid(block, identity)?;
         if let Some(links) = &self.links {
-            return links
+            let out = links
                 .bind(py)
-                .call_method1("read", (mesh, block, geom, identity));
+                .call_method1("read", (mesh, block, geom, identity))?;
+            if crate::element_ids::known_definition_uid(&out)?.is_none() {
+                // A linked file's definitions, named apart from the host's.
+                let doc = self.doc_id.as_deref().unwrap_or("");
+                crate::element_ids::set_definition_uid(
+                    &out,
+                    &crate::element_ids::derived_uid(&format!("built:link:v1:def:{doc}:{uid}")),
+                )?;
+            }
+            return Ok(out);
         }
         api(py)?.call_method1("_load_mesh", (mesh, block, geom))?;
+        crate::element_ids::set_definition_uid(mesh, &uid)?;
         Ok(mesh.clone())
     }
 }
@@ -171,13 +231,38 @@ fn igz_load_into_inner<'p>(
         {
             let version = data.call_method1("get", ("built_format",))?;
             if !version.is_exact_instance_of::<PyInt>()
-                || version.ne(1)?
+                || !(version.eq(1)? || version.eq(crate::file_ids::FORMAT)?)
                 || archive.is_none()
                 || data.contains("igz_format")?
             {
                 return Err(PyValueError::new_err(
                     "Invalid or unsupported Built document format",
                 ));
+            }
+            // Features a reader must implement (docs/built-format.md): this
+            // build knows none beyond format 2 itself.
+            let exact = data
+                .call_method1("get", ("ext",))?
+                .cast::<PyDict>()
+                .ok()
+                .map(|e| e.contains(crate::file_ids::EXACT_NAMESPACE))
+                .transpose()?
+                .unwrap_or(false);
+            if exact {
+                return Err(PyValueError::new_err(format!(
+                    "This document needs features this build of Built lacks: {}",
+                    crate::file_ids::EXACT_GEOMETRY
+                )));
+            }
+            let needs = data.call_method1("get", ("requires",))?;
+            if !needs.is_none() {
+                let needs: Vec<String> = needs.extract().map_err(|_| PyValueError::new_err("Invalid Built document requirements"))?;
+                if !needs.is_empty() {
+                    return Err(PyValueError::new_err(format!(
+                        "This document needs features this build of Built lacks: {}",
+                        needs.join(", ")
+                    )));
+                }
             }
         }
         if archive.is_none() {
@@ -230,6 +315,9 @@ fn igz_load_into_inner<'p>(
             (work, meter(py, progress, 0.25, 0., geometry, None)?),
             Some(&opt),
         )?;
+        // Element ids index the file's origin table: map it to this process.
+        let doc = data.call_method1("get", ("doc",))?;
+        geom.setattr("id_map", crate::file_ids::file_origin_map(&doc)?)?;
         let survey = codec.call_method1("_unpack_photo_mesh", (&payload, &archive))?;
         Ok((mat, geom, survey))
     })();
@@ -248,11 +336,25 @@ fn igz_load_into_inner<'p>(
     tick(progress, 0.35, "Building geometry…")?;
     codec.call_method1("igz_reset_scene", (scene, &payload, survey))?;
     scene.setattr("materials", mat)?;
+    let doc_id: Option<String> = data
+        .call_method1("get", ("doc",))?
+        .cast::<PyDict>()
+        .ok()
+        .and_then(|d| d.get_item("id").ok().flatten())
+        .and_then(|v| v.extract().ok());
+    // A file without one (format 1, .igz) gets an id derived from its
+    // archive checksums: the same file opens with the same id until its
+    // first format-2 save writes it (docs/persistent-ids.md §5.1).
+    let doc_id = match doc_id {
+        Some(id) => Some(id),
+        None => legacy_doc_id(path)?,
+    };
     let read = Py::new(
         py,
         ReadMesh {
             geom: geom.unbind(),
             links: link_meshes.map(|v| v.clone().unbind()),
+            doc_id: doc_id.clone(),
         },
     )?;
     scene.setattr(
@@ -321,6 +423,13 @@ fn igz_load_into_inner<'p>(
         group_api.call_method1("reserve_group_names", (names,))?;
     }
     let new = codec.call_method1("igz_finish_scene", (scene, &payload))?;
+    // The document's identity; a file without one gets it at its first
+    // format-2 save (`file_ids::ensure_doc_id`).
+    scene.setattr("doc_id", doc_id.as_ref().map(|s| s.as_str()))?;
+    // Forward compatibility: a newer writer's top-level `ext` comes back
+    // out verbatim (docs/built-format.md, Stability).
+    let ext = data.call_method1("get", ("ext",))?;
+    scene.setattr("doc_ext", if ext.is_instance_of::<PyDict>() { ext } else { py.None().into_bound(py) })?;
     let total = repairs.get_item(0)?.add(new)?;
     repairs.set_item(0, &total)?;
     scene.setattr("load_repairs", total)?;

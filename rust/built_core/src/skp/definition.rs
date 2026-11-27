@@ -147,6 +147,7 @@ fn build(
             counts: &counts,
             face_attr: Some(&attrs),
             sequential: false,
+            ids: Default::default(),
         };
         store = Store::from_block(store.state.ns, &block, store.weld)?;
     } else {

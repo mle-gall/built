@@ -83,6 +83,20 @@ pub(crate) fn resolve_mesh<'py>(scene: &Obj<'py>, r#ref: Option<&Obj<'py>>) -> P
                 }
             }
         }
+        // A persistent definition uid (docs/persistent-ids.md §6.1).
+        let uid: String = key.extract()?;
+        let loose = scene.getattr_opt("loose_mesh")?.unwrap_or(scene.getattr("mesh")?);
+        if uid == crate::element_ids::ROOT_DEFINITION {
+            return Ok(loose);
+        }
+        for root in scene.getattr("groups")?.try_iter()? {
+            for pair in placements.call1((root?,))?.try_iter()? {
+                let m = pair?.get_item(0)?.getattr("mesh")?;
+                if crate::element_ids::known_definition_uid(&m)?.as_deref() == Some(uid.as_str()) {
+                    return Ok(m);
+                }
+            }
+        }
     }
     Err(PyKeyError::new_err(key.clone().unbind()))
 }
@@ -201,6 +215,62 @@ pub(crate) fn from_json_key<'py>(value: &Obj<'py>) -> PyResult<Obj<'py>> {
         "element key {}: a decimal string",
         value.repr()?
     )))
+}
+/// Element keys of a mesh for persistent ids (`f:…`) and keys alike:
+/// ints, decimal strings or text ids; an id the mesh lacks is None.
+pub(crate) fn keys_in<'py>(mesh: &Obj<'py>, seq: &Obj<'py>) -> PyResult<Bound<'py, PyList>> {
+    let py = mesh.py();
+    let out = PyList::empty(py);
+    let store = store_of(mesh)?;
+    for item in seq.try_iter()? {
+        let item = item?;
+        if let Ok(s) = item.extract::<String>() {
+            if crate::element_ids::is_text_id(&s) {
+                let key = match &store {
+                    Some(st) => {
+                        let (kind, id) = crate::element_ids::from_text(&s).map_err(PyValueError::new_err)?;
+                        let name = crate::element_ids::kind_name(kind).unwrap();
+                        st.call_method1("keys_of_ids", (name, vec![id]))?.get_item(0)?
+                    }
+                    None => py.None().into_bound(py),
+                };
+                out.append(key)?;
+                continue;
+            }
+        }
+        out.append(from_json_key(&item)?)?;
+    }
+    Ok(out)
+}
+/// The text id of a key of a store-backed mesh (None for a Python mesh).
+pub(crate) fn id_text_of<'py>(mesh: &Obj<'py>, kind: &str, key: &Obj<'py>) -> PyResult<Option<String>> {
+    let Some(st) = store_of(mesh)? else { return Ok(None) };
+    let Ok(id) = st.call_method1("id_of", (kind, key)) else { return Ok(None) };
+    let letter = crate::element_ids::kind_letter(kind).unwrap();
+    Ok(Some(crate::element_ids::to_text(letter, id.extract()?)))
+}
+/// Replace text ids anywhere in command arguments by the open mesh's keys
+/// (commands accept a key or a persistent id for every element).
+pub(crate) fn translate_ids<'py>(mesh: &Obj<'py>, value: &Obj<'py>) -> PyResult<Obj<'py>> {
+    let py = mesh.py();
+    if let Ok(s) = value.extract::<String>() {
+        if crate::element_ids::is_text_id(&s) {
+            let key = keys_in(mesh, &PyList::new(py, [value])?.into_any())?.get_item(0)?;
+            if key.is_none() {
+                return Err(PyKeyError::new_err(s));
+            }
+            return Ok(key);
+        }
+        return Ok(value.clone());
+    }
+    if value.is_instance_of::<PyList>() || value.is_instance_of::<PyTuple>() {
+        let out = PyList::empty(py);
+        for v in value.try_iter()? {
+            out.append(translate_ids(mesh, &v?)?)?;
+        }
+        return Ok(out.into_any());
+    }
+    Ok(value.clone())
 }
 pub(super) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(mesh_key, m)?)?;

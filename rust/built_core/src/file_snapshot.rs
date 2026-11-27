@@ -79,6 +79,8 @@ struct Geometry {
     attrs: Option<Owned>,
     layers: Option<Owned>,
     deferred: Option<Owned>,
+    /// The definition uid, captured with the geometry.
+    uid: Option<String>,
 }
 #[pymethods]
 impl Geometry {
@@ -95,6 +97,7 @@ impl Geometry {
             attrs,
             layers,
             deferred,
+            uid: None,
         }
     }
 }
@@ -205,8 +208,9 @@ fn copy(value: Owned, depth: usize) -> Job {
         }
     })
 }
-fn geometry_record(geometry: Geometry) -> PyResult<Owned> {
+fn geometry_record(mut geometry: Geometry, mesh: &Owned) -> PyResult<Owned> {
     Python::attach(|py| {
+        geometry.uid = Some(crate::element_ids::definition_uid(mesh.bind(py))?);
         let d = PyDict::new(py);
         d.set_item("geom", Py::new(py, geometry)?)?;
         Ok(d.into_any().unbind())
@@ -225,7 +229,7 @@ async fn capture_geometry(mesh: Owned) -> PyResult<Owned> {
             .transpose()?)
     })?;
     if let Some(src) = deferred {
-        return geometry_record(Geometry::new(None, None, None, Some(copy(src, 0).await?)));
+        return geometry_record(Geometry::new(None, None, None, Some(copy(src, 0).await?)), &mesh);
     }
     let empty = Python::attach(|py| -> PyResult<_> {
         let m = mesh.bind(py);
@@ -265,12 +269,10 @@ async fn capture_geometry(mesh: Owned) -> PyResult<Owned> {
         Ok(Some((a.into_any().unbind(), attrs, names)))
     })?;
     if let Some((a, attrs, names)) = packed {
-        return geometry_record(Geometry::new(
-            Some(a),
-            Some(copy(attrs, 0).await?),
-            Some(names),
-            None,
-        ));
+        return geometry_record(
+            Geometry::new(Some(a), Some(copy(attrs, 0).await?), Some(names), None),
+            &mesh,
+        );
     }
     let mut vertices = crate::file_mesh::Vertices::new(true);
     let mut edges = vec![];
@@ -280,9 +282,12 @@ async fn capture_geometry(mesh: Owned) -> PyResult<Owned> {
     let layer_names = Python::attach(|py| PyDict::new(py).unbind());
     let it = Python::attach(|py| iterator(&mesh.bind(py).getattr("edges")?))?;
     let mut i = 0;
+    let mut edge_keys: Vec<u128> = Vec::new();
+    let mut face_keys: Vec<u128> = Vec::new();
     while let Some(e) = next(&it)? {
         Python::attach(|py| -> PyResult<()> {
             let e = e.bind(py);
+            edge_keys.push(e.getattr("key")?.extract()?);
             edges.extend([
                 vertices.index(&e.getattr("v0")?)?,
                 vertices.index(&e.getattr("v1")?)?,
@@ -321,6 +326,7 @@ async fn capture_geometry(mesh: Owned) -> PyResult<Owned> {
     while let Some(f) = next(&it)? {
         let loops = Python::attach(|py| -> PyResult<_> {
             let f = f.bind(py);
+            face_keys.push(f.getattr("key")?.extract()?);
             let mut loops = vec![f.getattr("loop")?];
             loops.extend(crate::file_mesh::maximal_vertex_holes(
                 &f.getattr("hole_loops")?,
@@ -381,6 +387,7 @@ async fn capture_geometry(mesh: Owned) -> PyResult<Owned> {
     }
     let (arrays, names) = Python::attach(|py| -> PyResult<_> {
         let a = PyDict::new(py);
+        crate::file_mesh::object_ids(mesh.bind(py), [&vertices.keys, &edge_keys, &face_keys], &a)?;
         let pos = vertices.positions();
         a.set_item(
             "pos",
@@ -406,12 +413,7 @@ async fn capture_geometry(mesh: Owned) -> PyResult<Owned> {
             layer_names.bind(py).keys().into_any().unbind(),
         ))
     })?;
-    geometry_record(Geometry::new(
-        Some(arrays),
-        Some(table.into_any()),
-        Some(names),
-        None,
-    ))
+    geometry_record(Geometry::new(Some(arrays), Some(table.into_any()), Some(names), None), &mesh)
 }
 #[pyfunction]
 fn geometry_steps(mesh: Owned) -> Steps {
@@ -462,6 +464,7 @@ fn snapshot_steps(scene: Owned) -> Steps {
     steps(async move {
         let generator = Python::attach(|py| -> PyResult<_> {
             let s = scene.bind(py);
+            crate::file_ids::ensure_doc_id(s)?;
             let document = py.import("copy")?.call_method1("copy", (s,))?;
             if let Some(m) = s.getattr("_loose_mesh").ok().filter(|v| !v.is_none()) {
                 document.setattr("mesh", m)?
@@ -603,6 +606,10 @@ fn encoded_geometry<'p>(
     };
     if !codec.call_method1("_bulk_sized", (ne, nf))?.is_truthy()? {
         meta.set_item("sequential", true)?
+    }
+    let built = sink.getattr_opt("built")?.map(|b| b.is_truthy()).transpose()?.unwrap_or(false);
+    if let (true, Some(uid)) = (built, &d.uid) {
+        meta.set_item("uid", uid)?;
     }
     encode.call1((meta,))
 }

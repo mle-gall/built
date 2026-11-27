@@ -1975,6 +1975,16 @@ impl PyMaterial {
             opt_value(v)?,
         )
     }
+    /// Persistent uid (None until named; `material_uid` draws one).
+    #[getter]
+    fn uid<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
+        read(slf.py(), slf.as_any(), slf.get().key, Field::Uid)
+    }
+    #[setter]
+    fn set_uid(slf: &Bound<'_, Self>, v: &Bound<'_, PyAny>) -> PyResult<()> {
+        let s = if v.is_none() { None } else { Some(v.extract::<String>()?) };
+        write(slf.py(), slf.as_any(), slf.get().key, Field::Uid, FVal::Str(s))
+    }
     #[getter]
     fn texture<'py>(slf: &Bound<'py, Self>) -> PyResult<Bound<'py, PyAny>> {
         read(slf.py(), slf.as_any(), slf.get().key, Field::Texture)

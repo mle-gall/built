@@ -552,7 +552,10 @@ impl<'py> Hierarchy<'py> {
         }
         let node = record!(py;"name"=>name,"matrix"=>m,"mesh"=>if self.meshes.get_item(&key)?.is_some_and(|r|r.len().unwrap_or(0)>0){Some(key)}else{None},"children"=>&kids);
         if self.link {
-            node.set_item("extras", record!(py;"built_uid"=>g.getattr("uid")?))?;
+            // The placement and the definition it shows, both persistent
+            // (docs/persistent-ids.md §7.3): Blender can share meshes by it.
+            let def = crate::element_ids::definition_uid(&g.getattr("mesh")?)?;
+            node.set_item("extras", record!(py;"built_uid"=>g.getattr("uid")?,"built_def"=>def))?;
         }
         for child in g.getattr("children")?.try_iter()? {
             if let Some(node) = self.part(&child?, &world, &paint, depth + 1)? {
@@ -593,7 +596,7 @@ impl<'py> Hierarchy<'py> {
                         }
                     }
                     h.meshes.set_item("loose", &prims)?;
-                    roots.append(record!(py;"name"=>h.tr.call1(("Loose geometry",))?,"matrix"=>py.None(),"mesh"=>"loose","children"=>PyList::empty(py),"extras"=>record!(py;"built_uid"=>"loose")))?;
+                    roots.append(record!(py;"name"=>h.tr.call1(("Loose geometry",))?,"matrix"=>py.None(),"mesh"=>"loose","children"=>PyList::empty(py),"extras"=>record!(py;"built_uid"=>"loose","built_def"=>crate::element_ids::ROOT_DEFINITION)))?;
                     continue;
                 }
                 let none = py.None().into_bound(py);

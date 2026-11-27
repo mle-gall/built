@@ -21,6 +21,8 @@ mod general_settings;
 mod document_insert;
 mod kept_components;
 mod annotation_anchor;
+pub mod element_ids;
+mod file_ids;
 mod coordinate_frame;
 mod record_class;
 mod image_plane;
@@ -320,6 +322,8 @@ fn built_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     builtproject::document::register(m)?;
     kept_components::register(m)?;
     annotation_anchor::register(m)?;
+    element_ids::register(m)?;
+    file_ids::register(m)?;
     coordinate_frame::register(m)?;
     image_plane::register(m)?;
     python_tls::register(m)?;

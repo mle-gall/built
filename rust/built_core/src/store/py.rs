@@ -547,7 +547,7 @@ impl PyMeshStore {
     #[staticmethod]
     #[pyo3(signature = (namespace, pos, edges, flags, curves, layers, layer_names, rings, sizes,
                         counts, face_attr = None, sequential = false, scale = 10_000.0,
-                        tol2 = 1e-8, fused = false))]
+                        tol2 = 1e-8, fused = false, ids = None))]
     #[allow(clippy::too_many_arguments)]
     fn from_block(
         py: Python<'_>,
@@ -566,7 +566,9 @@ impl PyMeshStore {
         scale: f64,
         tol2: f64,
         fused: bool,
+        ids: Option<Bound<'_, PyAny>>,
     ) -> PyResult<Self> {
+        let owned = super::ids_py::sources(ids.as_ref())?;
         let pos3 = match &pos {
             PointArray::Single(p) => BlockPoints::Single(triples(p)?),
             PointArray::Double(p) => BlockPoints::Double(triples(p)?),
@@ -594,6 +596,7 @@ impl PyMeshStore {
             counts: &counts,
             face_attr: face_attr.as_deref(),
             sequential,
+            ids: super::ids_py::borrow(&owned),
         };
         let w = Weld { scale, tol2, fused };
         let store = py.detach(|| Store::from_block(namespace, &block, w)).map_err(PyValueError::new_err)?;
@@ -603,6 +606,68 @@ impl PyMeshStore {
     #[getter]
     fn namespace(&self) -> u64 {
         self.inner.state.ns
+    }
+
+    /// Persistent ids of a kind's live elements in list order, packed in
+    /// process space (docs/persistent-ids.md §3): the writer's columns.
+    fn ids<'py>(&self, py: Python<'py>, kind: &str) -> PyResult<Bound<'py, PyArray1<u64>>> {
+        Ok(self.inner.live_pids(kind_of(kind)?).into_pyarray(py))
+    }
+
+    /// The packed id of one element (live or a tombstone).
+    fn id_of(&self, kind: &str, key: u128) -> PyResult<u64> {
+        let k = kind_of(kind)?;
+        Ok(self.inner.pid(k, any_of(&self.inner, k, key)?))
+    }
+
+    /// Packed ids of many keys of one kind.
+    fn ids_of(&self, kind: &str, keys: Vec<u128>) -> PyResult<Vec<u64>> {
+        let k = kind_of(kind)?;
+        keys.into_iter().map(|key| Ok(self.inner.pid(k, any_of(&self.inner, k, key)?))).collect()
+    }
+
+    /// The live key of each packed id (None: not in this mesh).
+    fn keys_of_ids(&self, kind: &str, ids: Vec<u64>) -> PyResult<Vec<Option<u128>>> {
+        let k = kind_of(kind)?;
+        if ids.len() <= 4 {
+            return Ok(ids.iter().map(|&id| self.inner.slot_of_pid(k, id).map(|s| self.inner.key(k, s))).collect());
+        }
+        let index = self.inner.pid_index(k);
+        Ok(ids.iter().map(|id| index.get(id).map(|&s| self.inner.key(k, s))).collect())
+    }
+
+    /// Give a live element another id (succession, Explode's keep-if-free).
+    fn set_id(&mut self, kind: &str, key: u128, id: u64) -> PyResult<()> {
+        let k = kind_of(kind)?;
+        let slot = live_of(&self.inner, k, key)?;
+        self.inner.set_pid(k, slot, id);
+        Ok(())
+    }
+
+    /// Persistent-id succession after a History step (`succession.rs`):
+    /// `(derived, merged)` as `(kind, id text, parent text)` triples.
+    #[allow(clippy::type_complexity)]
+    fn succeed(&mut self, before: &PyStoreSnapshot) -> (Vec<(&'static str, String, String)>, Vec<(&'static str, String, String)>) {
+        let lineage = self.inner.succeed(&before.inner.state);
+        let text = |v: Vec<(Kind, u64, u64)>| {
+            v.into_iter()
+                .map(|(k, a, b)| {
+                    let c = k.name().chars().next().unwrap();
+                    (k.name(), crate::element_ids::to_text(c, a), crate::element_ids::to_text(c, b))
+                })
+                .collect::<Vec<_>>()
+        };
+        (text(lineage.derived), text(lineage.merged))
+    }
+
+    /// Migration ids in list order (`Store::number_legacy`).
+    fn number_ids_legacy(&mut self) {
+        self.inner.number_legacy();
+    }
+
+    /// Whether a kind's ids are still the implicit `first + slot`.
+    fn ids_implicit(&self, kind: &str) -> PyResult<bool> {
+        Ok(self.inner.state.ids[kind_of(kind)? as usize].is_implicit())
     }
 
     /// `namespace << 40`: OR it into a local key array for the ints.
@@ -634,8 +699,10 @@ impl PyMeshStore {
 
     /// Preserve slot generations, incidence order and binary64 positions for pickle.
     fn pickle_archive<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, pyo3::types::PyBytes>> {
-        let bytes = bincode::serialize(&self.inner)
+        let mut bytes = bincode::serialize(&self.inner)
             .map_err(|err| PyValueError::new_err(err.to_string()))?;
+        // Persistent ids after the store (older archives end before them).
+        bytes.extend(bincode::serialize(&self.inner.state.ids).map_err(|err| PyValueError::new_err(err.to_string()))?);
         Ok(pyo3::types::PyBytes::new(py, &bytes))
     }
 
@@ -644,8 +711,15 @@ impl PyMeshStore {
         if version != 1 {
             return Err(PyValueError::new_err("unknown mesh pickle archive version"));
         }
-        let mut store: Store = bincode::deserialize(bytes)
+        let mut cursor = std::io::Cursor::new(bytes);
+        let mut store: Store = bincode::deserialize_from(&mut cursor)
             .map_err(|err| PyValueError::new_err(err.to_string()))?;
+        let rest = &bytes[cursor.position() as usize..];
+        if rest.is_empty() {
+            store.number_legacy();
+        } else {
+            store.state.ids = bincode::deserialize(rest).map_err(|err| PyValueError::new_err(err.to_string()))?;
+        }
         let fresh = Store::empty(namespace, store.weld);
         store.state.ns = namespace;
         store.lineage = fresh.lineage;
@@ -665,16 +739,20 @@ impl PyMeshStore {
             }
             let mut vertices = Vec::new();
             let mut index = vec![-1i32; d.pos.len()];
+            let dense_vids = self.inner.live_pids(Kind::Vertex);
+            let mut vids = Vec::new();
             let mut vertex = |i: i64| {
                 let k = &mut index[i as usize];
                 if *k < 0 {
                     *k = vertices.len() as i32;
                     vertices.push(d.pos[i as usize]);
+                    vids.push(dense_vids[i as usize]);
                 }
                 *k
             };
             let edges: Vec<i32> = d.edges.iter().flatten().copied().map(&mut vertex).collect();
             let rings: Vec<i32> = d.corners.iter().copied().map(vertex).collect();
+            let ids = [vids, self.inner.live_pids(Kind::Edge), self.inner.live_pids(Kind::Face)];
             let mut names = Vec::new();
             let mut name_index = std::collections::HashMap::new();
             let layers: Vec<i32> = d
@@ -694,11 +772,13 @@ impl PyMeshStore {
             for f in &mut d.flags {
                 *f &= if *f & 1 != 0 { 7 } else { 3 };
             }
-            Some((d, vertices, edges, rings, layers, names))
+            Some((d, vertices, edges, rings, layers, names, ids))
         });
-        let Some((d, vertices, edges, rings, layers, names)) = packed else {
+        let Some((d, vertices, edges, rings, layers, names, ids)) = packed else {
             return Ok(None);
         };
+        let [vids, eids, fids] = ids;
+
         let out = PyDict::new(py);
         out.set_item("pos", rows3(py, &vertices))?;
         out.set_item(
@@ -724,6 +804,9 @@ impl PyMeshStore {
         if !names.is_empty() {
             out.set_item("edge_layer", layers.into_pyarray(py))?;
         }
+        out.set_item("vertex_id", vids.into_pyarray(py))?;
+        out.set_item("edge_id", eids.into_pyarray(py))?;
+        out.set_item("face_id", fids.into_pyarray(py))?;
         Ok(Some((out, names)))
     }
 
@@ -3366,6 +3449,7 @@ impl PyMeshStore {
                     .map(|&i| if i < 0 { i + nv } else { i })
                     .collect();
                 let edges: Vec<_> = state.ends.iter().map(|ends| ends.map(i64::from)).collect();
+                let edge_ids: Vec<u64> = (0..edges.len() as u32).map(|s| state.ids[1].get(s)).collect();
                 let flags = state.eflags.to_vec();
                 let curves = state.ecurve.to_vec();
                 let layers: Vec<_> = state
@@ -3389,6 +3473,7 @@ impl PyMeshStore {
                     sizes,
                     counts,
                     face_attr: attrs.as_deref(),
+                    ids: [super::ids::IdSource::Fresh, super::ids::IdSource::Array(&edge_ids), super::ids::IdSource::Fresh],
                     ..Block::default()
                 })
             })
@@ -4028,6 +4113,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyRoundPlan>()?;
     m.add_class::<super::intersect::PyPolygon>()?;
     m.add_class::<PyChange>()?;
+    m.add_function(wrap_pyfunction!(super::ids_py::apply_source_ids, m)?)?;
     m.add("StoreFallback", m.py().get_type::<StoreFallback>())?;
     Ok(())
 }

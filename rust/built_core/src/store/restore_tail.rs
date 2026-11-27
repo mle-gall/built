@@ -48,6 +48,7 @@ impl Store {
         for s in next.slots[v].len()..cur.slots[v].len() {
             let g = cur.slots[v].gen(s as u32);
             next.slots[v].state.push(g << 1);
+            next.ids[v].put(s as u32, s, cur.ids[v].get(s as u32));
             put(&mut next.vpos, s, *cur.vpos.get(s), [0.0; 3]);
             put(&mut next.vedge, s, NONE, NONE);
         }
@@ -55,6 +56,8 @@ impl Store {
         for s in next.slots[e].len()..cur.slots[e].len() {
             let g = cur.slots[e].gen(s as u32);
             next.slots[e].state.push(g << 1);
+            next.ids[e].put(s as u32, s, cur.ids[e].get(s as u32));
+            next.exact.inherit(Kind::Edge, s as u32, cur.exact.get(Kind::Edge, s as u32));
             put(&mut next.ends, s, *cur.ends.get(s), [NONE, NONE]);
             put(&mut next.enext, s, [NONE, NONE], [NONE, NONE]);
             put(&mut next.eflags, s, *cur.eflags.get(s), 0);
@@ -87,6 +90,8 @@ impl Store {
         for s in next.slots[f].len()..cur.slots[f].len() {
             let g = cur.slots[f].gen(s as u32);
             next.slots[f].state.push(g << 1);
+            next.ids[f].put(s as u32, s, cur.ids[f].get(s as u32));
+            next.exact.inherit(Kind::Face, s as u32, cur.exact.get(Kind::Face, s as u32));
             let rings = self.face_rings(s as u32);
             let fr = FaceRings {
                 corner_start: next.corners.len() as u32,

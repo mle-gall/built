@@ -74,12 +74,17 @@ fn geometry<'py>(
 ) -> Reply<'py> {
     let py = scene.py();
     let m = resolve_mesh(scene, mesh)?;
-    let keys = parse(keys)?;
-    let found = elements(&m, kind, keys.as_any())?;
+    let given = keys.clone();
+    let keys = keys_in(&m, keys)?;
+    let found = elements(&m, kind, PyList::new(py, keys.iter().filter(|k| !k.is_none()))?.as_any())?;
     let st = store_of(&m)?;
     let rows = PyList::empty(py);
     let missing = PyList::empty(py);
-    for k in keys.iter() {
+    for (k, asked) in keys.iter().zip(given.try_iter()?) {
+        if k.is_none() {
+            missing.append(asked?)?;
+            continue;
+        }
         let key = to_json_key(&k)?;
         let Some(element) = found.get_item(&k)? else {
             missing.append(key)?;
@@ -87,6 +92,7 @@ fn geometry<'py>(
         };
         let r = PyDict::new(py);
         r.set_item("key", key)?;
+        r.set_item("id", id_text_of(&m, kind, &k)?)?;
         match kind {
             "face" => {
                 let rings = PyList::empty(py);
@@ -196,10 +202,20 @@ fn selection<'py>(scene: &Obj<'py>) -> Reply<'py> {
     }
     placements.sort()?;
     out.set_item("placements", placements)?;
+    let mesh = scene.getattr("mesh")?;
+    let ids = PyDict::new(py);
     for (k, v) in kinds.iter() {
         v.call_method0("sort")?;
-        out.set_item(k, json_ids(&v)?)?;
+        out.set_item(&k, json_ids(&v)?)?;
+        let kind: String = k.extract()?;
+        let texts = PyList::empty(py);
+        for key in v.try_iter()? {
+            texts.append(id_text_of(&mesh, &kind, &key?)?)?;
+        }
+        ids.set_item(&k, texts)?;
     }
+    out.set_item("ids", ids)?;
+    out.set_item("definition", crate::element_ids::definition_uid(&mesh)?)?;
     Ok(out)
 }
 #[pyfunction]
@@ -228,10 +244,12 @@ fn select<'py>(
     let missing = PyList::empty(py);
     for (kind, ks) in [("face", faces), ("edge", edges), ("vertex", vertices)] {
         let Some(ks) = ks else { continue };
-        let keys = parse(ks)?;
-        let found = elements(&m, kind, keys.as_any())?;
-        for k in keys.iter() {
-            if let Some(v) = found.get_item(&k)? {
+        let keys = keys_in(&m, ks)?;
+        let found = elements(&m, kind, PyList::new(py, keys.iter().filter(|k| !k.is_none()))?.as_any())?;
+        for (k, asked) in keys.iter().zip(ks.try_iter()?) {
+            if k.is_none() {
+                missing.append(asked?)?;
+            } else if let Some(v) = found.get_item(&k)? {
                 picked.append(v)?;
             } else {
                 missing.append(to_json_key(&k)?)?;
@@ -377,7 +395,34 @@ fn triangles<'py>(scene: &Obj<'py>, keys: &Obj<'py>, mesh: Option<&Obj<'py>>) ->
     out.set_item("missing", missing)?;
     Ok(out)
 }
+/// Persistent ids back to session keys: `{mesh, definition, keys: {id:
+/// key | None}, missing}` (an agent, a BCF pin or a web client coming back
+/// to a saved element). `mesh` may be a definition uid or a placement path.
+#[pyfunction]
+#[pyo3(signature=(scene,ids,mesh=None))]
+fn resolve<'py>(scene: &Obj<'py>, ids: &Obj<'py>, mesh: Option<&Obj<'py>>) -> Reply<'py> {
+    let py = scene.py();
+    let m = resolve_mesh(scene, mesh)?;
+    let keys = keys_in(&m, ids)?;
+    let out = base(&m)?;
+    out.set_item("definition", crate::element_ids::definition_uid(&m)?)?;
+    let found = PyDict::new(py);
+    let missing = PyList::empty(py);
+    for (id, key) in ids.try_iter()?.zip(keys.iter()) {
+        let id = id?;
+        if key.is_none() {
+            missing.append(&id)?;
+            found.set_item(&id, py.None())?;
+        } else {
+            found.set_item(&id, to_json_key(&key)?)?;
+        }
+    }
+    out.set_item("keys", found)?;
+    out.set_item("missing", missing)?;
+    Ok(out)
+}
 pub(super) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(resolve, m)?)?;
     m.add_function(wrap_pyfunction!(mesh_info, m)?)?;
     m.add_function(wrap_pyfunction!(faces, m)?)?;
     m.add_function(wrap_pyfunction!(edges, m)?)?;

@@ -29,6 +29,9 @@ pub(super) fn build<'py>(
     let step = api
         .getattr("Step")?
         .call1((history.getattr("revision")?, phase, name))?;
+    // The document's persistent id (drawn now for a new document, saved
+    // with it at its first format-2 save).
+    step.setattr("document", crate::file_ids::ensure_doc_id(&scene).ok())?;
     let paints = hints::painted(cmd, &tokens.get_item(0)?.get_item(0)?)?;
     let meshes = step.getattr("meshes")?;
     let change_type = api.getattr("MeshChange")?;
