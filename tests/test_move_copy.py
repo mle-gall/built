@@ -175,7 +175,9 @@ def test_a_group_copies_as_a_sibling_and_arrays():
     assert abs(min(v.y() for v in copy.mesh.faces[0].vertices) - 3.0) < 1e-6
     assert abs(min(v.y() for v in g.mesh.faces[0].vertices)) < 1e-6   # original untouched
     assert tool.on_array_value(vp, 4, "x")
-    assert len(scene.groups) == 5
+    assembly, = [member for member in scene.groups if member is not g]
+    assert len(assembly.children) == 4
+    assert all(copy.mesh is g.mesh for copy in assembly.children)
     vp.history.undo()
     assert scene.groups == [g]
 
