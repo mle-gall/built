@@ -40,11 +40,11 @@ mod activity;
 mod plugins;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum DrawerMode { Fillet, Soften, Pinned }
+enum DrawerMode { Fillet, Form, Pinned }
 
 impl DrawerMode {
-    fn resolve(soften: bool, fillet: bool, pinned: bool) -> Option<Self> {
-        if soften { Some(Self::Soften) } else if fillet { Some(Self::Fillet) }
+    fn resolve(form: bool, fillet: bool, pinned: bool) -> Option<Self> {
+        if form { Some(Self::Form) } else if fillet { Some(Self::Fillet) }
         else if pinned { Some(Self::Pinned) } else { None }
     }
 }
@@ -711,7 +711,13 @@ impl Ui {
         if let Some(col) = self.column.as_mut() { col.kinds = kinds; }
     }
     pub fn set_prompt(&mut self, title: String, body: String, buttons: Vec<(String, String)>) {
+        if body.starts_with("\u{1d}edit\u{1d}") {
+            self.set_review(false);
+            self.destination = Destination::Project;
+            self.plugins.showing = false;
+        }
         if let Some(col) = self.column.as_mut() {
+            col.edits.retain(|key, _| !key.starts_with("prompt:"));
             col.prompt = (!title.is_empty()).then_some((title, body, buttons));
         }
     }
@@ -775,10 +781,18 @@ impl Ui {
         self.ctx.memory_mut(|m| m.stop_text_input());
         self.sheet = Some(Sheet { title, body, tone, buttons });
     }
+    pub fn place_form(&mut self, placement: &str) {
+        self.set_review(false);
+        if placement == "inspector" {
+            self.destination = Destination::Project;
+            self.plugins.showing = false;
+        }
+        if let Some(d) = &mut self.dialog { d.placement = placement.into(); }
+    }
     pub fn organise_scenes(&mut self) {
-        let anchor = self.ctx.pointer_latest_pos().unwrap_or(self.ctx.screen_rect().center());
-        self.menu = Some(("scenes".into(), Rect::from_center_size(anchor, Vec2::ZERO)));
-        self.scene_browser.open_management = true;
+        self.menu = None;
+        self.lsheet.set(Some(large_sheet::Spec { id: "scene-organiser".into(),
+            title: tr("Organise scenes"), width: 760., closable: true, ..Default::default() }));
     }
 
     pub fn extension_menu(&mut self, rows: Vec<crate::extension_menu::Row>) { self.plugins.commands = rows; }
@@ -1207,7 +1221,7 @@ impl Ui {
             &egui::LayerId::new(egui::Order::Foreground, egui::Id::new(name))));
         [
             ("drawer_pinned", visible("drawer") && self.drawer_mode() == Some(DrawerMode::Pinned)),
-            ("drawer_operation", visible("drawer") && matches!(self.drawer_mode(), Some(DrawerMode::Fillet | DrawerMode::Soften))),
+            ("drawer_operation", visible("drawer") && matches!(self.drawer_mode(), Some(DrawerMode::Fillet | DrawerMode::Form))),
             ("recent_preview", self.glass.showing_preview()),
             ("tool_rail", visible("palette") || visible("sheets_rail")), ("dock", visible("column") || visible("sheets_dock")), ("bottom_bar", visible("bottom")),
             ("view_menu", self.view_open),
@@ -1655,7 +1669,7 @@ impl Ui {
                             if kind=="scenes" && self.tabs.get(3).is_some_and(|rows|!rows.is_empty()) {
                                 let scenes=&self.tabs[1];
                                 current=scenes.iter().find(|r|r.4==1).map(|r|r.1.clone());
-                                self.scene_browser.show(ui,scenes,&self.tabs[3],&mut clicked,&mut self.actions);
+                                self.scene_browser.show(ui,scenes,&self.tabs[3],&mut clicked,&mut self.actions,false);
                             } else if let Some(items) = self.tabs.get(group) {
                                 for item in items {
                                     if item.4 == 1 { current = Some(item.1.clone()); }
@@ -1927,7 +1941,7 @@ impl Ui {
     }
 
     fn drawer_mode(&self) -> Option<DrawerMode> {
-        DrawerMode::resolve(self.dialog.as_ref().is_some_and(|d| d.has_soften_preview()),
+        DrawerMode::resolve(self.dialog.as_ref().is_some_and(|d| d.in_drawer()),
                             self.active == "fillet" && self.panels.data["bevel"].is_object(),
                             self.plugins.has_pinned())
     }
@@ -1935,7 +1949,7 @@ impl Ui {
     fn draw_drawer(&mut self, ctx: &egui::Context, screen: Rect) {
         let Some(mode) = self.drawer_mode() else { return };
         let bounds = self.drawer_bounds(ctx, screen);
-        if mode == DrawerMode::Soften {
+        if mode == DrawerMode::Form {
             self.draw_soften_preview(ctx, bounds);
         }
         kit::drawer(ctx, bounds, |ui| {
@@ -1952,7 +1966,7 @@ impl Ui {
                     kit::caption_plain(ui, "Fillet");
                     self.panels.bevel(ui, &mut self.actions);
                 }
-                DrawerMode::Soften => self.soften_fields(ui),
+                DrawerMode::Form => self.drawer_form(ui),
             }
         });
     }
@@ -2639,6 +2653,33 @@ impl Ui {
                         floating_width: SPACE_XS,
                         ..egui::style::ScrollStyle::thin()
                     };
+                    if let Some((title, wire, _)) = &col.prompt {
+                        if let Some((id, value)) = wire.strip_prefix("\u{1d}edit\u{1d}").and_then(|v| v.split_once('\u{1d}')) {
+                            kit::caption_plain(ui, title);
+                            let key = format!("prompt:{id}");
+                            let first = !col.edits.contains_key(&key);
+                            let text = col.edits.entry(key).or_insert_with(|| value.to_owned());
+                            let output = kit::field(text).desired_width(ui.available_width()-12.).show(ui);
+                            if first {
+                                output.response.request_focus();
+                                let mut state = output.state;
+                                state.cursor.set_char_range(Some(egui::text::CCursorRange::two(
+                                    egui::text::CCursor::new(0), egui::text::CCursor::new(text.chars().count()))));
+                                state.store(ui.ctx(), output.response.id);
+                            }
+                            if output.response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                                actions.push(format!("prompt\u{1f}yes\u{1f}{text}"));
+                                col.prompt = None;
+                                col.edits.retain(|key, _| !key.starts_with("prompt:"));
+                            }
+                            return;
+                        }
+                    }
+                    if let Some(d) = self.dialog.as_mut().filter(|d| d.placement == "inspector") {
+                        kit::caption_plain(ui, &d.title);
+                        dialog::fields(ui, d, &mut self.actions);
+                        return;
+                    }
                     // A line type being edited takes the inspector until it is saved or closed.
                     if col.mode.is_empty() && col.styles.catalog.editing_line() {
                         egui::ScrollArea::vertical().id_salt("line type editor").auto_shrink([false, false]).show(ui, |ui| {
@@ -2837,7 +2878,7 @@ impl Ui {
             col.readiness_sent = Some(wanted);
             actions.push(format!("readiness\u{1f}{}", u8::from(wanted)));
         }
-        if let Some((title, body_text, buttons)) = col.prompt.clone() {
+        if let Some((title, body_text, buttons)) = col.prompt.clone().filter(|(_, body, _)| !body.starts_with("\u{1d}edit\u{1d}")) {
             let mut answered = false;
             egui::Area::new(egui::Id::new("prompt"))
                 .pivot(egui::Align2::CENTER_TOP)
@@ -2848,32 +2889,14 @@ impl Ui {
                         ui.set_width(W - 40.0);
                         ui.label(egui::RichText::new(&title).font(title_font()).color(INK));
                         ui.add_space(SPACE_S);
-                        // A body written "\u{1d}edit\u{1d}<id>\u{1d}<text>" is a field to type in.
-                        let field = body_text.strip_prefix("\u{1d}edit\u{1d}").map(|r| {
-                            let (id, text) = r.split_once('\u{1d}').unwrap_or((r, ""));
-                            (id.to_owned(), text.to_owned())
-                        });
-                        let mut enter = false;
-                        if let Some((id, text)) = &field {
-                            let buf = col.edits.entry(format!("prompt:{id}")).or_insert_with(|| text.clone());
-                            let r = ui.add(kit::field(buf).font(body()).margin(Margin::symmetric(6, 4))
-                                .desired_width((W - 40.0 - 40.0).max(60.0)).clip_text(true));
-                            r.request_focus();
-                            enter = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-                        } else {
-                            ui.label(egui::RichText::new(&body_text).font(body()).color(DIM));
-                        }
+                        ui.label(egui::RichText::new(&body_text).font(body()).color(DIM));
                         ui.add_space(SPACE_M);
-                        let typed = field.as_ref().map(|(id, _)| col.edits.get(&format!("prompt:{id}")).cloned().unwrap_or_default());
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             ui.spacing_mut().item_spacing = vec2(SPACE_S, 0.0);
                             for (i, (id, label)) in buttons.iter().enumerate() {
                                 let hint = if i == 0 { "↩" } else if matches!(id.as_str(), "cancel" | "no") { "esc" } else { "" };
-                                if sheet_button(ui, label, hint, u8::from(i == 0)) || (enter && i == 0) {
-                                    match &typed {
-                                        Some(t) => actions.push(format!("prompt\u{1f}{id}\u{1f}{t}")),
-                                        None => actions.push(format!("prompt\u{1f}{id}")),
-                                    }
+                                if sheet_button(ui, label, hint, u8::from(i == 0)) {
+                                    actions.push(format!("prompt\u{1f}{id}"));
                                     answered = true;
                                 }
                             }
@@ -3130,7 +3153,7 @@ impl Ui {
                      ("terrain_profile", work && model && self.panels.data["terrain"].is_object()),
                      ("jobs", !self.jobs.is_empty() || self.activity_open),
                      ("notices", self.history.iter().any(|r| r.5 > 0.)),
-                     ("dialog", self.dialog.as_ref().is_some_and(|d| !d.has_soften_preview())),
+                     ("dialog", self.dialog.as_ref().is_some_and(|d| d.placement.is_empty() && !d.in_drawer())),
                      ("tab_menu", self.strip.menu_open()),
                      ("tab_overflow", self.strip.overflow_open()),
                      ("ctx_menu", self.ctx_menu.is_some()),
@@ -3423,6 +3446,17 @@ fn test_chrome() -> Option<Ui> {
     let adapter = pollster::block_on(instance.request_adapter(&Default::default()))?;
     let (device, _) = pollster::block_on(adapter.request_device(&Default::default(), None)).unwrap();
     Some(Ui::new(&device, wgpu::TextureFormat::Bgra8UnormSrgb))
+}
+
+#[test]
+fn organiser_uses_a_dismissible_sheet() {
+    let Some(mut ui) = test_chrome() else { return };
+    ui.menu = Some(("scenes".into(), Rect::ZERO));
+    ui.organise_scenes();
+    assert!(ui.menu.is_none());
+    assert_eq!(ui.large_sheet_state().0, "scene-organiser");
+    assert!(ui.lsheet_key("Escape", true, 0));
+    assert!(!ui.large_sheet_shown());
 }
 
 #[test]

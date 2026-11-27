@@ -1072,6 +1072,7 @@ impl Ui {
                 }
                 let (_, act) = self.lsheet.escape(in_field, in_search);
                 match act {
+                    Some(_) if !in_field && self.lsheet.id() == "scene-organiser" => { self.lsheet.set(None); }
                     Some(a) if a.is_empty() => self.ctx.memory_mut(|m| m.stop_text_input()),
                     Some(a) => { self.ctx.memory_mut(|m| m.stop_text_input()); self.actions.push(a); }
                     None => {}
@@ -1219,6 +1220,14 @@ impl Ui {
                                                   &spec.content.sub, meta(), FAINT);
                             }
                             ui.add_space(SPACE_S);
+                        }
+                        if spec.id == "scene-organiser" {
+                            if let (Some(scenes), Some(folders)) = (self.tabs.get(1), self.tabs.get(3)) {
+                                let mut clicked = None;
+                                self.scene_browser.show(ui, scenes, folders, &mut clicked, &mut self.actions, true);
+                                self.actions.extend(clicked);
+                            }
+                            return;
                         }
                         if spec.id == "site-placement" {
                             d.blocks(ui,&spec.content.blocks);
@@ -1375,6 +1384,7 @@ impl Ui {
         if live {
             let id = self.lsheet.id();
             for a in out {
+                if id == "scene-organiser" && a == "close" { self.lsheet.set(None); continue; }
                 // Fields (ui/dialog.rs) carry the prefix already.
                 if a.starts_with("lsheet:") { self.actions.push(a); } else { self.actions.push(format!("lsheet:{id}{SEP}{a}")); }
             }

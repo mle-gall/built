@@ -71,7 +71,6 @@ fn record_key(row: &Item) -> Option<u64> {
 #[derive(Default)]
 pub(super) struct Browser {
     owner: String,
-    pub open_management: bool,
     pub thumbnails: Option<bool>,
     photos: std::collections::BTreeMap<String, Photo>,
     pending: Option<String>,
@@ -146,11 +145,12 @@ impl Browser {
         folders: &[Item],
         clicked: &mut Option<String>,
         background: &mut Vec<String>,
+        managing: bool,
     ) {
         let Some(root) = folders.first() else {
             return;
         };
-        let open_management = std::mem::take(&mut self.open_management);
+
         if self.owner != root.3 {
             let thumbnails = self.thumbnails;
             *self = Self::default();
@@ -158,15 +158,6 @@ impl Browser {
             self.owner = root.3.clone();
         }
         let thumbnails = self.thumbnails.unwrap_or(true);
-        if let Some(choice) = kit::segmented(
-            ui,
-            &["List", "Thumbnails"],
-            usize::from(thumbnails),
-            ui.available_width(),
-        ) {
-            self.thumbnails = Some(choice == 1);
-            background.push(format!("scenephotomode:{choice}"));
-        }
         let now = ui.input(|i| i.time);
         if !folders.iter().any(|row| row.0 == self.folder) {
             self.open("");
@@ -213,7 +204,7 @@ impl Browser {
                     ) {
                         continue;
                     }
-                    if self.selecting {
+                    if managing && self.selecting {
                         if let Some(key) = record_key(row) {
                             let mut checked = self.selected.contains(&key);
                             if kit::toggle(ui, &mut checked, &row.1).changed() {
@@ -268,11 +259,11 @@ impl Browser {
                     }
                 }
             });
-        if open_management {
-            let id = ui.make_persistent_id("manage scene folders");
-            ui.data_mut(|data| data.insert_persisted(id, true));
+        if !managing {
+            if kit::quiet(ui, "Organise scenes…").clicked() { *clicked = Some("act:organise-scenes".into()); }
+            return;
         }
-        kit::disclosure(ui, "manage scene folders", "Organise scenes", false, |ui| {
+        ui.scope(|ui| {
             ui.add(
                 kit::field(&mut self.name)
                     .hint_text("Folder name")
@@ -423,7 +414,7 @@ mod tests {
             },
             |ctx| {
                 egui::CentralPanel::default().show(ctx, |ui| {
-                    browser.show(ui, rows, folders, &mut None, &mut jobs)
+                    browser.show(ui, rows, folders, &mut None, &mut jobs, false)
                 });
             },
         );

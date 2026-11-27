@@ -875,6 +875,9 @@ fn before_frame(view: &Bound<'_, PyAny>, win: &Bound<'_, PyAny>) -> PyResult<()>
     if !sig.eq(dict.call_method1("get", ("_ui_dialog_sig",))?)? {
         view.setattr("_ui_dialog_sig", &sig)?;
         renderer.call_method1("ui_set_dialog", wire)?;
+        if let Some(placement) = form.getattr_opt("placement")? {
+            renderer.call_method1("ui_place_form", (placement,))?;
+        }
         if let Some(scene) = form.getattr_opt("soften_scene")? {
             let vp = win.getattr("viewport")?;
             let lines = if vp.getattr("scene")?.is(&scene) {
@@ -950,16 +953,18 @@ fn post(py: Python<'_>, parent: &Bound<'_, PyAny>, form: Bound<'_, Form>) -> PyR
 
 /// A name prompt: `done(text)`, or `done(None)` on Cancel.
 #[pyfunction]
-#[pyo3(signature = (parent, title, label, text=None, done=None, *, multiline=false, ok=None, note=None))]
+#[pyo3(signature = (parent, title, label, text=None, done=None, *, multiline=false, ok=None, note=None, inspector=false))]
 #[allow(clippy::too_many_arguments)]
-fn ask_text(py: Python<'_>, parent: &Bound<'_, PyAny>, title: Py<PyAny>, label: &Bound<'_, PyAny>, text: Option<Bound<'_, PyAny>>, done: Option<Py<PyAny>>, multiline: bool, ok: Option<Py<PyAny>>, note: Option<Py<PyAny>>) -> PyResult<()> {
+fn ask_text(py: Python<'_>, parent: &Bound<'_, PyAny>, title: Py<PyAny>, label: &Bound<'_, PyAny>, text: Option<Bound<'_, PyAny>>, done: Option<Py<PyAny>>, multiline: bool, ok: Option<Py<PyAny>>, note: Option<Py<PyAny>>, inspector: bool) -> PyResult<()> {
     let t = obj(py, true)?.into_bound(py);
     let ml = obj(py, multiline)?.into_bound(py);
     let f = field(py, ("text", "edit", label.clone(), text.unwrap_or_else(|| s(py, ""))), &[("focus", t), ("multiline", ml.clone()), ("full", ml)])?;
     let ok = match ok.filter(|o| o.bind(py).is_truthy().unwrap_or(false)) { Some(o) => o, None => obj(py, tr(py, "OK")?)? };
     let buttons = PyList::new(py, [(s(py, "cancel"), s(py, &tr(py, "Cancel")?)), (s(py, "ok"), ok.into_bound(py))])?;
     let form = Form::make(py, title, PyList::new(py, [f])?.as_any(), note, Some(buttons.into_any()), obj(py, "ok")?, obj(py, "cancel")?, None, if multiline { 520.0 } else { 440.0 }, Some(answer_of(py, done, "text")?), None, None, None, None)?;
-    post(py, parent, Bound::new(py, form)?)
+    let form = Bound::new(py, form)?;
+    if inspector { form.setattr("placement", "inspector")?; }
+    post(py, parent, form)
 }
 
 /// A number prompt: `done(value)`, or `done(None)` on Cancel.

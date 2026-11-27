@@ -80,7 +80,7 @@ fn confirm_close_tab(win: &Bound<'_, PyAny>, doc: &Bound<'_, PyAny>, ask: bool) 
     win.call_method0("_end_group_edits")?;
     let vars = PyDict::new(win.py());
     vars.set_item("name", doc.call_method0("display_name")?)?;
-    let prompt = translated(win.py(), "Close “{name}”?", Some(&vars))?;
+    let prompt = translated(win.py(), "Close “{name}”", Some(&vars))?;
     win.call_method1("_confirm_discard", (prompt,))?.is_truthy()
 }
 

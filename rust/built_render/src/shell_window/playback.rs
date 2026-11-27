@@ -265,7 +265,8 @@ pub(crate) fn edit_animation<'p>(win: &Obj<'p>) -> PyResult<Obj<'p>> {
     let forms = py.import("built_render.chrome_forms")?;
     let form = forms.call_method1(
         "OperationForm",
-        (settings_rows::tr(py, "Configure animation")?, model, apply),
+        (settings_rows::tr(py, "Animation settings")?, model, apply),
     )?;
+    form.setattr("placement", "drawer")?;
     forms.call_method1("show", (win, form))
 }

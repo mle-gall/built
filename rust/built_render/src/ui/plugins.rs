@@ -713,7 +713,7 @@ mod tests {
         panels.open("doc1-demo");
         for (soften, fillet, expected) in [
             (false, false, DrawerMode::Pinned), (false, true, DrawerMode::Fillet),
-            (false, false, DrawerMode::Pinned), (true, false, DrawerMode::Soften),
+            (false, false, DrawerMode::Pinned), (true, false, DrawerMode::Form),
             (false, false, DrawerMode::Pinned),
         ] {
             assert_eq!(DrawerMode::resolve(soften, fillet, panels.has_pinned()), Some(expected));

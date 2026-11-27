@@ -311,6 +311,7 @@ fn make_component(win: &Bound<'_, PyAny>) -> PyResult<()> {
     };
     let kw = PyDict::new(py);
     kw.set_item("text", &suggestion)?;
+    kw.set_item("inspector", true)?;
     let done = ComponentName {
         mode,
         win: win.clone().unbind(),

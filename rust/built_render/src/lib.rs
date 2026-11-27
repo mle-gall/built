@@ -2994,6 +2994,9 @@ impl Renderer {
                      fields: Vec<ui::dialog::Field>, buttons: Vec<ui::dialog::Button>) {
         if let Some(ui) = self.ui.as_mut() { ui.set_dialog(seq, title, note, width, fields, buttons); }
     }
+    fn ui_place_form(&mut self, placement: &str) {
+        if let Some(ui) = &mut self.ui { ui.place_form(placement); }
+    }
     fn ui_set_soften_preview(&mut self, lines: Vec<([f32; 2], [f32; 2])>) {
         if let Some(ui) = self.ui.as_mut() { ui.set_soften_preview(lines); }
     }

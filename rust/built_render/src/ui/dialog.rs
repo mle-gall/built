@@ -48,7 +48,8 @@ pub struct Dialog {
     /// What every action starts with: `dlg:<seq>` for a modal form,
     /// `lsheet:<sheet id>` for the fields of a large sheet (ui/large_sheet.rs).
     pub(super) prefix: String,
-    title: String,
+    pub(super) title: String,
+    pub(super) placement: String,
     note: String,
     width: f32,
     soften_preview: Option<Vec<([f32; 2], [f32; 2])>>,
@@ -68,9 +69,10 @@ pub struct Dialog {
 }
 
 impl Dialog {
+    pub(super) fn in_drawer(&self) -> bool { self.has_soften_preview() || self.placement == "drawer" }
     pub(super) fn has_soften_preview(&self) -> bool { self.soften_preview.is_some() }
     pub(super) fn new(seq: String) -> Self {
-        Dialog { prefix: format!("dlg:{seq}"), seq, title: String::new(), note: String::new(), width: 420.0, soften_preview: None, join_marks: None, fields: Vec::new(),
+        Dialog { placement: String::new(), prefix: format!("dlg:{seq}"), seq, title: String::new(), note: String::new(), width: 420.0, soften_preview: None, join_marks: None, fields: Vec::new(),
                  buttons: Vec::new(), page: 0, bufs: HashMap::new(), sent: HashMap::new(),
                  focus_pending: true, tab_focus: false, choice_open: None }
     }
@@ -227,7 +229,7 @@ impl Ui {
         }
     }
 
-    pub(super) fn soften_fields(&mut self, ui: &mut egui::Ui) {
+    pub(super) fn drawer_form(&mut self, ui: &mut egui::Ui) {
         let Some(d) = self.dialog.as_mut() else { return };
         super::kit::caption_plain(ui, &d.title);
         fields(ui, d, &mut self.actions);
@@ -247,7 +249,7 @@ impl Ui {
         let right = if review { screen.max.x - GUT } else { self.free_right(ctx, screen) - GUT };
         let anchor = self.form_anchor(ctx, screen);
         let Some(d) = self.dialog.as_mut() else { return };
-        if d.has_soften_preview() { return; }
+        if !d.placement.is_empty() || d.has_soften_preview() { return; }
         let w = d.width.min((right - left).max(300.0)).min(screen.width() - 2.0 * GUT);
         let join = d.join_marks.is_some();
         let x = (if join { right - w } else { anchor.x - w / 2.0 }).clamp(GUT, (screen.max.x - GUT - w).max(GUT));
