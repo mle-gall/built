@@ -96,7 +96,7 @@ impl OrientationCache {
         for f in store.state.changed_face_geometry(&self.state)? {
             dirty[f as usize] = true;
         }
-        let dense = store.state.order[0].dense_of_slot(&store.state.slots[0]);
+        let dense = scan.vertex_slot_indices();
         if scan.positions().len() != store.n(Kind::Vertex) {
             return None;
         }

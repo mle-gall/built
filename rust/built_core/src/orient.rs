@@ -214,6 +214,7 @@ pub(crate) fn interior_probe(g: &Geom, f: usize, rings: &[&[u32]]) -> V3 {
 
 /// CPython's `random.Random`: MT19937 seeded by `init_by_array` with the
 /// 32-bit words of `abs(seed)`.
+#[derive(Clone)]
 pub struct PyRandom {
     mt: Box<[u32; 624]>,
     idx: usize,
@@ -315,6 +316,37 @@ impl PyRandom {
         let b = (self.next_u32() >> 6) as f64;
         (a * 67108864.0 + b) * (1.0 / 9007199254740992.0)
     }
+}
+
+// Distant sheet faces consume the same draws on successive orientations.
+// Save an exact MT state every 65536 draws for the most recent seed on
+// this thread. Larger offsets can always use the uncached jump.
+fn skip_sheet_draws(rng: &mut PyRandom, seed: u64, consumed: usize, skip: usize) {
+    const STRIDE: usize = 65536;
+    const MAX_CHECKPOINTS: usize = 256;
+    let target = consumed + skip;
+    let checkpoint = target / STRIDE;
+    if skip < STRIDE || checkpoint >= MAX_CHECKPOINTS {
+        rng.skip_draws(skip);
+        return;
+    }
+    thread_local! {
+        static SAVED: std::cell::RefCell<(u64, Vec<PyRandom>)> = const { std::cell::RefCell::new((0, Vec::new())) };
+    }
+    SAVED.with_borrow_mut(|(last_seed, states)| {
+        if *last_seed != seed || states.is_empty() {
+            *last_seed = seed;
+            states.clear();
+            states.push(PyRandom::new(seed));
+        }
+        while states.len() <= checkpoint {
+            let mut next = states.last().unwrap().clone();
+            next.skip_draws(STRIDE);
+            states.push(next);
+        }
+        rng.clone_from(&states[checkpoint]);
+    });
+    rng.skip_draws(target % STRIDE);
 }
 
 /// The jitter draws of one round, `uniform(-jitter, jitter)` each, made as
@@ -750,6 +782,7 @@ impl<'a> Ctx<'a> {
         if !self.certain.is_empty() {
             let mut rng = PyRandom::new(seed);
             let mut skip = 0;
+            let mut consumed = 0;
             return list.iter().map(|&face| {
                 let f = face as usize;
                 if self.deg[f] { return Side::Undecided; }
@@ -757,13 +790,15 @@ impl<'a> Ctx<'a> {
                     skip += per;
                     return Side::Outward;
                 }
-                rng.skip_draws(skip);
+                skip_sheet_draws(&mut rng, seed, consumed, skip);
+                consumed += skip;
                 skip = 0;
                 let mut ask = |dir| {
                     let mut draws = [0.; 62];
                     for draw in &mut draws[..per] {
                         *draw = -jitter + (jitter - -jitter) * rng.random();
                     }
+                    consumed += per;
                     self.vote(face, dir, &draws[..per], boundary, None)
                 };
                 match ask(self.g.normal[f]) {
@@ -881,20 +916,19 @@ fn sheet_queries(g: &Geom, scope: &[u32], probes: &[V3], jitter: f64) -> Option<
         hi: [f64::NEG_INFINITY; 3],
     };
     let mut magnitude = 0f64;
+    for &point in &g.pos {
+        for x in f64s(point) {
+            if !x.is_finite() { return None; }
+            magnitude = magnitude.max(x.abs());
+        }
+    }
     for &f in scope {
-        for t in g.tris_of(f as usize) {
-            let ps = t.map(coord);
-            let off = ps.iter().any(|p| p[axis] != plane);
-            for p in ps {
+        for triangle in g.tris_of(f as usize) {
+            if triangle.iter().all(|&v| coord(v)[axis] == plane) { continue; }
+            for p in triangle.map(coord) {
                 for k in 0..3 {
-                    if !p[k].is_finite() {
-                        return None;
-                    }
-                    magnitude = magnitude.max(p[k].abs());
-                    if off {
-                        window.lo[k] = window.lo[k].min(p[k]);
-                        window.hi[k] = window.hi[k].max(p[k]);
-                    }
+                    window.lo[k] = window.lo[k].min(p[k]);
+                    window.hi[k] = window.hi[k].max(p[k]);
                 }
             }
         }
@@ -1357,6 +1391,21 @@ pub fn py_random_stream(seed: u64, n: usize) -> Vec<f64> {
 #[cfg(test)]
 mod sheet_votes {
     use super::*;
+
+    #[test]
+    fn jumping_past_distant_probes_preserves_each_next_draw() {
+        for seed in [12345, 771, 12345] {
+            let mut reference = PyRandom::new(seed);
+            let mut cached = PyRandom::new(seed);
+            let mut used = 0;
+            for step in [13, 140001, 11, 65536, 72145] {
+                reference.skip_draws(step);
+                skip_sheet_draws(&mut cached, seed, used, step);
+                assert_eq!(reference.random(), cached.random());
+                used += step + 1;
+            }
+        }
+    }
 
     #[test]
     fn skipping_proven_sheet_votes_keeps_the_jitter_stream() {

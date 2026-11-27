@@ -171,6 +171,10 @@ impl MeshScan {
         self.ends[e]
     }
 
+    pub(crate) fn vertex_slot_indices(&self) -> &[u32] {
+        &self.vdense
+    }
+
     pub(crate) fn positions(&self) -> &[[f64; 3]] {
         &self.pos
     }
