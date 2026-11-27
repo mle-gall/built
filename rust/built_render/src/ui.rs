@@ -2134,17 +2134,17 @@ impl Ui {
                         ui.add_space(SPACE_XS);
                     } else if col.path.len() <= 1 && col.proposal_available && !col.proposal_dismissed {
                         ui.horizontal(|ui| {
-                            ui.set_height(CONTROL_H);
+                            ui.set_height(BUTTON_H);
                             let overview = &col.overview;
                             let has_source = overview.tags > 1 || overview.folders > 0 || overview.links > 0;
                             if !has_source {
-                                if kit::quiet(ui, "New node").clicked() { actions.push("new\u{1f}".into()); }
+                                if kit::sheet_button(ui, "New node", "", 0) { actions.push("new\u{1f}".into()); }
                                 return;
                             }
-                            if kit::quiet(ui, "Propose structure from tags…").on_hover_text("Preview a filing structure from these tags").clicked() {
+                            if kit::panel_button(ui, "Propose structure from tags…", "", 0, None).on_hover_text("Preview a filing structure from these tags").clicked() {
                                 actions.push("propose\u{1f}".into());
                             }
-                            if kit::quiet(ui, "×").on_hover_text("Dismiss the suggestion").clicked() {
+                            if kit::icon_button(ui, "×", "Dismiss the suggestion").clicked() {
                                 col.proposal_dismissed = true;
                             }
                         });
@@ -2152,7 +2152,7 @@ impl Ui {
                     } else if col.path.len() <= 1 && !col.proposal_available {
                         if let Some((target,_,_)) = &delivery {
                             ui.horizontal(|ui| {
-                                ui.set_height(CONTROL_H);
+                                ui.set_height(BUTTON_H);
                                 ui.spacing_mut().item_spacing.x = SPACE_XS;
                                 ui.add_space(SPACE_S);
                                 kit::caption_plain(ui,"New items go to");
@@ -2838,7 +2838,7 @@ impl Ui {
                             for (_, counts) in sections.iter().filter(|(title, _)| title == "Solid") {
                                 inspector_rows(ui, counts, &mut col.edits, &mut actions);
                             }
-                            if kit::quiet(ui, "Show in drawer").clicked() {
+                            if kit::row_link(ui, "Show in drawer").clicked() {
                                 cmds.push("drawer:selection_health".into());
                             }
                         }
@@ -4243,6 +4243,11 @@ fn destination_round_trip_preserves_project_state_and_width() {
     for label in ["READY TO DELIVER", "⚠ 1 issue", "3 elements not filed", "What is checked", "KEPT", "Handover", "+ New", "!"] {
         assert!(delivery.contains_key(label), "{label}");
     }
+    assert!(!delivery.contains_key("Delete delivery"));
+    tree_click(&mut ui, delivery["⋯"], egui::PointerButton::Primary);
+    let menu = frame(&mut ui);
+    tree_click(&mut ui, menu["Delete delivery"], egui::PointerButton::Primary);
+    assert!(ui.take_actions().iter().any(|a| a == "deliver:delete:d"));
     assert!(!delivery.contains_key("Coverage detail"));
     tree_click(&mut ui, delivery["What is checked"], egui::PointerButton::Primary);
     assert!(frame(&mut ui).contains_key("Coverage detail"));
@@ -4292,7 +4297,7 @@ fn tasks_destination_groups_tasks_by_what_they_need_and_queues_their_verbs() {
     }));
     let f = frame(&mut ui);
     for text in ["2 need attention", "Needs attention", "In progress", "Settled · 1", "To review", "Question", "Working",
-                 "Codex · 3 changes", "Backrest slat 01", "Accept changes", "Request changes…", "Revert task", "Show in Project", "+ New task"] {
+                 "Codex · 3 changes", "Backrest slat 01", "Accept changes", "Request changes…", "Revert task", "Show in Project ›", "+ New task"] {
         assert!(f.contains_key(text), "{text} missing: {:?}", f.keys());
     }
     assert!(!f.contains_key("Name the groups"), "settled tasks fold away");

@@ -183,6 +183,20 @@ def test_checks_and_file_export_open_deliveries(tmp_path, native_host, monkeypat
     renderer.ui_show_destination.assert_called_once_with("deliveries")
 
 
+def test_delete_delivery_waits_for_confirmation(tmp_path, native_host, monkeypatch):
+    from built_render import chrome_dialogs
+    win = native_host.window
+    key = add(win.viewport.history, tmp_path / "draft.svg")
+    ask = Mock()
+    monkeypatch.setattr(chrome_dialogs, "ask_later", ask)
+    for answer in ("cancel", "delete"):
+        dock.delivery_action(win, win.viewport, f"delete:{key}")
+        assert key in deliveries.records(win.viewport.scene)
+        assert ask.call_args.kwargs["default"] == "cancel"
+        ask.call_args.args[-1](answer)
+    assert key not in deliveries.records(win.viewport.scene)
+
+
 def test_problem_checks_cover_filed_geometry():
     from core import bim_registry
     from views.wgpu_ui import _problem_rules

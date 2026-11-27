@@ -70,6 +70,14 @@ Manager**, **About** and report sheets also use this component.
 - **Motion.** In and out in 160 ms: the dim fades, the sheet rises 14 pt
   and fades. Closing keeps the last content while it goes.
 
+### Actions at rest
+
+Use one filled primary button per panel or section when there is a clear next action, such as Run. Use a neutral, outlined `BUTTON_H` button for secondary commands. A header action such as + New can use a compact width. Icons can stand alone when their meaning is familiar.
+
+Put an inline reveal or navigation action at the trailing edge of its row. Use the kit's accent text link and chevron. Keep labels, values and captions in neutral ink. A disclosure uses a triangle and dim text to show that it expands.
+
+Group commands with the record they affect. Put destructive commands in the record's existing overflow menu or at the end of its detail, separated by space. Use danger text on a ghost button and confirm deletion with Cancel as the default.
+
 ### Behaviour (the same on every sheet)
 
 - **Input ownership.** While a sheet is up it takes the pointer everywhere

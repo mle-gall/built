@@ -474,7 +474,7 @@ impl Gallery {
                 sheet_button(ui, "Export", "↵", 1);
             }
             Row::Secondary => {
-                sheet_button(ui, "Cancel", "Esc", 0);
+                panel_button(ui, "Cancel", "Esc", 0, None);
             }
             Row::Destructive => {
                 sheet_button(ui, "Discard", "", 2);
@@ -485,6 +485,7 @@ impl Gallery {
             }
             Row::Quiet => {
                 quiet(ui, "Details");
+                row_link(ui, "Show");
                 icon_button(ui, "×", "Close");
             }
             Row::Field => {
@@ -808,11 +809,17 @@ impl Gallery {
                     ui.data_mut(|d|d.insert_temp(id,(editor,curve)));
                 });
                 material_readout(ui, "Material", super::SWATCH_FALLBACK, "#808080");
-                disclosure(ui, "gallery-export", "Export details", true, |ui| {
+                let id = ui.make_persistent_id("gallery-export");
+                let mut open = ui.data_mut(|d| *d.get_persisted_mut_or(id, true));
+                if disclosure_toggle(ui, "Export details", open) {
+                    open = !open;
+                    ui.data_mut(|d| d.insert_persisted(id, open));
+                }
+                if open {
                     prop_row(ui, "IFC class", "IfcWall");
                     prop_row(ui, "Predefined type", "STANDARD");
                     prop_row(ui, "Uniclass", "EF_25_10 Walls");
-                });
+                }
             });
     }
 

@@ -76,7 +76,7 @@ impl Ui {
                         wrapped(ui, "External agents cannot edit this model. Allow them in Settings › AI.", meta(), FAINT);
                     }
                 });
-                if !data["access"].as_bool().unwrap_or(false) && kit::quiet(ui, "Open Settings › AI").clicked() {
+                if !data["access"].as_bool().unwrap_or(false) && kit::row_link(ui, "Open Settings › AI").clicked() {
                     cmds.push("task:settings:".into());
                 }
                 return;
@@ -174,7 +174,7 @@ impl Ui {
                 kit::dot(ui.painter(), r.center(), ACCENT);
                 ui.label(egui::RichText::new(format!("{} modified", changes.len())).font(meta()).color(DIM));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if kit::chip_button(ui, "Show in Project") {
+                    if kit::row_link(ui, "Show in Project").clicked() {
                         cmds.push(format!("task:project:{guid}"));
                     }
                 });
@@ -207,7 +207,7 @@ impl Ui {
             });
             ui.horizontal(|ui| {
                 ui.add_space(SPACE_S);
-                if kit::quiet(ui, "Cancel").clicked() {
+                if kit::sheet_button(ui, "Cancel", "", 0) {
                     close = true;
                 }
             });
@@ -225,7 +225,7 @@ impl Ui {
                     pane.requesting = Some(guid.clone());
                     pane.reply.clear();
                 }
-                if can("can_revert") && kit::quiet(ui, "Revert task").on_hover_text("Undo this task's changes as one step").clicked() {
+                if can("can_revert") && kit::panel_button(ui, "Revert task", "", 2, None).on_hover_text("Undo this task's changes as one step").clicked() {
                     cmds.push(format!("task:revert:{guid}"));
                 }
             });
@@ -292,7 +292,7 @@ impl Ui {
             if kit::sheet_button(ui, "Send", "⌘↵", 1) {
                 send = true;
             }
-            if kit::quiet(ui, "Cancel").clicked() {
+            if kit::sheet_button(ui, "Cancel", "", 0) {
                 pane.compose = false;
             }
         });

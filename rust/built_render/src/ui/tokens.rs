@@ -62,6 +62,8 @@ palette! {
     POP_SHADOW = Color32::from_black_alpha(90);
     IMAGE_HOVER = Color32::from_black_alpha(170);
     HOVER_EDGE = Color32::from_rgba_premultiplied(46, 46, 46, 46);
+    // Neutral outline for secondary and destructive actions at rest.
+    ACTION_EDGE = HOVER_EDGE;
     ON_PRIMARY = SHEET;
     ON_PRIMARY_HINT = ON_PRIMARY;
     PRIMARY_PRESS = Color32::from_rgb(0x55, 0x8C, 0xE6);

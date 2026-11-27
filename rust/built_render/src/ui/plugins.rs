@@ -354,7 +354,7 @@ impl Panels {
                     }
                 }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    let button = kit::quiet(ui, &super::tr("Close"));
+                    let button = kit::panel_button(ui, &super::tr("Close"), "", 0, None);
                     ui.data_mut(|d| d.insert_temp(egui::Id::new("drawer-close"), button.rect.center()));
                     if button.clicked() {
                         close = true;
@@ -434,7 +434,7 @@ fn draw_item(
 ) -> Event {
     let mut event = None;
     match &i.widget {
-        Widget::Chip { available } => kit::status_chip(ui, &i.label, if *available { ACCENT } else { WARN }),
+        Widget::Chip { available } => kit::status_chip(ui, &i.label, if *available { DIM } else { FAINT }),
         Widget::Button => {
             if kit::sheet_button(ui, &i.label, "", u8::from(primary)) {
                 event = Some(("invoke", Value::Null))
@@ -480,7 +480,7 @@ fn draw_item(
                     let draft = drafts.entry(key.clone()).or_insert_with(|| value.clone());
                     let r = if path {
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            if kit::quiet(ui, &super::tr("Choose…")).clicked() {
+                            if kit::sheet_button(ui, &super::tr("Choose…"), "", 0) {
                                 event = Some(("browse", Value::Null));
                             }
                             kit::path_field(ui, draft)

@@ -33,6 +33,7 @@ pub(super) fn blocked(report: &Value) -> u64 {
 /// Link the per-row view to its delivery setup.
 pub(super) fn strip(ui: &mut egui::Ui, report: &Value) -> bool {
     ui.horizontal(|ui| {
+        ui.set_height(super::BUTTON_H);
         let room = (ui.available_width() - 95.).max(96.);
         let clicked = kit::dropdown(ui, "Delivery:", delivery_name(report), false, room).clicked();
         kit::caption_plain(ui, &summary(report));
@@ -49,7 +50,7 @@ pub(super) fn destination(ui: &mut egui::Ui, report: &Value, jobs: &[super::Job]
     let choices = report["choices"].as_array().map(Vec::as_slice).unwrap_or_default();
     ui.horizontal(|ui| {
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if kit::quiet(ui, "+ New").clicked() {
+            if kit::panel_button(ui, "+ New", "", 0, Some(super::BUTTON_H * 2.)).clicked() {
                 cmds.push("deliver:new".into());
             }
             kit::inspector_title(ui, "Deliveries", "");
@@ -58,7 +59,7 @@ pub(super) fn destination(ui: &mut egui::Ui, report: &Value, jobs: &[super::Job]
     ui.separator();
     ui.add_space(super::SPACE_S);
     egui::ScrollArea::vertical().id_salt("delivery contents")
-        .max_height((ui.available_height() - super::BUTTON_H - super::SPACE_M).max(super::ROW_H))
+        .max_height(ui.available_height())
         .auto_shrink([false, false]).show(ui, |ui| {
         if let Some(review)=report["review"].as_object() {
             kit::inspector_title(ui, "Review handover", delivery_name(report));
@@ -120,7 +121,7 @@ pub(super) fn destination(ui: &mut egui::Ui, report: &Value, jobs: &[super::Job]
             ui.push_id(label, |ui| {
                 ui.horizontal(|ui| {
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if kit::quiet(ui, "Show ›").clicked() {
+                        if kit::row_link(ui, "Show").clicked() {
                             *rule = Some(label.to_owned());
                             show = true;
                             if !check.paths.is_empty() {
@@ -131,7 +132,7 @@ pub(super) fn destination(ui: &mut egui::Ui, report: &Value, jobs: &[super::Job]
                         }
                         ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
                             ui.add_space(super::SPACE_S);
-                            ui.label(egui::RichText::new("⚠").font(super::body()).color(super::WARN));
+                            ui.label(egui::RichText::new("⚠").font(super::body()).color(super::DIM));
                             ui.add_space(super::SPACE_XS);
                             ui.add(egui::Label::new(egui::RichText::new(&text).font(super::body())).truncate())
                                 .on_hover_text(&text);
@@ -162,77 +163,93 @@ pub(super) fn destination(ui: &mut egui::Ui, report: &Value, jobs: &[super::Job]
         for choice in choices {
             let key = choice[0].as_str().unwrap_or("");
             let name = choice[1].as_str().unwrap_or("Delivery");
-            let (rect, response) = kit::list_row(ui, super::ROW_H, key == active);
-            let title = super::fit(ui, name, super::body(), super::INK, rect.width() - 2. * super::SPACE_S, 1);
-            super::leading(ui.painter(), rect, rect.left() + super::SPACE_S, title, super::INK);
-            if response.on_hover_text(name).clicked() {
-                cmds.push(format!("deliver:select:{key}"));
-            }
-        }
-        if !active.is_empty() {
-            ui.separator();
-            if kit::quiet(ui, "Edit setup…").clicked() { cmds.push(format!("deliver:edit:{active}")); }
-            if let Some(outputs) = report["outputs"].as_array().filter(|outputs| !outputs.is_empty()) {
-                if let Some(job) = running {
-                    kit::prop_row(ui, "Outputs", &job.2);
-                    kit::progress_bar(ui, job.3, super::SPACE_XS);
-                } else {
-                    kit::caption(ui, "Outputs");
+            if key != active {
+                let (rect, response) = kit::list_row(ui, super::ROW_H, false);
+                let title = super::fit(ui, name, super::body(), super::INK,
+                    rect.width() - super::CONTROL_H, 1);
+                super::leading(ui.painter(), rect, rect.left() + super::SPACE_S, title, super::INK);
+                ui.painter().text(rect.right_center() - egui::vec2(super::SPACE_S, 0.0),
+                    egui::Align2::RIGHT_CENTER, "›", super::body(), super::DIM);
+                if response.on_hover_text(name).clicked() {
+                    cmds.push(format!("deliver:select:{key}"));
                 }
-                for output in outputs {
-                    let format = output["format"].as_str().unwrap_or("").to_uppercase();
-                    let path = output["destination"].as_str().unwrap_or("");
-                    let last=report["runs"].as_array().and_then(|runs|runs.last()).and_then(|r|r["outputs"].as_array())
-                        .and_then(|rows|rows.iter().find(|row|row["format"]==output["format"]));
-                    let result=last.and_then(|row|row["result"].as_str()).filter(|s|*s!="Delivered").unwrap_or(path);
-                    let status = match running {
-                        Some(job) if job.2.strip_prefix("Writing ") == Some(&format) => "Writing…",
-                        Some(_) => path,
-                        None => result,
-                    };
-                    let row = ui.scope(|ui| kit::prop_row(ui, &format, status));
-                    row.response.on_hover_text(path);
-                }
+                continue;
             }
-            kit::disclosure(ui, ("delivery history", active), "Run history", true, |ui| {
+            egui::Frame::new().fill(super::WELL).corner_radius(super::R_ROW)
+                .inner_margin(egui::Margin::symmetric(super::SPACE_S as i8, super::SPACE_S as i8))
+                .show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                ui.horizontal(|ui| {
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        let menu = kit::icon_button(ui, "⋯", "Delivery actions");
+                        let id = ui.make_persistent_id(("delivery actions", key));
+                        if menu.clicked() { ui.memory_mut(|m| m.toggle_popup(id)); }
+                        if ui.memory(|m| m.is_popup_open(id)) {
+                            ui.ctx().set_sublayer(ui.layer_id(), egui::LayerId::new(egui::Order::Foreground, id));
+                            egui::popup_below_widget(ui, id, &menu, egui::PopupCloseBehavior::CloseOnClickOutside, |ui| {
+                                if kit::sheet_button(ui, "Delete delivery", "", 2) {
+                                    cmds.push(format!("deliver:delete:{key}"));
+                                    ui.memory_mut(|m| m.close_popup());
+                                }
+                            });
+                        }
+                        kit::inspector_title(ui, name, "");
+                    });
+                });
+                if let Some(outputs) = report["outputs"].as_array().filter(|outputs| !outputs.is_empty()) {
+                    if let Some(job) = running {
+                        kit::prop_row(ui, "Outputs", &job.2);
+                        kit::progress_bar(ui, job.3, super::SPACE_XS);
+                    } else if outputs.len() > 1 {
+                        kit::caption(ui, "Outputs");
+                    }
+                    for output in outputs {
+                        let format = output["format"].as_str().unwrap_or("").to_uppercase();
+                        let path = output["destination"].as_str().unwrap_or("");
+                        let last=report["runs"].as_array().and_then(|runs|runs.last()).and_then(|r|r["outputs"].as_array())
+                            .and_then(|rows|rows.iter().find(|row|row["format"]==output["format"]));
+                        let result=last.and_then(|row|row["result"].as_str()).filter(|s|*s!="Delivered").unwrap_or(path);
+                        let status = match running {
+                            Some(job) if job.2.strip_prefix("Writing ") == Some(&format) => "Writing…",
+                            Some(_) => path,
+                            None => result,
+                        };
+                        let row = ui.scope(|ui| kit::prop_row(ui, &format, status));
+                        row.response.on_hover_text(path);
+                    }
+                }
                 let runs = report["runs"].as_array().map(Vec::as_slice).unwrap_or_default();
-                if runs.is_empty() {
-                    ui.horizontal(|ui| {
-                        ui.add_space(super::SPACE_S);
-                        kit::empty_state(ui, "No runs yet");
-                    });
-                }
-                for (i, run) in runs.iter().enumerate().rev() {
-                    ui.push_id(i, |ui| {
-                        kit::prop_row(ui, run["result"].as_str().unwrap_or("Delivered"), run["time"].as_str().unwrap_or(""));
-                        if let Some(ids)=run["ids_result"].as_str() {
-                            kit::prop_row(ui,"IDS",ids);
-                            if kit::quiet(ui,"Review").clicked() {cmds.push(format!("deliver:review:{active}:{i}"));}
-                        }
-                        if run["folder"].as_str().is_some_and(|s| !s.is_empty()) && kit::quiet(ui, "Open folder").clicked() {
-                            cmds.push(format!("deliver:history:{active}:{i}"));
-                        }
-                    });
-                }
+                kit::disclosure(ui, ("delivery history", active), "Run history", !runs.is_empty(), |ui| {
+                    if runs.is_empty() {
+                        ui.horizontal(|ui| {
+                            ui.add_space(super::SPACE_S);
+                            kit::empty_state(ui, "No runs yet");
+                        });
+                    }
+                    for (i, run) in runs.iter().enumerate().rev() {
+                        ui.push_id(i, |ui| {
+                            kit::prop_row(ui, run["result"].as_str().unwrap_or("Delivered"), run["time"].as_str().unwrap_or(""));
+                            if let Some(ids)=run["ids_result"].as_str() {
+                                kit::prop_row(ui,"IDS",ids);
+                                if kit::row_link(ui,"Review").clicked() {cmds.push(format!("deliver:review:{active}:{i}"));}
+                            }
+                            if run["folder"].as_str().is_some_and(|s| !s.is_empty()) && kit::row_link(ui, "Open folder").clicked() {
+                                cmds.push(format!("deliver:history:{active}:{i}"));
+                            }
+                        });
+                    }
+                });
+                ui.add_space(super::SPACE_S);
+                ui.horizontal_wrapped(|ui| {
+                    ui.spacing_mut().item_spacing.x = super::SPACE_S;
+                    ui.add_space(super::SPACE_S);
+                    let run = if report["package"] == true { "Run handover package" } else { "Run" };
+                    if kit::sheet_button(ui, run, "", 1) { cmds.push(format!("deliver:run:{active}")); }
+                    if kit::sheet_button(ui, "Edit setup…", "", 0) { cmds.push(format!("deliver:edit:{active}")); }
+                });
             });
-            if kit::quiet(ui, "Delete delivery").clicked() { cmds.push(format!("deliver:delete:{active}")); }
         }
     });
-    ui.add_space(super::SPACE_S);
-    if !active.is_empty()
-        && kit::sheet_button(
-            ui,
-            if report["package"] == true {
-                "Run handover package"
-            } else {
-                "Run"
-            },
-            "",
-            1,
-        )
-    {
-        cmds.push(format!("deliver:run:{active}"));
-    }
     show
 }
 

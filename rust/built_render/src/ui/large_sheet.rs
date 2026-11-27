@@ -469,48 +469,13 @@ fn file_glyph(ui: &egui::Ui, c: Pos2, ink: Color32) {
     ui.painter().add(egui::Shape::closed_line(pts, pen));
 }
 
-/// A header or block button (role 1 accent, 3 quiet text, else neutral).
+/// Header and block verbs share the same resting states as panel actions.
 fn button(ui: &mut egui::Ui, v: &Verb, width: Option<f32>) -> bool {
-    if width.is_none() && v.enabled && v.role != 3 {
-        // The kit's sheet button: the same as a question sheet's.
-        let clicked = sheet_button(ui, &v.label, &v.key, v.role);
-        return clicked;
-    }
-    if v.role == 3 {
-        let g = ui.painter().layout_no_wrap(v.label.clone(), body(), INK);
-        let sense = if v.enabled { Sense::click() } else { Sense::hover() };
-        let (r, resp) = ui.allocate_exact_size(vec2(width.unwrap_or(g.size().x + SPACE_L), BUTTON_H), sense);
-        paint_state(ui, r, state_of(&resp, false, v.enabled), R_CONTROL);
-        centered(ui.painter(), r, g,
-                            if v.enabled { ACCENT } else { OFF });
-        let resp = if v.tip.is_empty() { resp } else { resp.on_hover_text(&v.tip) };
-        return resp.clicked() && v.enabled;
-    }
-    let primary = v.role == 1;
-    let ink = if !v.enabled { OFF } else if primary { ON_PRIMARY } else { INK };
-    let g = ui.painter().layout_no_wrap(v.label.clone(), if primary { strong(TYPE_BODY) } else { body() }, ink);
-    let k = (!v.key.is_empty()).then(|| ui.painter().layout_no_wrap(v.key.clone(), meta(),
-        if primary { ON_PRIMARY_HINT } else { FAINT }));
-    let kw = k.as_ref().map_or(0.0, |k| k.size().x + 8.0);
-    let w = width.unwrap_or((g.size().x + kw + 22.0).max(56.0));
-    let sense = if v.enabled { Sense::click() } else { Sense::hover() };
-    let (rect, resp) = ui.allocate_exact_size(vec2(w, BUTTON_H), sense);
-    let cr = CornerRadius::same(R_CONTROL);
-    if primary && v.enabled {
-        let fill = if resp.is_pointer_button_down_on() { PRIMARY_PRESS } else if resp.hovered() { PRIMARY_HOVER } else { ACCENT };
-        ui.painter().rect_filled(rect, cr, fill);
-    } else {
-        ui.painter().rect_filled(rect, cr, HOVER);
-        paint_state(ui, rect, state_of(&resp, false, v.enabled), R_CONTROL);
-        ui.painter().rect_stroke(rect, cr, Stroke::new(1.0_f32, RULE), egui::StrokeKind::Inside);
-    }
-    let x0 = rect.center().x - (g.size().x + kw) / 2.0;
-    ui.painter().galley(pos2(x0, rect.center().y - g.size().y / 2.0), g.clone(), ink);
-    if let Some(k) = k {
-        ui.painter().galley(pos2(x0 + g.size().x + 8.0, rect.center().y - k.size().y / 2.0), k, ink);
-    }
+    let resp = ui.add_enabled_ui(v.enabled, |ui| {
+        kit::panel_button(ui, &v.label, &v.key, v.role, width)
+    }).inner;
     let resp = if v.tip.is_empty() { resp } else { resp.on_hover_text(&v.tip) };
-    resp.clicked() && v.enabled
+    resp.clicked()
 }
 
 /// Everything a pane's blocks need, borrowed apart from the Ui.
@@ -1483,12 +1448,8 @@ impl Ui {
         ui.scope_builder(egui::UiBuilder::new().max_rect(inner).layout(egui::Layout::left_to_right(egui::Align::Center)), |ui| {
             ui.spacing_mut().item_spacing = vec2(0.0, 0.0);
             for (i, l) in f.links.iter().enumerate() {
-                if i > 0 { ui.label(egui::RichText::new("  ·  ").font(meta()).color(OFF)); }
-                let g = ui.painter().layout_no_wrap(l.label.clone(), meta(), FAINT);
-                let (r, resp) = ui.allocate_exact_size(g.size() + vec2(0.0, 8.0), Sense::click());
-                let ink = if resp.hovered() { INK } else { FAINT };
-                ui.painter().galley(pos2(r.min.x, r.center().y - g.size().y / 2.0), g, ink);
-                if resp.clicked() { out.push(format!("verb{SEP}{}", l.id)); }
+                if i > 0 { ui.add_space(SPACE_XS); }
+                if kit::row_link(ui, &l.label).clicked() { out.push(format!("verb{SEP}{}", l.id)); }
             }
             if let Some(action) = &f.action {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -1518,7 +1479,7 @@ impl Ui {
                         ui.add_space(if i == 0 { SPACE_XS } else { SPACE_M });
                         if facets {
                             hidden=st.collapsed_facets.contains(&it.label);
-                            if quiet(ui,&format!("{} {}",if hidden {"▸"}else{"▾"},it.label)).clicked() {
+                            if kit::disclosure_toggle(ui, &it.label, !hidden) {
                                 if hidden {st.collapsed_facets.remove(&it.label);} else {st.collapsed_facets.insert(it.label.clone());}
                             }
                         }else{ui.horizontal(|ui| { ui.add_space(SPACE_S); caption_plain(ui, &it.label); });}

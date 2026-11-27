@@ -365,14 +365,13 @@ pub mod molecules {
         ui.allocate_exact_size(vec2(content_w + 20.0, CONTROL_H), sense)
     }
 
-    /// A command chip (inspector next steps): the neutral control wash.
+    /// A compact outlined command for inspector next steps.
     pub fn chip_button(ui: &mut egui::Ui, label: &str) -> bool {
         let g = ui.painter().layout_no_wrap(label.to_owned(), meta(), INK);
         let (rect, resp) = chip_rect(ui, g.size().x, Sense::click());
         let st = control_state(ui, &resp, false);
-        let r = CornerRadius::same(R_ROW);
         if st != State::Off {
-            ui.painter().rect_filled(rect, r, CONTROL);
+            action_outline(ui, rect, R_ROW);
         }
         paint_state(ui, rect, st, R_ROW);
         centered(ui.painter(), rect, g, if st == State::Off { OFF } else { INK });
@@ -385,22 +384,29 @@ pub mod molecules {
         let g = ui.painter().layout_no_wrap(label.to_owned(), meta(), INK_2);
         let (rect, _) = chip_rect(ui, g.size().x + 10.0, Sense::hover());
         let off = !ui.is_enabled();
-        ui.painter()
-            .rect_filled(rect, CornerRadius::same(R_ROW), CONTROL);
         dot(ui.painter(), pos2(rect.min.x + 12.0, rect.center().y), tone);
         leading(ui.painter(), rect, rect.min.x + 20.0, g, if off { OFF } else { INK_2 });
     }
 
-    /// A sheet button, BUTTON_H high: the default in accent, the rest the
-    /// neutral control wash; the key that answers it in faint type after the label.
+    /// A natural-width panel button with an optional shortcut.
     pub fn sheet_button(ui: &mut egui::Ui, label: &str, hint: &str, role: u8) -> bool {
+        panel_button(ui, label, hint, role, None).clicked()
+    }
+
+    fn action_outline(ui: &egui::Ui, rect: Rect, radius: u8) {
+        ui.painter().rect_stroke(rect, CornerRadius::same(radius),
+            Stroke::new(1.0_f32, ACTION_EDGE), egui::StrokeKind::Inside);
+    }
+
+    /// A panel action. Only the primary role has a fill at rest.
+    pub fn panel_button(ui: &mut egui::Ui, label: &str, hint: &str, role: u8, width: Option<f32>) -> egui::Response {
         let primary = role == 1;
         let font = strong(TYPE_BODY);
         let g = ui.painter().layout_no_wrap(label.to_owned(), font, INK);
         let k = (!hint.is_empty()).then(|| ui.painter().layout_no_wrap(hint.to_owned(), meta(), FAINT));
         let kw = k.as_ref().map_or(0.0, |k| k.size().x + 8.0);
         let (rect, resp) = ui.allocate_exact_size(
-            vec2((g.size().x + kw + 24.0).max(72.0), BUTTON_H),
+            vec2(width.unwrap_or_else(|| (g.size().x + kw + 2.0 * SPACE_M).max(72.0)), BUTTON_H),
             Sense::click(),
         );
         let state = control_state(ui, &resp, false);
@@ -426,7 +432,7 @@ pub mod molecules {
                 paint_focus(ui, rect, R_CONTROL);
             }
         } else {
-            ui.painter().rect_filled(rect, r, CONTROL);
+            action_outline(ui, rect, R_CONTROL);
             paint_state(ui, rect, state, R_CONTROL);
         }
         let x0 = (rect.center().x - (g.size().x + kw) / 2.0).round();
@@ -440,7 +446,17 @@ pub mod molecules {
             let hint_ink = if off { OFF } else if primary { ON_PRIMARY_HINT } else { INK_2 };
             leading(&text, rect, x0 + g.size().x + 8.0, k, hint_ink);
         }
-        resp.clicked()
+        resp
+    }
+
+    /// A navigation or reveal link within a row.
+    pub fn row_link(ui: &mut egui::Ui, label: &str) -> egui::Response {
+        let g = ui.painter().layout_no_wrap(format!("{label} ›"), body(), ACCENT);
+        let (rect, resp) = ui.allocate_exact_size(vec2(g.size().x + 2.0 * SPACE_S, CONTROL_H), Sense::click());
+        let state = control_state(ui, &resp, false);
+        if state == State::Focus { paint_focus(ui, rect, R_ROW); }
+        centered(ui.painter(), rect, g, if state == State::Off { OFF } else { ACCENT });
+        resp.on_hover_cursor(egui::CursorIcon::PointingHand)
     }
 
     /// A warning chip: the chip geometry, amber text on an amber wash.
@@ -463,11 +479,12 @@ pub mod molecules {
         resp.clicked()
     }
 
-    /// A quiet text button: no fill at rest, the hover wash on hover.
+    /// A compact ghost action with a neutral outline at rest.
     pub fn quiet(ui: &mut egui::Ui, label: &str) -> egui::Response {
         let g = ui.painter().layout_no_wrap(label.to_owned(), body(), INK_2);
         let (rect, resp) = ui.allocate_exact_size(vec2(g.size().x + 16.0, CONTROL_H), Sense::click());
         let st = control_state(ui, &resp, false);
+        action_outline(ui, rect, R_ROW);
         paint_state(ui, rect, st, R_ROW);
         centered(ui.painter(), rect, g, ink_of(st));
         resp
@@ -1177,12 +1194,17 @@ pub mod molecules {
     ) -> Option<R> {
         let id = ui.make_persistent_id(id);
         let mut open = ui.data_mut(|d| *d.get_persisted_mut_or(id, default_open));
-        let (r, resp) = ui.allocate_exact_size(vec2(ui.available_width(), ROW_H), Sense::click());
-        let st = control_state(ui, &resp, false);
-        if resp.clicked() {
+        if disclosure_toggle(ui, title, open) {
             open = !open;
             ui.data_mut(|d| d.insert_persisted(id, open));
         }
+        open.then(|| body(ui))
+    }
+
+    /// A disclosure whose open state is owned by the caller.
+    pub fn disclosure_toggle(ui: &mut egui::Ui, title: &str, open: bool) -> bool {
+        let (r, resp) = ui.allocate_exact_size(vec2(ui.available_width(), ROW_H), Sense::click());
+        let st = control_state(ui, &resp, false);
         let ink = match st {
             State::Off => OFF,
             State::Hover | State::Press | State::Focus => INK,
@@ -1194,7 +1216,7 @@ pub mod molecules {
         chevron(ui.painter(), pos2(r.min.x + 12.0, r.center().y), open, ink);
         let g = ui.painter().layout_no_wrap(title.to_owned(), caption_font(), ink);
         leading(ui.painter(), r, r.min.x + 22.0, g, ink);
-        open.then(|| body(ui))
+        resp.clicked()
     }
     pub fn list_row(ui: &mut egui::Ui, height: f32, selected: bool) -> (Rect, egui::Response) {
         let (rect, resp) =

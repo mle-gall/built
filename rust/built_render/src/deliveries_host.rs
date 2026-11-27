@@ -1150,7 +1150,20 @@ fn delivery_action(win: &Bound<'_, PyAny>, view: &Bound<'_, PyAny>, arg: &str) -
                 export_form(win, Some(key.str()?.to_string()), false, "ifc")?;
             }
             "delete" => {
-                run_command(py, &history, "delete_delivery", &[("key", &key)].into_py_dict(py)?)?;
+                let record = deliveries(py)?.call_method1("records", (vp.getattr("scene")?,))?.get_item(&key)?;
+                let question = format!("Remove {} from the kept deliveries?", record.get_item("name")?);
+                let (key, history, view) = (key.unbind(), history.unbind(), view.clone().unbind());
+                let done = crate::settings_rows::func(py, move |py, args| {
+                    if args.get_item(0)?.eq("delete")? {
+                        run_command(py, history.bind(py), "delete_delivery", &[("key", key.bind(py))].into_py_dict(py)?)?;
+                        view.bind(py).setattr("_ui_tree_sig", py.None())?;
+                        view.bind(py).call_method0("update")?;
+                    }
+                    Ok(py.None())
+                })?;
+                let opts = [("default", "cancel"), ("cancel", "cancel"), ("discard", "delete")].into_py_dict(py)?;
+                dialogs(py)?.getattr("ask_later")?.call((win, "Delete delivery?", question,
+                    [("cancel", "Cancel"), ("delete", "Delete delivery")], done), Some(&opts))?;
             }
             _ => {}
         }

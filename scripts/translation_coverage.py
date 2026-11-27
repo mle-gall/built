@@ -21,7 +21,7 @@ CALL = re.compile(
     r'\b(?:tr|tr_fn|t|translate)\s*\.\s*call1?\s*\(\s*\(\s*|'
     r'(?:call_method1?\s*\(\s*"tr"\s*,|getattr\("tr"\)\?\.call1?\()\s*\(\s*|'
     r'\b(?:label|button|hint_text|on_hover_text|RichText::new)\(\s*|'
-    r'kit::(?:caption|quiet|primary|secondary|empty_state)\(\s*ui,\s*)$'
+    r'kit::(?:caption|quiet|primary|secondary|empty_state|row_link|panel_button|sheet_button)\(\s*ui,\s*)$'
 )
 RUST_TOKEN = re.compile(
     r"""//[^\n]*|/\*.*?\*/|'(?:\\.|[^'\\\n])'|r(?P<hash>\#*)"(?P<raw>.*?)"(?P=hash)|"(?:\\.|[^"\\])*" """.strip(),
