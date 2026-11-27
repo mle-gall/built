@@ -219,7 +219,7 @@ fn place_group_tool_offset<'py>(a: &Args<'py>) -> Reply<'py> {
     tool.call_method1("_point", ("offset",))
 }
 fn sweep_key(code:i32)->Option<&'static str>{
-    match code{0x1000001=>Some("Tab"),82=>Some("R"),70=>Some("F"),76=>Some("L"),0x1000004|0x1000005=>Some("Enter"),_=>None}
+    match code{0x1000001=>Some("Tab"),82=>Some("R"),70=>Some("F"),76=>Some("L"),68=>Some("D"),0x1000004|0x1000005=>Some("Enter"),_=>None}
 }
 fn sweep_claims<'p>(a:&Args<'p>)->Reply<'p>{
     let code=a.get_item(1)?.extract()?;

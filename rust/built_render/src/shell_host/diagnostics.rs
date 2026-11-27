@@ -242,12 +242,24 @@ pub(super) fn snapshot<'p>(h: &Bound<'p, Host>) -> PyResult<Bound<'p, PyDict>> {
     d.set_item("sketch", crate::sketch_workspace::state(&w)?)?;
     let rows = py.import("built_core.command_protocol")?.call_method1("live_rows", (&scene,))?;
     let sketches = PyList::empty(py);
+    let sweeps = PyList::empty(py);
     for r in rows.try_iter()? {
         let r = r?;
         if r.get_item("kind")?.eq("sketch")? {
             sketches.append(r)?;
+        } else if r.get_item("kind")?.eq("sweep")? {
+            sweeps.append(r)?;
         }
     }
     d.set_item("sketch_rows", sketches)?;
+    d.set_item("sweep_rows", sweeps)?;
+    // The Sweep tool's chip (preset · profile · attachment · rotation).
+    let chip = w
+        .getattr_opt("_tools")?
+        .and_then(|t| t.get_item("sweep").ok())
+        .and_then(|t| t.getattr("_machine").ok())
+        .and_then(|m| m.call_method0("state").ok())
+        .and_then(|s| s.get_item("chip").ok());
+    d.set_item("sweep_chip", chip.unwrap_or_else(|| none(py)))?;
     Ok(d)
 }

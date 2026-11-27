@@ -5,12 +5,19 @@
 //! - `new` / `new:section`: a blank profile or section, no plane;
 //! - `face`: on the selected face's plane, its outline as the first curves
 //!   (a profile from the face), the model around it as context;
-//! - `import:<path>`: a DXF or SVG file (DWG through the LibreDWG bridge)
+//! - `import:<path>` (`import_sweep:<path>` from the Sweep picker, back to
+//!   Sweep on Done): a DXF or SVG file (DWG through the LibreDWG bridge)
 //!   into a new sketch with the clean-up list;
 //! - `open:<path>`: a Library `.builtprofile`;
 //! - `edit:<uid>`: a sketch row of this model;
 //! - `library:<json>`: a saved Library profile or section (its id is kept,
 //!   so saving it again is its next revision).
+//! - `sweep`: a new profile for the Sweep tool (Sweep › D): Done commits it
+//!   and returns to the Sweep tool with it in the chip, Cancel returns too;
+//! - `member[:<placement uid>]`: the profile of a swept member (double-click
+//!   its section face, right-click › Edit profile; the selected member when
+//!   no uid): its sketch row, or its catalogue size as a drawing that the
+//!   member takes as its profile on Done (`sketch_commit(adopt=…)`).
 //!
 //! Done runs `sketch_commit`: the row and every user of it in one History
 //! step. Save to Library opens the shared Save to Library drawer
@@ -137,9 +144,27 @@ fn context(py: Python<'_>, scene: &Obj<'_>, frame: &serde_json::Value) -> PyResu
     to_value(&c)
 }
 
-fn enter_with(win: &Obj<'_>, mut spec: serde_json::Value) -> PyResult<bool> {
+/// What the workspace returns to and which members Done re-points: kept on
+/// the window from entering to Done or Cancel (`then`, `adopt`).
+const SESSION: &str = "_sketch_session";
+
+fn session(win: &Obj<'_>) -> serde_json::Value {
+    win.getattr_opt(SESSION)
+        .ok()
+        .flatten()
+        .and_then(|v| v.extract::<String>().ok())
+        .and_then(|t| serde_json::from_str(&t).ok())
+        .unwrap_or(serde_json::Value::Null)
+}
+
+fn enter_with(win: &Obj<'_>, spec: serde_json::Value) -> PyResult<bool> {
+    enter_session(win, spec, serde_json::Value::Null)
+}
+
+fn enter_session(win: &Obj<'_>, mut spec: serde_json::Value, then: serde_json::Value) -> PyResult<bool> {
     let py = win.py();
     let Some(r) = renderer(win)? else { return Ok(false) };
+    win.setattr(SESSION, then.to_string())?;
     if spec["crumbs"].is_null() {
         spec["crumbs"] = serde_json::json!(crumbs(win)?);
     }
@@ -177,7 +202,7 @@ fn row_frame(scene: &Obj<'_>, row: &serde_json::Value) -> PyResult<serde_json::V
 fn users_text(py: Python<'_>, rows: &[serde_json::Value], uid: &str) -> String {
     let n = rows
         .iter()
-        .filter(|r| r["inputs"].as_array().is_some_and(|i| i.iter().any(|x| x["row"] == uid)))
+        .filter(|r| r["profile"]["sketch"] == uid || r["inputs"].as_array().is_some_and(|i| i.iter().any(|x| x["row"] == uid)))
         .count();
     match n {
         0 => String::new(),
@@ -212,6 +237,59 @@ pub fn enter(win: &Obj<'_>, how: &str, arg: &str) -> PyResult<bool> {
             Ok(entered)
         }
         "new" => enter_with(win, serde_json::json!({"use": if arg == "section" { "section" } else { "profile" }})),
+        "sweep" => {
+            let mut crumbs = crumbs(win)?;
+            crumbs.push(tr(py, "Sweep"));
+            crumbs.push(tr(py, "New profile"));
+            enter_session(win, serde_json::json!({"use": "profile", "crumbs": crumbs}), serde_json::json!({"then": "sweep"}))
+        }
+        "member" => {
+            let owner = if arg.is_empty() {
+                let sel = scene.getattr("selection")?;
+                let mut found = None;
+                for item in sel.try_iter()? {
+                    let item = item?;
+                    if let Some(uid) = item.getattr_opt("uid")?.and_then(|u| u.extract::<String>().ok()) {
+                        found = Some(uid);
+                        break;
+                    }
+                }
+                found
+            } else {
+                Some(arg.to_owned())
+            };
+            let api = protocol(py)?;
+            let row = match owner {
+                Some(uid) => to_value(&api.call_method1("live_sweep", (&scene, uid))?)?,
+                None => serde_json::Value::Null,
+            };
+            if row.is_null() {
+                win.call_method1("notify", ("info", tr(py, "Select a swept member to edit its profile")))?;
+                return Ok(false);
+            }
+            if let Some(uid) = row["profile"]["sketch"].as_str() {
+                return enter(win, "edit", uid);
+            }
+            let key = row["profile"]["library"].as_str().unwrap_or("");
+            let sketch = to_value(&api.call_method1("profile_sketch", (key,))?)?;
+            if sketch.is_null() {
+                win.call_method1("notify", ("info", tr(py, "This member's profile cannot be drawn")))?;
+                return Ok(false);
+            }
+            let mut crumbs = crumbs(win)?;
+            if let Some(name) = scene.call_method0("groups_by_uid").ok().and_then(|all| all.get_item(row["owner"].as_str().unwrap_or("")).ok()).and_then(|g| g.getattr("name").ok()?.extract::<String>().ok()) {
+                crumbs.push(name);
+            }
+            let size = row["profile_name"].as_str().unwrap_or("").to_owned();
+            if crumbs.last() != Some(&size) {
+                crumbs.push(size);
+            }
+            enter_session(
+                win,
+                serde_json::json!({"sketch": sketch, "crumbs": crumbs, "users": tr(py, "1 element")}),
+                serde_json::json!({"adopt": [row["uid"]]}),
+            )
+        }
         "face" | "section" => {
             // `arg`: empty for the selected face, or `<uid>/<uid>…|f:<id>`
             // (scripts and a row's plane reference).
@@ -258,7 +336,7 @@ pub fn enter(win: &Obj<'_>, how: &str, arg: &str) -> PyResult<bool> {
                 }),
             )
         }
-        "import" => {
+        "import" | "import_sweep" => {
             let path = PathBuf::from(arg);
             let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
             let shown = path.file_name().and_then(|n| n.to_str()).unwrap_or(arg).to_owned();
@@ -286,7 +364,8 @@ pub fn enter(win: &Obj<'_>, how: &str, arg: &str) -> PyResult<bool> {
             };
             let mut crumbs = crumbs(win)?;
             crumbs.push(tr(py, "Import"));
-            let done = enter_with(win, serde_json::json!({"import": readable, "import_name": shown, "crumbs": crumbs}));
+            let then = if how == "import_sweep" { serde_json::json!({"then": "sweep"}) } else { serde_json::Value::Null };
+            let done = enter_session(win, serde_json::json!({"import": readable, "import_name": shown, "crumbs": crumbs}), then);
             if let Some(t) = temp {
                 // The workspace read it on entering.
                 let _ = py.import("built_core.formats.dwg_bridge")?.call_method1("discard_temp_dxf", (t,));
@@ -337,8 +416,12 @@ pub fn action(win: &Obj<'_>, arg: &str) -> PyResult<()> {
     match verb {
         "done" => {
             let row: serde_json::Value = serde_json::from_str(payload).map_err(|e| PyValueError::new_err(e.to_string()))?;
+            let then = session(win);
             let kwargs = PyDict::new(py);
             kwargs.set_item("row", json(py, &row)?)?;
+            if let Some(adopt) = then["adopt"].as_array().filter(|a| !a.is_empty()) {
+                kwargs.set_item("adopt", json(py, &serde_json::json!(adopt))?)?;
+            }
             let history = vp.getattr("history")?;
             let reply = protocol(py)?.getattr("run")?.call((&history, "sketch_commit"), Some(&kwargs));
             match reply {
@@ -349,6 +432,11 @@ pub fn action(win: &Obj<'_>, arg: &str) -> PyResult<()> {
                     let state = rows.iter().find(|r| r["uid"] == uid.as_str()).and_then(|r| r["state"].as_str()).unwrap_or("").to_owned();
                     let users = users_text(py, &rows, &uid);
                     let name = row["name"].as_str().filter(|n| !n.is_empty()).map(str::to_owned).unwrap_or_else(|| tr(py, "Sketch"));
+                    win.setattr(SESSION, py.None())?;
+                    if then["then"] == "sweep" {
+                        let named = row["name"].as_str().filter(|n| !n.is_empty()).map(str::to_owned).unwrap_or_else(|| tr(py, "The drawn profile"));
+                        return back_to_sweep(win, rows.iter().find(|r| r["uid"] == uid.as_str()), &named, &state);
+                    }
                     let text = match (state.as_str(), users.is_empty()) {
                         ("profile_open", _) => format!("{name} {}", tr(py, "saved, not closed yet: its users keep their last profile")),
                         (_, true) => format!("{name} {}", tr(py, "saved in this model")),
@@ -371,6 +459,11 @@ pub fn action(win: &Obj<'_>, arg: &str) -> PyResult<()> {
             }
         }
         "cancel" => {
+            let then = session(win);
+            if then["then"] == "sweep" {
+                back_to_sweep(win, None, "", "")?;
+            }
+            let kept = then.clone();
             let w = win.clone().unbind();
             let back = pyo3::types::PyCFunction::new_closure(py, None, None, move |args, _| -> PyResult<()> {
                 let py = args.py();
@@ -379,7 +472,7 @@ pub fn action(win: &Obj<'_>, arg: &str) -> PyResult<()> {
                     let spec = r.call_method0("ui_sketch_discarded")?;
                     if !spec.is_none() {
                         let spec: serde_json::Value = serde_json::from_str(&spec.extract::<String>()?).map_err(|e| PyValueError::new_err(e.to_string()))?;
-                        enter_with(win, spec)?;
+                        enter_session(win, spec, kept.clone())?;
                     }
                 }
                 Ok(())
@@ -399,6 +492,25 @@ pub fn action(win: &Obj<'_>, arg: &str) -> PyResult<()> {
             crate::library_host::destinations::save_to_library(win, if section { "sections" } else { "profiles" }, &file.name, &data.to_string(), Some(id), rev, "", None, None, None, None, None)?;
         }
         _ => {}
+    }
+    Ok(())
+}
+
+/// Back to the Sweep tool after Sweep › D: with the committed profile in
+/// its chip, or as it was (Cancel, or a profile that is not closed yet).
+fn back_to_sweep(win: &Obj<'_>, row: Option<&serde_json::Value>, name: &str, state: &str) -> PyResult<()> {
+    let py = win.py();
+    win.call_method1("_activate_tool", ("sweep",))?;
+    let Some(row) = row else { return Ok(()) };
+    let machine = win.getattr("_tools")?.get_item("sweep")?.getattr("_machine")?;
+    let taken = state == "ok" && machine.call_method1("set", ("sketch", json(py, row)?))?.is_truthy()?;
+    if taken {
+        win.call_method1("notify", ("success", format!("{name} {}", tr(py, "is the Sweep profile"))))?;
+    } else {
+        win.call_method1("notify", ("warning", format!("{name} {}", tr(py, "is saved in this model, but it is not a closed profile yet: Sweep keeps its profile"))))?;
+    }
+    if let Ok(view) = view_of(win) {
+        view.call_method0("update")?;
     }
     Ok(())
 }

@@ -901,6 +901,10 @@ fn glue(
             }
         }
         "savepreset" => crate::library_host::capture_preset(win,first()?)?,
+        "editprofile" => {
+            let uid: String = first()?.getattr("uid")?.extract()?;
+            crate::sketch_workspace::enter(win, "member", &uid)?;
+        }
         "rename" => ask_rename(win, view, first()?)?,
         "edittext" => edit_text(win, view)?,
         _ => return Err(PyKeyError::new_err(name.to_owned())),

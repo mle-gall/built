@@ -410,7 +410,7 @@ pub fn menu_rows(f: &Facts, kind: &str) -> Vec<Row> {
         }
         "group" | "component" => {
             if f.repeat_copy {r.one(vec![e("skiprepeat","Skip this copy")]);}
-            if f.live { r.one(vec![e("savepreset","Save as preset…")]); }
+            if f.live { r.one(vec![e("editprofile","Edit profile"),e("savepreset","Save as preset…")]); }
             r.one(vec![ek("open", "Open for editing", "double-click")]);
             r.one(vec![e("rename", "Rename…")]);
             let mut visibility = vec![e("hide", "Hide")];
@@ -734,6 +734,7 @@ pub fn dispatch(kind: &str, id: &str) -> (&'static str, String, String) {
         "open" => tree("open"),
         "skiprepeat" => glue("skiprepeat", ""),
         "savepreset" => glue("savepreset",""),
+        "editprofile" => glue("editprofile",""),
         "rename" => glue("rename", ""),
         "lock" => glue("lock", ""),
         "explode" => slot("_on_explode_group", ""),

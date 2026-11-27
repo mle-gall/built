@@ -162,6 +162,16 @@ impl SweepTool {
             )
         })
     }
+    /// The profile the chip names: a drawing by its name, a size by its label.
+    fn profile_name(&self) -> &str {
+        self.profile
+            .drawing
+            .as_ref()
+            .and_then(|d| d["name"].as_str())
+            .filter(|n| !n.is_empty())
+            .or_else(|| label(&self.profile.library))
+            .unwrap_or(if self.profile.drawing.is_some() { "Drawn profile" } else { "Sweep" })
+    }
     fn preset(&self) -> &str {
         if let Some(name) = self.chosen.as_ref().and_then(|p| p["name"].as_str()) {
             return name;
@@ -256,7 +266,7 @@ impl Tool for SweepTool {
         } else {
             None
         };
-        json!({"section_inset":inset,"length":self.start.zip(self.hover).map(|(a,b)|DVec3::from(a).distance(b.into())),"start_point":self.start,"hover_point":self.hover,"profile":self.profile.library,"chip":format!("{} · {} · {} · {}°{}",self.preset(),label(&self.profile.library).unwrap_or("Sweep"),self.attachment_name(),self.rotation,if self.mirror{" · ↔"}else{""}),"attachment":self.attachment_name(),"rotation":self.rotation,"mirror":self.mirror})
+        json!({"section_inset":inset,"length":self.start.zip(self.hover).map(|(a,b)|DVec3::from(a).distance(b.into())),"start_point":self.start,"hover_point":self.hover,"profile":self.profile.library,"chip":format!("{} · {} · {} · {}°{}",self.preset(),self.profile_name(),self.attachment_name(),self.rotation,if self.mirror{" · ↔"}else{""}),"attachment":self.attachment_name(),"rotation":self.rotation,"mirror":self.mirror})
     }
     fn set(&mut self, key: &str, value: &Json) -> bool {
         match key {
@@ -441,6 +451,11 @@ impl Tool for SweepTool {
                 "f" => self.mirror = !self.mirror,
                 "l" => {
                     host.call("sweep_picker", Json::Null);
+                }
+                // Draw the profile now: the Sketch workspace, then back here
+                // with it in the chip (sketch_workspace.rs, `sketch:sweep`).
+                "d" if self.start.is_none() && self.edit.is_none() => {
+                    host.call("sweep_draw", Json::Null);
                 }
                 "enter" | "return" => {
                     if let Ok(paths) = serde_json::from_value(host.call("sweep_edges", Json::Null))
