@@ -46,7 +46,10 @@ fn big(b: &[f64; 6]) -> f64 {
 }
 
 pub(crate) fn grown_ring_box(scan: &MeshScan, f: usize, pad: f64, rel: f64) -> [f64; 6] {
-    let mut b = ring_box(scan, f);
+    grow_box(ring_box(scan, f), pad, rel)
+}
+
+pub(crate) fn grow_box(mut b: [f64; 6], pad: f64, rel: f64) -> [f64; 6] {
     if b[0].is_finite() {
         let diagonal = ((b[3] - b[0]).powi(2) + (b[4] - b[1]).powi(2) + (b[5] - b[2]).powi(2)).sqrt();
         let g = pad + rel * diagonal + slack(big(&b));

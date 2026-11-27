@@ -114,7 +114,7 @@ impl Store {
                 .iter()
                 .filter(|&&f| self.state.fflags.get(f as usize) & INTERIOR == 0),
         ) {
-            if !seen.insert(f) || !self.may_meet_cap(f, o, n, tol) {
+            if !self.may_meet_cap(f, o, n, tol) || !seen.insert(f) {
                 continue;
             }
             let rings = self.face_rings(f);

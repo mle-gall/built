@@ -106,6 +106,7 @@ struct Cache {
     comp_token: i64,
     scope: Option<Scope>,
     scope_token: i64,
+    blocks: Option<(i64, FaceBlocks)>,
     packed: Option<(i64, Option<Vec<u128>>, Option<BTreeSet<u32>>, Option<RayWindow>, Tris)>,
     dropped: Vec<[V3; 2]>,
     frames: HashMap<u128, (V3, V3)>,
@@ -178,6 +179,45 @@ impl RayWindow {
             }
         }
         sides.into_iter().all(|yes| yes)
+    }
+}
+
+/// Conservative bounds over consecutive batches of face slots. Inner rings
+/// participate just as in RayWindow::intersects. Keep list order so the
+/// indexed surface has exactly the reference triangle and owner order.
+struct FaceBlocks {
+    faces: Vec<u32>,
+    bounds: Vec<([f64; 3], [f64; 3])>,
+}
+
+impl FaceBlocks {
+    const BLOCK: usize = 64;
+    fn new(store: &Store) -> Self {
+        let faces = store.live_slots(Kind::Face);
+        let st = &store.state;
+        let bounds = faces.chunks(Self::BLOCK).map(|batch| {
+            let (mut lo, mut hi) = ([f64::INFINITY; 3], [f64::NEG_INFINITY; 3]);
+            for &f in batch {
+                let r = st.frings.get(f as usize);
+                let count: usize = (0..r.n_rings)
+                    .map(|i| *st.ring_sizes.get((r.ring_start + i) as usize) as usize).sum();
+                for i in r.corner_start as usize..r.corner_start as usize + count {
+                    let p = st.vpos.get(*st.corners.get(i) as usize);
+                    for k in 0..3 {
+                        lo[k] = lo[k].min(p[k]); hi[k] = hi[k].max(p[k]);
+                    }
+                }
+            }
+            (lo, hi)
+        }).collect();
+        Self { faces, bounds }
+    }
+
+    fn candidates(&self, window: RayWindow) -> impl Iterator<Item = u32> + '_ {
+        self.faces.chunks(Self::BLOCK).zip(&self.bounds)
+            .filter(move |(_, (lo, hi))| window.axes.iter().enumerate()
+                .all(|(i, &k)| hi[k] >= window.lo[i] && lo[k] <= window.hi[i]))
+            .flat_map(|(batch, _)| batch.iter().copied())
     }
 }
 
@@ -370,10 +410,18 @@ impl Store {
             self.components(cache);
         }
         let comp = cache.comp.as_ref();
-        let faces: Vec<u32> = self
-            .live_slots(Kind::Face)
-            .into_iter()
-            .filter(|&f| window.is_none_or(|w| w.intersects(self, f)) && !shadowed.contains(&f))
+        let candidates: Vec<u32> = match window {
+            Some(w) => {
+                if cache.blocks.as_ref().is_none_or(|(token, _)| *token != cache.token) {
+                    cache.blocks = Some((cache.token, FaceBlocks::new(self)));
+                }
+                cache.blocks.as_ref().unwrap().1.candidates(w)
+                    .filter(|&f| w.intersects(self, f)).collect()
+            }
+            None => self.live_slots(Kind::Face),
+        };
+        let faces: Vec<u32> = candidates.into_iter()
+            .filter(|f| !shadowed.contains(f))
             .filter(|&f| match &want {
                 None => true,
                 Some(w) => comp
@@ -988,7 +1036,7 @@ mod window_tests {
     #[test]
     fn pruned_and_full_parity_give_identical_cap_edits() {
         let mut random = PyRandom::new(421);
-        for round in 0..32 {
+        for round in 0..224 {
             let mut model = Store::empty(2, Default::default());
             let mut fresh = PySet::new();
             let mut ch = Change::default();
@@ -1023,9 +1071,19 @@ mod window_tests {
                     }
                 }
             }
+            // A sheet with an opening supplies an inner ring to the cap
+            // arrangement. Several solids supply competing paint donors.
+            let at = |x, y| [x, y, 0.0];
+            model.add_face(&[
+                vec![at(11.,0.), at(15.,0.), at(15.,4.), at(11.,4.)],
+                vec![at(12.,1.), at(12.,3.), at(14.,3.), at(14.,1.)],
+            ], &mut ch).unwrap();
+            let classes: HashMap<_, _> = model.live_slots(Kind::Face).into_iter()
+                .filter(|f| f % 3 != 0)
+                .map(|f| (model.key(Kind::Face, f), 1 + f % 5)).collect();
             let apply = |mut model: Store, window_min_faces| {
                 let mut ch = Change::default();
-                let mut paint = Paint::new(HashMap::new(), Vec::new());
+                let mut paint = Paint::new(classes.clone(), Vec::new());
                 let mut ctx = Ctx {
                     window_min_faces,
                     standalone: false,
@@ -1049,11 +1107,11 @@ mod window_tests {
                         &mut bumps,
                     )
                     .unwrap();
-                (model, ch, result, bumps)
+                (model, ch, result, bumps, paint.made, paint.order)
             };
-            let (reference, a, ra, ba) = apply(model.clone(), usize::MAX);
-            let (local, b, rb, bb) = apply(model, 0);
-            assert_eq!((a, ra, ba), (b, rb, bb));
+            let (reference, a, ra, ba, ma, oa) = apply(model.clone(), usize::MAX);
+            let (local, b, rb, bb, mb, ob) = apply(model, 0);
+            assert_eq!((a, ra, ba, ma, oa), (b, rb, bb, mb, ob));
             assert!(reference.state.same_as(&local.state));
         }
     }

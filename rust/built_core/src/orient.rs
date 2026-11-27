@@ -357,6 +357,8 @@ fn grown(lo: [f64; 3], hi: [f64; 3]) -> ([f64; 3], [f64; 3]) {
 struct Node {
     lo: [f64; 3],
     hi: [f64; 3],
+    // All triangle corners in this node share this axis coordinate.
+    plane: Option<(usize, f64)>,
     /// Leaf: `order[start..end]`; inner: children `kids`.
     start: u32,
     end: u32,
@@ -429,7 +431,8 @@ impl RayIndex {
             glo = [f64::NEG_INFINITY; 3];
             ghi = [f64::INFINITY; 3];
         }
-        let mut root = Node { lo: glo, hi: ghi, start: base as u32, end: (base + len) as u32, kids: [0, 0], leaf: true };
+        let plane = (0..3).find(|&k| lo[k] == hi[k]).map(|k| (k, lo[k]));
+        let mut root = Node { plane, lo: glo, hi: ghi, start: base as u32, end: (base + len) as u32, kids: [0, 0], leaf: true };
         if len <= LEAF {
             return Sub { nodes: vec![root] };
         }
@@ -536,6 +539,9 @@ impl RayIndex {
         stack.push((0, all));
         while let Some((ni, live)) = stack.pop() {
             let n = &self.nodes[ni as usize];
+            // In the Möller–Trumbore test the distance numerator is
+            // exactly zero for an origin on this axis-aligned plane.
+            if n.plane.is_some_and(|(k, x)| o[k] == x) { continue; }
             let mut m = 0u32;
             let mut bits = live;
             while bits != 0 {
