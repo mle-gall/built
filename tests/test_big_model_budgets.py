@@ -3,8 +3,9 @@
 root, another inside a group, nested assemblies, a yard of 3,000 parts and
 parts kilometres away (the extent of a site model).
 
-The shell's own Host draws offscreen in this process; each figure is the
-best of a few tries, so one hiccup of the machine does not decide it. On a
+The shell's own Host draws offscreen in this process. Push/Pull uses the
+median of three neighbouring pushes. Other edit figures use the best of
+three tries so one hiccup of the machine does not decide them. On a
 machine already busy (the full suite on every core) a miss is reported and
 skipped, with the figures, rather than failed: the quiet single-worker pass
 (``-m perf -p no:xdist``) is the one that holds them.
@@ -313,7 +314,7 @@ def test_big_model_interaction_budgets(tmp_path, model, x0):
             assert len(vp.scene.mesh.faces) > faces
             _key(host, Qt.Key_Escape.value)
         ms["move_commit_200k"] = min(moves)
-        ms["push_commit_200k"] = min(pushes)
+        ms["push_commit_200k"] = statistics.median(pushes)
 
     table = "\n".join(f"  {k:<24} {ms[k]:8.1f} ms  (budget {v} ms)" for k, v in BUDGET_MS.items())
     print("\nbig model budgets:\n" + table)
