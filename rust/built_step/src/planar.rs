@@ -2,7 +2,8 @@
 //! Piecewise planar solid representations. Coordinates at this boundary are metres.
 use glam::DVec3;
 use std::collections::{HashMap, HashSet};
-use step_io::build::{CurveInput, FaceBoundInput, Frame, Part, SurfaceInput};
+mod author;
+use step_io::build::{Frame, Part};
 use step_io::{
     scene::{CurveKind, Solid, SurfaceKind},
     Orientation, StepBuilder,
@@ -78,13 +79,8 @@ impl Body {
         part: Part,
         name: &str,
     ) -> Result<crate::Authored, String> {
-        let mut vertices = Vec::with_capacity(self.points.len());
-        for p in &self.points {
-            vertices.push(
-                b.vertex((*p * 1000.).to_array())
-                    .map_err(|e| e.to_string())?,
-            );
-        }
+        let mut author =
+            author::PlanarAuthor::new(b.author(), &self.points).map_err(|e| e.to_string())?;
         let mut edges = HashMap::new();
         let mut faces = Vec::new();
         let mut volume = 0.;
@@ -99,8 +95,11 @@ impl Body {
                     let key = (from.min(to), from.max(to));
                     let (edge, sense) = match edges.entry(key) {
                         std::collections::hash_map::Entry::Vacant(v) => {
-                            let e = b
-                                .edge(vertices[from], vertices[to], CurveInput::Line)
+                            let direction = (self.points[to] - self.points[from])
+                                .try_normalize()
+                                .ok_or("zero length edge")?;
+                            let e = author
+                                .edge(from, to, direction)
                                 .map_err(|e| e.to_string())?;
                             v.insert((e, from, i, false));
                             (e, Orientation::Forward)
@@ -116,18 +115,15 @@ impl Body {
                             (*e, Orientation::Reversed)
                         }
                     };
-                    uses.push((edge, sense));
+                    uses.push(
+                        author
+                            .oriented(edge, sense == Orientation::Forward)
+                            .map_err(|e| e.to_string())?,
+                    );
                 }
-                bounds.push(FaceBoundInput {
-                    edges: uses,
-                    outer: j == 0,
-                    orientation: Orientation::Forward,
-                });
+                bounds.push(author.bound(uses, j == 0).map_err(|e| e.to_string())?);
             }
-            faces.push(
-                b.face(SurfaceInput::Plane(plane), Orientation::Forward, bounds)
-                    .map_err(|e| e.to_string())?,
-            );
+            faces.push(author.face(&plane, bounds).map_err(|e| e.to_string())?);
         }
         if faces.is_empty() {
             return Err("empty shell".into());

@@ -275,8 +275,8 @@ fn save_step(scene: &Bound<'_, PyAny>, path: PathBuf) -> PyResult<()> {
                     _ => None,
                 })
                 .fold(1e-10_f64, f64::max);
-            built_step::write_checked(
-                &defs,
+            built_step::write_owned(
+                defs,
                 &path,
                 tol * 1000.,
                 |g, b, p, name| g.add(b, p, name, tol),

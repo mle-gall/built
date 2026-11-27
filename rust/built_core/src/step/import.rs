@@ -120,16 +120,33 @@ fn label(d: ProductDef<'_>) -> String {
         .unwrap_or_else(|| d.id().to_owned())
 }
 
+// Keep the source part separate from technical diagnostics, including names
+// that themselves contain punctuation or entity-like text.
+fn issue_kind(error: &PyErr) -> &'static str {
+    let why = error.to_string();
+    if why.contains("closed shell incidence") || why.contains("shell orientation") {
+        "shell"
+    } else if why.contains("trim")
+        || why.contains("boundary")
+        || why.contains("pcurve")
+        || why.contains("projected join")
+    {
+        "boundary"
+    } else {
+        "shape"
+    }
+}
+
 #[pyfunction]
 pub(super) fn prepare_step(py: Python<'_>, path: PathBuf) -> PyResult<Bound<'_, PyDict>> {
-    let bytes = std::fs::read(path)?;
-    let exchange = py.detach(|| built_step::read(&bytes)).map_err(bad)?;
+    let file = std::fs::File::open(path)?;
+    let exchange = py.detach(|| built_step::read_seek(&file)).map_err(bad)?;
     let model = &exchange.model;
     let scene = model.scene();
     let source_ids = std::cell::OnceCell::new();
     let label_entity = |key| {
         source_ids
-            .get_or_init(|| built_step::SourceIds::new(&bytes, &exchange))
+            .get_or_init(|| built_step::SourceIds::from_file(&file, &exchange))
             .label(model, key)
     };
     let contexts = super::units::Contexts::new(model).map_err(bad)?;
@@ -139,6 +156,7 @@ pub(super) fn prepare_step(py: Python<'_>, path: PathBuf) -> PyResult<Bound<'_, 
         .iter()
         .map(|(id, reason)| format!("#{id}: {reason}"))
         .collect();
+    let mut body_issues = Vec::new();
     let mut exact = 0;
     let mut accepted_solids = HashSet::new();
     let mut rejected = 0;
@@ -220,6 +238,7 @@ pub(super) fn prepare_step(py: Python<'_>, path: PathBuf) -> PyResult<Bound<'_, 
                     exact += 1
                 }
                 Err(e) => {
+                    body_issues.push((name.clone(), issue_kind(&e)));
                     problems.push(format!("{name} ({}): {e}", label_entity(solid.key())));
                     rejected += 1
                 }
@@ -252,6 +271,7 @@ pub(super) fn prepare_step(py: Python<'_>, path: PathBuf) -> PyResult<Bound<'_, 
                     }
                     Err(e) => {
                         rejected += 1;
+                        body_issues.push((name.clone(), issue_kind(&e)));
                         problems.push(format!("{name} ({}): {e}", label_entity(shell.key())));
                     }
                 }
@@ -360,6 +380,7 @@ pub(super) fn prepare_step(py: Python<'_>, path: PathBuf) -> PyResult<Bound<'_, 
     result.set_item("rejected", rejected)?;
     result.set_item("missing", missing)?;
     result.set_item("problems", problems)?;
+    result.set_item("body_issues", body_issues)?;
     result.set_item("synthetic_file_name", exchange.synthetic_file_name)?;
     Ok(result)
 }

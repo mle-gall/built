@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! Typed STEP exchange. Source bytes and Part 21 identifiers survive diagnostics.
-use std::io::Read;
+use std::io::{Cursor, Read, Seek};
 pub use step_io;
 use step_io::{Error, Report, StepModel};
 
@@ -11,15 +11,19 @@ pub struct Exchange {
 }
 
 pub fn read(source: &[u8]) -> Result<Exchange, Error> {
-    let (model, report, synthetic_file_name) = match step_io::read(source) {
+    read_seek(Cursor::new(source))
+}
+
+/// Keep the file outside the entity graph. Only a malformed header needs
+/// a derivative buffer, bounded to the same diagnostic header limit.
+pub fn read_seek(mut source: impl Read + Seek) -> Result<Exchange, Error> {
+    let (model, report, synthetic_file_name) = match step_io::read(&mut source) {
         Ok((model, report)) => (model, report, false),
         Err(e @ Error::MissingHeaderEntity { name: "FILE_NAME" }) => {
-            let Some(offset) = missing_name_offset(source) else {
+            let Some(input) = repaired(&mut source)? else {
                 return Err(e);
             };
-            const RECORD: &[u8] = b"\nFILE_NAME('','',(''),(''),'','','');\n";
-            let (model, report) =
-                step_io::read(source[..offset].chain(RECORD).chain(&source[offset..]))?;
+            let (model, report) = step_io::read(input)?;
             (model, report, true)
         }
         Err(e) => return Err(e),
@@ -29,6 +33,23 @@ pub fn read(source: &[u8]) -> Result<Exchange, Error> {
         report,
         synthetic_file_name,
     })
+}
+
+fn repaired<R: Read + Seek>(source: &mut R) -> Result<Option<impl Read + '_>, Error> {
+    source.rewind().map_err(Error::Io)?;
+    let mut head = Vec::new();
+    source
+        .take(1024 * 1024)
+        .read_to_end(&mut head)
+        .map_err(Error::Io)?;
+    let Some(i) = missing_name_offset(&head) else {
+        return Ok(None);
+    };
+    head.splice(
+        i..i,
+        b"\nFILE_NAME('','',(''),(''),'','','');\n".iter().copied(),
+    );
+    Ok(Some(Cursor::new(head).chain(source)))
 }
 
 fn missing_name_offset(source: &[u8]) -> Option<usize> {
@@ -114,6 +135,37 @@ pub fn write_checked<B>(
         f64,
     ) -> Result<Measure, String>,
 ) -> Result<(), String> {
+    let borrowed = definitions
+        .iter()
+        .map(|d| Definition {
+            name: d.name.clone(),
+            bodies: d.bodies.iter().collect(),
+            children: d.children.clone(),
+        })
+        .collect();
+    write_owned(
+        borrowed,
+        path,
+        uncertainty_mm,
+        |body, b, part, name| add(*body, b, part, name),
+        measure,
+        measure_sheet,
+    )
+}
+
+pub fn write_owned<B>(
+    definitions: Vec<Definition<B>>,
+    path: &Path,
+    uncertainty_mm: f64,
+    add: impl Fn(&B, &mut step_io::StepBuilder, step_io::build::Part, &str) -> Result<Authored, String>,
+    measure: impl Fn(&StepModel, step_io::scene::Solid<'_>, f64) -> Result<Measure, String>,
+    measure_sheet: impl Fn(
+        &StepModel,
+        step_io::scene::Shell<'_>,
+        step_io::Orientation,
+        f64,
+    ) -> Result<Measure, String>,
+) -> Result<(), String> {
     let mut builder = step_io::StepBuilder::new_with(&step_io::build::UnitsInput {
         uncertainty: uncertainty_mm,
         ..Default::default()
@@ -123,7 +175,8 @@ pub fn write_checked<B>(
     let mut volumes = Vec::new();
     let mut items = Vec::new();
     let mut placements = Vec::new();
-    for (definition, &part) in definitions.iter().zip(&parts) {
+    let occurrence_count: usize = definitions.iter().map(|d| d.children.len()).sum();
+    for (definition, &part) in definitions.into_iter().zip(&parts) {
         let mut row = Vec::new();
         for body in &definition.bodies {
             let Authored(metric, item) = add(body, &mut builder, part, &definition.name)?;
@@ -201,7 +254,7 @@ pub fn write_checked<B>(
             .all_product_definitions()
             .map(|d| d.occurrences().count())
             .sum::<usize>()
-            != definitions.iter().map(|d| d.children.len()).sum::<usize>()
+            != occurrence_count
         || restored.len() != volumes.len()
         || restored.iter().zip(&volumes).any(|(a, b)| {
             let (ak, a) = a.ordered();
@@ -219,27 +272,34 @@ pub fn write_checked<B>(
 /// entity arena in ascending Part 21 id order after dropping unresolved rows.
 pub struct SourceIds(std::collections::HashMap<String, Vec<u64>>);
 impl SourceIds {
-    pub fn new(bytes: &[u8], exchange: &Exchange) -> Self {
+    pub fn from_file(mut file: &std::fs::File, exchange: &Exchange) -> Self {
         use std::collections::{HashMap, HashSet};
         let mut ids = HashMap::<String, Vec<u64>>::new();
         let dropped: HashSet<_> = exchange.report.dropped.iter().map(|r| r.0).collect();
-        let offset = exchange
-            .synthetic_file_name
-            .then(|| missing_name_offset(bytes))
-            .flatten();
-        let mut input: Box<dyn Read + '_> = if let Some(i) = offset {
-            Box::new(
-                (&bytes[..i])
-                    .chain(b"\nFILE_NAME('','',(''),(''),'','','');\n".as_slice())
-                    .chain(&bytes[i..]),
-            )
+        let mut input: Box<dyn Read + '_> = if exchange.synthetic_file_name {
+            match repaired(&mut file) {
+                Ok(Some(input)) => Box::new(input),
+                _ => return Self(ids),
+            }
         } else {
-            Box::new(bytes)
+            if file.rewind().is_err() {
+                return Self(ids);
+            }
+            Box::new(file)
         };
         if let Ok(stream) = step_io::parser::stream(&mut input) {
             for record in stream {
                 if let Ok(step_io::parser::RawEntity::Simple { id, name, .. }) = record {
-                    if !dropped.contains(&id) {
+                    if matches!(
+                        name.as_str(),
+                        "MANIFOLD_SOLID_BREP"
+                            | "BREP_WITH_VOIDS"
+                            | "CLOSED_SHELL"
+                            | "OPEN_SHELL"
+                            | "SHELL_BASED_SURFACE_MODEL"
+                            | "MAPPED_ITEM"
+                    ) && !dropped.contains(&id)
+                    {
                         ids.entry(name).or_default().push(id);
                     }
                 }
