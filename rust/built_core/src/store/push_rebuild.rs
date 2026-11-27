@@ -101,6 +101,7 @@ type Scope = (std::sync::Arc<[u32]>, std::sync::Arc<[u32]>);
 
 #[derive(Default)]
 struct Cache {
+    index: Option<std::sync::Arc<super::face_index::FaceIndex>>,
     token: i64,
     seeds: Vec<u128>,
     comp: Option<Vec<u32>>,
@@ -186,14 +187,16 @@ impl RayWindow {
 /// Conservative bounds over consecutive batches of face slots. Inner rings
 /// participate just as in RayWindow::intersects. Keep list order so the
 /// indexed surface has exactly the reference triangle and owner order.
-struct FaceBlocks {
-    faces: Vec<u32>,
-    bounds: Vec<([f64; 3], [f64; 3])>,
+#[derive(Clone)]
+pub(super) struct FaceBlocks {
+    extra:Vec<u32>,
+    faces: std::sync::Arc<[u32]>,
+    bounds: std::sync::Arc<[([f64; 3], [f64; 3])]>,
 }
 
 impl FaceBlocks {
     const BLOCK: usize = 64;
-    fn new(store: &Store) -> Self {
+    pub(super) fn new(store: &Store) -> Self {
         let faces = store.live_slots(Kind::Face);
         let st = &store.state;
         let bounds = faces.chunks(Self::BLOCK).map(|batch| {
@@ -215,11 +218,11 @@ impl FaceBlocks {
             }
             (lo, hi)
         }).collect();
-        Self { faces, bounds }
+        Self { faces:faces.into(), bounds, extra:Vec::new() }
     }
 
     fn candidates(&self, window: RayWindow) -> impl Iterator<Item = u32> + '_ {
-        self.faces.chunks(Self::BLOCK).zip(&self.bounds)
+        self.faces.chunks(Self::BLOCK).zip(self.bounds.iter())
             .filter(move |(_, (lo, hi))| window.axes.iter().enumerate()
                 .all(|(i, &k)| hi[k] >= window.lo[i] && lo[k] <= window.hi[i]))
             .flat_map(|(batch, _)| batch.iter().copied())
@@ -373,12 +376,15 @@ impl Store {
             return;
         }
         let mut edges = self.live_slots(Kind::Edge);
-        let comp = self.cap_labels(&edges);
+        let comp = match &cache.index {
+            Some(i)=>i.cap.get_or_init(||super::cap_blocks::CapBlocks::new(self)).labels(self),
+            None=>self.cap_labels(&edges),
+        };
         let wanted = self.cap_members(&cache.seeds,&comp);
         cache.scope = wanted.iter().any(|w| *w).then(|| {
             let mut faces = self.live_slots(Kind::Face);
             faces.retain(|&f| wanted[comp[f as usize] as usize]);
-            edges.retain(|&e| self.scoped_edge(e,&comp,&wanted));
+            if faces.len()!=self.n(Kind::Face){edges.retain(|&e| self.scoped_edge(e,&comp,&wanted));}
             (faces.into(),edges.into())
         });
         cache.scope_token = cache.token;
@@ -399,7 +405,15 @@ impl Store {
 
     fn face_blocks<'a>(&self, cache: &'a mut Cache) -> &'a FaceBlocks {
         if cache.blocks.as_ref().is_none_or(|(token, _)| *token != cache.token) {
-            cache.blocks = Some((cache.token, FaceBlocks::new(self)));
+            let blocks=if let Some(i)=&cache.index {
+                let base=i.cap.get_or_init(||super::cap_blocks::CapBlocks::new(self));
+                let mut b=base.faces.clone();
+                let delta=self.state.changes_since(&base.base);
+                b.extra=delta.created[2].iter().chain(&delta.modified[2])
+                    .filter_map(|&k|self.slot(Kind::Face,k)).collect();
+                if delta.moved.is_empty(){b}else{FaceBlocks::new(self)}
+            }else{FaceBlocks::new(self)};
+            cache.blocks = Some((cache.token, blocks));
         }
         &cache.blocks.as_ref().unwrap().1
     }
@@ -416,10 +430,13 @@ impl Store {
         let blocks = self.face_blocks(cache);
         let x = arr(origin)[k];
         let scale = (self.state.corners.len() as f64 + 4.) * f64::EPSILON * 4.;
-        blocks.faces.chunks(FaceBlocks::BLOCK).zip(&blocks.bounds).filter(|(_, (lo, hi))| {
+        let mut hits:Vec<_>=blocks.faces.chunks(FaceBlocks::BLOCK).zip(blocks.bounds.iter()).filter(|(_, (lo, hi))| {
             let pad = ON_PLANE + (lo[k].abs().max(hi[k].abs()) + x.abs() + 1.) * scale;
             !(lo[k] - x > pad || x - hi[k] > pad)
-        }).flat_map(|(faces, _)| faces.iter().copied()).collect()
+        }).flat_map(|(faces, _)| faces.iter().copied()).chain(blocks.extra.iter().copied())
+        .filter(|&f|self.alive(Kind::Face,f)).collect();
+        hits.sort_unstable_by_key(|&f|self.state.list_rank(Kind::Face,f));hits.dedup();
+        hits.into()
     }
 
     /// `cache.packed(mesh, shadowed, want)`.
@@ -441,8 +458,11 @@ impl Store {
         }
         let candidates: Vec<u32> = match window {
             Some(w) => {
-                self.face_blocks(cache).candidates(w)
-                    .filter(|&f| w.intersects(self, f)).collect()
+                let b=self.face_blocks(cache);
+                let mut faces:Vec<_>=b.candidates(w).chain(b.extra.iter().copied())
+                    .filter(|&f|self.alive(Kind::Face,f) && w.intersects(self,f)).collect();
+                faces.sort_unstable_by_key(|&f|self.state.list_rank(Kind::Face,f));faces.dedup();
+                faces
             }
             None => self.live_slots(Kind::Face),
         };
@@ -491,10 +511,22 @@ impl Store {
             let d = p.sub(origin);
             [d.dot(u, h), d.dot(w, h)]
         };
-        let plane_edges: Vec<u32> = scope_edges
-            .iter().copied()
-            .filter(|&e| self.edge_on_cap_plane(e, origin, n, ON_PLANE, h))
-            .collect();
+        let axis=(0..3).find(|&k|arr(n)[k].abs()==1. && arr(n)[(k+1)%3]==0. && arr(n)[(k+2)%3]==0.);
+        let local=axis.filter(|_|scope_edges.len()>=ctx.window_min_faces && scope_edges.len()==self.n(Kind::Edge)).and_then(|k|{
+            // Only the first endpoint can nominate its edge. Walking disks
+            // preserves loose edges and avoids testing every edge twice.
+            let mut candidates=Vec::new();
+            for (v,p) in self.state.vpos.iter().enumerate(){
+                if (p[k]-arr(origin)[k]).abs()>=ON_PLANE || !self.alive(Kind::Vertex,v as u32){continue;}
+                for e in self.edges_at(v as u32){
+                    if self.state.ends.get(e as usize)[0]==v as u32 && self.edge_on_cap_plane(e,origin,n,ON_PLANE,h){candidates.push(e);}
+                }
+                if candidates.len()>scope_edges.len()/16{return None}
+            }
+            candidates.sort_unstable_by_key(|&e|self.state.list_rank(Kind::Edge,e));
+            Some(candidates)
+        });
+        let plane_edges=local.unwrap_or_else(||scope_edges.iter().copied().filter(|&e|self.edge_on_cap_plane(e,origin,n,ON_PLANE,h)).collect());
         if plane_edges.len() < 3 {
             return Ok(None);
         }
@@ -943,6 +975,13 @@ impl Store {
         h: Hypot,
         ch: &mut Change,
     ) -> Result<Rebuilt, OpError> {
+        self.rebuild_push_indexed(fresh,seeds,keep,removing,paint,compensated,h,ch,None)
+    }
+
+    pub(super) fn rebuild_push_indexed(
+        &mut self,fresh:Fresh,seeds:&[[f64;3]],keep:bool,removing:bool,paint:&mut Paint,
+        compensated:bool,h:Hypot,ch:&mut Change,index:Option<std::sync::Arc<super::face_index::FaceIndex>>,
+    )->Result<Rebuilt,OpError>{
         let mut fresh: PySet = match fresh {
             Fresh::Listed(keys) => PySet::from_keys(keys),
             Fresh::Delta(keys) => keys,
@@ -962,7 +1001,7 @@ impl Store {
                 }
             }
         }
-        let mut cache = Cache { comp_token: -1, scope_token: -1, ..Cache::default() };
+        let mut cache = Cache { index, comp_token: -1, scope_token: -1, ..Cache::default() };
         let mut ctx = Ctx { window_min_faces: 8192, standalone: false, h, compensated, keep, removing, metrics: Metrics::native(compensated), paint };
         let mut bumps = 0;
         for round in 0..4 {
@@ -1113,7 +1152,7 @@ mod window_tests {
     #[test]
     fn pruned_and_full_parity_give_identical_cap_edits() {
         let mut random = PyRandom::new(421);
-        for round in 0..224 {
+        for round in 0..320 {
             let mut model = Store::empty(2, Default::default());
             let mut fresh = PySet::new();
             let mut ch = Change::default();
@@ -1172,13 +1211,23 @@ mod window_tests {
                     paint: &mut paint,
                 };
                 let mut bumps = 0;
+                let mut cache=Cache::default();
+                if window_min_faces==0 {
+                    // Start from a different revision, as on the second push.
+                    let mut before=model.clone();
+                    let gone=*before.live_slots(Kind::Face).last().unwrap();
+                    before.remove_face(gone,&mut Change::default());
+                    let index=super::super::face_index::FaceIndex::build(&before);
+                    index.cap.get_or_init(||super::super::cap_blocks::CapBlocks::new(&before));
+                    cache.index=Some(std::sync::Arc::new(index));
+                }
                 let result = model
                     .apply_cap_rebuild(
                         V3(0., 0., 0.),
-                        V3(0., 0., 1.),
+                        if round<224 {V3(0.,0.,1.)}else if round%2==0{V3(1.,0.,0.)}else{V3(0.,1.,0.)},
                         &fresh,
                         &mut Vec::new(),
-                        &mut Cache::default(),
+                        &mut cache,
                         &mut ctx,
                         &mut ch,
                         &mut bumps,

@@ -182,7 +182,7 @@ fn on_face(g: &Geom, f: usize, outer: &[u32], p: V3) -> bool {
 }
 
 /// `built_core.orient._interior_probe(face)`.
-fn interior_probe(g: &Geom, f: usize, rings: &[&[u32]]) -> V3 {
+pub(crate) fn interior_probe(g: &Geom, f: usize, rings: &[&[u32]]) -> V3 {
     let h = g.h;
     let outer: &[u32] = rings.first().copied().unwrap_or(&[]);
     if rings.len() <= 1 {
@@ -866,6 +866,49 @@ fn incoherent(scan: &MeshScan, faces: &[u32], flipped: &[bool]) -> usize {
     uses.values().filter(|(c, d)| *c == 2 && d.0 != u32::MAX).count()
 }
 
+/// Axis-aligned probes whose jitter cones can reach nonplanar geometry.
+type Slab = (usize, [f64;3], [f64;3]);
+fn sheet_queries(g:&Geom, scope:&[u32], probes:&[V3], jitter:f64)->Option<(Vec<bool>,Vec<Slab>)>{
+    let seed=*scope.first()? as usize;
+    let [a,b,c]=*g.tris_of(seed).first()?;
+    let coord=|v:u32| f64s(g.pos[v as usize]);
+    let axis=(0..3).find(|&k|coord(a)[k]==coord(b)[k] && coord(a)[k]==coord(c)[k])?;
+    let plane=coord(a)[axis];
+    let mut window=SheetWindow{axis,plane,lo:[f64::INFINITY;3],hi:[f64::NEG_INFINITY;3]};
+    let mut magnitude=0f64;
+    for &f in scope {
+        for t in g.tris_of(f as usize){
+            let ps=t.map(coord);
+            let off=ps.iter().any(|p|p[axis]!=plane);
+            for p in ps {for k in 0..3{
+                if !p[k].is_finite(){return None}
+                magnitude=magnitude.max(p[k].abs());
+                if off{window.lo[k]=window.lo[k].min(p[k]);window.hi[k]=window.hi[k].max(p[k]);}
+            }}
+        }
+    }
+    (window.lo,window.hi)=grown(window.lo,window.hi);
+    let mut certain=vec![false;g.normal.len()];
+    let mut slabs=[([f64::INFINITY;3],[f64::NEG_INFINITY;3]);3];
+    let mut uncertain=0;
+    for &f in scope{
+        let f=f as usize;
+        if window.misses(probes[f],g.normal[f],jitter){certain[f]=true;continue}
+        uncertain+=1;
+        if uncertain>scope.len()/32{return None}
+        let n=f64s(g.normal[f]);
+        let k=(0..3).find(|&k|n[k].abs()==1. && n[(k+1)%3]==0. && n[(k+2)%3]==0.)?;
+        let p=f64s(probes[f]);
+        let spread=(p[k].abs()+magnitude+1.)*(2.*jitter.abs()+1e-12)+1e-4*(1.+magnitude);
+        for j in 0..3{
+            slabs[k].0[j]=slabs[k].0[j].min(p[j]-spread);
+            slabs[k].1[j]=slabs[k].1[j].max(p[j]+spread);
+        }
+    }
+    let slabs=slabs.into_iter().enumerate().filter(|(_, (lo,hi))|lo[0]<=hi[0]).map(|(k,(lo,hi))|(k,lo,hi)).collect();
+    Some((certain,slabs))
+}
+
 /// What `orient_outward` decides: the faces whose `interior` mark changes
 /// (with the new value) and the faces to turn over, in list order.
 pub struct Decision {
@@ -891,6 +934,10 @@ pub(crate) fn component_root(p: &mut [u32], mut x: u32) -> u32 {
 /// `built_core.orient.orient_outward(mesh, seed, only)` on a scan whose parts
 /// RINGS, EFACES and FFLAGS are read and whose `geom` is built.
 pub fn orient(scan: &MeshScan, g: &Geom, only: Option<&[u32]>, prm: &Params) -> Decision {
+    orient_with_probes(scan,g,only,prm,None)
+}
+
+pub(crate) fn orient_with_probes(scan:&MeshScan,g:&Geom,only:Option<&[u32]>,prm:&Params,cached:Option<Vec<V3>>)->Decision{
     let nf = scan.n_faces();
     let h = g.h;
     let mut t = std::time::Instant::now();
@@ -963,6 +1010,24 @@ pub fn orient(scan: &MeshScan, g: &Geom, only: Option<&[u32]>, prm: &Params) -> 
             rows.entry(c).or_default().push(f);
         }
     }
+    // Per face of the scope: probe and degeneracy (`normal().length()`).
+    let probe=cached.unwrap_or_else(||{
+        let mut probe=vec![V3(0.,0.,0.);nf];
+        let active:Vec<_>=scope.par_iter().map(|&f|{
+            let f=f as usize;
+            if facegeom::length(g.normal[f],h)<1e-9 {V3(0.,0.,0.)}
+            else{interior_probe(g,f,&scan.rings_of(f))}
+        }).collect();
+        for (&f,p) in scope.iter().zip(active){probe[f as usize]=p;}
+        probe
+    });
+    let deg=g.normal.iter().map(|&n|facegeom::length(n,h)<1e-9).collect::<Vec<_>>();
+    // Distant probes on a common sheet cannot hit any off-plane triangle.
+    // Keep their positions in the jitter stream. Only the other probes
+    // need triangles in the crossing index.
+    let windows = if rows.len()==1 && scope.len()>=8192 {
+        sheet_queries(g, &scope, &probe, prm.jitter)
+    }else{None};
     let index: HashMap<u32, RayIndex> = rows
         .into_par_iter()
         .map(|(c, faces)| {
@@ -975,6 +1040,13 @@ pub fn orient(scan: &MeshScan, g: &Geom, only: Option<&[u32]>, prm: &Params) -> 
                     let pa = f64s(g.pos[t[0] as usize]);
                     let pb = f64s(g.pos[t[1] as usize]);
                     let pc = f64s(g.pos[t[2] as usize]);
+                    if let Some((_, slabs))=&windows {
+                        if !slabs.iter().any(|&(axis,lo,hi)|{
+                            (0..3).filter(|&k|k!=axis).all(|k|
+                                pa[k].min(pb[k]).min(pc[k])<=hi[k] &&
+                                pa[k].max(pb[k]).max(pc[k])>=lo[k])
+                        }){continue;}
+                    }
                     a.push(pa);
                     e1.push([pb[0] - pa[0], pb[1] - pa[1], pb[2] - pa[2]]);
                     e2.push([pc[0] - pa[0], pc[1] - pa[1], pc[2] - pa[2]]);
@@ -985,24 +1057,8 @@ pub fn orient(scan: &MeshScan, g: &Geom, only: Option<&[u32]>, prm: &Params) -> 
         })
         .collect();
     lap("ray index", &mut t);
-    // Per face of the scope: probe and degeneracy (`normal().length()`).
-    let mut probe = vec![V3(0.0, 0.0, 0.0); nf];
-    let mut deg = vec![true; nf];
-    let pd: Vec<(u32, V3, bool)> = scope
-        .par_iter()
-        .map(|&f| {
-            let n = g.normal[f as usize];
-            let d = (facegeom::length(n, h) as f64) < 1e-9;
-            let p = if d { V3(0.0, 0.0, 0.0) } else { interior_probe(g, f as usize, &scan.rings_of(f as usize)) };
-            (f, p, d)
-        })
-        .collect();
-    for (f, p, d) in pd {
-        probe[f as usize] = p;
-        deg[f as usize] = d;
-    }
-    let mut certain = Vec::new();
-    if index.values().any(|ix| ix.sheet.is_some()) {
+    let mut certain=windows.map(|(mask,_)|mask).unwrap_or_default();
+    if certain.is_empty() && index.values().any(|ix| ix.sheet.is_some()) {
         certain.resize(nf, false);
         for &face in &scope {
             let f = face as usize;
