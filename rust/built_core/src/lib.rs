@@ -12,6 +12,7 @@ use pyo3::prelude::*;
 use numpy::IntoPyArray;
 use pyo3::types::PyBytes;
 
+mod align;
 mod math;
 mod exact;
 mod screen;
@@ -503,6 +504,7 @@ fn built_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(snap_engine::resolve_snap, m)?)?;
     m.add_function(wrap_pyfunction!(snap::lock_crossing, m)?)?;
     m.add_function(wrap_pyfunction!(snap_build::build_snap_index, m)?)?;
+    m.add_function(wrap_pyfunction!(snap_build::patch_snap_proto, m)?)?;
     m.add_class::<group_geometry::GroupGeometry>()?;
     presentation::register(m)?;
     m.add_function(wrap_pyfunction!(object_outline::object_hole_mask, m)?)?;

@@ -335,12 +335,18 @@ fn resident_rebase<'p>(index: &Obj<'p>, packed: &Obj<'p>) -> PyResult<Obj<'p>> {
     )?;
     p.index(&base, &protos, packed, &index.getattr("scene")?)
 }
+/// Past this many triangles a rebaked prototype's snap trees are carried
+/// over from its previous ones (`patch_snap_proto`) rather than rebuilt.
+const CARRY_PAST: usize = 20_000;
+
 #[pyfunction]
+#[pyo3(signature = (packed, code, scene, first_row, previous=None))]
 pub(super) fn resident_prototype<'p>(
     packed: &Obj<'p>,
     code: usize,
     scene: &Obj<'p>,
     first_row: isize,
+    previous: Option<&Obj<'p>>,
 ) -> PyResult<Obj<'p>> {
     let py = packed.py();
     let np = py.import("numpy")?;
@@ -352,7 +358,14 @@ pub(super) fn resident_prototype<'p>(
         usize::try_from(first_row).ok(),
         &PyDict::new(py),
     )?;
-    let built = py.import("built_core")?.call_method1(
+    let core = py.import("built_core")?;
+    if let Some(old) = previous.filter(|p| p.is_instance(&core.getattr("InstanceProto").unwrap()).unwrap_or(false)) {
+        if old.len()? >= CARRY_PAST {
+            let proto = core.call_method1("patch_snap_proto", (old, array))?;
+            return Ok((&proto, &proto).into_pyobject(py)?.into_any());
+        }
+    }
+    let built = core.call_method1(
         "build_snap_index",
         (
             PyList::new(py, [array])?,

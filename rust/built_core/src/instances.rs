@@ -38,6 +38,10 @@ pub struct Proto {
     /// near a pixel skips the far branches of a big prototype.
     eorder: Vec<u32>,
     enodes: Vec<Node>,
+    /// Triangles / edges in trees grafted on since the last full build
+    /// (`patched`): past a share of the whole, the next bake builds afresh.
+    grafted: usize,
+    egrafted: usize,
 }
 
 /// Past this many boxes, a BVH range is split in parallel.
@@ -207,6 +211,73 @@ fn bvh_range(order: &mut [u32], base: usize, blo: &[[f64; 3]], bhi: &[[f64; 3]],
     nodes
 }
 
+/// A tree over `n_old` boxes carried over to `n` boxes paired with them by
+/// `runs`: each leaf keeps its paired entries (as new indices), the rest
+/// of the new boxes (`bounds(i)`) get a tree of their own beside the old
+/// root. Boxes only ever grow apart from their contents, never shrink
+/// below them, so every walk still reaches what it should.
+fn carried(order: &[u32], nodes: &[Node], n_old: usize, n: usize, runs: &[(usize, usize, usize)],
+           bounds: impl Fn(usize) -> ([f64; 3], [f64; 3])) -> (Vec<u32>, Vec<Node>) {
+    const NONE: u32 = u32::MAX;
+    let mut to_new = vec![NONE; n_old];
+    let mut paired = vec![false; n];
+    for &(o, k, len) in runs {
+        for t in 0..len {
+            to_new[o + t] = (k + t) as u32;
+            paired[k + t] = true;
+        }
+    }
+    let mut order = order.to_vec();
+    let mut nodes = nodes.to_vec();
+    for node in nodes.iter_mut().filter(|node| node.leaf) {
+        let mut w = node.start as usize;
+        for r in node.start as usize..node.end as usize {
+            let m = to_new[order[r] as usize];
+            if m != NONE {
+                order[w] = m;
+                w += 1;
+            }
+        }
+        node.end = w as u32;
+    }
+    let fresh: Vec<u32> = (0..n as u32).filter(|&i| !paired[i as usize]).collect();
+    if fresh.is_empty() {
+        return (order, nodes);
+    }
+    let (lo, hi): (Vec<_>, Vec<_>) = fresh.iter().map(|&i| bounds(i as usize)).unzip();
+    let cen: Vec<_> = lo.iter().zip(&hi).map(|(l, h)| std::array::from_fn(|k| (l[k] + h[k]) * 0.5)).collect();
+    let (extra_order, mut extra) = build_bvh(&lo, &hi, &cen);
+    let base = order.len() as u32;
+    order.extend(extra_order.into_iter().map(|i| fresh[i as usize]));
+    let (nl, root) = (nodes.len() as u32, (nodes[0], extra[0]));
+    // [root, old root, new root, the rest of the old, the rest of the new],
+    // as `bvh_range` joins two halves.
+    for v in nodes.iter_mut().filter(|v| !v.leaf) {
+        v.left += 2;
+    }
+    for v in extra.iter_mut() {
+        if !v.leaf {
+            v.left += nl + 1;
+        }
+        v.start += base;
+        v.end += base;
+    }
+    let mut out = Vec::with_capacity(1 + nodes.len() + extra.len());
+    out.push(Node {
+        lo: std::array::from_fn(|k| root.0.lo[k].min(root.1.lo[k])),
+        hi: std::array::from_fn(|k| root.0.hi[k].max(root.1.hi[k])),
+        start: 0,
+        end: order.len() as u32,
+        left: 1,
+        leaf: false,
+    });
+    out.push(nodes[0]);
+    out.push(extra[0]);
+    out.extend_from_slice(&nodes[1..]);
+    out.extend_from_slice(&extra[1..]);
+    (order, out)
+}
+
 /// Whether the box ``lo``/``hi``, placed by ``m`` and seen through ``mvp``,
 /// can come within ``reach`` px of ``(px, py)`` — with two pixels to spare
 /// for the bake's float32 rounding; a box crossing the eye plane may be
@@ -295,11 +366,67 @@ impl Proto {
             (Vec::new(), Vec::new())
         };
         let (order, nodes) = build_bvh(&tlo, &thi, &cen);
-        Proto { v0, e1, e2, order, nodes, edges, eorder, enodes }
+        Proto { v0, e1, e2, order, nodes, edges, eorder, enodes, grafted: 0, egrafted: 0 }
     }
 
     pub fn n_tris(&self) -> usize {
         self.v0.len()
+    }
+
+    /// This prototype's trees carried over to the next bake of its mesh
+    /// (`v0`/`e1`/`e2`, `edges`): the triangles and edges an edit left as
+    /// they were keep their leaves (renumbered), those it changed or
+    /// removed leave them, and a small tree over the new ones is grafted
+    /// beside the old root. None when too much changed for that to pay:
+    /// then the caller builds afresh. Queries walk the result as any tree
+    /// (`left`/`left + 1`, leaf ranges of `order`), so their answers are
+    /// those of a fresh build up to the order ties were met in.
+    pub fn patched(&self, v0: Vec<[f64; 3]>, e1: Vec<[f64; 3]>, e2: Vec<[f64; 3]>,
+                   edges: Vec<[[f64; 3]; 2]>) -> Proto {
+        match self.carry(&v0, &e1, &e2, &edges) {
+            Some((order, nodes, eorder, enodes, grafted, egrafted)) =>
+                Proto { v0, e1, e2, order, nodes, edges, eorder, enodes, grafted, egrafted },
+            None => Proto::new(v0, e1, e2, edges),
+        }
+    }
+
+    #[allow(clippy::type_complexity)]
+    fn carry(&self, v0: &[[f64; 3]], e1: &[[f64; 3]], e2: &[[f64; 3]], edges: &[[[f64; 3]; 2]])
+        -> Option<(Vec<u32>, Vec<Node>, Vec<u32>, Vec<Node>, usize, usize)> {
+        const WINDOW: usize = 512;
+        let (n, ne) = (v0.len(), edges.len());
+        let past = |n: usize| 4096 + n / 16;
+        let tri_runs = crate::align::runs_by(self.v0.len(), n, |i, j| {
+            self.v0[i] == v0[j] && self.e1[i] == e1[j] && self.e2[i] == e2[j]
+        }, WINDOW, 4)?;
+        let edge_runs = crate::align::runs(&self.edges, edges, WINDOW, 4)?;
+        let new_tris = crate::align::unpaired(&tri_runs, n);
+        let new_edges = crate::align::unpaired(&edge_runs, ne);
+        if self.grafted + new_tris > past(n) || self.egrafted + new_edges > past(ne) || self.nodes.is_empty() {
+            return None;
+        }
+        let tri_box = |r: usize| -> ([f64; 3], [f64; 3]) {
+            let a = v0[r];
+            let b = [a[0] + e1[r][0], a[1] + e1[r][1], a[2] + e1[r][2]];
+            let c = [a[0] + e2[r][0], a[1] + e2[r][1], a[2] + e2[r][2]];
+            (std::array::from_fn(|k| a[k].min(b[k]).min(c[k])), std::array::from_fn(|k| a[k].max(b[k]).max(c[k])))
+        };
+        let edge_box = |e: &[[f64; 3]; 2]| -> ([f64; 3], [f64; 3]) {
+            (std::array::from_fn(|k| e[0][k].min(e[1][k])), std::array::from_fn(|k| e[0][k].max(e[1][k])))
+        };
+        let (order, nodes) = carried(&self.order, &self.nodes, self.v0.len(), n, &tri_runs, |r| tri_box(r));
+        let (eorder, enodes, egrafted) = if ne <= 4 * LEAF {
+            (Vec::new(), Vec::new(), 0)
+        } else if self.enodes.is_empty() {
+            let (lo, hi): (Vec<_>, Vec<_>) = edges.iter().map(edge_box).unzip();
+            let cen: Vec<_> = lo.iter().zip(&hi).map(|(l, h)| std::array::from_fn(|k| (l[k] + h[k]) * 0.5)).collect();
+            let (o, nd) = build_bvh(&lo, &hi, &cen);
+            (o, nd, 0)
+        } else {
+            let (o, nd) = carried(&self.eorder, &self.enodes, self.edges.len(), ne, &edge_runs, |e| edge_box(&edges[e]));
+            (o, nd, self.egrafted + new_edges)
+        };
+        Some((order, nodes, eorder, enodes, self.grafted + new_tris, egrafted))
     }
 
     #[inline]
@@ -1177,3 +1304,108 @@ impl Proto {
     }
 }
 
+
+#[cfg(test)]
+mod carried_tests {
+    use super::*;
+
+    /// A grid of `n`x`n` unit quads (two triangles each) and their edges,
+    /// `skip`ped cells left out and `extra` cells raised to `z = 1`.
+    fn grid(n: usize, skip: &[usize], raised: &[usize]) -> (Vec<[f64; 3]>, Vec<[f64; 3]>, Vec<[f64; 3]>, Vec<[[f64; 3]; 2]>) {
+        let (mut a, mut b, mut c, mut e) = (Vec::new(), Vec::new(), Vec::new(), Vec::new());
+        for cell in 0..n * n {
+            if skip.contains(&cell) {
+                continue;
+            }
+            let (x, y) = ((cell / n) as f64, (cell % n) as f64);
+            let z = if raised.contains(&cell) { 1.0 } else { 0.0 };
+            for (p, q, r) in [([x, y, z], [x + 1., y, z], [x + 1., y + 1., z]), ([x, y, z], [x + 1., y + 1., z], [x, y + 1., z])] {
+                a.push(p);
+                b.push(sub(q, p));
+                c.push(sub(r, p));
+            }
+            e.push([[x, y, z], [x + 1., y, z]]);
+            e.push([[x, y, z], [x, y + 1., z]]);
+        }
+        (a, b, c, e)
+    }
+
+    fn on_ray(p: &Proto, o: [f64; 3], d: [f64; 3]) -> Vec<usize> {
+        let mut found = Vec::new();
+        p.for_tris_on_ray(o, d, f64::INFINITY, |r| {
+            found.push(r);
+            true
+        });
+        found.sort_unstable();
+        found
+    }
+
+    #[test]
+    fn a_carried_tree_finds_what_a_fresh_one_finds() {
+        let (a, b, c, e) = grid(120, &[], &[]);
+        let old = Proto::new(a, b, c, e);
+        // An edit: a few cells gone, a few changed, the grid otherwise the same.
+        let (a, b, c, e) = grid(120, &[7, 500, 501, 9000], &[33, 34, 7000]);
+        let fresh = Proto::new(a.clone(), b.clone(), c.clone(), e.clone());
+        let carried = old.patched(a, b, c, e);
+        assert!(carried.grafted > 0 && carried.grafted < 20);
+        let (m, mvp) = (identity(), ortho());
+        for k in 0..400 {
+            let (x, y) = ((k * 37 % 1200) as f64 * 0.1 + 0.05, (k * 53 % 1200) as f64 * 0.1 + 0.05);
+            for z in [0.5, 1.5] {
+                let o = [x, y, z + 10.];
+                let d = [0., 0., -1.];
+                // Every triangle under the point is offered, wherever it went.
+                let exact: Vec<usize> = on_ray(&fresh, o, d).into_iter().filter(|&r| covers(&fresh, r, x, y)).collect();
+                let got: Vec<usize> = on_ray(&carried, o, d).into_iter().filter(|&r| covers(&carried, r, x, y)).collect();
+                assert_eq!(exact, got, "at {x} {y}");
+            }
+            let (px, py) = ((x / 120.) * 800., (1. - y / 120.) * 800.);
+            let near = |p: &Proto| -> Vec<usize> {
+                let mut v: Vec<usize> = p.edges_may_reach(&m, &mvp, 800., 800., px, py, 3., None).into_iter()
+                    .filter(|&i| segment_px(&p.edges[i], px, py) <= 3.).collect();
+                v.sort_unstable();
+                v
+            };
+            assert_eq!(near(&fresh), near(&carried));
+        }
+        // A wholesale change builds afresh.
+        let (a, b, c, e) = grid(60, &[], &[]);
+        assert_eq!(old.patched(a, b, c, e).grafted, 0);
+    }
+
+    fn covers(p: &Proto, r: usize, x: f64, y: f64) -> bool {
+        let (a, b, c) = (p.v0[r], p.e1[r], p.e2[r]);
+        let (px, py) = (x - a[0], y - a[1]);
+        let det = b[0] * c[1] - b[1] * c[0];
+        let (u, v) = ((px * c[1] - py * c[0]) / det, (b[0] * py - b[1] * px) / det);
+        u >= 0. && v >= 0. && u + v <= 1.
+    }
+
+    fn identity() -> [f64; 16] {
+        let mut m = [0.; 16];
+        for i in 0..4 {
+            m[i * 5] = 1.;
+        }
+        m
+    }
+
+    /// Column-major: x, y in [0, 120] to clip [-1, 1].
+    fn ortho() -> [f64; 16] {
+        let mut m = identity();
+        m[0] = 2. / 120.;
+        m[5] = 2. / 120.;
+        m[10] = -0.01;
+        m[12] = -1.;
+        m[13] = -1.;
+        m
+    }
+
+    fn segment_px(e: &[[f64; 3]; 2], px: f64, py: f64) -> f64 {
+        let s = |p: [f64; 3]| ((p[0] / 120.) * 800., (1. - p[1] / 120.) * 800.);
+        let ((ax, ay), (bx, by)) = (s(e[0]), s(e[1]));
+        let (dx, dy) = (bx - ax, by - ay);
+        let t = (((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy)).clamp(0., 1.);
+        ((ax + t * dx - px).powi(2) + (ay + t * dy - py).powi(2)).sqrt()
+    }
+}

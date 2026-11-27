@@ -218,7 +218,8 @@ impl ResidentInference {
                 } else {
                     -1
                 };
-                let pair = resident_prototype(packed, k, &self.scene(py)?, first)?;
+                let previous = protos.get_item(k)?;
+                let pair = resident_prototype(packed, k, &self.scene(py)?, first, Some(&previous))?;
                 protos.set_item(k, pair.get_item(0)?)?;
                 bounds.set_item(
                     k,
