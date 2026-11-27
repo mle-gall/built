@@ -2068,37 +2068,48 @@ impl Renderer {
 
     /// Runs of unchanged corner rows (old index, new index, count).
     #[pyo3(signature = (id, data, runs, matching_back=false))]
-    fn patch_prototype_materials(&mut self, id: usize, data: PyReadonlyArray1<'_, u8>,
-        runs: Vec<(usize,usize,usize)>, matching_back: bool) -> PyResult<()> {
+    fn patch_prototype_materials(
+        &mut self,
+        id: usize,
+        data: PyReadonlyArray1<'_, u8>,
+        runs: Vec<(usize, usize, usize)>,
+        matching_back: bool,
+    ) -> PyResult<()> {
         self.sun.invalidate();
         let data = data.as_slice()?;
         let s = self.scene.as_mut().ok_or_else(|| PyValueError::new_err("no scene"))?;
-        if id >= s.p as usize || data.len()%32 != 0 || (matching_back && !data.is_empty()) { return Err(PyValueError::new_err("invalid material rows")); }
+        if id >= s.p as usize || data.len() % 32 != 0 || (matching_back && !data.is_empty()) {
+            return Err(PyValueError::new_err("invalid material rows"));
+        }
         let limit = self.device.limits().max_storage_buffer_binding_size as usize;
         // The sparse table owns one disjoint run per prototype. Find a gap
         // among the other live runs so edits can reuse their old allocation.
         let at = material_room(&s.material_data, s.p as usize, id, data.len(), limit)
             .ok_or_else(|| PyValueError::new_err("material records exceed storage binding limit"))?;
-        let old: [u32;4] = bytemuck::pod_read_unaligned(&s.material_data[id*16..(id+1)*16]);
-        let old_count=old[2] as usize;
-        let mut end=0;
-        for &(src,dst,n) in &runs {
-            if src.checked_add(n).is_none() || dst<end || dst.checked_add(n).is_none_or(|v|v>data.len()/32) {
+        let old: [u32; 4] = bytemuck::pod_read_unaligned(&s.material_data[id * 16..(id + 1) * 16]);
+        let old_count = old[2] as usize;
+        let mut end = 0;
+        for &(src, dst, n) in &runs {
+            if src.checked_add(n).is_none() || dst < end || dst.checked_add(n).is_none_or(|v| v > data.len() / 32) {
                 return Err(PyValueError::new_err("invalid material copy range"));
             }
-            end=dst+n;
+            end = dst + n;
         }
-        let gpu=&self.textures.materials;
-        let plan=(!runs.is_empty() && !s.material_layout_dirty && old[1] as usize*16==at
-            && at+data.len()<=gpu.size() as usize && gpu.usage().contains(wgpu::BufferUsages::COPY_SRC)
-            && at+old_count*32<=s.material_data.len() && runs.iter().all(|&(src,_,n)|src+n<=old_count))
-            .then(||edge_memo::Writes::from_runs(&s.material_data[at..at+old_count*32],data,&runs,32));
+        let gpu = &self.textures.materials;
+        let plan = (!runs.is_empty()
+            && !s.material_layout_dirty
+            && old[1] as usize * 16 == at
+            && at + data.len() <= gpu.size() as usize
+            && gpu.usage().contains(wgpu::BufferUsages::COPY_SRC)
+            && at + old_count * 32 <= s.material_data.len()
+            && runs.iter().all(|&(src, _, n)| src + n <= old_count))
+        .then(|| edge_memo::Writes::from_runs(&s.material_data[at..at + old_count * 32], data, &runs, 32));
         let mut header = [0, 0, 0, u32::from(matching_back)];
         if !data.is_empty() {
-            let face: Command = bytemuck::pod_read_unaligned(&s.template_data[id*20..id*20+20]);
-            header = [face.base as u32, (at/16) as u32, (data.len()/32) as u32, 0];
+            let face: Command = bytemuck::pod_read_unaligned(&s.template_data[id * 20..id * 20 + 20]);
+            header = [face.base as u32, (at / 16) as u32, (data.len() / 32) as u32, 0];
         }
-        s.material_data[id*16..(id+1)*16].copy_from_slice(bytemuck::bytes_of(&header));
+        s.material_data[id * 16..(id + 1) * 16].copy_from_slice(bytemuck::bytes_of(&header));
         if at + data.len() > s.material_data.len() {
             s.material_data.resize(at + data.len(), 0);
         }
@@ -2106,23 +2117,27 @@ impl Renderer {
         // Preserve unchanged blocks on the device, including complete rows
         // when a material or mapping changed on only part of a large mesh.
         let mut writes: Vec<std::ops::Range<usize>> = Vec::new();
-        if let Some(plan)=plan {
-            move_buffer_spans(&self.device,&self.queue,gpu,at,&plan.moves);
-            writes=plan.upload;
-            for (_,dst,n) in plan.moves {target[dst..dst+n].copy_from_slice(&data[dst..dst+n]);}
-            for r in &writes{target[r.clone()].copy_from_slice(&data[r.clone()]);}
-        }else{
-        for (i, (old, new)) in target.chunks_mut(4096).zip(data.chunks(4096)).enumerate() {
-            if old != new {
-                old.copy_from_slice(new);
-                let begin = i * 4096;
-                if let Some(run) = writes.last_mut().filter(|r| r.end == begin) {
-                    run.end += new.len();
-                } else {
-                    writes.push(begin..begin + new.len());
+        if let Some(plan) = plan {
+            move_buffer_spans(&self.device, &self.queue, gpu, at, &plan.moves);
+            writes = plan.upload;
+            for (_, dst, n) in plan.moves {
+                target[dst..dst + n].copy_from_slice(&data[dst..dst + n]);
+            }
+            for r in &writes {
+                target[r.clone()].copy_from_slice(&data[r.clone()]);
+            }
+        } else {
+            for (i, (old, new)) in target.chunks_mut(4096).zip(data.chunks(4096)).enumerate() {
+                if old != new {
+                    old.copy_from_slice(new);
+                    let begin = i * 4096;
+                    if let Some(run) = writes.last_mut().filter(|r| r.end == begin) {
+                        run.end += new.len();
+                    } else {
+                        writes.push(begin..begin + new.len());
+                    }
                 }
             }
-        }
         }
         s.face_ranges = face_ranges(&s.material_data, s.p);
         // Write only this prototype's header and its new records into the
@@ -2130,14 +2145,15 @@ impl Renderer {
         // rebaked prototype) queued 432 full copies of the ride's material
         // table on one 432-part bridge edit: ~30 GB before the GPU let any go.
         let materials = &self.textures.materials;
-        if s.material_data.len() as u64 <= materials.size()
-            && materials.usage().contains(wgpu::BufferUsages::COPY_DST) {
+        if s.material_data.len() as u64 <= materials.size() && materials.usage().contains(wgpu::BufferUsages::COPY_DST)
+        {
             if s.material_layout_dirty {
                 self.queue.write_buffer(materials, 0, &s.material_data);
                 s.material_layout_dirty = false;
                 return Ok(());
             }
-            self.queue.write_buffer(materials, (id*16) as u64, bytemuck::bytes_of(&header));
+            self.queue
+                .write_buffer(materials, (id * 16) as u64, bytemuck::bytes_of(&header));
             for run in writes {
                 self.queue.write_buffer(materials, (at + run.start) as u64, &data[run]);
             }
@@ -2148,10 +2164,17 @@ impl Renderer {
         s.material_layout_dirty = false;
         let capacity = grown_capacity(materials.size() as usize, s.material_data.len()).min(limit);
         self.gpu_memory = self.gpu_memory.saturating_sub(materials.size());
-        self.textures.materials = capacity_buffer(&self.device, &s.material_data, capacity,
-            wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::COPY_DST);
+        self.textures.materials = capacity_buffer(
+            &self.device,
+            &s.material_data,
+            capacity,
+            wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::COPY_DST,
+        );
         self.gpu_memory += self.textures.materials.size();
-        self.texture_groups = [&self.draw, &self.xray].iter().map(|p| self.textures.bind(&self.device,p)).collect();
+        self.texture_groups = [&self.draw, &self.xray]
+            .iter()
+            .map(|p| self.textures.bind(&self.device, p))
+            .collect();
         self.aa.bind_textures(&self.device, &self.textures);
         self.transparency.bind_textures(&self.device, &self.textures);
         Ok(())

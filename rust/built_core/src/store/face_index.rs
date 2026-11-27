@@ -21,7 +21,7 @@ type FxHashSet<T> = std::collections::HashSet<T, super::cow::FxBuild>;
 use std::sync::Arc;
 
 pub struct FaceIndex {
-    pub(super) orientation:Arc<std::sync::OnceLock<Option<super::push_orientation::OrientationCache>>>,
+    pub(super) orientation: Arc<std::sync::OnceLock<Option<super::push_orientation::OrientationCache>>>,
     pub(super) cap: Arc<std::sync::OnceLock<super::cap_blocks::CapBlocks>>,
     revision: u64,
     lineage: u64,
@@ -155,8 +155,8 @@ impl FaceIndex {
             (slots, Vec::new())
         };
         FaceIndex {
-            orientation:Default::default(),
-            cap:Default::default(),
+            orientation: Default::default(),
+            cap: Default::default(),
             revision: store.revision,
             lineage: store.lineage,
             last: st.clone(),
@@ -237,8 +237,8 @@ impl FaceIndex {
         let mut extra: Vec<u32> = touched.iter().copied().filter(|&f| faces.alive(f)).collect();
         extra.sort_unstable();
         Arc::new(FaceIndex {
-            orientation:self.orientation.clone(),
-            cap:self.cap.clone(),
+            orientation: self.orientation.clone(),
+            cap: self.cap.clone(),
             revision: store.revision,
             lineage: store.lineage,
             last: st.clone(),

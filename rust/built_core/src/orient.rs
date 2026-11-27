@@ -867,46 +867,68 @@ fn incoherent(scan: &MeshScan, faces: &[u32], flipped: &[bool]) -> usize {
 }
 
 /// Axis-aligned probes whose jitter cones can reach nonplanar geometry.
-type Slab = (usize, [f64;3], [f64;3]);
-fn sheet_queries(g:&Geom, scope:&[u32], probes:&[V3], jitter:f64)->Option<(Vec<bool>,Vec<Slab>)>{
-    let seed=*scope.first()? as usize;
-    let [a,b,c]=*g.tris_of(seed).first()?;
-    let coord=|v:u32| f64s(g.pos[v as usize]);
-    let axis=(0..3).find(|&k|coord(a)[k]==coord(b)[k] && coord(a)[k]==coord(c)[k])?;
-    let plane=coord(a)[axis];
-    let mut window=SheetWindow{axis,plane,lo:[f64::INFINITY;3],hi:[f64::NEG_INFINITY;3]};
-    let mut magnitude=0f64;
+type Slab = (usize, [f64; 3], [f64; 3]);
+fn sheet_queries(g: &Geom, scope: &[u32], probes: &[V3], jitter: f64) -> Option<(Vec<bool>, Vec<Slab>)> {
+    let seed = *scope.first()? as usize;
+    let [a, b, c] = *g.tris_of(seed).first()?;
+    let coord = |v: u32| f64s(g.pos[v as usize]);
+    let axis = (0..3).find(|&k| coord(a)[k] == coord(b)[k] && coord(a)[k] == coord(c)[k])?;
+    let plane = coord(a)[axis];
+    let mut window = SheetWindow {
+        axis,
+        plane,
+        lo: [f64::INFINITY; 3],
+        hi: [f64::NEG_INFINITY; 3],
+    };
+    let mut magnitude = 0f64;
     for &f in scope {
-        for t in g.tris_of(f as usize){
-            let ps=t.map(coord);
-            let off=ps.iter().any(|p|p[axis]!=plane);
-            for p in ps {for k in 0..3{
-                if !p[k].is_finite(){return None}
-                magnitude=magnitude.max(p[k].abs());
-                if off{window.lo[k]=window.lo[k].min(p[k]);window.hi[k]=window.hi[k].max(p[k]);}
-            }}
+        for t in g.tris_of(f as usize) {
+            let ps = t.map(coord);
+            let off = ps.iter().any(|p| p[axis] != plane);
+            for p in ps {
+                for k in 0..3 {
+                    if !p[k].is_finite() {
+                        return None;
+                    }
+                    magnitude = magnitude.max(p[k].abs());
+                    if off {
+                        window.lo[k] = window.lo[k].min(p[k]);
+                        window.hi[k] = window.hi[k].max(p[k]);
+                    }
+                }
+            }
         }
     }
-    (window.lo,window.hi)=grown(window.lo,window.hi);
-    let mut certain=vec![false;g.normal.len()];
-    let mut slabs=[([f64::INFINITY;3],[f64::NEG_INFINITY;3]);3];
-    let mut uncertain=0;
-    for &f in scope{
-        let f=f as usize;
-        if window.misses(probes[f],g.normal[f],jitter){certain[f]=true;continue}
-        uncertain+=1;
-        if uncertain>scope.len()/32{return None}
-        let n=f64s(g.normal[f]);
-        let k=(0..3).find(|&k|n[k].abs()==1. && n[(k+1)%3]==0. && n[(k+2)%3]==0.)?;
-        let p=f64s(probes[f]);
-        let spread=(p[k].abs()+magnitude+1.)*(2.*jitter.abs()+1e-12)+1e-4*(1.+magnitude);
-        for j in 0..3{
-            slabs[k].0[j]=slabs[k].0[j].min(p[j]-spread);
-            slabs[k].1[j]=slabs[k].1[j].max(p[j]+spread);
+    (window.lo, window.hi) = grown(window.lo, window.hi);
+    let mut certain = vec![false; g.normal.len()];
+    let mut slabs = [([f64::INFINITY; 3], [f64::NEG_INFINITY; 3]); 3];
+    let mut uncertain = 0;
+    for &f in scope {
+        let f = f as usize;
+        if window.misses(probes[f], g.normal[f], jitter) {
+            certain[f] = true;
+            continue;
+        }
+        uncertain += 1;
+        if uncertain > scope.len() / 32 {
+            return None;
+        }
+        let n = f64s(g.normal[f]);
+        let k = (0..3).find(|&k| n[k].abs() == 1. && n[(k + 1) % 3] == 0. && n[(k + 2) % 3] == 0.)?;
+        let p = f64s(probes[f]);
+        let spread = (p[k].abs() + magnitude + 1.) * (2. * jitter.abs() + 1e-12) + 1e-4 * (1. + magnitude);
+        for j in 0..3 {
+            slabs[k].0[j] = slabs[k].0[j].min(p[j] - spread);
+            slabs[k].1[j] = slabs[k].1[j].max(p[j] + spread);
         }
     }
-    let slabs=slabs.into_iter().enumerate().filter(|(_, (lo,hi))|lo[0]<=hi[0]).map(|(k,(lo,hi))|(k,lo,hi)).collect();
-    Some((certain,slabs))
+    let slabs = slabs
+        .into_iter()
+        .enumerate()
+        .filter(|(_, (lo, hi))| lo[0] <= hi[0])
+        .map(|(k, (lo, hi))| (k, lo, hi))
+        .collect();
+    Some((certain, slabs))
 }
 
 /// What `orient_outward` decides: the faces whose `interior` mark changes
@@ -1011,23 +1033,37 @@ pub(crate) fn orient_with_probes(scan:&MeshScan,g:&Geom,only:Option<&[u32]>,prm:
         }
     }
     // Per face of the scope: probe and degeneracy (`normal().length()`).
-    let probe=cached.unwrap_or_else(||{
-        let mut probe=vec![V3(0.,0.,0.);nf];
-        let active:Vec<_>=scope.par_iter().map(|&f|{
-            let f=f as usize;
-            if facegeom::length(g.normal[f],h)<1e-9 {V3(0.,0.,0.)}
-            else{interior_probe(g,f,&scan.rings_of(f))}
-        }).collect();
-        for (&f,p) in scope.iter().zip(active){probe[f as usize]=p;}
+    let probe = cached.unwrap_or_else(|| {
+        let mut probe = vec![V3(0., 0., 0.); nf];
+        let active: Vec<_> = scope
+            .par_iter()
+            .map(|&f| {
+                let f = f as usize;
+                if facegeom::length(g.normal[f], h) < 1e-9 {
+                    V3(0., 0., 0.)
+                } else {
+                    interior_probe(g, f, &scan.rings_of(f))
+                }
+            })
+            .collect();
+        for (&f, p) in scope.iter().zip(active) {
+            probe[f as usize] = p;
+        }
         probe
     });
-    let deg=g.normal.iter().map(|&n|facegeom::length(n,h)<1e-9).collect::<Vec<_>>();
+    let deg = g
+        .normal
+        .iter()
+        .map(|&n| facegeom::length(n, h) < 1e-9)
+        .collect::<Vec<_>>();
     // Distant probes on a common sheet cannot hit any off-plane triangle.
     // Keep their positions in the jitter stream. Only the other probes
     // need triangles in the crossing index.
-    let windows = if rows.len()==1 && scope.len()>=8192 {
+    let windows = if rows.len() == 1 && scope.len() >= 8192 {
         sheet_queries(g, &scope, &probe, prm.jitter)
-    }else{None};
+    } else {
+        None
+    };
     let index: HashMap<u32, RayIndex> = rows
         .into_par_iter()
         .map(|(c, faces)| {
@@ -1040,12 +1076,14 @@ pub(crate) fn orient_with_probes(scan:&MeshScan,g:&Geom,only:Option<&[u32]>,prm:
                     let pa = f64s(g.pos[t[0] as usize]);
                     let pb = f64s(g.pos[t[1] as usize]);
                     let pc = f64s(g.pos[t[2] as usize]);
-                    if let Some((_, slabs))=&windows {
-                        if !slabs.iter().any(|&(axis,lo,hi)|{
-                            (0..3).filter(|&k|k!=axis).all(|k|
-                                pa[k].min(pb[k]).min(pc[k])<=hi[k] &&
-                                pa[k].max(pb[k]).max(pc[k])>=lo[k])
-                        }){continue;}
+                    if let Some((_, slabs)) = &windows {
+                        if !slabs.iter().any(|&(axis, lo, hi)| {
+                            (0..3).filter(|&k| k != axis).all(|k| {
+                                pa[k].min(pb[k]).min(pc[k]) <= hi[k] && pa[k].max(pb[k]).max(pc[k]) >= lo[k]
+                            })
+                        }) {
+                            continue;
+                        }
                     }
                     a.push(pa);
                     e1.push([pb[0] - pa[0], pb[1] - pa[1], pb[2] - pa[2]]);
@@ -1057,12 +1095,14 @@ pub(crate) fn orient_with_probes(scan:&MeshScan,g:&Geom,only:Option<&[u32]>,prm:
         })
         .collect();
     lap("ray index", &mut t);
-    let mut certain=windows.map(|(mask,_)|mask).unwrap_or_default();
+    let mut certain = windows.map(|(mask, _)| mask).unwrap_or_default();
     if certain.is_empty() && index.values().any(|ix| ix.sheet.is_some()) {
         certain.resize(nf, false);
         for &face in &scope {
             let f = face as usize;
-            certain[f] = index.get(&comp[f]).and_then(|ix| ix.sheet.as_ref())
+            certain[f] = index
+                .get(&comp[f])
+                .and_then(|ix| ix.sheet.as_ref())
                 .is_some_and(|s| s.misses(probe[f], g.normal[f], prm.jitter));
         }
         if certain.iter().filter(|c| **c).count() < scope.len() - scope.len() / 32 {
@@ -1331,20 +1371,57 @@ mod sheet_votes {
         let probe: Vec<_> = a.iter().map(|p| V3(p[0] + 0.5, p[1] + 0.49999, p[2])).collect();
         let faces: Vec<_> = (0..n as u32).collect();
         let normal = V3(0., 0., 1.);
-        let ix = RayIndex::new(a, vec![[1.,0.,0.]; n], vec![[0.,1.,0.]; n], faces.clone());
+        let ix = RayIndex::new(a.clone(), vec![[1.,0.,0.]; n], vec![[0.,1.,0.]; n], faces.clone());
         let window = ix.sheet.as_ref().unwrap();
         let certain: Vec<_> = probe.iter().map(|&p| window.misses(p, normal, 3e-4)).collect();
         assert!(certain.iter().filter(|v| **v).count() > n * 9 / 10);
         let index = HashMap::from([(0, ix)]);
-        let geom = Geom { h: Hypot::LibStdCxx, pos: vec![], normal: vec![normal; n],
-            centroid: vec![], tstart: vec![], tris: vec![] };
+        let pos = a
+            .iter()
+            .flat_map(|&[x, y, z]| [V3(x, y, z), V3(x + 1., y, z), V3(x, y + 1., z)])
+            .collect();
+        let geom = Geom {
+            h: Hypot::LibStdCxx,
+            pos,
+            normal: vec![normal; n],
+            centroid: vec![],
+            tstart: (0..=n as u32).collect(),
+            tris: faces.iter().map(|&i| [3 * i, 3 * i + 1, 3 * i + 2]).collect(),
+        };
+        let (mask, slabs) = sheet_queries(&geom, &faces, &probe, 3e-4).unwrap();
+        let candidates: Vec<_> = faces
+            .iter()
+            .copied()
+            .filter(|&f| {
+                let [x, y, _] = a[f as usize];
+                slabs
+                    .iter()
+                    .any(|&(axis, lo, hi)| axis == 2 && x <= hi[0] && x + 1. >= lo[0] && y <= hi[1] && y + 1. >= lo[1])
+            })
+            .collect();
+        assert!(candidates.len() < n / 32);
+        let count = candidates.len();
+        let origins = candidates.iter().map(|&f| a[f as usize]).collect();
+        let pruned = HashMap::from([(
+            0,
+            RayIndex::new(
+                origins,
+                vec![[1., 0., 0.]; count],
+                vec![[0., 1., 0.]; count],
+                candidates,
+            ),
+        )]);
         let (comp, deg, boundary) = (vec![0; n], vec![false; n], vec![true; n]);
         let mut ctx = Ctx { g: &geom, comp: &comp, index: &index, probe: &probe, deg: &deg,
             certain: &[], rays: 7 };
         for seed in [12345, 771] {
+            ctx.index = &index;
             ctx.certain = &[];
             let full = ctx.pass(&faces, &boundary, seed, 3e-4);
             ctx.certain = &certain;
+            assert_eq!(ctx.pass(&faces, &boundary, seed, 3e-4), full);
+            ctx.index = &pruned;
+            ctx.certain = &mask;
             assert_eq!(ctx.pass(&faces, &boundary, seed, 3e-4), full);
         }
     }

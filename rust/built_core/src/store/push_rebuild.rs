@@ -189,7 +189,7 @@ impl RayWindow {
 /// indexed surface has exactly the reference triangle and owner order.
 #[derive(Clone)]
 pub(super) struct FaceBlocks {
-    extra:Vec<u32>,
+    extra: Vec<u32>,
     faces: std::sync::Arc<[u32]>,
     bounds: std::sync::Arc<[([f64; 3], [f64; 3])]>,
 }
@@ -218,7 +218,7 @@ impl FaceBlocks {
             }
             (lo, hi)
         }).collect();
-        Self { faces:faces.into(), bounds, extra:Vec::new() }
+        Self { faces: faces.into(), bounds, extra: Vec::new() }
     }
 
     fn candidates(&self, window: RayWindow) -> impl Iterator<Item = u32> + '_ {
@@ -384,7 +384,9 @@ impl Store {
         cache.scope = wanted.iter().any(|w| *w).then(|| {
             let mut faces = self.live_slots(Kind::Face);
             faces.retain(|&f| wanted[comp[f as usize] as usize]);
-            if faces.len()!=self.n(Kind::Face){edges.retain(|&e| self.scoped_edge(e,&comp,&wanted));}
+            if faces.len() != self.n(Kind::Face) {
+                edges.retain(|&e| self.scoped_edge(e, &comp, &wanted));
+            }
             (faces.into(),edges.into())
         });
         cache.scope_token = cache.token;
@@ -405,14 +407,23 @@ impl Store {
 
     fn face_blocks<'a>(&self, cache: &'a mut Cache) -> &'a FaceBlocks {
         if cache.blocks.as_ref().is_none_or(|(token, _)| *token != cache.token) {
-            let blocks=if let Some(i)=&cache.index {
-                let base=i.cap.get_or_init(||super::cap_blocks::CapBlocks::new(self));
-                let mut b=base.faces.clone();
-                let delta=self.state.changes_since(&base.base);
-                b.extra=delta.created[2].iter().chain(&delta.modified[2])
-                    .filter_map(|&k|self.slot(Kind::Face,k)).collect();
-                if delta.moved.is_empty(){b}else{FaceBlocks::new(self)}
-            }else{FaceBlocks::new(self)};
+            let blocks = if let Some(i) = &cache.index {
+                let base = i.cap.get_or_init(|| super::cap_blocks::CapBlocks::new(self));
+                let mut b = base.faces.clone();
+                let delta = self.state.changes_since(&base.base);
+                b.extra = delta.created[2]
+                    .iter()
+                    .chain(&delta.modified[2])
+                    .filter_map(|&k| self.slot(Kind::Face, k))
+                    .collect();
+                if delta.moved.is_empty() {
+                    b
+                } else {
+                    FaceBlocks::new(self)
+                }
+            } else {
+                FaceBlocks::new(self)
+            };
             cache.blocks = Some((cache.token, blocks));
         }
         &cache.blocks.as_ref().unwrap().1
@@ -430,12 +441,20 @@ impl Store {
         let blocks = self.face_blocks(cache);
         let x = arr(origin)[k];
         let scale = (self.state.corners.len() as f64 + 4.) * f64::EPSILON * 4.;
-        let mut hits:Vec<_>=blocks.faces.chunks(FaceBlocks::BLOCK).zip(blocks.bounds.iter()).filter(|(_, (lo, hi))| {
-            let pad = ON_PLANE + (lo[k].abs().max(hi[k].abs()) + x.abs() + 1.) * scale;
-            !(lo[k] - x > pad || x - hi[k] > pad)
-        }).flat_map(|(faces, _)| faces.iter().copied()).chain(blocks.extra.iter().copied())
-        .filter(|&f|self.alive(Kind::Face,f)).collect();
-        hits.sort_unstable_by_key(|&f|self.state.list_rank(Kind::Face,f));hits.dedup();
+        let mut hits: Vec<_> = blocks
+            .faces
+            .chunks(FaceBlocks::BLOCK)
+            .zip(blocks.bounds.iter())
+            .filter(|(_, (lo, hi))| {
+                let pad = ON_PLANE + (lo[k].abs().max(hi[k].abs()) + x.abs() + 1.) * scale;
+                !(lo[k] - x > pad || x - hi[k] > pad)
+            })
+            .flat_map(|(faces, _)| faces.iter().copied())
+            .chain(blocks.extra.iter().copied())
+            .filter(|&f| self.alive(Kind::Face, f))
+            .collect();
+        hits.sort_unstable_by_key(|&f| self.state.list_rank(Kind::Face, f));
+        hits.dedup();
         hits.into()
     }
 
@@ -458,10 +477,14 @@ impl Store {
         }
         let candidates: Vec<u32> = match window {
             Some(w) => {
-                let b=self.face_blocks(cache);
-                let mut faces:Vec<_>=b.candidates(w).chain(b.extra.iter().copied())
-                    .filter(|&f|self.alive(Kind::Face,f) && w.intersects(self,f)).collect();
-                faces.sort_unstable_by_key(|&f|self.state.list_rank(Kind::Face,f));faces.dedup();
+                let b = self.face_blocks(cache);
+                let mut faces: Vec<_> = b
+                    .candidates(w)
+                    .chain(b.extra.iter().copied())
+                    .filter(|&f| self.alive(Kind::Face, f) && w.intersects(self, f))
+                    .collect();
+                faces.sort_unstable_by_key(|&f| self.state.list_rank(Kind::Face, f));
+                faces.dedup();
                 faces
             }
             None => self.live_slots(Kind::Face),

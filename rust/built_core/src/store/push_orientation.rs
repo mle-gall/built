@@ -147,3 +147,47 @@ impl OrientationCache {
         Some((geom, probes))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::scans::{EFACES, FFLAGS, RINGS};
+    use crate::store::edit::Change;
+
+    #[test]
+    fn retained_face_probes_match_a_new_scan_after_slot_reuse() {
+        let mut store = Store::empty(15, Default::default());
+        let mut change = Change::default();
+        let face = |x: f64, z: f64| vec![[x, 0., z], [x + 1., 0., z], [x, 2., z]];
+        for i in 0..16 {
+            store.add_face(&[face(i as f64, 0.)], &mut change).unwrap();
+        }
+        let h = Hypot::LibStdCxx;
+        let scan = |s: &Store| MeshScan::from_state(s.state.clone(), RINGS | EFACES | FFLAGS);
+        let cache = OrientationCache::new(
+            &store,
+            &scan(&store),
+            &store.live_slots(Kind::Face),
+            h,
+            true,
+        )
+        .unwrap();
+        store.remove_face(3, &mut change);
+        store.add_face(&[face(3., 2.)], &mut change).unwrap();
+        let scan = scan(&store);
+        let faces = store.live_slots(Kind::Face);
+        let (kept, probes) = cache.geometry(&store, &scan, &faces, h, true).unwrap();
+        let fresh = Geom::of(&scan, h, true);
+        let bits = |v: V3| [v.0, v.1, v.2].map(f64::to_bits);
+        assert_eq!(kept.tris, fresh.tris);
+        assert_eq!(kept.tstart, fresh.tstart);
+        for i in 0..faces.len() {
+            assert_eq!(bits(kept.centroid[i]), bits(fresh.centroid[i]));
+            assert_eq!(bits(kept.normal[i]), bits(fresh.normal[i]));
+            assert_eq!(
+                bits(probes[i]),
+                bits(interior_probe(&fresh, i, &scan.rings_of(i)))
+            );
+        }
+    }
+}

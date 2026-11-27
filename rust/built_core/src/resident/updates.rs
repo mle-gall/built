@@ -443,14 +443,17 @@ fn mesh_centre(py: Python<'_>, mesh: &Obj<'_>) -> PyResult<Option<[f64; 3]>> {
 }
 
 #[pyclass(module = "built_core", dict, weakref)]
-pub struct InstanceUpdates { pub(super) plain: Option<super::plain_edit::Layout>, rich: Option<super::rich_edit::Layout> }
+pub struct InstanceUpdates {
+    pub(super) plain: Option<super::plain_edit::Layout>,
+    rich: Option<super::rich_edit::Layout>,
+}
 
 #[pymethods]
 impl InstanceUpdates {
     #[new]
     #[pyo3(signature = (*_args, **_kwargs))]
     fn new(_args: &Bound<'_, PyTuple>, _kwargs: Option<&Bound<'_, PyDict>>) -> Self {
-        Self { plain: None, rich:None }
+        Self { plain: None, rich: None }
     }
 
     fn __init__<'py>(slf: &Bound<'py, Self>, scene: &Obj<'py>, packed: &Obj<'py>) -> PyResult<()> {
@@ -540,14 +543,14 @@ impl InstanceUpdates {
         s.setattr("mesh_changes", PyDict::new(py))?;
         s.setattr("changed_records", PyDict::new(py))?;
         s.setattr("roots", py.get_type::<PySet>().call1((scene.getattr("groups")?,))?)?;
-        slf.borrow_mut().rich=None;
+        slf.borrow_mut().rich = None;
         super::plain_edit::prime(slf)?;
-        if slf.borrow().plain.is_none(){
-            if let Some(mesh)=scene.getattr_opt("mesh")?{
-                if let Some(entry)=s.getattr("meshes")?.cast::<PyDict>()?.get_item(id(&mesh))?{
-                    if let Ok(code)=entry.get_item(2)?.extract::<usize>(){
-                        let layout=super::rich_edit::seed(s,&mesh,code,true)?;
-                        slf.borrow_mut().rich=layout;
+        if slf.borrow().plain.is_none() {
+            if let Some(mesh) = scene.getattr_opt("mesh")? {
+                if let Some(entry) = s.getattr("meshes")?.cast::<PyDict>()?.get_item(id(&mesh))? {
+                    if let Ok(code) = entry.get_item(2)?.extract::<usize>() {
+                        let layout = super::rich_edit::seed(s, &mesh, code, true)?;
+                        slf.borrow_mut().rich = layout;
                     }
                 }
             }
@@ -563,10 +566,16 @@ impl InstanceUpdates {
     }
 
     fn face_ranges<'py>(slf: &Bound<'py,Self>, mesh: &Obj<'py>, faces: &Obj<'py>) -> PyResult<Option<Vec<(usize,u32,u32)>>> {
-        if let Some(l)=&slf.borrow().rich{
-            let variants=slf.getattr("variants")?;
-            if variants.cast::<PyDict>()?.get_item(id(mesh))?.is_some_and(|v|v.len().ok()==Some(1)){
-                if let Some(r)=super::rich_edit::ranges(l,mesh,faces)?{return Ok(Some(r))}
+        if let Some(l) = &slf.borrow().rich {
+            let variants = slf.getattr("variants")?;
+            if variants
+                .cast::<PyDict>()?
+                .get_item(id(mesh))?
+                .is_some_and(|v| v.len().ok() == Some(1))
+            {
+                if let Some(r) = super::rich_edit::ranges(l, mesh, faces)? {
+                    return Ok(Some(r));
+                }
             }
         }
         match super::plain_edit::face_ranges(slf, mesh, faces)? {
@@ -1346,11 +1355,18 @@ impl InstanceUpdates {
             let mut cache = slf.borrow_mut().plain.take();
             let applied = super::plain_edit::apply(s, &changed, renderer.as_ref(), &mut cache)?;
             slf.borrow_mut().plain = cache;
-            let mut rich=slf.borrow_mut().rich.take();
-            let updated=if applied {false} else if let Some(l)=&mut rich {super::rich_edit::apply(s,&changed,renderer.as_ref(),l)?}else{false};
-            if updated {
-                slf.borrow_mut().rich=rich; true
-            }else{applied}
+            let mut rich = slf.borrow_mut().rich.take();
+            if applied {
+                true
+            } else if let Some(layout) = rich.as_mut() {
+                let patched = super::rich_edit::apply(s, &changed, renderer.as_ref(), layout)?;
+                if patched {
+                    slf.borrow_mut().rich = rich;
+                }
+                patched
+            } else {
+                false
+            }
         } else { false };
         if any_changed && !patched {
             packed.getattr("__dict__")?.call_method1("pop", ("_snap_edit",py.None()))?;
@@ -1574,10 +1590,10 @@ impl InstanceUpdates {
                 }
             }
         }
-        if any_changed && !patched && changed.len()?==1 && anchors_moved.is_empty(){
-            let entry=changed.get_item(0)?;
-            let layout=super::rich_edit::seed(s,&entry.get_item(0)?,entry.get_item(2)?.extract()?,false)?;
-            slf.borrow_mut().rich=layout;
+        if any_changed && !patched && changed.len()? == 1 && anchors_moved.is_empty() {
+            let entry = changed.get_item(0)?;
+            let layout = super::rich_edit::seed(s, &entry.get_item(0)?, entry.get_item(2)?.extract()?, false)?;
+            slf.borrow_mut().rich = layout;
         }
         let instances = packed.getattr("instances")?;
         let mut membership_changed = instances.len()? != resident.getattr("count")?.extract::<usize>()?;
