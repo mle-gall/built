@@ -13,27 +13,36 @@ fn rows(ctx: &Bound<'_, PyAny>) -> PyResult<Vec<(Value, String)>> {
         .call_method1("preset_catalog", (scene,))?;
     let mut items: Vec<(Value, String)> = serde_json::from_str(&dumps(py, &catalog)?)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    if let Ok(files) = std::fs::read_dir(local_dir()?) {
-        for file in files
-            .flatten()
-            .map(|f| f.path())
-            .filter(|p| p.extension().is_some_and(|s| s == "builtpreset"))
-        {
-            let Some(p) = std::fs::read(file)
-                .ok()
-                .and_then(|b| serde_json::from_slice::<Value>(&b).ok())
-            else {
-                continue;
-            };
-            if p["uid"].is_string()
-                && p["name"].is_string()
-                && !items.iter().any(|(row, _)| row["uid"] == p["uid"])
-            {
-                items.push((p, "mine".into()));
-            }
+    for (_, preset) in saved_presets()? {
+        if !items.iter().any(|(row, _)| row["uid"] == preset["uid"]) {
+            items.push((preset, "mine".into()));
         }
     }
     Ok(items)
+}
+fn saved_presets() -> PyResult<Vec<(PathBuf, Value)>> {
+    let mut saved = Vec::new();
+    if let Ok(files) = std::fs::read_dir(local_dir()?) {
+        for file in files.flatten().map(|entry| entry.path()) {
+            if file.extension().is_some_and(|ext| ext == "builtpreset") {
+                if let Some(preset) = std::fs::read(&file)
+                    .ok()
+                    .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
+                    .filter(|row| row["uid"].is_string() && row["name"].is_string())
+                {
+                    saved.push((file, preset));
+                }
+            }
+        }
+    }
+    Ok(saved)
+}
+fn saved_path(key: &str) -> PyResult<PathBuf> {
+    saved_presets()?
+        .into_iter()
+        .find(|(_, row)| row["uid"] == key)
+        .map(|(path, _)| path)
+        .ok_or_else(|| PyValueError::new_err("Saved preset is missing"))
 }
 fn local_dir() -> PyResult<PathBuf> {
     Ok(ProfilesProvider::saved_directory()?.with_file_name("presets"))
@@ -77,6 +86,7 @@ fn edit(ctx: &Bound<'_, PyAny>, preset: Value, title: &str) -> PyResult<()> {
     let field = forms.getattr("Field")?;
     let fields = PyList::empty(py);
     let capture = title == "Save as preset";
+    let personal = title == "Edit saved preset";
     for (key, label) in [
         ("name", "Name"),
         ("pack", "Pack"),
@@ -181,7 +191,21 @@ fn edit(ctx: &Bound<'_, PyAny>, preset: Value, title: &str) -> PyResult<()> {
             } else {
                 0
             };
-            if destination == 0 {
+            if personal {
+                let file = saved_path(&shown(&p["uid"]))?;
+                let temporary = file.with_extension(format!("{}.tmp", uid(py)?));
+                p["rev"] = json!(p["rev"].as_u64().unwrap_or(0).saturating_add(1));
+                let result = (|| -> std::io::Result<()> {
+                    use std::io::Write;
+                    std::fs::File::create_new(&temporary)?.write_all(p.to_string().as_bytes())?;
+                    std::fs::rename(&temporary, file)
+                })();
+                if result.is_err() {
+                    let _ = std::fs::remove_file(temporary);
+                }
+                result?;
+                flash(c.bind(py), "Preset saved")?;
+            } else if destination == 0 {
                 update(c.bind(py), json!([p]))?;
             } else {
                 let folder = if destination == 1 {
@@ -225,7 +249,10 @@ fn transfer(ctx: &Bound<'_, PyAny>, pack: Option<String>) -> PyResult<()> {
         if path.is_none() {
             return Ok(none(py));
         }
-        let path: PathBuf = path.extract()?;
+        let mut path: PathBuf = path.extract()?;
+        if path.is_dir() {
+            path.push("pack.json");
+        }
         let ctx = c.bind(py);
         if let Some(pack) = &pack {
             let rows: Vec<_> = rows(ctx)?
@@ -254,7 +281,7 @@ fn transfer(ctx: &Bound<'_, PyAny>, pack: Option<String>) -> PyResult<()> {
     py.import("built_render.chrome_forms")?
         .getattr("ask_text")?
         .call(
-            (ctx.getattr("win")?, title, "Pack file (.builtpreset)"),
+            (ctx.getattr("win")?, title, "Pack file or folder"),
             Some(&[("done", done)].into_py_dict(py)?),
         )?;
     Ok(())
@@ -282,7 +309,7 @@ impl PresetsProvider {
             if p["primitive"] == "sweep" {
                 verbs.insert(0, "apply");
             }
-            if source == "model" {
+            if source == "model" || source == "mine" {
                 verbs.push("delete");
             }
             let mut details = Vec::new();
@@ -341,6 +368,7 @@ impl PresetsProvider {
         let data = item.get_item("preset")?;
         let mut p: Value = serde_json::from_str(&dumps(py, &data)?)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let personal = item.get_item("source")?.eq("mine")?;
         match verb {
             "apply" if p["primitive"] == "sweep" => {
                 let win = ctx.getattr("win")?;
@@ -350,7 +378,15 @@ impl PresetsProvider {
                     .getattr("_machine")?
                     .call_method1("set", ("preset", data))?;
             }
-            "edit" => edit(ctx, p, "Edit project preset")?,
+            "edit" => edit(
+                ctx,
+                p,
+                if personal {
+                    "Edit saved preset"
+                } else {
+                    "Edit project preset"
+                },
+            )?,
             "duplicate" => {
                 p["uid"] = json!(uid(py)?);
                 p["name"] = json!(format!("{} copy", shown(&p["name"])));
@@ -359,8 +395,16 @@ impl PresetsProvider {
             "export" => transfer(ctx, Some(shown(&p["pack"])))?,
             "delete" => ask(
                 &ctx.getattr("view")?,
-                ("delete", "presets", shown(&p["uid"])),
-                "Delete project preset?",
+                (
+                    if personal { "delete_saved" } else { "delete" },
+                    "presets",
+                    shown(&p["uid"]),
+                ),
+                if personal {
+                    "Delete saved preset?"
+                } else {
+                    "Delete project preset?"
+                },
                 &shown(&p["name"]),
                 "Delete",
             )?,
@@ -375,7 +419,9 @@ impl PresetsProvider {
         key: &str,
         _text: &str,
     ) -> PyResult<()> {
-        if what == "delete" {
+        if what == "delete_saved" {
+            std::fs::remove_file(saved_path(key)?)?;
+        } else if what == "delete" {
             let reply = core(
                 ctx,
                 "preset_delete",

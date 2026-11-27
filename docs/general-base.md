@@ -671,7 +671,8 @@ Sweep stores the preset's display name in `preset`, its stable 16-hex ID in
 `preset_uid` and its followed revision in `preset_rev`. Existing Sweep rows
 with only a name keep their geometry and record. A document embeds its preset
 rows in `ext["built.presets"] = {"v": 1, "rows": [...]}`. A pack file uses the
-same envelope plus `"format": "built.presets"`. A single saved Library preset
+same envelope plus `"format": "built.presets"`. When importing or exporting a
+pack folder, the Library reads or writes that envelope in `pack.json`. A single saved Library preset
 is one JSON row in a `.builtpreset` file. Drawn profiles in a portable preset
 carry their sketch under `values.profile.drawing`.
 

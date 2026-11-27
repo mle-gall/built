@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 from copy import deepcopy
 
+import pytest
+
 from built_core import command_protocol as live
 from built_core.history import History
 from built_core.protocol import commands
@@ -123,7 +125,8 @@ def test_library_browse_and_duplicate(tmp_path, monkeypatch):
     assert not [p for p in provider.items(ctx) if p["source"] == "model"]
 
 
-def test_pack_export_import_uses_one_step(tmp_path, monkeypatch):
+@pytest.mark.parametrize("folder", [False, True])
+def test_pack_export_import_uses_one_step(tmp_path, monkeypatch, folder):
     import json
     from types import SimpleNamespace
 
@@ -137,11 +140,12 @@ def test_pack_export_import_uses_one_step(tmp_path, monkeypatch):
     ctx = SimpleNamespace(win=None, scene=scene,
                           vp=SimpleNamespace(notify_scene_changed=lambda: None),
                           core=lambda verb, **kw: commands.run(history, verb, **kw))
-    path = tmp_path / "mep.builtpreset"
+    path = tmp_path if folder else tmp_path / "mep.builtpreset"
     monkeypatch.setattr(chrome_forms, "ask_text", lambda *args, done: done(str(path)))
     pipe = next(p for p in provider.items(ctx) if p["name"] == "Pipe")
     provider.run(ctx, "export", pipe)
-    pack = json.loads(path.read_text())
+    manifest = path / "pack.json" if folder else path
+    pack = json.loads(manifest.read_text())
     assert {p["name"] for p in pack["rows"]} == {"Duct", "Pipe"}
     provider.type_action(ctx, "import")
     assert len([p for p in provider.items(ctx) if p["source"] == "model"]) == 2
@@ -174,3 +178,31 @@ def test_starter_presets_file_into_a_new_node():
     apply(history, "undo")
     assert not scene.groups
     assert preset["node"] not in bim_registry.get(scene).get("structure", {}).get("nodes", {})
+
+
+def test_saved_preset_can_be_edited_and_deleted_in_my_library(tmp_path, monkeypatch):
+    import json
+    from pathlib import Path
+    from types import SimpleNamespace
+
+    from built_render import chrome_forms
+    from built_render.wgpu_library import PresetsProvider, ProfilesProvider
+
+    monkeypatch.setenv("BUILT_SETTINGS_DIR", str(tmp_path))
+    folder = Path(ProfilesProvider.saved_directory()).with_name("presets")
+    folder.mkdir(parents=True)
+    path = folder / "personal.builtpreset"
+    preset = dict(steel(), uid="0000000100000001")
+    path.write_text(json.dumps(preset))
+    forms = []
+    monkeypatch.setattr(chrome_forms, "show", lambda win, form: forms.append(form))
+    ctx = SimpleNamespace(win=None, scene=Scene(), flash=lambda text: None)
+    provider = PresetsProvider()
+    mine, = [p for p in provider.items(ctx) if p["source"] == "mine"]
+    provider.run(ctx, "edit", mine)
+    form, = forms
+    form.on_done("ok", dict(form.values(), name="Personal rafter"))
+    changed = json.loads(path.read_text())
+    assert changed["name"] == "Personal rafter" and changed["rev"] == preset["rev"] + 1
+    provider.confirmed(ctx, "delete_saved", mine["key"], "")
+    assert not path.exists()
