@@ -159,6 +159,14 @@ fn dispatch<'py>(host: &Obj<'py>, cmd: &Obj<'py>, phase: &str) -> PyResult<Obj<'
         .call1((host.getattr("_listeners")?,))?;
     notify(&listeners, 0, cmd, phase, false)?;
     let succession = if nested || phase == "undo" { None } else { succession_mark(host, cmd)? };
+    // A redo restores the state the step recorded before its rebind pass:
+    // a step whose exact curves came from its intent (fitted circles) gives
+    // that intent again, so the pass derives the same bindings.
+    if phase == "redo" && succession.is_some() {
+        if let Some(bits) = cmd.getattr_opt("_exact_intent")? {
+            crate::store::exact_bound::set_intent(bits.extract()?);
+        }
+    }
     host.setattr("_running", true)?;
     let mut ran = false;
     let result = (|| {

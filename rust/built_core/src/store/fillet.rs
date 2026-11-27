@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! Edge and vertex rounding share the replacement transaction and preview data.
-use super::{edit::Change, keys::Kind, topo::OpError, Store, SOFT};
+use super::{edit::Change, keys::Kind, topo::OpError, Store, FLAT, SOFT};
 use crate::store::geometry::{length, Hypot, V3};
 use std::collections::{BTreeMap, BTreeSet};
 use std::ops::{Add, Div, Mul, Sub};
@@ -76,6 +76,69 @@ pub(super) type Result<T> = std::result::Result<T, Refusal>;
 pub(super) fn at(msg: &'static str, p: V3) -> Refusal {
     (msg, Some(p))
 }
+/// The largest size in (0, `size`] that `fits`, to a millionth of `size`,
+/// by bisection on the planner itself (what the adjacent faces allow, with
+/// every corner and neighbouring cut counted). None when a ten-thousandth
+/// of `size` is refused too: that refusal is not about the size.
+pub(crate) fn largest(size: f64, fits: impl Fn(f64) -> bool) -> Option<f64> {
+    if !(size.is_finite() && size > 0.) {
+        return None;
+    }
+    if fits(size) {
+        return Some(size);
+    }
+    let (mut lo, mut hi) = (size * 1e-4, size);
+    if !fits(lo) {
+        return None;
+    }
+    while hi - lo > size * 1e-6 {
+        let mid = 0.5 * (lo + hi);
+        if fits(mid) {
+            lo = mid
+        } else {
+            hi = mid
+        }
+    }
+    Some(lo)
+}
+
+/// `x` rounded down to `digits` significant digits (a hair of slack so a
+/// bisected limit just under a round value keeps it).
+fn floor_digits(x: f64, digits: i32) -> f64 {
+    if !(x.is_finite() && x > 0.) {
+        return 0.;
+    }
+    let step = 10f64.powi(x.log10().floor() as i32 - (digits - 1));
+    ((x / step) + 1e-2).floor() * step
+}
+
+/// From the largest size that fits (`limit`, metres) and the length of one
+/// display unit (`unit`, metres): the limit as said to the user (two
+/// significant digits, never more than fits) and a clean size to propose
+/// (9.5 → 9, else 10 % under on two digits). Each is checked with `fits`, stepping
+/// down when roundoff put it just over.
+pub(crate) fn clean_fits(limit: f64, unit: f64, fits: impl Fn(f64) -> bool) -> (f64, f64) {
+    let unit = if unit.is_finite() && unit > 0. { unit } else { 1. };
+    let u = limit / unit;
+    // `x` to two digits, stepped down by its own last digit while refused
+    // (0.99999 rounds to 1.00, refused, then 0.99; not 0.9).
+    let settle = |x: f64| {
+        let step = 10f64.powi(x.max(f64::MIN_POSITIVE).log10().floor() as i32 - 1);
+        let mut v = floor_digits(x, 2);
+        for _ in 0..4 {
+            if v > 0. && fits(v * unit) {
+                return v * unit;
+            }
+            v -= step;
+        }
+        limit
+    };
+    let said = settle(u);
+    let one = floor_digits(u, 1);
+    let proposed = if one >= 0.9 * u && fits(one * unit) { one * unit } else { settle(0.9 * u) };
+    (said, proposed)
+}
+
 pub(super) fn check(size: f64, profile: f64) -> Result<()> {
     if !size.is_finite() || size <= 0. {
         return Err(("The radius must be positive.", None));
@@ -93,6 +156,10 @@ pub struct RoundPlan {
     pub strips: Vec<Vec<V3>>,
     pub patches: Vec<Vec<V3>>,
     pub soft: Vec<(V3, V3)>,
+    /// Tangent seams between a strip and a face it rounds into: soft (no
+    /// line) with smooth normals off, so the flat face is never shaded
+    /// from the strip's normals (an exact strip shades from its support).
+    pub seams: Vec<(V3, V3)>,
     pub curves: Vec<Vec<V3>>,
     pub flags: Vec<(u32, V3, V3)>,
     pub materials: Vec<u32>,
@@ -178,11 +245,13 @@ impl RoundPlan {
                 ch.modified[1].push(s.key(Kind::Edge, e));
             }
         }
-        for &(a, b) in &self.soft {
-            if let Some(e) = edge(s, a, b) {
-                let i = e as usize;
-                s.state.eflags.set(i, *s.state.eflags.get(i) | SOFT);
-                ch.modified[1].push(s.key(Kind::Edge, e));
+        for (pairs, bits) in [(&self.soft, SOFT), (&self.seams, SOFT | FLAT)] {
+            for &(a, b) in pairs {
+                if let Some(e) = edge(s, a, b) {
+                    let i = e as usize;
+                    s.state.eflags.set(i, *s.state.eflags.get(i) | bits);
+                    ch.modified[1].push(s.key(Kind::Edge, e));
+                }
             }
         }
         if !ids.is_empty() {
@@ -796,6 +865,10 @@ pub(super) fn plan<M: FilletMesh>(
         return Err(("Pick an edge to round.", None));
     }
     check(size, profile)?;
+    // A straight profile (Chamfer, profile 0.25) is flat: its seams with the
+    // faces are creases, not tangents. Only `smooth` softens seams, those
+    // between its coplanar segments, so no flat face is smoothed by it.
+    let straight = is_straight(outline, profile);
     let mut plan = RoundPlan::default();
     let mut rounds = Vec::new();
     let mut groups: BTreeMap<u32, Vec<usize>> = BTreeMap::new();
@@ -953,6 +1026,14 @@ pub(super) fn plan<M: FilletMesh>(
             Ok(seq)
         })?;
         let ring = &plan.rebuilt.last().unwrap().1[0];
+        // Cuts from opposite sides that pass each other (two fillets wider
+        // than the face between them) turn the face inside out: refused as
+        // too large, not built as a folded face.
+        let before: Vec<V3> = s.rings(f)[0].iter().map(|&v| s.point(v)).collect();
+        let area = newell(&before);
+        if newell(ring).dot(area, h) <= 1e-9 * area.dot(area, h) {
+            return Err(at("A face would collapse at {p} — the radius is too large.", before[0]));
+        }
         let normal = s.plane_normal(f, h);
         let o = s.point(s.rings(f)[0][0]);
         let span = ring.iter().map(|&p| length(p - o, h)).fold(1., f64::max);
@@ -984,19 +1065,15 @@ pub(super) fn plan<M: FilletMesh>(
             }
             plan.strips.push(quad)
         }
-        if outline.is_empty() {
-            if M::OBJECT {
-                plan.soft
-                    .extend((1..last).chain([0, last]).map(|i| (a[i], b[i])));
-            } else {
-                plan.soft.extend(a.iter().copied().zip(b.iter().copied()));
-            }
+        if outline.is_empty() && !straight {
+            plan.soft.extend((1..last).map(|i| (a[i], b[i])));
+            plan.seams.extend([0, last].map(|i| (a[i], b[i])));
         }
         for (v, sec) in &r.sections {
             let degree = groups[v].len();
             if degree == 1 || (degree == 3 && cut_corner && outline.is_empty()) {
                 plan.curves.push(sec.clone())
-            } else if outline.is_empty() {
+            } else if outline.is_empty() && !straight {
                 plan.soft.extend(sec.windows(2).map(|w| (w[0], w[1])))
             }
         }
@@ -1005,7 +1082,7 @@ pub(super) fn plan<M: FilletMesh>(
         let rs = [&rounds[g[0]], &rounds[g[1]], &rounds[g[2]]];
         corner(&mut plan, s, v, rs, profile, cut_corner, outline, steps, h)?;
     }
-    if !outline.is_empty() {
+    if !outline.is_empty() || straight {
         smooth(&mut plan, h, M::OBJECT)
     }
     for &v in groups.keys() {
@@ -1013,6 +1090,11 @@ pub(super) fn plan<M: FilletMesh>(
             .extend(s.disk(v).into_iter().filter(|&e| !s.radial(e).is_empty()))
     }
     Ok(plan)
+}
+
+/// The superellipse of profile 0.25 is the straight line x + y = 1.
+fn is_straight(outline: &[(f64, f64)], profile: f64) -> bool {
+    outline.is_empty() && (profile - 0.25).abs() < 1e-9
 }
 
 type PointKey = [i64; 3];
@@ -1032,15 +1114,13 @@ fn sides(r: &[V3]) -> impl Iterator<Item = (V3, V3)> + '_ {
     r.iter().copied().zip(r.iter().copied().cycle().skip(1))
 }
 fn smooth(plan: &mut RoundPlan, h: Hypot, insertion_order: bool) {
-    let mut normals: BTreeMap<Side, Vec<(V3, V3, V3)>> = BTreeMap::new();
+    // Per side: the normals of the rings on it, and whether each ring is a
+    // rebuilt (flat) face rather than a strip or patch.
+    let mut normals: BTreeMap<Side, Vec<(V3, V3, V3, bool)>> = BTreeMap::new();
     let mut order = Vec::new();
-    for ring in plan
-        .rebuilt
-        .iter()
-        .map(|(_, r)| &r[0])
-        .chain(&plan.strips)
-        .chain(&plan.patches)
-    {
+    let rebuilt = plan.rebuilt.iter().map(|(_, r)| (&r[0], true));
+    let made = plan.strips.iter().chain(&plan.patches).map(|r| (r, false));
+    for (ring, flat) in rebuilt.chain(made) {
         if let Some(n) = unit(newell(ring), h) {
             for (a, b) in sides(ring) {
                 let key = side(a, b);
@@ -1048,7 +1128,7 @@ fn smooth(plan: &mut RoundPlan, h: Hypot, insertion_order: bool) {
                 if insertion_order && entries.is_empty() {
                     order.push(key);
                 }
-                entries.push((n, a, b));
+                entries.push((n, a, b, flat));
             }
         }
     }
@@ -1057,9 +1137,13 @@ fn smooth(plan: &mut RoundPlan, h: Hypot, insertion_order: bool) {
     }
     for key in order {
         let ns = &normals[&key];
-        if let [(n, a, b), (m, _, _)] = ns.as_slice() {
+        if let [(n, a, b, f), (m, _, _, g)] = ns.as_slice() {
             if n.dot(*m, h) > 30f64.to_radians().cos() {
-                plan.soft.push((*a, *b))
+                if f != g {
+                    plan.seams.push((*a, *b))
+                } else {
+                    plan.soft.push((*a, *b))
+                }
             }
         }
     }
@@ -1245,7 +1329,9 @@ fn corner<M: FilletMesh>(
             }
         },
     );
-    if outline.is_empty() {
+    if is_straight(outline, profile) {
+        // Flat facets meeting at creases: `smooth` decides at the end.
+    } else if outline.is_empty() {
         plan.soft.extend(patch.soft)
     } else {
         wind_like(&mut patch.patches, &plan.strips);
@@ -1484,4 +1570,36 @@ fn staircase(c: [V3; 3], o: V3, k: usize, sign: f64, h: Hypot) -> Vec<Vec<V3>> {
         }
     }
     faces
+}
+
+#[cfg(test)]
+mod largest_tests {
+    #[test]
+    fn largest_finds_the_limit_and_gives_up_on_other_refusals() {
+        let r = super::largest(0.1, |r| r <= 0.0095).unwrap();
+        assert!((r - 0.0095).abs() < 1e-6 && r <= 0.0095);
+        assert_eq!(super::largest(0.1, |_| true), Some(0.1));
+        assert_eq!(super::largest(0.1, |_| false), None);
+        assert_eq!(super::largest(-1., |_| true), None);
+    }
+
+    #[test]
+    fn clean_fits_says_the_limit_and_proposes_a_round_size() {
+        let mm = 1e-3;
+        let fits = |r: f64| r <= 0.0095 + 1e-12;
+        let (said, proposed) = super::clean_fits(0.0094999, mm, fits);
+        assert!((said - 0.0095).abs() < 1e-12 && (proposed - 0.009).abs() < 1e-12);
+        // 15 mm: 10 is a third under, so 10 % under on two digits: 13 mm.
+        let (said, proposed) = super::clean_fits(0.015, mm, |r| r <= 0.015 + 1e-12);
+        assert!((said - 0.015).abs() < 1e-12 && (proposed - 0.013).abs() < 1e-12);
+        // 39.99 mm, with 40 refused: not 30 but about 10 % under, 36 mm.
+        let (said, proposed) = super::clean_fits(0.03999, mm, |r| r < 0.04);
+        assert!((said - 0.039).abs() < 1e-12 && (proposed - 0.036).abs() < 1e-12, "{said} {proposed}");
+        // A limit just under a round value is said by its own digits.
+        let (said, _) = super::clean_fits(0.99999, 1., |r| r < 1.);
+        assert!((said - 0.99).abs() < 1e-12, "{said}");
+        // Roundoff over the limit steps down.
+        let (said, _) = super::clean_fits(0.00949, mm, |r| r <= 0.00949);
+        assert!((said - 0.0094).abs() < 1e-12);
+    }
 }

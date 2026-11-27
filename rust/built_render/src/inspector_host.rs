@@ -223,6 +223,13 @@ fn bevel_state<'py>(py: Python<'py>, tool: &Bound<'py, PyAny>) -> PyResult<Bound
     b.set_item("affect", tool.getattr("affect")?)?;
     b.set_item("measure", tool.getattr("measure")?)?;
     b.set_item("amount", py.import("built_core.units")?.call_method1("fmt_len_fine", (tool.getattr("radius")?,))?)?;
+    // A size the picked edges refuse: the Size field reads in the error
+    // colour with the reason (and what fits) under it.
+    let refused = match tool.getattr_opt("value_error")? {
+        Some(flag) if flag.is_truthy()? => tool.getattr("_message")?,
+        _ => py.None().into_bound(py),
+    };
+    b.set_item("error", refused)?;
     b.set_item("segments", &segments)?;
     b.set_item("shape", &shape)?;
     b.set_item("numeric_profile", tool.getattr("numeric_profile")?)?;

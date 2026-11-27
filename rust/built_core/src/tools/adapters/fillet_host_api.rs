@@ -39,11 +39,43 @@ fn host_reset_bevel<'py>(a: &Args<'py>) -> Reply<'py> {
         tool.setattr("edges", &picked)?;
     }
     tool.call_method0("_replan")?;
+    // The remembered size does not fit what is picked: start from the
+    // largest clean size that does, and say so. The remembered one stays.
+    let fit = tool.getattr("_fit")?;
+    if picked.is_truthy()? && tool.getattr("_plan")?.is_none() && !fit.is_none() {
+        let remembered = tool.getattr("radius")?;
+        tool.setattr("radius", fit.get_item(1)?)?;
+        tool.call_method0("_replan")?;
+        if !tool.getattr("_plan")?.is_none() {
+            let fmt = |v: &Obj<'py>| module.call_method1("fmt_len_fine", (v,));
+            let said = module.call_method(
+                "tr",
+                ("{m} {r}: {t} does not fit this selection.",),
+                Some(&fields!(py; "m" => module.call_method1("tr", (tool.call_method0("vcb_caption")?,))?,
+                    "r" => fmt(&tool.getattr("radius")?)?, "t" => fmt(&remembered)?)),
+            )?;
+            viewport.call_method1("flash_status", (said, 4000))?;
+        } else {
+            drop_proposal(&tool)?;
+            tool.call_method0("_replan")?;
+        }
+    }
     Ok(none(py))
+}
+/// A proposed size lives on the instance for one activation;
+/// what the user typed or sized stays on the class, remembered per session.
+fn drop_proposal(tool: &Obj<'_>) -> PyResult<()> {
+    if tool.getattr("__dict__")?.contains("radius")? {
+        tool.delattr("radius")?;
+    }
+    Ok(())
 }
 fn reset<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let tool = a.get_item(0)?;
+    drop_proposal(&tool)?;
+    tool.setattr("_fit", none(py))?;
+    tool.setattr("_fit_key", none(py))?;
     tool.setattr("edges", PyList::empty(py).into_any())?;
     tool.setattr("hover_edge", none(py))?;
     tool.setattr("hover_vertex", none(py))?;
@@ -305,7 +337,13 @@ fn set_size<'py>(a: &Args<'py>) -> Reply<'py> {
         "radius",
         py.get_type::<pyo3::types::PyFloat>().call1((&value,))?,
     )?;
+    drop_proposal(&tool)?;
     tool.call_method0("_replan")?;
+    // Never a silent no-op: a refused size says why (and what fits).
+    let message = tool.getattr("_message")?;
+    if message.is_truthy()? && tool.call_method0("_current_edges")?.is_truthy()? {
+        viewport.call_method1("flash_status", (message, 4000))?;
+    }
     viewport.call_method0("update")?;
     Ok(none(py))
 }
@@ -697,6 +735,9 @@ fn host_panel_value<'py>(a: &Args<'py>) -> Reply<'py> {
         &field,
         &value,
     ))?;
+    if field.eq("radius")? {
+        drop_proposal(&tool)?;
+    }
     if field.eq("segments")? {
         viewport.call_method1(
             "flash_status",
@@ -780,12 +821,69 @@ fn replan<'py>(a: &Args<'py>) -> Reply<'py> {
     }
     if plan.is_instance(&py.get_type::<pyo3::types::PyString>().into_any())? {
         tool.setattr("_plan", none(py))?;
-        tool.setattr("_message", &plan)?;
+        let fit = fit_for(&tool, &module, &mesh, &edges, &key)?;
+        let message = if fit.is_none() {
+            plan
+        } else {
+            module.call_method(
+                "tr",
+                ("{m} too large: {r} fits.",),
+                Some(&fields!(py; "m" => module.call_method1("tr", (tool.call_method0("vcb_caption")?,))?,
+                    "r" => module.call_method1("fmt_len_fine", (fit.get_item(0)?,))?)),
+            )?
+        };
+        tool.setattr("_message", &message)?;
     } else {
         tool.setattr("_plan", &plan)?;
         tool.setattr("_message", none(py))?;
     }
     Ok(none(py))
+}
+/// For a refused size: `(said, proposed)` from `fillet_fit`, or None when
+/// the refusal is not about the size. The limit depends on the picked
+/// elements and every setting but the size, so it is kept for that key.
+fn fit_for<'py>(tool: &Obj<'py>, module: &Obj<'py>, mesh: &Obj<'py>, edges: &Obj<'py>, key: &Obj<'py>) -> Reply<'py> {
+    let py = tool.py();
+    let items = PyList::new(py, key.try_iter()?.collect::<PyResult<Vec<_>>>()?)?;
+    items.set_item(1, py.None())?;
+    let fit_key = items.to_tuple();
+    if fit_key.as_any().eq(tool.getattr("_fit_key")?)? {
+        return tool.getattr("_fit");
+    }
+    let unit = module.call_method1("metres_from_number", (1.0,))?;
+    let kw = fields!(py; "unit" => &unit);
+    let fit = if tool.call_method0("_corners_mode")?.is_truthy()? {
+        module.call_method(
+            "vertex_bevel_fit",
+            (mesh, edges, tool.getattr("radius")?, tool.getattr("segments")?, tool.getattr("profile")?),
+            Some(&kw),
+        )?
+    } else {
+        module.call_method(
+            "fillet_fit",
+            (
+                mesh,
+                edges,
+                tool.getattr("radius")?,
+                tool.getattr("segments")?,
+                tool.getattr("profile")?,
+                tool.getattr("measure")?,
+                tool.getattr("corners")?,
+                tool.getattr("shape")?,
+            ),
+            Some(&kw),
+        )?
+    };
+    tool.setattr("_fit_key", fit_key)?;
+    tool.setattr("_fit", &fit)?;
+    Ok(fit)
+}
+/// The anchored field reads a refusal in the error colour.
+fn value_error<'py>(a: &Args<'py>) -> Reply<'py> {
+    let py = a.py();
+    let tool = a.get_item(0)?;
+    (tool.getattr("_message")?.is_truthy()? && tool.call_method0("_current_edges")?.is_truthy()?)
+        .into_bound_py_any(py)
 }
 fn rubber_band_lines<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
@@ -914,6 +1012,7 @@ pub(super) const METHODS: &[Method] = &[
     ("preview_faces", Mode::Method, preview_faces, &["self"], "", ""),
     ("rubber_band_lines", Mode::Method, rubber_band_lines, &["self"], "", ""),
     ("value_label", Mode::Method, value_label, &["self"], "", ""),
+    ("value_error", Mode::Property, value_error, &["self"], "bool", "The value field shows a refusal: drawn in the error colour."),
     ("_shape_label", Mode::Method, shape_label, &["self"], "str", "English source label of the drawn outline in use."),
     ("_is_plain_fillet", Mode::Method, is_plain_fillet, &["self"], "bool", ""),
 ];

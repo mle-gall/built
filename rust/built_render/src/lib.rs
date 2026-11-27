@@ -2957,10 +2957,15 @@ impl Renderer {
     /// The value field on the geometry: caption, live reading or what is
     /// typed, its anchor (points), the tool's start on screen and the
     /// document's revision (a commit is read from them, ui/value_field.rs).
-    #[pyo3(signature = (caption, value, typing, x, y, start=None, revision=0))]
+    /// `error`: the value is the tool's refusal (drawn in the error colour).
+    #[pyo3(signature = (caption, value, typing, x, y, start=None, revision=0, error=false))]
+    #[allow(clippy::too_many_arguments)]
     fn ui_set_cursor_value(&mut self, caption: String, value: String, typing: bool, x: Option<f32>, y: Option<f32>,
-                           start: Option<(f32, f32)>, revision: u64) {
-        if let Some(ui) = self.ui.as_mut() { ui.set_cursor_value(caption, value, typing, x, y, start, revision); }
+                           start: Option<(f32, f32)>, revision: u64, error: bool) {
+        if let Some(ui) = self.ui.as_mut() {
+            ui.cursor_error = error && !typing;
+            ui.set_cursor_value(caption, value, typing, x, y, start, revision);
+        }
     }
     fn ui_set_selection(&mut self, summary: String, actions: Vec<(String, String, String, bool, bool)>) {
         if let Some(ui) = self.ui.as_mut() { ui.set_selection(summary, actions); }

@@ -24,6 +24,11 @@ pub struct Panels {
     pub terrain: Terrain,
 }
 
+/// The Fillet/Chamfer form's Size field (tests focus it by this id).
+pub(crate) fn bevel_size_field() -> egui::Id {
+    egui::Id::new("bevel.size.field")
+}
+
 fn send(out: &mut Vec<String>, key: &str, value: Value) {
     out.push(format!("panel:{}", json!([key, value])));
 }
@@ -243,6 +248,11 @@ impl Panels {
     }
 
     pub fn bevel(&mut self, ui: &mut Ui, out: &mut Vec<String>) {
+        /// The Size field's text while it is being typed (one id for the
+        /// field and for Apply, which sends it first).
+        fn bevel_amount_id() -> egui::Id {
+            egui::Id::new("bevel.amount")
+        }
         let b = &self.data["bevel"];
         let shape = if b["numeric_profile"] == true && b["shape"].is_null() {
             "profile value"
@@ -266,9 +276,17 @@ impl Panels {
             });
             let ui = &mut cols[2];
             kit::caption_plain(ui, "Size");
-            let id = ui.make_persistent_id("bevel.amount");
+            let id = bevel_amount_id();
             let mut amount = ui.data(|d| d.get_temp::<String>(id)).unwrap_or_else(|| label(&b["amount"]).to_owned());
-            let field = ui.add(kit::field(&mut amount).desired_width(ui.available_width()));
+            let error = b["error"].as_str().filter(|e| !e.is_empty());
+            let mut edit = kit::field(&mut amount).id(bevel_size_field()).desired_width(ui.available_width());
+            if error.is_some() {
+                edit = edit.text_color(tokens::ERROR);
+            }
+            let field = ui.add(edit);
+            if let Some(reason) = error {
+                field.clone().on_hover_text(reason);
+            }
             if field.changed() { ui.data_mut(|d| d.insert_temp(id, amount.clone())); }
             if field.lost_focus() && ui.data(|d| d.get_temp::<String>(id)).is_some() {
                 send(out, "bevel.amount", json!(amount));
@@ -290,10 +308,22 @@ impl Panels {
         self.bevel_inspector(ui, out);
         ui.horizontal(|ui| {
             if kit::sheet_button(ui, "Apply", "↵", 1) {
+                // A size still being typed applies with it, not the old one.
+                let id = bevel_amount_id();
+                if let Some(amount) = ui.data_mut(|d| d.remove_temp::<String>(id)) {
+                    send(out, "bevel.amount", json!(amount));
+                }
                 send(out, "bevel.finish", Value::Null);
             }
             if kit::sheet_button(ui, "Cancel", "Esc", 0) {
                 out.push("tool:select".into());
+            }
+            // The refusal beside Apply, which it explains: what fits instead.
+            // On this row the form keeps its height, so the Size field does
+            // not move under the pointer as the reason comes and goes.
+            if let Some(reason) = self.data["bevel"]["error"].as_str().filter(|e| !e.is_empty()) {
+                ui.add_space(tokens::SPACE_S);
+                ui.label(egui::RichText::new(reason).font(tokens::meta()).color(tokens::ERROR));
             }
         });
     }

@@ -165,6 +165,8 @@ pub struct Ui {
     hint: String,
     /// The value field on the geometry and its readback (ui/value_field.rs).
     cursor: value_field::ValueField,
+    /// The live value is the tool's refusal (Fillet: "Radius too large").
+    pub(crate) cursor_error: bool,
     /// Selection bar: summary and (id, label, shortcut) actions.
     selection: Option<(String, Vec<(String, String, String, bool, bool)>)>,
     actions: Vec<String>,
@@ -395,6 +397,7 @@ impl Ui {
             status: String::new(),
             hint: String::new(),
             cursor: Default::default(),
+            cursor_error: false,
             selection: None,
             actions: Vec::new(),
             captured: false,
@@ -1061,11 +1064,17 @@ impl Ui {
             return true;
         }
         if self.fillet_key(name) {
-            if pressed {
+            if name == "Enter" && self.ctx.wants_keyboard_input() {
+                // The form's field ends its edit on Enter inside egui's pass,
+                // so it sees the focus go and sends the typed size. Clearing
+                // the focus here, between passes, hid that: the size never
+                // reached the tool and every later Apply refused the old one.
+                if let Some(key) = egui::Key::from_name(name) {
+                    self.events.push(egui::Event::Key { key, physical_key: None, pressed, repeat: false, modifiers: mods_from(mods) });
+                }
+            } else if pressed {
                 if name == "Escape" {
                     self.actions.push("tool:select".into());
-                } else if self.ctx.wants_keyboard_input() {
-                    self.ctx.memory_mut(|m| m.stop_text_input());
                 } else {
                     self.actions.push(r#"panel:["bevel.finish",null]"#.into());
                 }
@@ -3065,19 +3074,19 @@ impl Ui {
         } else { bottom };
         let free = Rect::from_min_max(pos2(left, TOP_H + GUT), pos2(right, bottom));
         let (back, live) = self.cursor.place(free, vec2(170.0, 30.0));
-        let pill = |id: &str, r: Rect, caption: &str, value: &str, typing: bool, committed: bool| {
+        let pill = |id: &str, r: Rect, caption: &str, value: &str, typing: bool, committed: bool, error: bool| {
             egui::Area::new(egui::Id::new(id))
                 .fixed_pos(r.min)
                 .order(egui::Order::Tooltip)
                 .interactable(false)
-                .show(ctx, |ui| value_pill(ui, caption, value, typing, committed));
+                .show(ctx, |ui| kit::value_pill_tone(ui, caption, value, typing, committed, error));
         };
         if let (Some(r), Some(b)) = (back, &self.cursor.readback) {
-            pill("value_readback", r, &b.caption, &b.value, false, true);
+            pill("value_readback", r, &b.caption, &b.value, false, true, false);
         }
         if let (Some(r), Some(l)) = (live, &self.cursor.live) {
             if screen.contains(l.at) {
-                pill("cursor_value", r, &l.caption, &l.value, l.typing, false);
+                pill("cursor_value", r, &l.caption, &l.value, l.typing, false, self.cursor_error && !l.typing);
             }
         }
     }
@@ -4521,4 +4530,49 @@ fn the_proposal_shortcut_accepts_empty_named_tags_folders_and_links() {
         assert_eq!(frame.contains_key("Propose structure from tags…"), offers_proposal);
         assert_eq!(frame.contains_key("New node"), !offers_proposal);
     }
+}
+
+#[test]
+fn a_size_typed_in_the_fillet_form_reaches_the_tool_on_enter() {
+    // Typed 5 in the Size field after a refused 100 mm, then Enter: the
+    // field sends the size (the tool replans) and stays usable; a second
+    // Enter, with no field in focus, applies. Apply with a size still in
+    // the field sends that size first.
+    let Some(mut ui) = test_chrome() else { return };
+    ui.ctx = test_context();
+    ui.set_active("fillet".into());
+    ui.panels.data["bevel"] = serde_json::json!({
+        "affect": "edges", "measure": "radius", "amount": "100.0 mm", "segments": 8,
+        "shape": null, "numeric_profile": false, "profile": 0.5, "outline": [],
+        "corners": "round", "points": [],
+    });
+    let screen = Rect::from_min_size(Pos2::ZERO, vec2(1280., 800.));
+    ui.screen = screen;
+    let frame = |ui: &mut Ui| {
+        let ctx = ui.ctx.clone();
+        let raw = egui::RawInput { screen_rect: Some(screen), events: std::mem::take(&mut ui.events), ..Default::default() };
+        let _ = ctx.run(raw, |c| ui.draw_drawer(c, screen));
+    };
+    let field = crate::inspector::bevel_size_field();
+    let typed = |ui: &mut Ui, text: &str| {
+        ui.ctx.memory_mut(|m| m.request_focus(field));
+        frame(ui);
+        ui.events.push(egui::Event::Key { key: egui::Key::A, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::COMMAND });
+        ui.events.push(egui::Event::Text(text.into()));
+        frame(ui);
+        assert!(ui.ctx.wants_keyboard_input());
+    };
+    for _ in 0..2 { frame(&mut ui); }
+    let _ = ui.take_actions();
+    for size in ["5", "2"] {
+        typed(&mut ui, size);
+        assert!(ui.claims_key("Enter", 0));
+        assert!(ui.key("Enter", true, 0) && ui.key("Enter", false, 0));
+        frame(&mut ui);
+        frame(&mut ui);
+        assert_eq!(ui.take_actions(), [format!(r#"panel:["bevel.amount","{size}"]"#)]);
+        assert!(!ui.ctx.memory(|m| m.has_focus(field)));
+    }
+    assert!(ui.key("Enter", true, 0));
+    assert_eq!(ui.take_actions(), [r#"panel:["bevel.finish",null]"#]);
 }

@@ -187,6 +187,34 @@ fn hypot(py: Python<'_>) -> PyResult<String> {
         .extract()
 }
 
+/// The drawn outline's name and controls, or the refusal for a drawn one
+/// that does not run from face to face.
+fn outline(shape: Option<&Obj<'_>>) -> Result<(String, Vec<(f64, f64, bool)>), &'static str> {
+    let mut controls = Vec::new();
+    let mut name = String::new();
+    if let Some(shape) = shape {
+        if shape.is_instance_of::<PyTuple>() || shape.is_instance_of::<PyList>() {
+            controls = crate::bevel_editor::read(shape).unwrap_or_default();
+            if !valid_controls(&controls) {
+                return Err("The drawn profile must run from one face to the other.");
+            }
+            name.push_str("custom");
+        } else if let Ok(s) = shape.extract::<String>() {
+            if matches!(s.as_str(), "steps" | "cornice" | "crown" | "supports") {
+                name = s;
+            }
+        }
+    }
+    Ok((name, controls))
+}
+
+fn measure_of(measure: &str) -> &str {
+    match measure {
+        "offset" | "width" | "depth" => measure,
+        _ => "radius",
+    }
+}
+
 #[pyfunction]
 #[pyo3(signature=(mesh, edges, radius, segments=8, profile=0.5, measure="radius", corners="round", shape=None))]
 pub(crate) fn plan_fillet<'p>(
@@ -204,29 +232,12 @@ pub(crate) fn plan_fillet<'p>(
     if let Some(msg) = refusal(&keys, radius, profile, "Pick an edge to round.") {
         return py.import("built_core.i18n")?.call_method1("tr", (msg,));
     }
-    let measure = match measure {
-        "offset" | "width" | "depth" => measure,
-        _ => "radius",
-    };
+    let measure = measure_of(measure);
     let corners = if corners == "cut" { "cut" } else { "round" };
-    let mut controls = Vec::new();
-    let mut name = String::new();
-    if let Some(shape) = shape {
-        if shape.is_instance_of::<PyTuple>() || shape.is_instance_of::<PyList>() {
-            controls = crate::bevel_editor::read(shape).unwrap_or_default();
-            if !valid_controls(&controls) {
-                return py.import("built_core.i18n")?.call_method1(
-                    "tr",
-                    ("The drawn profile must run from one face to the other.",),
-                );
-            }
-            name.push_str("custom");
-        } else if let Ok(s) = shape.extract::<String>() {
-            if matches!(s.as_str(), "steps" | "cornice" | "crown" | "supports") {
-                name = s;
-            }
-        }
-    }
+    let (name, controls) = match outline(shape) {
+        Ok(found) => found,
+        Err(msg) => return py.import("built_core.i18n")?.call_method1("tr", (msg,)),
+    };
     let chosen_shape = match name.as_str() {
         "" => None,
         "custom" => Some(PyTuple::new(py, &controls)?.into_any().unbind()),
@@ -245,6 +256,68 @@ pub(crate) fn plan_fillet<'p>(
         &hypot(py)?,
     );
     preview(mesh, plan, false, corners, chosen_shape)
+}
+
+/// For a refused `radius`: the largest radius that rounds these edges with
+/// these settings (what their faces allow), said to two digits of the
+/// display unit (`unit`, metres), and a clean radius to propose; None when
+/// the refusal is not about the size. Otherwise as `plan_fillet`.
+#[pyfunction]
+#[pyo3(signature=(mesh, edges, radius, segments=8, profile=0.5, measure="radius", corners="round", shape=None, unit=1e-3))]
+pub(crate) fn fillet_fit<'p>(
+    mesh: &Obj<'p>,
+    edges: &Obj<'p>,
+    radius: f64,
+    segments: isize,
+    profile: f64,
+    measure: &str,
+    corners: &str,
+    shape: Option<&Obj<'p>>,
+    unit: f64,
+) -> PyResult<Option<(f64, f64)>> {
+    let py = mesh.py();
+    let keys = selected(edges)?;
+    if refusal(&keys, radius, profile, "").is_some() {
+        return Ok(None);
+    }
+    let Ok((name, controls)) = outline(shape) else { return Ok(None) };
+    let corners = if corners == "cut" { "cut" } else { "round" };
+    let store = mesh.getattr("_store")?;
+    let store = store.extract::<PyRef<PyMeshStore>>()?;
+    store.fillet_fit(
+        py,
+        keys,
+        radius,
+        segments.max(1) as usize,
+        profile,
+        measure_of(measure),
+        corners,
+        &name,
+        controls,
+        &hypot(py)?,
+        unit,
+    )
+}
+
+/// `fillet_fit` for corners.
+#[pyfunction]
+#[pyo3(signature=(mesh, vertices, size, segments=8, profile=0.5, unit=1e-3))]
+pub(crate) fn vertex_bevel_fit<'p>(
+    mesh: &Obj<'p>,
+    vertices: &Obj<'p>,
+    size: f64,
+    segments: isize,
+    profile: f64,
+    unit: f64,
+) -> PyResult<Option<(f64, f64)>> {
+    let py = mesh.py();
+    let keys = selected(vertices)?;
+    if refusal(&keys, size, profile, "").is_some() {
+        return Ok(None);
+    }
+    let store = mesh.getattr("_store")?;
+    let store = store.extract::<PyRef<PyMeshStore>>()?;
+    store.vertex_bevel_fit(py, keys, size, segments.max(1) as usize, profile, &hypot(py)?, unit)
 }
 
 #[pyfunction]
@@ -313,6 +386,8 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<BevelPreview>()?;
     m.add_function(wrap_pyfunction!(plan_fillet, m)?)?;
     m.add_function(wrap_pyfunction!(plan_vertex_bevel, m)?)?;
+    m.add_function(wrap_pyfunction!(fillet_fit, m)?)?;
+    m.add_function(wrap_pyfunction!(vertex_bevel_fit, m)?)?;
     m.add_function(wrap_pyfunction!(apply_fillet, m)?)?;
     Ok(())
 }
