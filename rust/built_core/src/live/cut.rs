@@ -504,6 +504,12 @@ pub(super) fn live_openings<'p>(
             } else {
                 None
             };
+            let gap = cut.clearance.unwrap_or(0.);
+            let tool = if !all_operations && gap > 0. {
+                crate::solids::clearance_operand(&tool, gap)?
+            } else {
+                tool
+            };
             result.append((id, tool, guid))?;
         }
     }

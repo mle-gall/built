@@ -117,7 +117,7 @@ fn circular_volume(rows: &Rows) -> Option<f64> {
     }
     Some(PI * h * (ra * ra + ra * rb + rb * rb) / 3.)
 }
-fn volume(rows: &Rows, tolerance: f64) -> Result<f64, String> {
+pub(super) fn volume(rows: &Rows, tolerance: f64) -> Result<f64, String> {
     if let Some((_, r)) = super::sphere::full(rows) {
         return Ok(super::sphere::volume(r));
     }

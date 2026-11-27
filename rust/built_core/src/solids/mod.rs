@@ -342,6 +342,29 @@ fn run<'p>(op: &str, groups: &Obj<'p>) -> PyResult<(Bound<'p, PyList>, Bound<'p,
     operation(op, groups, None, 0.)
 }
 
+fn expanded<'p>(manifold: &Obj<'p>, clearance: f64) -> PyResult<Obj<'p>> {
+    let ball = manifold
+        .py()
+        .import("manifold3d")?
+        .getattr("Manifold")?
+        .call_method1("sphere", (clearance / 1000., 12))?;
+    manifold.call_method1("minkowski_sum", (ball,))
+}
+
+/// The IFC opening uses the same offset solid as the evaluated subtraction.
+pub(crate) fn clearance_operand<'p>(tool: &Obj<'p>, clearance: f64) -> PyResult<Obj<'p>> {
+    let mut sources = Sources::default();
+    let manifold = expanded(&sources.operand(tool, 0)?, clearance)?;
+    output::group(
+        &manifold,
+        &sources,
+        &tool.getattr("name")?,
+        &tool.getattr("layer")?,
+        false,
+    )?
+    .ok_or_else(|| error(tool.py(), "empty clearance operand"))
+}
+
 /// Keep intermediates in the manifold kernel. Only the final solid needs
 /// editable polygon faces, exact donor bindings and persistent element IDs.
 pub(crate) fn body_stack<'p>(
@@ -350,7 +373,6 @@ pub(crate) fn body_stack<'p>(
     active: &mut Option<String>,
     skipped: &mut Vec<(String, &'static str)>,
 ) -> PyResult<Result<Obj<'p>, &'static str>> {
-    let py = subject.py();
     let mut sources = Sources {
         live: Some((String::new(), usize::MAX)),
         ..Default::default()
@@ -365,11 +387,7 @@ pub(crate) fn body_stack<'p>(
         sources.live = Some((uid.clone(), index + 1));
         let mut cutter = sources.operand(&tool, index + 1)?;
         if gap > 0. {
-            let ball = py
-                .import("manifold3d")?
-                .getattr("Manifold")?
-                .call_method1("sphere", (gap / 1000., 12))?;
-            cutter = cutter.call_method1("minkowski_sum", (ball,))?;
+            cutter = expanded(&cutter, gap)?;
         }
         let next = match op.as_str() {
             "union" => result.add(&cutter)?,
@@ -438,11 +456,7 @@ pub(crate) fn operation<'p>(
         .map(|(i, g)| sources.operand(g, i))
         .collect::<PyResult<Vec<_>>>()?;
     if clearance > 0. {
-        let ball = py
-            .import("manifold3d")?
-            .getattr("Manifold")?
-            .call_method1("sphere", (clearance / 1000., 12))?;
-        mans[tool] = mans[tool].call_method1("minkowski_sum", (ball,))?;
+        mans[tool] = expanded(&mans[tool], clearance)?;
     }
     let result = PyList::empty(py);
     let name = py

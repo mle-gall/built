@@ -164,6 +164,33 @@ def test_plain_plane_and_exact_body_cut_interchange(tmp_path):
     assert get_volume(shape.geometry) == pytest.approx(solid_volume(target), abs=1e-7)
 
 
+def test_ifc_cope_opening_includes_the_clearance(tmp_path):
+    import ifcopenshell
+    import ifcopenshell.geom
+    import numpy as np
+    from ifcopenshell.util.shape import get_vertices
+    from formats.ifc import save_ifc
+    from tests.test_geometry_arrays import cube
+
+    scene = Scene()
+    history = History(scene)
+    wall = cube()
+    wall.ifc = {"class": "IfcWall", "name": "Panel"}
+    scene.groups.append(wall)
+    make_member(history, [[0, .5, .5], [1, .5, .5]])
+    body = scene.groups[-1]
+    row = dict(kind="cut", uid="c070000000000019", owner=wall.uid, operation="subtract",
+               cutter={"body": body.uid}, clearance=20)
+    apply(history, "live_set", row=row)
+    path = tmp_path / "cope.ifc"
+    save_ifc(scene, path)
+    model = ifcopenshell.open(path)
+    opening, = model.by_type("IfcOpeningElement")
+    shape = ifcopenshell.geom.create_shape(ifcopenshell.geom.settings(), opening)
+    size = np.ptp(get_vertices(shape.geometry), axis=0)
+    np.testing.assert_allclose(size, np.asarray(extent(body)) + .04, atol=1e-6)
+
+
 def test_mitred_round_member_preserves_analytic_step_and_ifc(tmp_path):
     import ifcopenshell
     from formats import step
