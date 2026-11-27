@@ -680,8 +680,9 @@ pub fn export_form<'py>(win: &Bound<'py, PyAny>, key: Option<String>, one_off: b
     let fmt_text = fmt.str()?.to_string();
     let filters = any(&format!("{} (*.{fmt_text})", fmt_text.to_uppercase()));
     let package = fmt.eq("package")?;
+    let default_name = crate::settings_rows::tr(py, if package { "Handover package" } else { "New delivery" })?;
     let mut fields = vec![
-        field("name", "edit", "Name", get(&record, "name", any(if package {"Handover package"} else {"New delivery"}))?, vec![("focus", true.into_pyobject(py)?.to_owned().into_any())])?,
+        field("name", "edit", "Name", get(&record, "name", any(&default_name))?, vec![("focus", true.into_pyobject(py)?.to_owned().into_any())])?,
         field("format", "choice", "Preset", fmt.clone(), vec![("options", formats.into_any())])?,
         field("scope", "choice", "Scope", get(&record, "scope", scope)?, vec![("options", scopes(py, &fmt, has_nodes)?)])?,
         field("node", "choice", "Project node", get(&record, "node", first_node)?, vec![("options", node_choices.into_any()), ("visible", shows("node")?)])?,
