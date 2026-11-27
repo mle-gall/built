@@ -155,7 +155,17 @@ def test_reviewed_panels_translate_literal_widget_labels():
                 assert not (isinstance(arg, ast.Constant) and isinstance(arg.value, str)
                             and arg.value.strip()), (filename, node.lineno)
 
-    bare = re.compile(r'(?:ui\.(?:label|strong|button)|on_hover_text|RichText::new)\(\s*"[A-Za-z]')
-    for name in ("activity.rs", "sheets.rs"):
-        source = (root / "rust/built_render/src/ui" / name).read_text().split("#[cfg(test)]")[0]
-        assert not bare.search(source), name
+    bare = re.compile(
+        r'(?:ui\.(?:label|strong|button)|on_hover_text|RichText::new)\(\s*"[A-Za-z]'
+        r'|\b(?:caption|quiet|primary|secondary|sheet_button|switch_row)\('
+        r'\s*(?:ui|&mut cols\[\d+\]),\s*"[A-Za-z]'
+    )
+    directory = root / "rust/built_render/src/ui"
+    for name in ("activity.rs", "sheets.rs", "plugins.rs", "kit.rs"):
+        source = (directory / name).read_text()
+        if name == "kit.rs":
+            source = source.split("impl FontPicker {", 1)[1].split("\n}", 1)[0]
+        else:
+            source = source.split("#[cfg(test)]", 1)[0]
+        match = bare.search(source)
+        assert not match, (name, match.group() if match else "")
