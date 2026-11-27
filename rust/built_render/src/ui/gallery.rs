@@ -702,6 +702,12 @@ impl Gallery {
                 });
                 inspector_title(ui, "Walls", "Tag · 24 items");
                 tag_inspector(ui, "preview-tag:Walls", true, &mut Vec::new());
+                ui.horizontal(|ui| {
+                    for tool in ["outer_shell", "solid_union", "solid_subtract", "solid_trim", "solid_intersect", "solid_split"] {
+                        let (rect, _) = ui.allocate_exact_size(vec2(CONTROL_H, CONTROL_H), Sense::hover());
+                        solid_glyph(ui.painter(), rect.shrink(3.), tool, INK);
+                    }
+                });
                 // One glyph per kind of tree row.
                 {
                     let kinds = ["tag", "folder", "loose", "section", "scene", "sheet", "group", "component", "image", "link"];

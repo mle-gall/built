@@ -184,6 +184,34 @@ pub mod atoms {
     /// `c`: "tag", "folder" (a tag folder), "loose" (loose geometry),
     /// "section", "scene", "sheet", "component", "image", "link"; anything
     /// else is a group.
+    /// The two operands and the part retained by a solid operation.
+    pub fn solid_glyph(painter: &egui::Painter, rect: Rect, tool: &str, ink: Color32) -> bool {
+        let (left, middle, right) = match tool {
+            "outer_shell" => (CLEAR, CLEAR, CLEAR),
+            "solid_union" => (ACCENT, ACCENT, ACCENT),
+            "solid_subtract" => (ACCENT, CLEAR, CLEAR),
+            "solid_trim" => (ACCENT, CLEAR, ink.gamma_multiply(0.45)),
+            "solid_intersect" => (CLEAR, ACCENT, CLEAR),
+            "solid_split" => (ink.gamma_multiply(0.6), ACCENT, ink.gamma_multiply(0.3)),
+            _ => return false,
+        };
+        let point = |x, y| rect.min + vec2(rect.width() * x / 24., rect.height() * y / 24.);
+        let path = |points: &[(f32, f32)]| points.iter().map(|&(x,y)| point(x,y)).collect::<Vec<_>>();
+        let stroke = Stroke::new(1_f32, ink);
+        let a = [(2.,8.), (8.,5.), (14.,8.), (14.,16.), (8.,19.), (2.,16.)];
+        let b = [(10.,8.), (16.,5.), (22.,8.), (22.,16.), (16.,19.), (10.,16.)];
+        painter.add(egui::Shape::convex_polygon(path(&a),left,stroke));
+        painter.add(egui::Shape::convex_polygon(path(&b),right,stroke));
+        painter.add(egui::Shape::convex_polygon(path(&[(10.,8.),(12.,7.),(14.,8.),(14.,16.),(12.,17.),(10.,16.)]), middle,stroke));
+        for points in [[(2.,8.), (8.,11.), (8.,19.)], [(22.,8.), (16.,11.), (16.,19.)]] {
+            painter.add(egui::Shape::line(path(&points), stroke));
+        }
+        if tool == "outer_shell" {
+            painter.add(egui::Shape::closed_line(path(&[(2.,8.),(8.,5.),(12.,7.),(16.,5.),(22.,8.),(22.,16.),(16.,19.),(12.,17.),(8.,19.),(2.,16.)]), Stroke::new(2_f32, ACCENT)));
+        }
+        true
+    }
+
     pub fn row_glyph(painter: &egui::Painter, c: Pos2, kind: &str, ink: Color32) {
         let line = Stroke::new(1.1_f32, ink);
         let at = |x: f32, y: f32| c + vec2(x, y);

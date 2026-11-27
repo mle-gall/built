@@ -3418,6 +3418,7 @@ fn tool_button(ui: &mut egui::Ui, tool: &Tool, active: bool, mark: &str) -> bool
     let st = state_of(&resp, active, tool.enabled);
     if st == State::On { paint_lit(ui, rect, R_CONTROL) } else { paint_state(ui, rect, st, R_CONTROL) }
     let tint = ink_of(st);
+    if !kit::solid_glyph(ui.painter(), rect.shrink(3.), &tool.id, tint) {
     match &tool.icon {
         Some(tex) => {
             egui::Image::new(tex).tint(tint).paint_at(ui, rect.shrink(3.0));
@@ -3426,6 +3427,7 @@ fn tool_button(ui: &mut egui::Ui, tool: &Tool, active: bool, mark: &str) -> bool
             // No art: the rail's unique, language-stable mark (rail::fallback_mark).
             ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, mark, meta(), tint);
         }
+    }
     }
     let tip = if !tool.enabled { format!("{} — Open in classic app", tool.label) } else if tool.key.is_empty() { tool.label.clone() } else { format!("{}    {}", tool.label, tool.key) };
     resp.on_hover_text(tip).clicked()
