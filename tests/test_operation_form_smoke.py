@@ -1147,6 +1147,11 @@ Host.menu, Host.state = drive, inspect
                     reason="requires a built window and BUILT_WINDOW_TESTS=1")
 def test_bevel_drawer_presets_and_session_values(tmp_path):
     """Use the same settings directory for two successive application sessions."""
+    from built_core.scene import Scene
+    from formats.igz import save_scene
+
+    model = tmp_path / "blank.built"
+    save_scene(Scene(), model)
     venv = fixture_venv(tmp_path, """from built_render import Host, inspector_action
 import json
 menu, state = Host.menu, Host.state
@@ -1165,18 +1170,19 @@ def snapshot(self):
 
 Host.menu, Host.state = edit, snapshot
 """)
+
     def launch(commands):
         steps = tmp_path / "steps"
         steps.write_text("wait 500\nkey escape\n" + commands + "\nquit\n")
         result = run([str(BIN), "--root", str(ROOT), "--venv", str(venv), "--new-instance",
-                      "--script", str(steps)], settings=tmp_path / "settings",
+                      "--script", str(steps), str(model)], settings=tmp_path / "settings",
                      capture_output=True, text=True, timeout=60)
         log = result.stdout + result.stderr
         states = [json.loads(line.removeprefix("[built] state ")) for line in log.splitlines()
                   if line.startswith("[built] state ")]
         assert result.returncode == 0 and states and "Traceback" not in log, log
         assert all(s["input"]["drawer_operation"] and not s["errors"] for s in states), log
-        return [s["bevel"] for s in states]
+        return [s["bevel"] for s in states[:commands.splitlines().count("state")]]
 
     both = "tool fillet\nwait 200\nstate\ntool chamfer\nwait 200\nstate"
     defaults = [[0.1, 8, 0.5, "radius", "round", "edges", None, False],
@@ -1195,6 +1201,7 @@ menu edit-amount="40 mm"
 menu edit-segments=6
 menu edit-measure="depth"
 key escape
+wait 250
 """ + both)
     assert states == defaults + [
         [0.04, 6, 0.25, "depth", "round", "edges", None, False],
