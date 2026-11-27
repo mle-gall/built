@@ -19,6 +19,7 @@ fn store_source<'p>(
     packed: &Obj<'p>,
     mesh: &Obj<'p>,
     store: &Obj<'p>,
+    code: usize,
 ) -> PyResult<(Obj<'p>, [f64; 3])> {
     let py = packed.py();
     let saved = match packed.getattr_opt("_snap_sources")? {
@@ -32,7 +33,17 @@ fn store_source<'p>(
             store.getattr("frame_origin")?,
         ),
     };
-    let arrays = snap.call_method0("arrays")?;
+    let native = snap
+        .cast::<crate::store::py::PyStoreSnapshot>()
+        .ok()
+        .and_then(|s| s.get().inner.state.exact.native.clone());
+    let arrays = if let Some(patch) = native {
+        super::exact::remember(packed, code, patch)?;
+        snap.call_method0("display_arrays")?
+    } else {
+        super::exact::forget(packed, code)?;
+        snap.call_method0("arrays")?
+    };
     let source = PyDict::new(py);
     for (name, col) in [
         ("pos", "pos"),
@@ -177,7 +188,7 @@ fn prototype_arrays<'p>(
             source = optional(Some(d.call_method1("get", ("_deferred_source",))?));
             if source.is_none() {
                 if let Some(st) = optional(Some(d.call_method1("get", ("_store",))?)) {
-                    let (s, f) = store_source(packed, m, &st)?;
+                    let (s, f) = store_source(packed, m, &st, code)?;
                     source = Some(s);
                     frame = f;
                 }
@@ -313,6 +324,9 @@ impl<'p> Placements<'p> {
 fn resident_rebase<'p>(index: &Obj<'p>, packed: &Obj<'p>) -> PyResult<Obj<'p>> {
     let py = packed.py();
     let p = Placements::read(packed)?;
+    if let Some(exact) = index.getattr("packed")?.getattr_opt("_exact_prototypes")? {
+        packed.setattr("_exact_prototypes", exact.call_method0("copy")?)?;
+    }
     let protos = index.getattr("protos")?;
     let base = p.build(
         py.import("built_core")?.as_any(),

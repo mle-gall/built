@@ -763,7 +763,15 @@ impl MeshToolAccess {
                 continue;
             }
             let t: f64 = hit.get_item(2)?.extract()?;
-            if !hidden.call1((along(&edge, t)?,))?.is_truthy()? {
+            let point = if store
+                .getattr_opt("native_exact")?
+                .is_some_and(|v| v.is_truthy().unwrap_or(false))
+            {
+                store.call_method1("native_edge_point", (hit.get_item(0)?, t))?
+            } else {
+                along(&edge, t)?
+            };
+            if !hidden.call1((point,))?.is_truthy()? {
                 let distance: f64 = hit.get_item(1)?.extract()?;
                 return (edge, distance).into_bound_py_any(py);
             }

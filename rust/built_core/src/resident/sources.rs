@@ -354,6 +354,9 @@ fn source_arrays<'py>(
         py.get_type::<PyList>().call1((mesh.getattr("faces")?,))?;
     }
     let own = mesh.getattr("__dict__")?.cast_into::<PyDict>()?;
+    if mesh.getattr("__dict__")?.contains("_deferred_exact")? {
+        mesh.call_method0("_materialize")?;
+    }
     let source = own.get_item("_deferred_source")?.filter(|s| !s.is_none());
     let stored = mesh.get_type().name()? == "StoreMesh";
     let mut stored_edge_layers = None;
@@ -372,14 +375,38 @@ fn source_arrays<'py>(
         // A store-backed mesh: its welded arrays, vertex indices already
         // shared by corners and edges.
         None if stored => {
-            let arrays = own.get_item("_store")?.ok_or_else(|| PyTypeError::new_err("a store mesh has a store"))?.call_method0("arrays")?;
+            let arrays = own
+                .get_item("_store")?
+                .ok_or_else(|| PyTypeError::new_err("a store mesh has a store"))?
+                .call_method1("display_arrays", (true,))?;
             let field = |key: &str| arrays.get_item(key);
             if hidden_tags.as_ref().is_some_and(|tags| !tags.is_empty()) {
                 stored_edge_layers = Some(field("layer")?);
             }
-            let columns = py.import("built_core")?.getattr("store_views")?.call_method1("attr_columns", (mesh, overrides.as_ref()))?;
-            (field("pos")?, field("corners")?, field("ring_sizes")?, field("ring_counts")?, field("edges")?,
-             field("flags")?.bitand(7)?, columns.get_item(0)?, columns.get_item(1)?)
+            let columns = py
+                .import("built_core")?
+                .getattr("store_views")?
+                .call_method1("attr_columns", (mesh, overrides.as_ref()))?;
+            let mut attr = columns.get_item(1)?;
+            if arrays.contains("face_owner")? {
+                attr = np
+                    .call_method1("asarray", (&attr,))?
+                    .get_item(field("face_owner")?)?;
+            }
+            (
+                field("pos")?,
+                field("corners")?,
+                field("ring_sizes")?,
+                field("ring_counts")?,
+                field("edges")?,
+                field("flags")?.bitand(if arrays.contains("face_owner")? {
+                    15
+                } else {
+                    7
+                })?,
+                columns.get_item(0)?,
+                attr,
+            )
         }
         None => return Err(PyTypeError::new_err("a resident prototype is a store mesh or a deferred one")),
     };

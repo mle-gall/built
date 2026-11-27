@@ -464,3 +464,30 @@ def test_acquired_arc_center_survives_crossing_the_empty_interior(view):
     view.scene.mesh.clear()
     refresh(view)
     assert view.source_viewport._valid_center_ref() is None
+
+
+def test_native_rim_and_surface_snap_to_support(view):
+    from built_core.protocol import commands
+    from tests.test_exact_geometry import cylinder
+
+    result = commands.run(view.source_viewport.history, "add_exact_geometry", geometry=cylinder())
+    assert result["ok"], result
+    _look(view, V(0, 0, 1), distance=6, pitch=25, yaw=-60)
+    refresh(view)
+    # The asynchronous viewport builds its index from a frozen replacement
+    # pack. The active viewport pack does not own the index's support map.
+    from built_core import resident_prepare
+    snapshot = view._inference_snapshot()
+    view.inference_index = resident_prepare(snapshot, view.scene)
+    if hasattr(view.packed, "_exact_prototypes"):
+        del view.packed._exact_prototypes
+    # This point is between sample vertices. Its chord is inside the circle.
+    point = V(math.cos(-.74), math.sin(-.74), 2)
+    snap = move(view, point)
+    assert snap.kind == "on_edge", (snap.kind, snap.point)
+    assert abs(math.hypot(snap.point.x(), snap.point.y())-1) < 1e-9
+    assert snap.edge.key == view.scene.groups[0].mesh.edges[1].key
+    point = V(math.cos(-.74), math.sin(-.74), .87)
+    snap = move(view, point)
+    assert snap.kind == "on_face", (snap.kind, snap.point)
+    assert abs(math.hypot(snap.point.x(), snap.point.y())-1) < 1e-9

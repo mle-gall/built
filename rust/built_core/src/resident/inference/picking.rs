@@ -56,14 +56,27 @@ pub(super) fn surface_hit<'p>(
         .into_iter()
         .filter(|&r| r >= 0 && (r as usize) < info.nrows() && info[[r as usize, 2]] & 129 == 0)
         .collect();
-    let (_, hit) = hit_rows(
+    let (placements, hit) = hit_rows(
         index,
         rows.into_pyarray(index.py()).as_any(),
         origin.call_method0("toTuple")?.extract()?,
         direction.call_method0("toTuple")?.extract()?,
         limit,
     )?;
-    hit.map(|(_, t, n)| {
+    hit.map(|(i, t, n)| {
+        let packed = index.getattr("packed")?;
+        let (t, n) = if packed.hasattr("_exact_prototypes")? {
+            super::exact::ray(
+                &packed,
+                placements.get_item(i)?.extract()?,
+                crate::math::xyz(origin)?,
+                crate::math::xyz(direction)?,
+            )?
+            .map_or((t, n), |(t, n)| (t, Some(n.to_array())))
+        } else {
+            (t, n)
+        };
+
         Ok((
             origin.add(direction.mul(t)?)?,
             n.map(|n| Vec3::from(glam::DVec3::from_array(n))),

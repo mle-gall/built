@@ -683,16 +683,25 @@ fn resident_snap<'p>(
     }
     let fields = PyDict::new(py);
     fields.set_item("edges", edges)?;
-    py.import("built_core.snap")?.getattr("compute_snap")?.call(
-        (
-            point,
-            (x, y),
-            acquisition::record(py, &fields)?,
-            rules,
-            threshold,
-        ),
-        Some(&opts),
-    )
+    let result = py
+        .import("built_core.snap")?
+        .getattr("compute_snap")?
+        .call(
+            (
+                point,
+                (x, y),
+                acquisition::record(py, &fields)?,
+                rules,
+                threshold,
+            ),
+            Some(&opts),
+        )?;
+    let snapshot=index.getattr("packed")?;
+    if !result.is_none() && snapshot.hasattr("_exact_prototypes")? {
+        let camera = crate::pick::Projector::new(&c.matrix_data.extract()?, c.width, c.height);
+        super::exact::refine_edge(&snapshot, &cols, &result, &camera, x, y)?;
+    }
+    Ok(result)
 }
 pub(super) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(resident_snap, m)?)
