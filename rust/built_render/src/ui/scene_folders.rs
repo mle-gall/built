@@ -264,6 +264,11 @@ impl Browser {
             return;
         }
         ui.scope(|ui| {
+            let mut thumbnails = thumbnails;
+            if kit::toggle(ui, &mut thumbnails, &super::tr("Thumbnails")).changed() {
+                self.thumbnails = Some(thumbnails);
+                background.push(format!("scenephotomode:{}", usize::from(thumbnails)));
+            }
             ui.add(
                 kit::field(&mut self.name)
                     .hint_text("Folder name")
