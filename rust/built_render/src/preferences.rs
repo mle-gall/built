@@ -451,12 +451,6 @@ const SECTIONS: &[(&str, &str, &str, &str)] = &[
         "Editing an axis makes the mapping Custom.",
     ),
     (
-        "import",
-        "Import",
-        "mac",
-        "The answers the import dialogs start with; each still asks.",
-    ),
-    (
         "keyboard",
         "Keyboard",
         "mac",
@@ -470,7 +464,7 @@ const SECTIONS: &[(&str, &str, &str, &str)] = &[
         "model",
         "Saved with this model. A number typed without a unit is in this unit.",
     ),
-    ("registry", "Project registry", "model", "Advanced"),
+    ("registry", "Project registry", "model", ""),
     ("appearance", "Appearance", "model", "Applies to the active view of this model."),
     (
         "dimensions",
@@ -535,6 +529,7 @@ impl PreferencesView {
         } else {
             let id = match page {
                 "3dmouse" | "mouse3d" => "ndof",
+                "import" => "general",
                 "shortcuts" | "keys" => "keyboard",
                 "dimension_style" | "dimstyle" => "dimensions",
                 "north" => "location",
@@ -565,12 +560,18 @@ impl PreferencesView {
         let menu = json!([["change", change], ["clear", clear], ["default", default]]);
         let mut items = Vec::new();
         let mut detail = Vec::new();
-        for (key, name, path, keys, factory) in actions {
+        let mut owners = std::collections::HashMap::<&str, Vec<(&str, u8)>>::new();
+        for (id, _, _, keys, _) in &actions {
+            for binding in keys.split(", ").filter(|k| !k.is_empty()) {
+                owners.entry(binding).or_default().push((id, crate::commands::shortcut_domains(id)));
+            }
+        }
+        for (key, name, path, keys, factory) in &actions {
             if key.strip_prefix("menu:recent:").is_some_and(|slot| slot.parse::<usize>().is_ok()) {
                 continue;
             }
             let id = format!("sc:{key}");
-            if self.kb_focus.as_deref() == Some(&id) {
+            if self.kb_focus.as_deref() == Some(id.as_str()) {
                 detail.push(json!({"kind":"heading","text":name}));
                 detail.push(json!({"kind":"kv","rows":[
                     [t("Menu")?, if path.is_empty() { "—" } else { &path }, ""],
@@ -591,7 +592,11 @@ impl PreferencesView {
                     continue;
                 }
             }
-            items.push(json!({"id":id,"label":name,"sub":path,"tip":path,"right":keys,"menu":menu}));
+            let domain = crate::commands::shortcut_domains(key);
+            let conflict = keys.split(", ").filter_map(|k| owners.get(k))
+                .flatten().any(|(other, scope)| *other != key.as_str() && scope & domain != 0);
+            let right = if conflict { format!("{} · {}", keys, t("Conflicts")?) } else { keys.clone() };
+            items.push(json!({"id":id,"label":name,"sub":path,"tip":path,"right":right,"menu":menu}));
         }
         let count = items.len();
         let mut content = Vec::new();

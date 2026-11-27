@@ -613,6 +613,7 @@ fn general<'py>(py: Python<'py>, env: &Bound<'py, PyAny>) -> PyResult<Bound<'py,
         rows.push(Binding::new("check_updates", key_get(py, key, obj(py, "1")?, Kind::Bool)?, key_set(py, key, Kind::Bool)?));
     }
     rows.extend(figure_rows(py)?);
+    rows.push(Binding::new("dxf_unit", key_get(py, "import/dxf_unit", obj(py, "mm")?, Kind::Str)?, key_set(py, "import/dxf_unit", Kind::Str)?));
     pref_page(py, env, "general", rows)
 }
 
@@ -906,10 +907,6 @@ fn ndof<'py>(py: Python<'py>, env: &Bound<'py, PyAny>) -> PyResult<Bound<'py, Py
     native_groups(py, &spec, put)
 }
 
-fn import<'py>(py: Python<'py>, env: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyList>> {
-    pref_page(py, env, "import", vec![Binding::new("dxf_unit", key_get(py, "import/dxf_unit", obj(py, "mm")?, Kind::Str)?, key_set(py, "import/dxf_unit", Kind::Str)?)])
-}
-
 // ---- This model ----------------------------------------------------------------------
 
 /// The document was edited: dirty, and every view hears of it.
@@ -1182,7 +1179,6 @@ pub fn section_groups<'py>(py: Python<'py>, env: &Bound<'py, PyAny>, section: &s
         "registry" => Ok(PyList::empty(py)),
         "ndof" if !NDOF_SUPPORTED => Ok(PyList::empty(py)),
         "ndof" => ndof(py, env),
-        "import" => import(py, env),
         "units" => _units(env),
         "dimensions" => dimensions(py, env),
         "appearance" => {

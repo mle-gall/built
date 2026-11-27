@@ -9,6 +9,7 @@ pub struct RegistryEditor {
     scene: Py<PyAny>,
     original: Value,
     draft: String,
+    advanced: bool,
     key: String,
     name: String,
     namespace: String,
@@ -76,12 +77,13 @@ impl RegistryEditor {
             .iter()
             .position(|key| key == &self.namespace)
             .unwrap_or(0) as f64;
-        vec![
-            document,
+        let mut fields = vec![
             edit("registry_key", "Namespace key", &self.key),
             edit("registry_name", "Namespace name", &self.name),
             system,
-        ]
+        ];
+        if self.advanced { fields.push(document); }
+        fields
     }
 
     fn perform(&mut self, win: &Bound<'_, PyAny>, verb: &str, path: &str) -> PyResult<()> {
@@ -184,6 +186,7 @@ impl RegistryEditor {
             scene: scene.clone().unbind(),
             draft: serde_json::to_string_pretty(&original).unwrap(),
             original,
+            advanced: false,
             key: String::new(),
             name: String::new(),
             namespace: String::new(),
@@ -196,6 +199,7 @@ impl RegistryEditor {
     }
 
     fn field(&self, id: &str) -> Option<Field> {
+        if id == "registry_json" { return Some(edit(id, "Registry JSON", &self.draft)); }
         self.rows().into_iter().find(|row| row.0 == id)
     }
 
@@ -220,6 +224,7 @@ impl RegistryEditor {
 
     #[pyo3(signature=(win, verb, path=""))]
     fn act(&mut self, win: &Bound<'_, PyAny>, verb: &str, path: &str) -> bool {
+        if verb == "registry_advanced" { self.advanced = !self.advanced; return true; }
         match self.perform(win, verb, path) {
             Ok(()) => {
                 self.error.clear();
@@ -239,7 +244,21 @@ impl RegistryEditor {
             content.call_method1("text", (error, "error"))?;
         }
         let verb = py.import("built_render.chrome_sheet")?.getattr("verb")?;
+        if let Ok(draft) = parse(&slf.draft) {
+            for (key, title) in [("classification_systems","Classification systems"), ("storeys","Storeys"), ("pset_library","Property sets"), ("export_profiles","Export profiles")] {
+                content.call_method1("caption", (title,))?;
+                let label = |v: &Value, fallback: &str| v["name"].as_str().unwrap_or(fallback).to_owned();
+                let names: Vec<_> = match &draft[key] {
+                    Value::Object(map) => map.iter().map(|(k,v)| label(v,k)).collect(),
+                    Value::Array(list) => list.iter().map(|v| label(v,v.as_str().unwrap_or("—"))).collect(),
+                    _ => vec![]
+                };
+                if names.is_empty() { content.call_method1("text", ("None",))?; }
+                for name in names { content.call_method1("text", (name,))?; }
+            }
+        }
         let mut buttons = [
+            ("registry_advanced", if slf.advanced { "Hide JSON" } else { "Edit as JSON" }),
             ("registry_add", "Add namespace"),
             ("registry_csv", "Import codes CSV…"),
         ]

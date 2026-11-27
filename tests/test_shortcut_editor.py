@@ -206,3 +206,13 @@ def test_keyboard_omits_recent_files_but_indexes_menu_paths(sheet):
     result = json.loads(sheet.state.keyboard(actions, str))
     items = next(block["items"] for block in result["content"] if block.get("id") == "keyboard")
     assert [(item["id"], item["tip"]) for item in items] == [("sc:menu:new", "File")]
+
+
+def test_conflicts_only_mark_commands_that_share_a_workspace(sheet):
+    actions = [(key, key, "", keys, "") for key, keys in [
+        ("tool:a", "K"), ("tool:b", "K"), ("sheet:c", "K"), ("menu:open", "J"),
+        ("sheet:d", "J"), ("tool:e", "")]]
+    result = json.loads(sheet.state.keyboard(actions, str))
+    rows = next(b["items"] for b in result["content"] if b.get("id") == "keyboard")
+    assert {row["id"] for row in rows if "Conflicts" in row["right"]} == {
+        "sc:tool:a", "sc:tool:b", "sc:sheet:d", "sc:menu:open"}

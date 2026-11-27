@@ -405,7 +405,7 @@ def test_native_ai_connection_edits_plugin_model(tmp_path):
     home, profile = tmp_path / "home", tmp_path / "settings"
     home.mkdir()
     steps = tmp_path / "ai-settings"
-    steps.write_text("wait 650\nmenu prefs\nwait 350\nclick 115 353\nwait 200\n"
+    steps.write_text("wait 650\nmenu prefs\nwait 350\nclick 115 328\nwait 200\n"
                      "click 620 263\ntype fixture-model\nkey enter\nwait 250\nstate\n"
                      "key escape\nwait 300\nstate\nquit\n")
     result = run([str(BIN), "--root", str(ROOT), "--new-instance", "--size", "1000x720",

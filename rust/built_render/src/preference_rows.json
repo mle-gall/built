@@ -32,6 +32,9 @@
       {"id": "figure_image", "kind": "path", "label": "Picture", "pick": "open", "visible_if": ["figure", "custom"], "enabled_if": ["scale_figure", true], "tip": "A PNG on a transparent background"},
       {"id": "figure_height", "kind": "number", "label": "Height", "lo": 0.3, "hi": 3, "decimals": 2, "suffix": "m", "visible_if": ["figure", "custom"], "enabled_if": ["scale_figure", true], "tip": "The height this person stands"},
       {"id": "figure_name", "kind": "edit", "label": "Name", "visible_if": ["figure", "custom"], "enabled_if": ["scale_figure", true]}
+    ]],
+    ["import", "Import", [
+      {"id": "dxf_unit", "kind": "choice", "label": "Suggested unit for DXF/DWG", "options": [["mm", "Millimetres"], ["cm", "Centimetres"], ["m", "Metres"], ["in", "Inches"], ["ft", "Feet"]], "default": "mm"}
     ]]
   ],
   "navigation": [
@@ -62,11 +65,6 @@
     ["editing", "Editing a group", [
       {"id": "rest_mode", "kind": "choice", "label": "Rest of model while editing", "options": [["normal", "Show normally"], ["fade", "Fade"], ["hide", "Hide (fastest)"]], "default": "fade", "words": "group component"},
       {"id": "rest_fade", "kind": "slider", "label": "Fade intensity", "lo": 0, "hi": 100, "default": 75, "enabled_if": ["rest_mode", "fade"], "tip": "How strongly the rest of the model is washed toward grey while a group or component is open."}
-    ]]
-  ],
-  "import": [
-    ["import", "Import", [
-      {"id": "dxf_unit", "kind": "choice", "label": "Suggested unit for DXF/DWG", "options": [["mm", "Millimetres"], ["cm", "Centimetres"], ["m", "Metres"], ["in", "Inches"], ["ft", "Feet"]], "default": "mm"}
     ]]
   ]
 }

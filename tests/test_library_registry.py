@@ -24,8 +24,12 @@ def library(monkeypatch):
     wire = sheet.wire()
     chrome_sheet.check_wire(json.dumps(wire))
     blocks = wire["content"]["blocks"]
-    assert [b["kind"] for b in blocks] == ["buttons", "fields"]
-    assert [b["id"] for b in blocks[0]["buttons"]] == ["registry_add", "registry_csv", "registry_apply"]
+    assert "Classification systems" in [b.get("text") for b in blocks]
+    buttons = next(b["buttons"] for b in blocks if b["kind"] == "buttons")
+    assert [b["id"] for b in buttons] == ["registry_advanced", "registry_add", "registry_csv", "registry_apply"]
+    assert "registry_json" not in [row[0] for row in sheet.forms()[0].wire()[4]]
+    lib.act(ctx, "verb", ["registry_advanced"])
+    assert "registry_json" in [row[0] for row in sheet.forms()[0].wire()[4]]
     return lib, ctx, sheet.forms()[0]
 
 
@@ -90,3 +94,15 @@ def test_read_only_model_preserves_the_draft(library):
     assert form.error and "survey" in form.field("registry_json")[3]
     assert bim_registry.get(vp.scene) == original and not vp.history.undo_stack
     chrome_sheet.close.assert_not_called()
+
+
+def test_bundled_wood_variants_keep_their_identity_and_have_distinct_labels():
+    import json
+    from pathlib import Path
+    from built_core import bundled_materials
+
+    resources = Path(__file__).resolve().parents[1] / "resources"
+    wood = [item for item in json.loads(bundled_materials(resources, "en"))
+            if item["name"] in ("Oak", "Pine")]
+    assert len(wood) == len({item["label"] for item in wood}) == 5
+    assert all(item["recipe"]["name"] == item["name"] for item in wood)
