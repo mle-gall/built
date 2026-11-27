@@ -23,7 +23,7 @@ use super::stitch::{Merge, Plan};
 use super::topo::OpError;
 use super::{Snapshot, State, Store, Weld};
 use std::borrow::Cow;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use numpy::ndarray::Array2;
 use numpy::{IntoPyArray, PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2, PyUntypedArrayMethods};
 use pyo3::exceptions::{PyAssertionError, PyException, PyKeyError, PyOverflowError, PyValueError};
@@ -94,7 +94,7 @@ pub struct PyMeshStore {
     scan_seed: Mutex<Option<Py<crate::scans::MeshScan>>>,
     /// The faces' box tree for the drawing commands' searches
     /// (`face_query`), brought up to the state asked about on use.
-    face_index: Mutex<Option<Arc<super::face_index::FaceIndex>>>,
+    face_index: Arc<OnceLock<Mutex<Arc<super::face_index::FaceIndex>>>>,
     /// `nonplanar_faces` of the last state asked about (with its
     /// tolerance), refreshed from the diff: a move re-tests only the faces
     /// it touched.
@@ -329,7 +329,7 @@ impl PyMeshStore {
 
     fn wrap(inner: Store) -> Self {
         Self { inner, cache: Mutex::new(Default::default()), edge_index: Mutex::new(None), scan_seed: Mutex::new(None),
-               face_index: Mutex::new(None), nonplanar: Mutex::new(None) }
+               face_index: Default::default(), nonplanar: Mutex::new(None) }
     }
 
     /// `Store::nonplanar_faces` of this store's state, in list order: the
@@ -383,13 +383,32 @@ impl PyMeshStore {
     /// revision numbers (two copies can reach the same one with different
     /// contents), so a tree refreshed to one must not answer for another.
     fn face_index_for(&self, store: &Store) -> Arc<super::face_index::FaceIndex> {
-        let mut slot = self.face_index.lock().unwrap();
-        let own = match slot.as_ref() {
-            Some(index) => index.refresh(&self.inner),
-            None => Arc::new(super::face_index::FaceIndex::build(&self.inner)),
-        };
-        *slot = Some(own.clone());
+        let cell = self.face_index.get_or_init(|| {
+            Mutex::new(Arc::new(super::face_index::FaceIndex::build(&self.inner)))
+        });
+        let mut slot = cell.lock().unwrap();
+        let own = slot.refresh(&self.inner);
+        *slot = own.clone();
         if std::ptr::eq(store, &self.inner) { own } else { own.refresh(store) }
+    }
+
+    /// The first Line commit queries a face tree and a drawing scan. Prepare
+    /// both while the active prototype is loaded. The tree worker reads a
+    /// copy-on-write snapshot; a later query refreshes it to the live revision.
+    pub(crate) fn prepare_edit_queries(&self, py: Python<'_>) -> PyResult<()> {
+        if self.face_index.get().is_none() {
+            let target = Arc::downgrade(&self.face_index);
+            let snapshot = self.inner.clone();
+            rayon::spawn(move || {
+                if let Some(target) = target.upgrade() {
+                    target.get_or_init(|| Mutex::new(Arc::new(super::face_index::FaceIndex::build(&snapshot))));
+                }
+            });
+        }
+        if self.scan_seed.lock().unwrap().is_none() {
+            self.scan_of(py, self.inner.state.clone())?;
+        }
+        Ok(())
     }
 
     /// `MeshScan::drawn_face_candidates` of the face `slot` just added to

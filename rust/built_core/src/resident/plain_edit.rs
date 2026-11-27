@@ -315,7 +315,9 @@ fn plain_store<'p>(
         || st.exact.arcs.is_some()
         || !st.layers.is_empty()
         || st.eflags.iter().any(|f| *f != 0)
-        || st.fflags.iter().any(|f| *f != 0)
+        // Push/Pull marks interior cap faces for the topology kernel.
+        // The resident bake renders them using the same face attributes.
+        || st.fflags.iter().any(|f| *f & !crate::store::INTERIOR != 0)
         || st.fattr.iter().any(|f| *f != 0)
         || mesh.getattr("_attr_table")?.is_truthy()?
     {
@@ -428,6 +430,7 @@ pub(super) fn prime(tracker: &Bound<'_, super::updates::InstanceUpdates>) -> PyR
         .getattr("prototype_origins")?
         .get_item(code)?
         .extract()?;
+    store.prepare_edit_queries(t.py())?;
     tracker.borrow_mut().plain = Some(Layout {
         code,
         token: token(),

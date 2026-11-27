@@ -956,5 +956,6 @@ def test_large_mesh_edits_match_a_fresh_pack_and_frame(native, monkeypatch):
     assert np.any(original != check())
     assert updates.face_ranges(mesh, [mesh.faces[0]]) == [(0, 0, 2)]
     assert not mesh.faces[0].attrs
+    mesh.faces[0].interior = True
     mesh.move_vertex(mesh.vertices[0], Vec3(.5,.5,.25))
     check()
