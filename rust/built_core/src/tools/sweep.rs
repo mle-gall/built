@@ -183,7 +183,7 @@ impl SweepTool {
         })).collect();
         host.run(&Command {
             name: "create_sweeps",
-            args: json!({"sweeps":specs}),
+            args: if self.profile.library == "basic/wall" {json!({"sweeps":specs,"wall_junctions":true})} else {json!({"sweeps":specs})},
         })
         .ok
     }

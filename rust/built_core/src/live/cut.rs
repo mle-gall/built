@@ -1074,9 +1074,25 @@ pub(crate) fn hosted(
             row.on = old.on;
         }
         attach(scene, &mut t, &mut row)?;
-        t.insert(row).map_err(PyValueError::new_err)?;
+        t.insert(row.clone()).map_err(PyValueError::new_err)?;
+        junction::hosting::adopt(scene, &mut t, &row, &fill_uid, false)?;
         t.pending.insert(uid.clone());
-    } else if t.remove(&uid).is_some() {
+    } else if let Some(old) = t.remove(&uid) {
+        if let Some(j) = old.junction.as_ref().and_then(|id| t.rows.get(id)).cloned() {
+            junction::remove_descendants(&mut t, &j.uid)?;
+            if let Some(g) = group(scene.py(), &t, &j.owner) {
+                let parent = doc::lock()
+                    .node(t.groups[&j.owner])
+                    .and_then(|n| n.owners.first().copied());
+                let siblings = parent
+                    .and_then(|k| doc::lock().handle_ref(scene.py(), k))
+                    .and_then(|p| p.bind(scene.py()).getattr("children").ok())
+                    .unwrap_or(scene.getattr("groups")?);
+                siblings.call_method1("remove", (g,))?;
+            }
+            t.remove(&j.uid);
+            Arc::make_mut(&mut t.groups).remove(&j.owner);
+        }
         let target = t.owners[&owner].clone();
         let mut row = (*t.rows[&target]).clone();
         row.cuts.retain(|id| id != &uid);

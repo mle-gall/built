@@ -457,3 +457,91 @@ def test_moving_the_portal_knee_keeps_the_bolt_grid_and_weld(capfd):
         samples = re.findall(r"Junction live evaluation ([\d.]+) ms", capfd.readouterr().err)
         assert len(samples) == 21
         print(f"One knee, median live evaluation {median(map(float, samples)):.3f} ms")
+
+
+def test_wall_tool_applies_corners_only_to_the_new_wall():
+    scene = Scene()
+    h = History(scene)
+    def wall(a, b, tool=False):
+        apply(h, "create_sweeps", sweeps=[dict(profile=dict(library="basic/wall"),
+              path=dict(points=[a, b]))], wall_junctions=tool)
+    wall([0, 0, 0], [2, 0, 0])
+    wall([0, 0, 0], [0, 1, 0])
+    assert not any(r["kind"] == "junction" for r in live.live_rows(scene))
+    wall([2, 0, 0], [2, 1, 0], True)
+    j = junction(scene)
+    assert j["state"] == "ok" and j["detail"]["name"] == "Wall corner · by priority"
+    assert len(j["contents"]) == 2 and len(live.junction_markers(scene)) == 1
+    apply(h, "undo")
+    assert len(scene.groups) == 2
+    wall([1, 0, 0], [1, 1, 0], True)
+    assert junction(scene)["detail"]["name"] == "Wall tee"
+
+
+def test_window_lintel_and_lining_follow_wall_stock(tmp_path):
+    from built_core import Matrix4, Vec3
+    from built_core.group import Group
+    from tests.test_geometry_arrays import CUBE
+    scene = Scene()
+    h = History(scene)
+    apply(h, "create_sweeps", sweeps=[dict(profile=dict(library="basic/wall",
+          params=dict(width=200, height=3000)), attachment="bottom_left",
+          path=dict(points=[[0, 0, 0], [6, 0, 0]]))])
+    wall, = scene.groups
+    fill = Group(name="Window")
+    fill.xform = Matrix4()
+    fill.ifc = {"class": "IfcWindow"}
+    fill.ext = {"library_host": "wall", "junction": "5c9f9bb202d14a8c"}
+    for face in CUBE:
+        fill.mesh.add_face([Vec3(x, .12*y, z) for x, y, z in face])
+    apply(h, "place_group", template=fill.uid, _pending=fill,
+          basis=[[1,0,0],[0,1,0],[0,0,1]], offset=[2,0,1],
+          wall_host=dict(uid=wall.uid, outline=[[2,0,1],[3,0,1],[3,0,2],[2,0,2]],
+                         normal=[0,-1,0], initial_offset=0, offset=0, sill=1, flipped=False))
+    j = junction(scene)
+    assert j["state"] == "ok", j.get("reason")
+    assert j["params"]["frame_depth"] == 200 and j["params"]["lintel_len"] == 1300
+    rows = {r["key"]: r for r in live.live_rows(scene) if r.get("junction") == j["uid"]}
+    assert rows["lintel"]["path"]["points"][1] == [1.3, 0, 0]
+    assert {"frame", "sill", "lining_left", "lining_right", "reveal_left", "reveal_right"} <= rows.keys()
+    sweep = live.live_sweep(scene, wall.uid)
+    sweep["path"]["points"][1][0] = 8
+    sweep["profile"]["params"]["width"] = 300
+    apply(h, "live_set", row=sweep)
+    j = junction(scene)
+    assert j["params"]["frame_depth"] == 300
+    assert fill.xform.data()[12:15] == (2., 0., 1.)
+    assert wall.ifc["openings"][0]["wall_rect"][0] == .25
+    apply(h, "move_placements", placements=[wall.uid], delta=[1, 2, 0])
+    assert fill.xform.data()[12:15] == (3., 2., 1.)
+    apply(h, "undo")
+    assert fill.xform.data()[12:15] == (2., 0., 1.)
+
+
+def test_wall_on_slab_contact_and_optional_trim():
+    from built_core import Matrix4, Vec3
+    from built_core.group import Group
+    from tests.test_geometry_arrays import CUBE
+    from tests.test_live_cut import solid_volume
+    import pytest
+    scene = Scene()
+    h = History(scene)
+    slab = Group(name="Slab")
+    slab.xform = Matrix4()
+    slab.ifc = {"class": "IfcSlab"}
+    for face in CUBE:
+        slab.mesh.add_face([Vec3(x*4-1, y*4-2, z*.25) for x, y, z in face])
+    scene.groups.append(slab)
+    apply(h, "create_sweeps", sweeps=[dict(profile=dict(library="basic/wall"),
+          attachment="bottom_left", path=dict(points=[[0, 0, 0], [2, 0, 0]]))])
+    wall = scene.groups[1]
+    stock = solid_volume(wall)
+    for name in ["Wall on slab", "Wall on slab · trim"]:
+        p = next(p for p, _ in live.preset_catalog(scene) if p["name"] == name)
+        apply(h, "junction_apply", detail=p["uid"], bindings={
+            "main": {"placement": slab.uid}, "joining": {"placement": wall.uid}})
+        j = junction(scene)
+        assert j["state"] == "ok" and j["frames"]["meet"][14] == pytest.approx(.25)
+        expected = stock - .25*.2*2 if j["contents"] else stock
+        assert solid_volume(wall) == pytest.approx(expected)
+        apply(h, "undo")

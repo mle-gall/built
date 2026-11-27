@@ -69,6 +69,8 @@ pub(super) fn prepare(
                 && preset.record.get("class") == Some(&json!("IfcPlate")))
         {
             "/path/points/1/2".to_owned()
+        } else if name == "path.x" || name == "path.y" {
+            format!("/path/points/1/{}", usize::from(name == "path.y"))
         } else if let Some(field) = name.strip_prefix("profile.params.") {
             if field.is_empty() || field.contains('/') {
                 return Err(err("Invalid part dimension"));
@@ -81,7 +83,7 @@ pub(super) fn prepare(
         let dest = sweep
             .pointer_mut(&path)
             .ok_or_else(|| err("Missing part field"))?;
-        let scale = if path == "/path/points/1/2" {
+        let scale = if path.starts_with("/path/points/1/") {
             0.001
         } else {
             1.

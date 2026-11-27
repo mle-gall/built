@@ -288,16 +288,38 @@ def test_hosted_opening_on_a_pitched_wall_follows_its_placement(tmp_path):
     from built_core import command_protocol
     scene.show_all_cutters = True
     outline, = command_protocol.live_cut_display(scene)
+    joint, = rows_of(scene, "junction")
+    cut = outline["row"]
+    assert joint["meeting"] == "hosted" and joint["state"] == "ok"
+    assert joint["roles"]["hosted"]["placement"] == window.uid and joint["roles"]["hosted"]["attached"]
+    assert joint["contents"] == [{"key": "opening", "row": cut["uid"]}]
+    assert cut["junction"] == joint["uid"]
     assert len(outline["lines"]) == 12
     assert outline["row"]["cutter"]["opening"]["fill"] == window.uid
     apply(h, "move_placements", placements=[wall.uid], delta=[1, 2, 0])
     assert window.xform.data()[12:15] == (3., 2., 1.)
+    apply(h, "move_placements", placements=[wall.uid, window.uid], delta=[1, 0, 0])
+    assert window.xform.data()[12:15] == (4., 2., 1.)
     path = tmp_path / "pitched.built"
     igz.save_scene(scene, path)
     reopened = Scene()
     igz.load_into(reopened, path)
     assert rows_of(reopened, "cut")[0]["state"] == "ok"
     assert solid_volume(reopened.groups[0]) == pytest.approx(before - .25)
+    assert rows_of(reopened, "junction")[0]["uid"] == joint["uid"]
+    from tests.test_live_recipes import rewrite
+    def previous_format(document):
+        rows = document["ext"]["built.live"]["rows"]
+        rows.remove(next(r for r in rows if r["kind"] == "junction"))
+        old = next(r for r in rows if r["kind"] == "cut")
+        del old["junction"], old["key"]
+        document["scene"]["groups"] = [g for g in document["scene"]["groups"] if g["uid"] != joint["owner"]]
+    legacy = tmp_path / "legacy.built"
+    rewrite(path, legacy, previous_format)
+    migrated = Scene()
+    igz.load_into(migrated, legacy)
+    assert rows_of(migrated, "junction")[0]["uid"] == joint["uid"]
+    assert rows_of(migrated, "cut")[0]["cutter"] == cut["cutter"]
 
 
 def test_pushpull_on_a_mitre_face_edits_its_live_joint(monkeypatch):

@@ -1025,6 +1025,22 @@ triangular fillet. A `part.glue` clips the projected outline to the stock faces
 on the contact plane and stores their overlap in square millimetres.
 The junction exposes the measured `length` or `area` as a derived field.
 
+### Hosted families and Wall tool (J4)
+
+A hosted component can set its placement extension `junction` to the UID
+of a hosted detail. The Architecture door and window details accept walls
+60–650 mm thick. Their lintels bear 150 mm at each jamb by default. A
+component without a detail receives the cut-only Hosted opening. The
+`hosted_opening` content entry adopts the existing rectangular cut. Its
+UID and stored opening GUID survive migration. The wall opening record
+also remains available to the IFC writer.
+
+The Wall tool requests `wall_junctions=true` on `create_sweeps` for new
+walls. A shared end applies the priority corner. An end on the run of
+another wall applies the tee. The new wall and its junctions share a
+History step. Loading existing walls leaves their intersections available
+for review.
+
 ## 13. Risks
 
 | Risk | Mitigation |
@@ -1046,5 +1062,5 @@ The junction exposes the measured `length` or `area` as a derived field.
 | Q1 | A junction applied along a Repeat (the purlin cleats): one row with per-station overrides, or one row per meeting? | **One row with `along`**, like a repeated cutter: new copies get their cleat in the same step, skips and overrides stay with their purlin by station key, and the file stays small. A station that needs a different detail is detached into its own junction. |
 | Q2 | IFC for child junctions: aggregate their parts flat into the top junction's assembly, or nest one `IfcElementAssembly` per child junction? | **Flat.** One assembly per connection is what Tekla, Advance Steel and most checkers expect; each child junction still writes its own `IfcRelConnectsWithRealizingElements` (plate to rafter realized by the weld; plate to column realized by the bolts), and `Built_Junction` on each part names the child detail it came from. |
 | Q3 | Bolt, nut and washer geometry: generated from standard tables and shared per size, or one Library component file per size? | **Implemented in J1.** ISO 4014/4017 bolts use generated, shared definitions keyed by standard, diameter, length and grip. Grip sets the nut and washer positions. Library components stay for hangers, brackets and couplers. |
-| Q4 | Should the Wall tool apply the corner detail when a wall ends on another wall? | **Yes**, as part of the Wall tool's own commit, with the marker and Undo: it is the tool's visible behaviour, not a silent suggestion. Existing walls get corners only through the review. |
+| Q4 | Should the Wall tool apply the corner detail when a wall ends on another wall? | **Implemented in J4**, as part of the Wall tool's own commit, with the marker and Undo: it is the tool's visible behaviour, not a silent suggestion. Existing walls get corners only through the review. |
 | Q5 | Release: one level (cuts stay live cut rows, a plate stays a sweep), or bake everything? | **One level**, consistent with Repeat's Release; "Release all" in the same menu bakes everything in one step. |

@@ -138,7 +138,7 @@ fn run_insert(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResult<()> {
     let ctx = if !ctx.is_none() && !ctx.getattr("children")?.is_none() { ctx } else { none(py) };
     let (owner, _) = places::insert_placement(&scene.getattr("groups")?, &ctx, &scene.getattr("mesh")?, &group)?;
     s.publish("_owner", owner);
-    crate::hosted_openings::regenerate(scene,&group)?;
+    crate::hosted_openings::place(scene,&group)?;
     crate::structure::file_created_placement(scene, &group)?;
     if !attachment.is_none() {
         let anchor = py
