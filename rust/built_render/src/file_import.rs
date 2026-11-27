@@ -194,7 +194,14 @@ fn load_file(
             )?;
         }
         "step" => {
-            py.import("built_core.formats.step")?.call_method1("apply_step", (scene, params.get_item("prepared")?, params.get_item("accept_partial")?))?;
+            py.import("built_core.formats.step")?.call_method1(
+                "apply_step",
+                (
+                    scene,
+                    params.get_item("prepared")?,
+                    params.get_item("accept_partial")?,
+                ),
+            )?;
         }
         "stl" => {
             py.import("built_core.formats.stl")?
@@ -261,7 +268,7 @@ fn import_file(
     simplify: &str,
     label: Option<&Bound<'_, PyAny>>,
 ) -> PyResult<bool> {
-    import_prepared(win,path,kind,scale,simplify,label,None)
+    import_prepared(win, path, kind, scale, simplify, label, None)
 }
 
 #[pyfunction]
@@ -321,21 +328,54 @@ fn import_prepared(
     let params = PyDict::new(py);
     let mut make_faces = false;
     if kind == "step" {
-        let prepared = if let Some(p)=accepted{p.clone()}else{match py.import("built_core.formats.step")?.call_method1("prepare_step", (path,)) {
-            Ok(p) => p,
-            Err(e) => {
-                dialogs.call_method1("critical", (win, &title, e.value(py).str()?))?;
-                return Ok(false);
+        let prepared = if let Some(p) = accepted {
+            p.clone()
+        } else {
+            match py
+                .import("built_core.formats.step")?
+                .call_method1("prepare_step", (path,))
+            {
+                Ok(p) => p,
+                Err(e) => {
+                    dialogs.call_method1("critical", (win, &title, e.value(py).str()?))?;
+                    return Ok(false);
+                }
             }
-        }};
+        };
         let problems = prepared.get_item("problems")?.extract::<Vec<String>>()?;
         if !problems.is_empty() && accepted.is_none() {
-            let buttons = PyList::new(py, [("cancel", translated(py, "Cancel", None)?), ("import", translated(py,"Import available bodies", None)?)])?;
+            let buttons = PyList::new(
+                py,
+                [
+                    ("cancel", translated(py, "Cancel", None)?),
+                    ("import", translated(py, "Import available bodies", None)?),
+                ],
+            )?;
             let kw = PyDict::new(py);
             kw.set_item("cancel", "cancel")?;
             kw.set_item("default", "cancel")?;
-            let done=py.import("functools")?.call_method1("partial",(wrap_pyfunction!(confirm_step,py)?,win,win.getattr("viewport")?.getattr("scene")?,path,shown,&prepared))?;
-            dialogs.call_method("ask_later", (win, translated(py,"Import partial STEP model?",None)?, problems.join("\n"), buttons,done),Some(&kw))?;
+            let done = py.import("functools")?.call_method1(
+                "partial",
+                (
+                    wrap_pyfunction!(confirm_step, py)?,
+                    win,
+                    win.getattr("viewport")?.getattr("scene")?,
+                    path,
+                    shown,
+                    &prepared,
+                ),
+            )?;
+            dialogs.call_method(
+                "ask_later",
+                (
+                    win,
+                    translated(py, "Import partial STEP model?", None)?,
+                    problems.join("\n"),
+                    buttons,
+                    done,
+                ),
+                Some(&kw),
+            )?;
             return Ok(false);
         }
         params.set_item("accept_partial", !problems.is_empty())?;
@@ -453,13 +493,23 @@ fn import_prepared(
     } else {
         if kind == "step" {
             let p = params.get_item("prepared")?.unwrap();
-            for k in ["exact","faceted","rejected","missing"] { args.set_item(k,p.get_item(k)?)?; }
-            let mut text=message(py,"Imported {name}: {exact} exact, {faceted} faceted, {rejected} rejected, {missing} missing",&args)?;
+            for k in ["exact", "faceted", "rejected", "missing"] {
+                args.set_item(k, p.get_item(k)?)?;
+            }
+            let mut text = message(
+                py,
+                "Imported {name}: {exact} exact, {faceted} faceted, {rejected} rejected, {missing} missing",
+                &args,
+            )?;
             if p.get_item("synthetic_file_name")?.is_truthy()? {
                 text.push_str(" · ");
-                text.push_str(&translated(py,"Supplied missing STEP file name",None)?.extract::<String>()?);
+                text.push_str(
+                    &translated(py, "Supplied missing STEP file name", None)?
+                        .extract::<String>()?,
+                );
             }
-            win.call_method0("statusBar")?.call_method1("showMessage",(text,8000))?;
+            win.call_method0("statusBar")?
+                .call_method1("showMessage", (text, 8000))?;
         } else {
             report_import(win, &name, offset.as_ref())?;
         }
@@ -480,7 +530,7 @@ fn import_prepared(
     Ok(true)
 }
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_function(wrap_pyfunction!(recover_selection,m)?)?;
+    m.add_function(wrap_pyfunction!(recover_selection, m)?)?;
     m.add_function(wrap_pyfunction!(run_import, m)?)?;
     m.add_function(wrap_pyfunction!(prepare_import, m)?)?;
     m.add_function(wrap_pyfunction!(import_file, m)?)?;
@@ -653,7 +703,11 @@ fn preview_recovery<'p>(
                     },
                 )?;
             }
-            detail.push(message(py,"{method} · Faces: {faces} · First face: {first_face}\nPlanar faces: {planar_faces} · Curved supports: {curved_supports}\nMaximum residual: {max_residual_m} m\nInput volume (m³): {input_volume_m3}\nOutput volume (m³): {output_volume_m3}",&vars)?);
+            detail.push(message(
+                py,
+                "{method} · Faces: {faces} · First face: {first_face}\nPlanar faces: {planar_faces} · Curved supports: {curved_supports}\nMaximum residual: {max_residual_m} m\nInput volume (m³): {input_volume_m3}\nOutput volume (m³): {output_volume_m3}",
+                &vars,
+            )?);
             detail.extend(row.get_item("untouched")?.extract::<Vec<String>>()?);
         }
     }
