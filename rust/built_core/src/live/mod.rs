@@ -2,7 +2,9 @@
 //! The root's journalled attribute holds a frozen, structurally shared table.
 //! Definition replacements and placement markers are ordinary document ops.
 mod cut;
+mod cut_display;
 pub(crate) use cut::{assign_cut_roles, hosted, migrate_wall, pushed_row};
+pub(crate) use cut_display::live_cut_display;
 mod drawn_profile;
 mod file;
 mod geometry;
@@ -566,7 +568,7 @@ enum Edit {
     Presets(Vec<presets::Preset>),
     DeletePreset(String),
     Create(Vec<sweep::Sweep>),
-    Set(Row),
+    Set(Vec<Row>),
     Release(String),
     Reevaluate(String),
 }
@@ -759,6 +761,8 @@ impl Mutation {
                         anchor: None,
                         operation: None,
                         end: None,
+                        span: None,
+                        offset: None,
                         on: None,
                         sweep: Some(Box::new(spec)),
                     })
@@ -775,71 +779,73 @@ impl Mutation {
                     t.pending.insert(uid);
                 }
             }
-            Edit::Set(request) => {
-                let mut row = request.clone();
-                if row.kind == "repeat" {
-                    repeat::prepare(scene, &mut t, &mut row)?;
-                    presets::bind_repeat(scene, &mut t, &mut row)?;
-                }
-                if row.kind != "sketch" && group(py, &t, &row.owner).is_none() {
-                    return Err(PyValueError::new_err("unknown recipe owner"));
-                }
-                if t.rows.get(&row.uid).is_some_and(|r| r.state == "stale") {
-                    return Err(PyValueError::new_err(
-                        "stale recipe requires re-evaluation or release",
-                    ));
-                }
-                if let (Some(old), Some(new)) = (
-                    t.rows.get(&row.uid).and_then(|r| r.sweep.as_deref()),
-                    row.sweep.as_deref_mut(),
-                ) {
-                    if let Some(g) = group(py, &t, &row.owner) {
-                        if old.preset_uid != new.preset_uid {
-                            if let Some(p) = presets::link(&mut t, new)? {
-                                p.record(&g, false)?;
-                            }
-                        } else if let Some(p) = old
-                            .preset_uid
-                            .as_deref()
-                            .and_then(|id| presets::lookup(&t, id))
-                        {
-                            if let Some(note) = presets::detach(old, new, &p) {
-                                g.getattr("ifc")?.set_item("preset_note", note)?;
+            Edit::Set(requests) => {
+                for request in requests {
+                    let mut row = request.clone();
+                    if row.kind == "repeat" {
+                        repeat::prepare(scene, &mut t, &mut row)?;
+                        presets::bind_repeat(scene, &mut t, &mut row)?;
+                    }
+                    if row.kind != "sketch" && group(py, &t, &row.owner).is_none() {
+                        return Err(PyValueError::new_err("unknown recipe owner"));
+                    }
+                    if t.rows.get(&row.uid).is_some_and(|r| r.state == "stale") {
+                        return Err(PyValueError::new_err(
+                            "stale recipe requires re-evaluation or release",
+                        ));
+                    }
+                    if let (Some(old), Some(new)) = (
+                        t.rows.get(&row.uid).and_then(|r| r.sweep.as_deref()),
+                        row.sweep.as_deref_mut(),
+                    ) {
+                        if let Some(g) = group(py, &t, &row.owner) {
+                            if old.preset_uid != new.preset_uid {
+                                if let Some(p) = presets::link(&mut t, new)? {
+                                    p.record(&g, false)?;
+                                }
+                            } else if let Some(p) = old
+                                .preset_uid
+                                .as_deref()
+                                .and_then(|id| presets::lookup(&t, id))
+                            {
+                                if let Some(note) = presets::detach(old, new, &p) {
+                                    g.getattr("ifc")?.set_item("preset_note", note)?;
+                                }
                             }
                         }
                     }
-                }
-                if row.kind == "cut" {
-                    cut::attach(scene, &mut t, &mut row)?;
-                } else if let Some(old) = t.rows.get(&row.uid) {
-                    row.cuts.clone_from(&old.cuts);
-                } else {
-                    row.cuts.clear();
-                }
-                if let Some(spec) = row.sweep.as_mut() {
-                    spec.preset_definition = None;
-                    bind_drawing(&mut t, &mut spec.profile)?;
-                }
-                row.state.clear();
-                let new_repeat = row.kind == "repeat" && !t.rows.contains_key(&row.uid);
-                t.insert(row.clone()).map_err(PyValueError::new_err)?;
-                if new_repeat {
-                    let source = row.source.as_ref().unwrap();
-                    let users: Vec<_> = t.users(&Key::Placement(source.clone())).cloned().collect();
-                    for uid in users {
-                        let Some(mut cut) = t.rows.get(&uid).map(|r| (**r).clone()) else {
-                            continue;
-                        };
-                        if matches!(&cut.cutter, Some(cut::Cutter::Body(id)) if id == source) {
-                            cut.cutter = Some(cut::Cutter::Repeat(row.uid.clone()));
-                            cut::attach(scene, &mut t, &mut cut)?;
-                            t.insert(cut).map_err(PyValueError::new_err)?;
+                    if row.kind == "cut" {
+                        cut::attach(scene, &mut t, &mut row)?;
+                    } else if let Some(old) = t.rows.get(&row.uid) {
+                        row.cuts.clone_from(&old.cuts);
+                    } else {
+                        row.cuts.clear();
+                    }
+                    if let Some(spec) = row.sweep.as_mut() {
+                        spec.preset_definition = None;
+                        bind_drawing(&mut t, &mut spec.profile)?;
+                    }
+                    row.state.clear();
+                    let new_repeat = row.kind == "repeat" && !t.rows.contains_key(&row.uid);
+                    t.insert(row.clone()).map_err(PyValueError::new_err)?;
+                    if new_repeat {
+                        let source = row.source.as_ref().unwrap();
+                        let users: Vec<_> = t.users(&Key::Placement(source.clone())).cloned().collect();
+                        for uid in users {
+                            let Some(mut cut) = t.rows.get(&uid).map(|r| (**r).clone()) else {
+                                continue;
+                            };
+                            if matches!(&cut.cutter, Some(cut::Cutter::Body(id)) if id == source) {
+                                cut.cutter = Some(cut::Cutter::Repeat(row.uid.clone()));
+                                cut::attach(scene, &mut t, &mut cut)?;
+                                t.insert(cut).map_err(PyValueError::new_err)?;
+                            }
                         }
                     }
+                    t.schedule([row.uid.clone()])
+                        .map_err(PyValueError::new_err)?;
+                    t.pending.insert(row.uid);
                 }
-                t.schedule([row.uid.clone()])
-                    .map_err(PyValueError::new_err)?;
-                t.pending.insert(row.uid);
             }
             Edit::Release(id) => {
                 let mut row = t
@@ -1081,7 +1087,7 @@ pub(crate) fn repeat_command<'p>(
         "uid": uid, "kind":"repeat", "source":source, "run":run, "rule":rule
     }))
     .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    let command = Bound::new(py, Mutation(Edit::Set(row)))?.into_any();
+    let command = Bound::new(py, Mutation(Edit::Set(vec![row])))?.into_any();
     command.setattr("_repeat_selection_row", uid)?;
     Ok(command)
 }
@@ -1242,25 +1248,30 @@ fn create_sweeps<'p>(history: &Obj<'p>, sweeps: &Obj<'p>) -> PyResult<Bound<'p, 
 }
 #[pyfunction]
 fn live_set<'p>(history: &Obj<'p>, row: &Obj<'p>) -> PyResult<Bound<'p, PyDict>> {
-    let row: Row = json(row)?;
-    for uid in std::iter::once(&row.uid)
-        .chain((!matches!(row.kind.as_str(), "sketch" | "repeat") || !row.owner.is_empty()).then_some(&row.owner))
-    {
-        if uid.len() != 16 || !uid.bytes().all(|c| c.is_ascii_hexdigit()) {
-            return Err(PyValueError::new_err("expected 16-hex uid"));
+    let rows: Vec<Row> = if row.is_instance_of::<pyo3::types::PyList>() {
+        json(row)?
+    } else {
+        vec![json(row)?]
+    };
+    if rows.is_empty() {
+        return Err(PyValueError::new_err("Expected live rows"));
+    }
+    for row in &rows {
+        for uid in std::iter::once(&row.uid)
+            .chain((!matches!(row.kind.as_str(), "sketch" | "repeat") || !row.owner.is_empty()).then_some(&row.owner))
+        {
+            if uid.len() != 16 || !uid.bytes().all(|c| c.is_ascii_hexdigit()) {
+                return Err(PyValueError::new_err("expected 16-hex uid"));
+            }
+        }
+        if !matches!(row.kind.as_str(), "test_box" | "sweep" | "sketch" | "cut" | "repeat") || row.v != 1 {
+            return Err(PyValueError::new_err("unsupported recipe"));
+        }
+        if row.kind == "sketch" {
+            sketch::validate(&row).map_err(PyValueError::new_err)?;
         }
     }
-    if !matches!(
-        row.kind.as_str(),
-        "test_box" | "sweep" | "sketch" | "cut" | "repeat"
-    ) || row.v != 1
-    {
-        return Err(PyValueError::new_err("unsupported recipe"));
-    }
-    if row.kind == "sketch" {
-        sketch::validate(&row).map_err(PyValueError::new_err)?;
-    }
-    edit(history, Edit::Set(row))
+    edit(history, Edit::Set(rows))
 }
 /// Done in the Sketch workspace: the sketch row and every user of it
 /// re-evaluated, one History step. A new sketch gets a fresh uid.
@@ -1287,9 +1298,18 @@ fn sketch_profile<'p>(scene: &Obj<'p>, uid: &str) -> PyResult<Obj<'p>> {
     };
     let s = sketch::body(row).map_err(PyValueError::new_err)?;
     let p = built_draft2d::profile(&s);
-    let names: Vec<String> = built_draft2d::sketch::ATTACH.iter().map(|n| n.to_string()).chain(s.points.iter().map(|p| p.name.clone())).collect();
-    let attach: serde_json::Map<String, serde_json::Value> =
-        names.iter().filter_map(|n| s.attachment(n).map(|at| (n.clone(), serde_json::json!([at.x, at.y])))).collect();
+    let names: Vec<String> = built_draft2d::sketch::ATTACH
+        .iter()
+        .map(|n| n.to_string())
+        .chain(s.points.iter().map(|p| p.name.clone()))
+        .collect();
+    let attach: serde_json::Map<String, serde_json::Value> = names
+        .iter()
+        .filter_map(|n| {
+            s.attachment(n)
+                .map(|at| (n.clone(), serde_json::json!([at.x, at.y])))
+        })
+        .collect();
     to_py(
         py,
         &serde_json::json!({
@@ -1316,6 +1336,7 @@ fn live_rows<'p>(scene: &Obj<'p>) -> PyResult<Obj<'p>> {
 }
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     presets::register(m)?;
+    m.add_function(wrap_pyfunction!(live_cut_display, m)?)?;
     m.add_function(wrap_pyfunction!(live_cuts, m)?)?;
     m.add_function(wrap_pyfunction!(cut::live_openings, m)?)?;
     m.add_function(wrap_pyfunction!(sweep_thumbnail, m)?)?;

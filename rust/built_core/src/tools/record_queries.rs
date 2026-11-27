@@ -172,6 +172,54 @@ impl ViewportToolHost {
                 }
                 json!(ids)
             }
+            "cut_grip" => {
+                let items=crate::live::live_cut_display(&view.getattr("scene")?)?;
+                if items.len()?==0 {return Ok(Some(Value::Null));}
+                let camera=Projection::from_view(view)?;
+                let cursor=glam::DVec2::from(args::<[f64;2]>(arg)?);
+                let mut nearest=9.;
+                let mut hit=Value::Null;
+                for item in items.try_iter()? {
+                    let item=item?;
+                    for grip in item.get_item("grips")?.try_iter()?{
+                        let grip=grip?;
+                        let at=grip.get_item("at")?.extract::<P3>()?;
+                        if let Some(px)=camera.pixel(at.into())?{
+                            let distance=cursor.distance(px.into());
+                            if distance<nearest{
+                                nearest=distance;
+                                hit=json!({"kind":grip.get_item("kind")?.extract::<String>()?, "at":at,"row":super::py::py_to_json(&item.get_item("row")?)?,"axis":item.get_item("axis")?.extract::<P3>()?,"radius":item.get_item("radius")?.extract::<f64>()?});
+                            }
+                        }
+                    }
+                }
+                if hit.is_null() {
+                    // Project the visible wires without a depth query. A foreground
+                    // face cannot swallow a pick on the cutter behind it.
+                    for item in items.try_iter()? {
+                        let item=item?;
+                        for line in item.get_item("lines")?.extract::<Vec<[P3;2]>>()? {
+                            let (Some(a),Some(b))=(camera.pixel(line[0].into())?,camera.pixel(line[1].into())?) else {continue;};
+                            let a=glam::DVec2::from(a);
+                            let ab=glam::DVec2::from(b)-a;
+                            let u=((cursor-a).dot(ab)/ab.length_squared().max(1e-9)).clamp(0.,1.);
+                            let d=cursor.distance(a+u*ab);
+                            if d>=nearest.min(5.) {continue;}
+                            let row=item.get_item("row")?;
+                            let at=item.get_item("centre")?.extract::<P3>()?;
+                            let grips=item.get_item("grips")?;
+                            if grips.len()? > 0 {
+                                nearest=d;
+                                hit=json!({"kind":"offset","row":super::py::py_to_json(&row)?,"at":at,"axis":item.get_item("axis")?.extract::<P3>()?,"radius":item.get_item("radius")?.extract::<f64>()?});
+                            } else if let Ok(body)=row.get_item("cutter")?.get_item("body") {
+                                nearest=d;
+                                hit=json!({"placement":body.extract::<String>()?});
+                            }
+                        }
+                    }
+                }
+                hit
+            }
             "cut_pick" => {
                 let px:(f64,f64)=args(arg)?;
                 let Some(pair)=hit(view,"pick_face_placement",px)? else{return Ok(Some(Value::Null));};
@@ -187,10 +235,15 @@ impl ViewportToolHost {
                 let local=xyz(&face.call_method0("centroid")?)?;
                 let ends=group.getattr("ext")?.call_method1("get",("built.live",))?;
                 let points=ends.get_item("path").and_then(|p|p.extract::<Vec<[f64;3]>>()).unwrap_or_default();
-                let start=points.first().zip(points.last()).is_some_and(|(a,b)|local.distance_squared((*a).into())<local.distance_squared((*b).into()));
                 let repeat = group.getattr("ext")?.get_item("built.repeat").ok()
                     .and_then(|m|m.get_item("row").ok()).and_then(|id|id.extract::<String>().ok());
-                json!({"repeat":repeat,"placement":group.getattr("uid")?.extract::<String>()?,"ring":ring,"face":{"path":path,"id":crate::element_ids::to_text('f',id)},"end":if start {"start"}else{"end"}})
+                let nearest = points.windows(2).enumerate().map(|(i,ab)| {
+                    let a=DVec3::from(ab[0]);let b=DVec3::from(ab[1]);let axis=b-a;
+                    let t=((local-a).dot(axis)/axis.length_squared()).clamp(0.,1.);
+                    (i,t<0.5,local.distance_squared(a+t*axis))
+                }).min_by(|a,b|a.2.total_cmp(&b.2));
+                let (span,start,_) = nearest.unwrap_or_default();
+                json!({"repeat":repeat,"placement":group.getattr("uid")?.extract::<String>()?,"ring":ring,"face":{"path":path,"id":crate::element_ids::to_text('f',id)},"span":span,"end":if start {"start"}else{"end"}})
             }
             "cut_selection" => {
                 let selected=view.getattr("scene")?.getattr("selection")?;

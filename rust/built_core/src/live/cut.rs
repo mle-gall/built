@@ -28,6 +28,8 @@ pub struct Plane {
     pub origin: [f64; 3],
     #[serde(default)]
     pub normal: Option<[f64; 3]>,
+    #[serde(default)]
+    pub angle: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -38,9 +40,13 @@ pub struct Anchor {
     pub offset: f64,
 }
 
+fn tilted(n: DVec3, angle: f64) -> DVec3 {
+    glam::DQuat::from_axis_angle(n.any_orthonormal_vector(), angle.to_radians()) * n
+}
 pub struct EndPlane {
     pub uid: String,
     pub end: bool,
+    pub span: usize,
     pub origin: DVec3,
     pub normal: DVec3,
 }
@@ -200,12 +206,20 @@ pub(super) fn end_planes(
             continue;
         }
         *active = Some(id.clone());
-        if path.len() != 2 {
+        if path.len() < 2 {
             return Ok(Err("unsupported_cut_path"));
         }
         let end = row.end.as_deref() != Some("start");
-        let tip = DVec3::from(path[usize::from(end)]);
-        let along = (DVec3::from(path[1]) - DVec3::from(path[0])).normalize_or_zero();
+        let closed = target.sweep.as_ref().is_some_and(|s| s.path.closed);
+        let count = if closed { path.len() } else { path.len() - 1 };
+        let span = row.span.unwrap_or(if end { count - 1 } else { 0 });
+        if span >= count {
+            return Ok(Err("end_unresolved"));
+        }
+        let a = DVec3::from(path[span]);
+        let b = DVec3::from(path[(span + 1) % path.len()]);
+        let tip = if end { b } else { a };
+        let along = (b - a).normalize_or_zero();
         let (mut origin, mut normal) = match &row.cutter {
             Some(Cutter::Plane(p)) => (
                 DVec3::from(p.origin),
@@ -219,14 +233,26 @@ pub(super) fn end_planes(
                     .get_item(EXT)?
                     .and_then(|m| m.get_item("path").ok())
                     .and_then(|p| p.extract::<Vec<[f64; 3]>>().ok())
-                    .filter(|p| p.len() == 2)
+                    .filter(|p| p.len() >= 2)
                 else {
                     return Ok(Err("end_unresolved"));
                 };
                 let m = reference::frame(t.groups[&target.owner]).inverse()
                     * reference::frame(t.groups[uid]);
-                let a = m.transform_point3(points[0].into());
-                let b = m.transform_point3(points[1].into());
+                let (_, pair) = points
+                    .windows(2)
+                    .enumerate()
+                    .min_by(|(_, a), (_, b)| {
+                        let distance = |s: &[[f64; 3]]| {
+                            s.iter()
+                                .map(|p| m.transform_point3((*p).into()).distance_squared(tip))
+                                .fold(f64::INFINITY, f64::min)
+                        };
+                        distance(a).total_cmp(&distance(b))
+                    })
+                    .unwrap();
+                let a = m.transform_point3(pair[0].into());
+                let b = m.transform_point3(pair[1].into());
                 let (near, far) = if tip.distance_squared(a) <= tip.distance_squared(b) {
                     (a, b)
                 } else {
@@ -260,12 +286,18 @@ pub(super) fn end_planes(
             if matches!(row.cutter, Some(Cutter::Bisector(_))) {
                 row.clearance.unwrap_or(0.)
             } else {
-                0.
+                row.offset.unwrap_or(0.)
             }
         });
+        let normal = if let Some(Cutter::Plane(p)) = &row.cutter {
+            tilted(normal, p.angle)
+        } else {
+            normal
+        };
         origin += normal * (offset / 1000.);
         result.push(EndPlane {
             uid: id.clone(),
+            span,
             end,
             origin,
             normal,
@@ -300,6 +332,36 @@ fn section_pose(
             ),
     ))
 }
+pub(super) fn section_frame(
+    scene: &Obj<'_>,
+    t: &LiveTable,
+    target: &Row,
+    cut: &Row,
+    section: &Row,
+) -> PyResult<Option<DMat4>> {
+    let mut pose = DMat4::IDENTITY;
+    if let Some(plane) = section.sketch_fields.plane.get("ref") {
+        if let Some(local) = cut.sketch_fields.plane.get("local") {
+            pose = DMat4::from_cols_array(
+                &serde_json::from_value(local.clone())
+                    .map_err(|e| PyValueError::new_err(e.to_string()))?,
+            );
+        } else if let Some(frame) = section_pose(scene, t, &target.owner, plane)? {
+            pose = frame;
+        } else {
+            return Ok(None);
+        }
+    }
+    pose *= DMat4::from_translation(DVec3::Z * cut.offset.unwrap_or(0.) / 1000.);
+    if let Some(anchor) = &cut.anchor {
+        let Some(point) = reference::origin(scene, t, &anchor.reference, cut)? else {
+            return Ok(None);
+        };
+        pose.w_axis =
+            (point + pose.z_axis.truncate().normalize_or_zero() * anchor.offset / 1000.).extend(1.);
+    }
+    Ok(Some(pose))
+}
 fn operand<'p>(
     scene: &Obj<'p>,
     t: &LiveTable,
@@ -331,7 +393,12 @@ fn operand<'p>(
             let Some(mut n) = normal.try_normalize() else {
                 return Ok(Err("end_unresolved"));
             };
-            origin += n * cut.anchor.as_ref().map_or(0., |a| a.offset / 1000.);
+            n = tilted(n, plane.angle);
+            origin += n * cut
+                .anchor
+                .as_ref()
+                .map_or(cut.offset.unwrap_or(0.), |a| a.offset)
+                / 1000.;
             if cut.end.as_deref() == Some("start") {
                 n = -n;
             }
@@ -393,19 +460,9 @@ fn operand<'p>(
             if section.state != "ok" {
                 return Ok(Err("profile_open"));
             }
-            let mut pose = DMat4::IDENTITY;
-            if let Some(plane) = section.sketch_fields.plane.get("ref") {
-                if let Some(local) = cut.sketch_fields.plane.get("local") {
-                    pose = DMat4::from_cols_array(
-                        &serde_json::from_value(local.clone())
-                            .map_err(|e| PyValueError::new_err(e.to_string()))?,
-                    );
-                } else if let Some(frame) = section_pose(scene, t, &target.owner, plane)? {
-                    pose = frame;
-                } else {
-                    return Ok(Err("ref_lost"));
-                }
-            }
+            let Some(pose) = section_frame(scene, t, target, cut, section)? else {
+                return Ok(Err("ref_lost"));
+            };
             let extrusion = if cut.sketch_fields.extrude.is_object() {
                 &cut.sketch_fields.extrude
             } else {
@@ -451,7 +508,7 @@ fn operand<'p>(
     if let Some(anchor) = cut
         .anchor
         .as_ref()
-        .filter(|_| !matches!(cut.cutter, Some(Cutter::Plane(_))))
+        .filter(|_| !matches!(cut.cutter, Some(Cutter::Plane(_) | Cutter::Section(_))))
     {
         let Some(point) = reference::origin(scene, t, &anchor.reference, cut)? else {
             return Ok(Err("ref_lost"));
