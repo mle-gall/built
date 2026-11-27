@@ -697,10 +697,21 @@ fn inspector_action(win: &Bound<'_, PyAny>, view: &Bound<'_, PyAny>, payload: &s
         }
         "repeat" if verb == "run" => {
             win.call_method1("_activate_tool", ("move",))?;
-            win.getattr("_tools")?
-                .get_item("move")?
-                .getattr("_machine")?
-                .call_method1("set", ("repeat_run", &v))?;
+            let tool = win.getattr("_tools")?.get_item("move")?;
+            let scene = vp.getattr("scene")?;
+            let query = py.import("built_core.command_protocol")?.getattr("live_repeat")?;
+            let depth = v.get_item("breadcrumb")?.len()?;
+            let mut level = v.clone();
+            let mut counts = Vec::new();
+            for i in 0..depth {
+                counts.push(format!("×{}", level.get_item("copies")?.extract::<usize>()?));
+                if i + 1 < depth {
+                    level = query.call1((&scene, level.get_item("source")?))?;
+                }
+            }
+            counts.reverse();
+            tool.setattr("_repeat_multipliers", counts.join("  "))?;
+            tool.getattr("_machine")?.call_method1("set", ("repeat_run", &v))?;
             vp.call_method0("update")?;
             Ok(())
         }

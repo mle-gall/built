@@ -217,6 +217,63 @@ impl Records {
                     if kit::quiet(ui, "Release").clicked() {
                         send(out, "repeat.release", row["uid"].clone());
                     }
+                    kit::disclosure(ui, "repeat ends", "Ends and skips", false, |ui| {
+                        let polar = row["run"]["polar"].is_object();
+                        let measure = row["measure"].as_str().unwrap_or("pitch");
+                        if !polar {
+                            kit::property_control(ui, "Measure", |ui| {
+                                let options = ["pitch", "gap"];
+                                let (choice, popup) = kit::select(ui, "repeat measure", measure, &options);
+                                layers.extend(popup);
+                                if let Some(i) = choice {
+                                    let mut next = row.clone();
+                                    next["measure"] = json!(options[i]);
+                                    send(out, "repeat.edit", next);
+                                }
+                            });
+                        }
+                        for (key, title, flag, default) in [
+                            ("start", "Start inset", "at_start", false),
+                            ("end", "End inset", "at_end", true),
+                        ] {
+                            kit::property_control(ui, title, |ui| {
+                                let old = row["ends"][key].as_f64().unwrap_or(0.);
+                                let id = ui.make_persistent_id(("repeat inset", row["uid"].as_str(), key));
+                                let mut n = ui.data(|d| d.get_temp(id)).unwrap_or(old);
+                                let response = ui.add(kit::number(&mut n, if polar { "°" } else { " mm" }));
+                                if response.changed() {
+                                    ui.data_mut(|d| d.insert_temp(id, n));
+                                }
+                                if response.drag_stopped() || response.lost_focus() {
+                                    ui.data_mut(|d| d.remove::<f64>(id));
+                                    if n >= 0. && n != old {
+                                        let mut next = row.clone();
+                                        next["ends"][key] = json!(n);
+                                        send(out, "repeat.edit", next);
+                                    }
+                                }
+                            });
+                            let mut include = row["ends"][flag].as_bool().unwrap_or(default);
+                            if ui.checkbox(&mut include, if default { "Include end" } else { "Include start" }).changed() {
+                                let mut next = row.clone();
+                                next["ends"][flag] = json!(include);
+                                send(out, "repeat.edit", next);
+                            }
+                        }
+                        for (index, skip) in row["skips"].as_array().into_iter().flatten().enumerate() {
+                            ui.horizontal(|ui| {
+                                let at = skip["at"].as_f64().unwrap_or_default();
+                                let unit = if polar { "°" } else { " mm" };
+                                let from = skip["from"].as_str().unwrap_or("start");
+                                ui.label(format!("{at:.1}{unit} from {from}"));
+                                if kit::quiet(ui, "Restore copy").clicked() {
+                                    let mut next = row.clone();
+                                    next["skips"].as_array_mut().unwrap().remove(index);
+                                    send(out, "repeat.edit", next);
+                                }
+                            });
+                        }
+                    });
                 });
             });
         }
