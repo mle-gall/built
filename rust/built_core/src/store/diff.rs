@@ -219,20 +219,31 @@ impl State {
             return None;
         }
         let mut dirty = self.changed_face_slots(before, true);
-        let mut moved = 0;
+        let mut moved = Vec::new();
         for (c, (now, old)) in self.vpos.chunks().zip(before.vpos.chunks()).enumerate() {
             if self.vpos.same_chunk(&before.vpos, c) { continue; }
             for (i, (p, q)) in now.iter().zip(old).enumerate() {
                 let v = (c * CHUNK + i) as u32;
-                if p == q || !self.slots[0].alive(v) { continue; }
-                moved += 1;
-                if moved > 4096 { return None; }
-                for e in self.edges_at(v) {
-                    dirty.extend_from_slice(self.edge_faces(e));
+                if p != q {
+                    moved.push(v);
+                    if moved.len() > 4096 { return None; }
                 }
             }
         }
-        if moved > 0 {
+        if !moved.is_empty() {
+            // A face can keep a corner after its edges are erased. Read the
+            // rings themselves, including holes and unlisted corners.
+            let mut flags = vec![false; self.vpos.len()];
+            for v in moved { flags[v as usize] = true; }
+            for f in self.slots[2].live_slots() {
+                let r = self.frings.get(f as usize);
+                let count: usize = (0..r.n_rings)
+                    .map(|i| *self.ring_sizes.get((r.ring_start + i) as usize) as usize).sum();
+                let first = r.corner_start as usize;
+                if (first..first + count).any(|i| flags[*self.corners.get(i) as usize]) {
+                    dirty.push(f);
+                }
+            }
             dirty.sort_unstable();
             dirty.dedup();
         }

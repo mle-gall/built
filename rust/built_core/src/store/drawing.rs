@@ -248,6 +248,15 @@ impl DrawingGraph {
         limit: usize,
         both: bool,
     ) -> Vec<Vec<Point>> {
+        Self::search_cycles(a, b, dead, extras, limit, both, |node, links| {
+            if let Some(row) = self.0.get(&node) { links.extend_from_slice(row); }
+        })
+    }
+
+    fn search_cycles(
+        a: Point, b: Point, dead: HashSet<usize>, extras: Vec<[Point; 2]>,
+        limit: usize, both: bool, mut neighbors: impl FnMut(Node, &mut Vec<(usize, Point)>),
+    ) -> Vec<Vec<Point>> {
         let (start, end) = (key(b), key(a));
         if start == end || limit < 3 {
             return vec![];
@@ -256,20 +265,17 @@ impl DrawingGraph {
         for edge in extras {
             added.append(usize::MAX, edge);
         }
-        let search = |skip: &HashSet<Node>| -> Option<Vec<Point>> {
+        let mut links = Vec::new();
+        let mut search = |skip: &HashSet<Node>| -> Option<Vec<Point>> {
             let mut parents = HashMap::from([(start, (start, b))]);
             let mut queue = VecDeque::from([(start, 1usize)]);
             while let Some((u, depth)) = queue.pop_front() {
                 if depth >= limit {
                     continue;
                 }
-                for &(i, p) in self
-                    .0
-                    .get(&u)
-                    .into_iter()
-                    .flatten()
-                    .chain(added.0.get(&u).into_iter().flatten())
-                {
+                links.clear();
+                neighbors(u, &mut links);
+                for &(i, p) in links.iter().chain(added.0.get(&u).into_iter().flatten()) {
                     let v = key(p);
                     if dead.contains(&i)
                         || skip.contains(&v)
@@ -304,6 +310,39 @@ impl DrawingGraph {
             None
         };
         std::iter::once(first).chain(second).collect()
+    }
+}
+
+/// A temporary drawing frame can change between neighboring strokes. Index
+/// each vertex once and visit only the edge disks the cycle search reaches.
+/// Coincident rounded coordinates share a bucket but keep all their edges.
+pub(crate) struct FrameVertices {
+    slots: Vec<(Node, u32)>,
+}
+
+impl FrameVertices {
+    pub(crate) fn new(state: &super::State) -> Self {
+        let mut slots: Vec<_> = state.slots[0].live_slots()
+            .map(|v| (key(*state.vpos.get(v as usize)), v)).collect();
+        slots.sort_unstable();
+        Self { slots }
+    }
+
+    pub(crate) fn cycles(&self, state: &super::State, a: Point, b: Point,
+                         dead: HashSet<usize>, extras: Vec<[Point; 2]>,
+                         limit: usize, both: bool) -> Vec<Vec<Point>> {
+        DrawingGraph::search_cycles(a, b, dead, extras, limit, both, |node, links| {
+            let first = self.slots.partition_point(|&(cell, _)| cell < node);
+            for &(_, v) in self.slots[first..].iter().take_while(|(cell, _)| *cell == node) {
+                for e in state.edges_at(v) {
+                    let ends = *state.ends.get(e as usize);
+                    let other = ends[usize::from(ends[0] == v)];
+                    let point = *state.vpos.get(other as usize);
+                    if key(point) != node { links.push((e as usize, point)); }
+                }
+            }
+            links.sort_unstable_by_key(|&(e, _)| state.list_rank(Kind::Edge, e as u32));
+        })
     }
 }
 
@@ -387,4 +426,40 @@ pub(crate) fn split_plan(
             .unwrap_or(std::cmp::Ordering::Equal)
     });
     (hits, cuts)
+}
+
+#[cfg(test)]
+mod frame_graph_tests {
+    use super::*;
+    use crate::store::edit::Change;
+
+    #[test]
+    fn framed_cycles_visit_edges_in_the_original_order() {
+        let mut store = Store::empty(16, Default::default());
+        let mut change = Change::default();
+        for x in 0..8 {
+            for y in 0..5 {
+                let x = x as f64;
+                let y = y as f64;
+                store.add_face(&[vec![[x,y,0.],[x+1.,y,0.],[x+1.,y+1.,0.],[x,y+1.,0.]]], &mut change).unwrap();
+            }
+        }
+        // Two distinct slots now round to the same drawing cell.
+        store.place_vertex(0, [1.00001, 0., 0.]);
+        let state = &store.state;
+        let mut full = DrawingGraph::default();
+        for e in store.live_slots(Kind::Edge) {
+            full.append(e as usize, state.ends.get(e as usize).map(|v| *state.vpos.get(v as usize)));
+        }
+        let indexed = FrameVertices::new(state);
+        for x in 0..7 {
+            let (a, b) = ([x as f64, 0., 0.], [1. + x as f64, 1., 0.]);
+            for both in [false, true] {
+                let dead = HashSet::from([1, 9, 21]);
+                let extra = vec![[a, [x as f64, -2., 0.]], [[x as f64, -2., 0.], b]];
+                assert_eq!(indexed.cycles(state, a, b, dead.clone(), extra.clone(), 7, both),
+                           full.cycles(a, b, dead, extra, 7, both));
+            }
+        }
+    }
 }
