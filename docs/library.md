@@ -25,7 +25,7 @@ preferences, the model's entries, the drawer, the browser rows and verbs).
 | `materials` | Library › a model material › Save to Library… | The material's dictionary; its image is carried in `<id>.files/` | Paint with it |
 | `components` | Library › Components › a definition › Save to Library… | `{"file": "component.built"}`, the definition saved as a `.built` of its own in `<id>.files/` | Place a copy |
 | `profiles` | Sketch workspace › Save to Library… (a profile) | The `built.profile` file | Use in Sweep; Open the drawing |
-| `sections` | Sketch workspace › Save to Library… (a section) | The `built.profile` file | Open the drawing (the Cut tool takes presets) |
+| `sections` | Sketch workspace › Save to Library… (a section) | The `built.profile` file | Open the drawing (the Cut tool takes presets); listed in Library › Sections |
 | `presets` | A live member › Save as preset | The preset row (`uid` is the item's id) | Use in Sweep or Cut |
 | `styles` | Display panel › Save style… | The style's dictionary | Use this style (also listed in the Display panel's Style choice) |
 | `scenes`, `title_blocks` | Not yet wired to a Save button | — | The layout and destinations accept them |

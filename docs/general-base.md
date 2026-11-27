@@ -781,10 +781,11 @@ boundary of a cylindrical member cut by an oblique plane.
 ## Notes from the sketch follow-ups (feat/sketch-followups)
 
 - **Entering.** Library › Profiles has *New profile…* and *Import drawing…*
-  in its header; the new Library › Sections tab (drawn sections: the
-  Library's `use: section` files as *My library*, this model's section rows
-  as *In this model*) has *New section…*; Enter or a double-click edits a
-  section. The Sweep picker (L) ends with *Other sources*: Pick a face
+  in its header; the new Library › Sections tab (saved `sections`
+  in every destination of docs/library.md, older loose `use: section` files
+  not yet migrated, and this model's section rows) has *New section…*;
+  Enter or a double-click edits a section. Profiles lists saved profiles
+  only. The Sweep picker (L) ends with *Other sources*: Pick a face
   (Alt-click), Draw a profile… (D), Import DXF, DWG, SVG…. Draw › New
   Profile…, Draw › New Section… and File › Import › Drawing into a Sketch
   (`sketch:new`, `sketch:new:section`, `import:sketch`) are in the menu bar
