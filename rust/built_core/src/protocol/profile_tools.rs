@@ -309,7 +309,13 @@ fn bevel_selection<'py>(
             plan: plan.unbind(),
         },
     )?;
-    execute(history, &class.call1((callback, mesh))?)
+    // The section arcs are curve runs: fit their circles, so the strips
+    // between them derive one cylinder each (docs/exact-geometry.md §10).
+    // A run that is not a circle (another profile) stays faceted.
+    let mutation = class.call1((callback, mesh))?;
+    let intent = crate::store::exact_bound::FIT_CIRCLES;
+    mutation.setattr("_exact_intent", intent)?;
+    crate::store::exact_bound::with_intent(intent, || execute(history, &mutation))
 }
 pub(super) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(bevel_selection, m)?)?;
