@@ -75,20 +75,33 @@ pub(in crate::live) fn apply_ends(scene: &Obj<'_>, t: &mut LiveTable, uid: &str)
                 if distance > 1e-5 && snapped != Some(&other.owner) {
                     continue;
                 }
-                let terminal = if span == 0 && tip.distance(a) < 1e-5 {
+                let on_axis = a + at * run;
+                let terminal = if span == 0 && on_axis.distance(a) < 1e-5 {
                     Some("start")
-                } else if span + 2 == s.path.points.len() && tip.distance(b) < 1e-5 {
+                } else if span + 2 == s.path.points.len() && on_axis.distance(b) < 1e-5 {
                     Some("end")
                 } else {
                     None
                 };
                 let rank = (terminal.is_none(), t.order[&other.uid]);
-                if best.as_ref().is_none_or(|(old, _, _)| rank < *old) {
-                    best = Some((rank, other.clone(), terminal));
+                if best.as_ref().is_none_or(|(old, _, _, _)| rank < *old) {
+                    best = Some((rank, other.clone(), terminal, on_axis));
                 }
             }
         }
-        if let Some((_, old, terminal)) = best {
+        if let Some((_, old, terminal, on_axis)) = best {
+            if snapped == Some(&old.owner) && terminal.is_some() {
+                // The junction owns both end cuts. Referencing a result face
+                // from either member's stock would close the dependency loop.
+                let mut stock = (*t.rows[uid]).clone();
+                let path = &mut stock.sweep.as_mut().unwrap().path;
+                let point = m.inverse().transform_point3(on_axis).to_array();
+                path.points[i] = point;
+                if let Some(ends) = &mut path.ends {
+                    ends[usize::from(end == "end")] = sweep::End::Point(point);
+                }
+                t.insert(stock).map_err(err)?;
+            }
             let mut main = json!({"placement":old.owner,"end":terminal.unwrap_or("end")});
             let mut joining = json!({"placement":new.owner,"end":end});
             let detail = if terminal.is_some() {

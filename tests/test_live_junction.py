@@ -545,3 +545,20 @@ def test_wall_on_slab_contact_and_optional_trim():
         expected = stock - .25*.2*2 if j["contents"] else stock
         assert solid_volume(wall) == pytest.approx(expected)
         apply(h, "undo")
+
+
+def test_wall_tool_face_snap_at_stock_end_is_a_priority_corner():
+    from tests.test_persistent_ids import face_id
+    scene = Scene()
+    h = History(scene)
+    def draw(path):
+        apply(h, "create_sweeps", sweeps=[dict(profile=dict(library="basic/wall"),
+              attachment="bottom", path=path)], wall_junctions=True)
+    draw(dict(points=[[0, 0, 0], [3, 0, 0]]))
+    wall, = scene.groups
+    side = max(wall.mesh.faces, key=lambda f: f.centroid().y())
+    hit = dict(path=[wall.uid], id=face_id(wall.mesh, side))
+    draw(dict(points=[[3, .1, 0], [3, 2, 0]], ends=[dict(to=hit, extend=True), [3, 2, 0]]))
+    j = junction(scene)
+    assert j["state"] == "ok" and len(j["contents"]) == 2
+    assert j["detail"]["name"] == "Wall corner · by priority"
