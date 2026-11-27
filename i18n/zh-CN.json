@@ -1,4 +1,6 @@
 {
+ "Show all cutters": "显示所有切割体",
+ "Pick a target, Shift-click for more, then pick the cutter. Tab changes operation, L picks a preset, A anchors, D draws a section.": "先选目标，再选切割体。Tab 切换运算，L 选择预设，A 设置锚点，D 绘制截面。 按住 Shift 单击可添加或移除目标。",
  "Pick a target, then its cutter. Tab changes operation, L picks a preset, A anchors, D draws a section.": "先选目标，再选切割体。Tab 切换运算，L 选择预设，A 设置锚点，D 绘制截面。",
  "Pick a start, or press Enter to sweep selected edges.": "选择起点，或按 Enter 沿选定的边扫掠。",
  "Pick the end or enter a length. Alt keeps the end free.": "选择终点或输入长度。按住 Alt 可保留自由端。",

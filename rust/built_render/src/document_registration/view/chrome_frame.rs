@@ -611,6 +611,14 @@ fn options<'py>(a: &Args<'py>) -> Reply<'py> {
     let flag = |name: &str| -> PyResult<i32> { Ok(tool.getattr(name)?.is_truthy()? as i32) };
     let (held_tool, held_host, held_view) = (tool.clone().unbind(), host.clone().unbind(), view.clone().unbind());
     match name.as_str() {
+        "CutTool" => {
+            let on = truthy(&source.getattr("scene")?, "show_all_cutters")?;
+            let run = action(py, move |py| {
+                let win = ui(py)?.call_method1("_window", (held_view.bind(py),))?;
+                py.import("views.view_commands")?.call_method1("run", (win, "show_cutters")).map(drop)
+            })?;
+            out.append(("show_cutters", "Show all cutters", "", i32::from(on), run))?;
+        }
         "MoveTool" if tool.hasattr("_toggle_copy")? => {
             let run = action(py, move |py| held_tool.bind(py).call_method1("_toggle_copy", (held_host.bind(py),)).map(drop))?;
             out.append(("copy", "Copy", ctrl()?, flag("_copy")?, run))?;
@@ -793,6 +801,11 @@ fn cursor_value<'py>(a: &Args<'py>) -> Reply<'py> {
             Some(n)=>(chip,py.import("built_core.units")?.call_method1("fmt_len",(n,))?.extract::<String>()?),
             None=>(tr.call1(("Sweep",))?,chip.extract::<String>()?),
         }
+    } else if cut && !typing && tool.call_method1("_state",("editing_grip",))?.is_truthy()? {
+        let value=tool.call_method1("_state",("grip_value",))?.extract::<f64>()?;
+        let unit=py.import("built_core.units")?;
+        let value=if caption=="Angle"{unit.call_method1("fmt_angle_deg",(value,))?}else{unit.call_method1("fmt_len",(value/1000.,))?};
+        (tr.call1((&caption,))?,value.extract()?)
     } else if cut && !typing {
         let chip=tool.call_method1("_state",("chip",))?;
         let offset:f64=tool.call_method1("_state",("offset",))?.extract()?;

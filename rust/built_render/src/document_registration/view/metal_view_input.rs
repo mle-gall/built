@@ -212,6 +212,14 @@ fn mouse_release<'py>(a: &Args<'py>) -> Reply<'py> {
             notify_scene(view)?;
             view.call_method0("sync_selection")?;
         }
+        if left && !view.getattr("_drag_nav")?.is_truthy()? {
+            let tool=tools.getattr("tool")?;
+            if tool.get_type().name()?.eq("CutTool") && tool.call_method1("_state",("editing_grip",))?.is_truthy()? {
+                let (a,b)=xy(&view.getattr("press")?)?;
+                let (x,y)=xy(&event.call_method0("position")?)?;
+                if (a.extract::<f64>()?-x.extract::<f64>()?).hypot(b.extract::<f64>()?-y.extract::<f64>()?)>4. {tools.call_method1("click",(event,))?;}
+            }
+        }
         if tools.getattr("mode")?.eq("mesh")? && left && !view.getattr("_drag_nav")?.is_truthy()? {
             // GL's: a left release only. A wheel-button orbit's release
             // committed a Push/Pull in progress (a release far from its

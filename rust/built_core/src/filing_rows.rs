@@ -332,10 +332,7 @@ impl<'py> Catalogue<'py> {
         rows.push(r);
         if open {
             for (id,label,on) in cuts.into_iter().flatten() {
-                let mut child=row(format!("cut:{id}"),label.clone(),"","cut",d+1,2,0,0);
-                child.1[5]=i64::from(*on);
-                child.0[2]=if *on {"Cut".into()}else{"Disabled cut".into()};
-                rows.push(child);
+                rows.push(crate::project_tree::cut_row(id,label,*on,d+1));
             }
             let max = self.cap(&key);
             if self.filter.is_empty() {

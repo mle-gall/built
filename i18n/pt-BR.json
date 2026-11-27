@@ -1,4 +1,6 @@
 {
+ "Show all cutters": "Mostrar todos os cortadores",
+ "Pick a target, Shift-click for more, then pick the cutter. Tab changes operation, L picks a preset, A anchors, D draws a section.": "Escolha o alvo e depois o cortador. Tab muda a operação, L escolhe uma predefinição, A define a ancoragem e D desenha uma seção. Shift-clique adiciona ou remove alvos.",
  "Pick a target, then its cutter. Tab changes operation, L picks a preset, A anchors, D draws a section.": "Escolha o alvo e depois o cortador. Tab muda a operação, L escolhe uma predefinição, A define a ancoragem e D desenha uma seção.",
  "Pick a start, or press Enter to sweep selected edges.": "Escolha o início ou pressione Enter para usar as arestas selecionadas.",
  "Pick the end or enter a length. Alt keeps the end free.": "Escolha o fim ou digite o comprimento. Alt deixa a ponta livre.",

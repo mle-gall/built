@@ -214,7 +214,8 @@ fn present_frame<'py>(a: &Args<'py>) -> Reply<'py> {
         view.call_method0("_edit_box_primitives")?
     };
     let outlines = py.import("views.wgpu_edit_context")?.call_method1("billboard_outline_primitives", (&view,))?;
-    let primitives = edit_box.add(boxes)?.add(outlines)?.add(view.getattr("overlay_primitives")?)?;
+    let cutters=super::frame_lines::cutter_primitives(&view,&scene)?;
+    let primitives = cutters.add(edit_box)?.add(boxes)?.add(outlines)?.add(view.getattr("overlay_primitives")?)?;
     if renderer.hasattr("set_center_cue")? {
         let cursor = attr(&view, "_cue_cursor")?;
         let cue = !attr(&source, "_center_ref")?.is_none()

@@ -1,4 +1,6 @@
 {
+ "Show all cutters": "ສະແດງຕົວຕັດທັງໝົດ",
+ "Pick a target, Shift-click for more, then pick the cutter. Tab changes operation, L picks a preset, A anchors, D draws a section.": "ເລືອກເປົ້າໝາຍ ແລ້ວເລືອກຕົວຕັດ. Tab ປ່ຽນການດຳເນີນງານ, L ເລືອກຄ່າສຳເລັດຮູບ, A ກຳນົດຈຸດຍຶດ ແລະ D ແຕ້ມໜ້າຕັດ. ກົດ Shift ແລ້ວຄລິກເພື່ອເພີ່ມ ຫຼື ເອົາເປົ້າໝາຍອອກ.",
  "Pick a target, then its cutter. Tab changes operation, L picks a preset, A anchors, D draws a section.": "ເລືອກເປົ້າໝາຍ ແລ້ວເລືອກຕົວຕັດ. Tab ປ່ຽນການດຳເນີນງານ, L ເລືອກຄ່າສຳເລັດຮູບ, A ກຳນົດຈຸດຍຶດ ແລະ D ແຕ້ມໜ້າຕັດ.",
  "Pick a start, or press Enter to sweep selected edges.": "ເລືອກຈຸດເລີ່ມ ຫຼື ກົດ Enter ເພື່ອໃຊ້ຂອບທີ່ເລືອກ.",
  "Pick the end or enter a length. Alt keeps the end free.": "ເລືອກປາຍ ຫຼື ພິມຄວາມຍາວ. Alt ຮັກສາປາຍໃຫ້ເປັນອິດສະຫຼະ.",

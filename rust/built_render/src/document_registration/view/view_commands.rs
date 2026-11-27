@@ -21,6 +21,7 @@ fn snapshot<'py>(a: &Args<'py>) -> Reply<'py> {
             &scene,
             &[
                 "show_section_planes",
+                "show_all_cutters",
                 "show_section_cuts",
                 "show_hidden_geometry",
                 "show_axes",

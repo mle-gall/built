@@ -125,6 +125,11 @@ pub(crate) fn row(
     )
 }
 
+pub(crate) fn cut_row(id:&str,label:&str,on:bool,depth:usize)->Row {
+    let mut child=row(format!("cut:{id}"),label.to_owned(),if on{"Cut"}else{"Disabled cut"},"cut",depth,2,0,0);
+    child.1[5]=i64::from(on);
+    child
+}
 /// A closed control can belong to the row itself or to an enclosing placement.
 pub(crate) fn placement_controls(row: &mut Row, group: &Bound<'_, PyAny>) -> PyResult<()> {
     row.1[5] = i64::from(!group.getattr("hidden")?.is_truthy()?);
@@ -286,6 +291,7 @@ pub(crate) fn project_context_rows(
     }
 
     rows.extend(loose(scene, 0, query)?);
+    let cuts=crate::live::cut_labels(scene)?;
     let mut stack = vec![(group, 0usize)];
     while let Some((g, depth)) = stack.pop() {
         let children = g.getattr("children")?;
@@ -322,9 +328,11 @@ pub(crate) fn project_context_rows(
                     }),
                 );
                 placement_controls(&mut r, &g)?;
-                r.1[7] = i64::from(children.is_truthy()?);
+                let owned=if cuts.is_empty(){None}else{cuts.get(&g.getattr("uid")?.extract::<String>()?)};
+                r.1[7] = i64::from(children.is_truthy()? || owned.is_some());
                 r.1[8] = i64::from(open);
                 rows.push(r);
+                if open { rows.extend(owned.into_iter().flatten().map(|(id,label,on)| cut_row(id,label,*on,depth))); }
             }
             if !open {
                 continue;

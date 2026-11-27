@@ -97,6 +97,7 @@ pub(super) fn row_kind(row: &Node) -> &'static str {
     match row.key.split_once(':').map_or("", |(kind, _)| kind) {
         "preview-tag" => "tag",
         "preview-folder" => "folder",
+        "cut" => "cut",
         "geometry" => "loose",
         "sections" | "section" => "section",
         "saved-scenes" | "saved-scene" => "scene",

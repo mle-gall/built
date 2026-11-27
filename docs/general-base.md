@@ -755,9 +755,20 @@ of both the cutter and the target. Set `on` to false to suppress a cut without
 losing its references. The first cut on a plain solid retains its uncut mesh
 in the document. A copied placement gets its own cut rows.
 
-The Cut tool takes a target and then a cutter. Tab cycles the operation, L
-opens preset search, A picks a separate anchor and D draws a section on the
-hovered face. Release on a cut bakes the stack through that row.
+The Cut tool takes a target and then a cutter. Shift-click toggles additional
+targets before the cutter pick. Their cut rows share one undo step. Tab cycles
+the operation, L opens preset search, A picks a separate anchor and D draws a section on the
+hovered face. Select a target to see its cutters, or enable **Show all cutters** in
+View ▸ Sections or the Cut tool strip. Pick a grip and drag or type the offset
+or plane angle. Release on the cut row in the project tree or record bakes the
+stack through that row.
+
+A fitting can specify a zero-based path `span` and its `start` or `end`.
+Without a span the fitting applies to the corresponding outer end. The saved
+`butt_planes` list carries both resolved planes for every span, in definition
+coordinates, including the mitre planes of adjacent spans. Plane angle is in
+degrees. Free plane and section offsets are in millimetres. For a cut with
+an anchor the offset is stored on the anchor.
 
 IFC4 Design Transfer exports analytic member end planes as clipping results.
 It composes supported single-span sweeps and planar solids as CSG. Rounded

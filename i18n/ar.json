@@ -1,4 +1,6 @@
 {
+ "Show all cutters": "إظهار جميع القواطع",
+ "Pick a target, Shift-click for more, then pick the cutter. Tab changes operation, L picks a preset, A anchors, D draws a section.": "اختر العنصر الهدف ثم القاطع. يغيّر Tab العملية، ويختار L إعدادًا مسبقًا، ويحدد A مرجع التثبيت، ويرسم D مقطعًا. اضغط على Shift وانقر لإضافة هدف أو إزالته.",
  "Pick a target, then its cutter. Tab changes operation, L picks a preset, A anchors, D draws a section.": "اختر العنصر الهدف ثم القاطع. يغيّر Tab العملية، ويختار L إعدادًا مسبقًا، ويحدد A مرجع التثبيت، ويرسم D مقطعًا.",
  "Pick a start, or press Enter to sweep selected edges.": "اختر البداية أو اضغط Enter لمدّ المقطع على الحواف المحددة.",
  "Pick the end or enter a length. Alt keeps the end free.": "اختر النهاية أو أدخل الطول. يبقي Alt النهاية حرة.",

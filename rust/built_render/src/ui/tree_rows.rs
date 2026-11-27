@@ -201,6 +201,7 @@ pub(super) fn show_menu(
             ("rename", "Rename…"),
             ("deletescene", "Delete"),
         ],
+        Some("cut") => &[("eye", "Hide"), ("releasecut", "Release")],
         Some("sections") => &[("toggle", "Expand"), ("eye", "Hide")],
         Some("geometry") => &[("item", "Select items"), ("eye", "Hide"), ("lock", "Lock")],
         Some("m") => &[("loose", "Show more")],
