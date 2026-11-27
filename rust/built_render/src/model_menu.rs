@@ -119,8 +119,8 @@ fn build_entries() -> Vec<MenuEntry> {
     add("export:dxf", "File ▸ Export", "Current View as DXF…", "", Export("dxf"));
     add("export:video", "File ▸ Export", "Scenes as Video…", "", Window("export_video"));
     add("export_igz", "File ▸ Export", "Save a Copy as .igz (IngeTrazo)…", "", Shell);
-    add("recover_exact", "Tools", "Recover exact geometry…", "", Window("_on_recover_exact"));
-    add("make_faceted", "Tools", "Make faceted", "", Window("_on_make_faceted"));
+    add("recover_exact", "Tools", "Recover Exact Geometry…", "", Window("_on_recover_exact"));
+    add("make_faceted", "Tools", "Make Faceted", "", Window("_on_make_faceted"));
     // Edit
     for (id, label, keys, method) in [
         ("repeat_last_command", "Repeat Last Command", "Shift+R", "repeat_last_command"),

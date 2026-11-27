@@ -184,6 +184,8 @@ pub const GROUPS: &[(&str, &[Row])] = &[
             Row::Entry("tool:chamfer"),
             Row::Entry("tool:outer_shell"),
             Row::Sub("Solid Tools"),
+            Row::Entry("recover_exact"),
+            Row::Entry("make_faceted"),
             Row::Entry("bridge"),
             Row::Entry("make_faces"),
             Row::Separator,
@@ -394,7 +396,7 @@ mod tests {
         assert!(outside.is_empty(), "export rows outside File ▸ Export: {outside:?}");
         let export: Vec<&str> = file.iter().filter(|r| r.0 == "File ▸ Export").map(|r| r.2.as_str()).collect();
         assert_eq!(export, [
-            "delivery_export", "export:ifc", "export:glb", "export:dae", "export:stl", "export:obj",
+            "delivery_export", "export:ifc", "export:glb", "export:dae", "export:step", "export:stl", "export:obj",
             "export_image", "export_view_svg", "export:dxf", "export:video", "export_igz",
         ]);
         let label = |id: &str| file.iter().find(|r| r.2 == id).unwrap().1.clone();
