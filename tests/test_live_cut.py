@@ -320,6 +320,12 @@ def test_hosted_opening_on_a_pitched_wall_follows_its_placement(tmp_path):
     igz.load_into(migrated, legacy)
     assert rows_of(migrated, "junction")[0]["uid"] == joint["uid"]
     assert rows_of(migrated, "cut")[0]["cutter"] == cut["cutter"]
+    edited = migrated.groups[0].mesh
+    edited.add_edge(Vec3(0, 0, 4), Vec3(1, 0, 4))
+    apply(History(migrated), "move_placements", placements=[window.uid], delta=[.1, 0, 0])
+    failure, = rows_of(migrated, "junction")
+    assert failure["state"] == "failed" and failure["reason"]["criterion"] == "wall_faces"
+    assert migrated.groups[0].mesh is edited
 
 
 def test_pushpull_on_a_mitre_face_edits_its_live_joint(monkeypatch):
