@@ -12,6 +12,7 @@
 //! Paint strip and the material inspector. Model edits go through
 //! `built_core.protocol.commands`.
 mod bulk;
+pub(crate) mod destinations;
 mod presets;
 use presets::PresetsProvider;
 pub(crate) use presets::capture_preset;
@@ -655,10 +656,20 @@ impl MaterialsProvider {
         let model = slf.call_method1("_model_items", (ctx,))?;
         let pair = slf.call_method1("_linked_items", (ctx, model))?;
         let out = PyList::empty(py);
+        let scene = ctx.getattr_opt("scene")?;
+        let saved = destinations::saved_ids(py, scene.as_ref(), "materials")?;
         for part in [pair.get_item(0)?, pair.get_item(1)?, slf.call_method1("_mine_items", (ctx,))?] {
             for e in part.try_iter()? {
-                out.append(e?)?;
+                let e = e?;
+                // A kept material copied into My library is listed once, from there.
+                if get(&e, "source")?.eq("mine")? && saved.contains(&crate::library_store::legacy_material_id(&get(&e, "name")?.str()?.to_string())) {
+                    continue;
+                }
+                out.append(e)?;
             }
+        }
+        for e in destinations::py_items(py, scene.as_ref(), &["materials"])? {
+            out.append(e)?;
         }
         for e in bundled.try_iter()? {
             out.append(py.import("builtins")?.getattr("dict")?.call1((e?,))?)?;
@@ -820,23 +831,21 @@ impl MaterialsProvider {
                 ask(&view, ("delete", "materials", key.clone()), &format!("Delete “{name_s}”?"), &body, "Delete")?;
             }
             ("keep", "m") => {
+                // Save to Library…: the material's dictionary, its image among its files.
                 let mat = scene.getattr("materials")?.call_method1("get", (&name,))?;
                 if !mat.is_none() {
-                    let kept = PyList::empty(py);
-                    for e in mine(py)?.try_iter()? {
-                        let e = e?;
-                        let t = get(&e, "type")?;
-                        if !((t.eq("materials")? || t.eq("colours")?) && get(&e, "name")?.eq(&name)?) {
-                            kept.append(e)?;
-                        }
+                    let mut data: serde_json::Value = serde_json::from_str(&dumps(py, &mat.call_method0("to_dict")?)?)
+                        .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+                    let mut files = Vec::new();
+                    if let Some(path) = data["texture"]["path"].as_str().map(PathBuf::from).filter(|p| p.is_file()) {
+                        let file = path.file_name().unwrap_or_default().to_string_lossy().into_owned();
+                        data["texture"]["path"] = serde_json::json!(file);
+                        files.push((file, path));
                     }
-                    let entry = PyDict::new(py);
-                    entry.set_item("type", "materials")?;
-                    entry.update(mat.call_method0("to_dict")?.cast::<pyo3::types::PyMapping>()?)?;
-                    kept.append(entry)?;
-                    store_json(py, MINE_KEY, kept.as_any())?;
+                    let id = crate::library_store::legacy_material_id(&name_s);
+                    destinations::save_to_library(&ctx.getattr("win")?, "materials", &name_s, &data.to_string(), Some(id), 1, "", None, None, Some(files),
+                                                  Some(vec!["model".into()]), None)?;
                     bump_mine(&view)?;
-                    flash(ctx, &format!("{name_s} is in My library, for every project"))?;
                 }
             }
             ("unkeep", "my") => {
@@ -1503,6 +1512,8 @@ impl ProfilesProvider {
                 "thumb":format!("profile:{}",size["key"].as_str().unwrap()),"defaults":details,
                 "source":"bundled","verbs":["apply"]})
         }).collect();
+        let scene=ctx.getattr_opt("scene")?.filter(|s|!s.is_none() && s.hasattr("_root").unwrap_or(false));
+        let saved:std::collections::HashSet<String>=destinations::saved_ids(py,scene.as_ref(),"profiles")?.into_iter().chain(destinations::saved_ids(py,scene.as_ref(),"sections")?).collect();
         if let Ok(files)=std::fs::read_dir(Self::saved_directory()?){
             let mut files:Vec<_>=files.flatten().map(|e|e.path()).filter(|p|p.extension().is_some_and(|s|s=="builtprofile")).collect();
             files.sort();
@@ -1512,6 +1523,7 @@ impl ProfilesProvider {
                 let name=data["name"].as_str().unwrap_or("Drawn profile");
                 let mut sketch=data["sketch"].clone();
                 sketch["name"]=serde_json::json!(name);
+                if saved.contains(&crate::library_store::legacy_profile_id(&file)) {continue;}
                 items.push(serde_json::json!({"key":format!("local:{}",file.file_name().unwrap_or_default().to_string_lossy()),"name":name,"category":"My profiles","source":"local","sketch":sketch,"verbs":["apply","edit"]}));
             }
         }
@@ -1519,8 +1531,18 @@ impl ProfilesProvider {
             let rows=py.import("built_core.command_protocol")?.call_method1("live_rows",(scene,))?;
             let rows:Vec<serde_json::Value>=serde_json::from_str(&json(py)?.call_method1("dumps",(rows,))?.extract::<String>()?).unwrap_or_default();
             for row in rows.iter().filter(|r|r["kind"]=="sketch" && r["use"]!="section" && r["state"]=="ok"){
-                items.push(serde_json::json!({"key":format!("sketch:{}",row["uid"].as_str().unwrap_or_default()),"name":row["name"].as_str().unwrap_or("Drawn profile"),"category":"This project","source":"project","sketch":row,"verbs":["apply","edit"]}));
+                items.push(serde_json::json!({"key":format!("sketch:{}",row["uid"].as_str().unwrap_or_default()),"name":row["name"].as_str().unwrap_or("Drawn profile"),"category":"Sketches","source":"model","sketch":row,"verbs":["apply","edit"]}));
             }
+        }
+        // Saved profiles; sections (the Cut tool's) only on the Library sheet,
+        // not in the Sweep pickers, which ask with the scene alone.
+        let kinds:&[&str]=if ctx.hasattr("win")? {&["profiles","sections"]} else {&["profiles"]};
+        for row in destinations::items(py,scene.as_ref(),kinds)? {
+            let mut row=row;
+            if row["lib"]["kind"]=="sections" {
+                row["category"]=serde_json::json!("Sections");
+            }
+            items.push(row);
         }
         json(py)?.call_method1("loads",(serde_json::to_string(&items).unwrap(),))
     }
@@ -2548,6 +2570,12 @@ impl LibrarySheet {
             }
             _ => {}
         }
+        if destinations::run(&lctx, verb, &e)? {
+            if verb == "apply" {
+                cs(py)?.call_method1("close", (&win,))?;
+            }
+            return Ok(());
+        }
         prov.call_method1("run", (&lctx, verb, &e))?;
         if verb == "duplicate" {
             st.set_item("force_focus", true)?;
@@ -2874,6 +2902,11 @@ fn paint_from_strip(win: &Bound<'_, PyAny>, key: &str) -> PyResult<()> {
 fn confirmed(win: &Bound<'_, PyAny>, view: &Bound<'_, PyAny>, pending: &Bound<'_, PyAny>, text: &str) -> PyResult<()> {
     let py = win.py();
     let (what, type_id, key) = (pending.get_item(0)?, pending.get_item(1)?, pending.get_item(2)?);
+    if what.eq("libdelete")? {
+        destinations::confirmed(win, view, &key.str()?.to_string())?;
+        _state(view)?.set_item("sig", py.None())?;
+        return Ok(());
+    }
     let p = provider(py, &type_id.str()?.to_string())?;
     if p.hasattr("confirmed")? {
         p.call_method1("confirmed", (ctx_of(py, win, view)?, what, key, text))?;
@@ -3115,6 +3148,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
         sub.add_function(f)?;
     }
     sub.add("item", sub.getattr("item_of")?)?;
+    destinations::register(&sub)?;
     m.add_submodule(&sub)?;
     py.import("sys")?.getattr("modules")?.set_item("built_render.wgpu_library", &sub)?;
     Ok(())

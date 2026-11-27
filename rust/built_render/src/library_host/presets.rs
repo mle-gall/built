@@ -10,10 +10,16 @@ fn rows(ctx: &Bound<'_, PyAny>) -> PyResult<Vec<(Value, String)>> {
         .filter(|s| s.hasattr("_root").unwrap_or(false));
     let catalog = py
         .import("built_core.command_protocol")?
-        .call_method1("preset_catalog", (scene,))?;
+        .call_method1("preset_catalog", (scene.clone(),))?;
     let mut items: Vec<(Value, String)> = serde_json::from_str(&dumps(py, &catalog)?)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;
+    let saved = super::destinations::saved_ids(py, scene.as_ref(), "presets")?;
     for (_, preset) in saved_presets()? {
+        // Listed from the Library once migration copied it there.
+        let id = preset["uid"].as_str().unwrap_or_default().to_lowercase();
+        if saved.contains(&id) || saved.contains(&crate::library_store::stable_id(&format!("preset:{id}"))) {
+            continue;
+        }
         if !items.iter().any(|(row, _)| row["uid"] == preset["uid"]) {
             items.push((preset, "mine".into()));
         }
@@ -240,6 +246,34 @@ fn edit(ctx: &Bound<'_, PyAny>, preset: Value, title: &str) -> PyResult<()> {
     forms.call_method1("show", (ctx.getattr("win")?, form))?;
     Ok(())
 }
+/// A preset's values and record defaults as detail rows.
+fn details(p: &Value) -> Vec<(String, String, String)> {
+    let mut details = Vec::new();
+    for section in ["values", "record"] {
+        for (key, v) in p[section].as_object().into_iter().flatten() {
+            details.push((
+                format!(
+                    "{} · {}",
+                    match key.as_str() {
+                        "class" => "IFC class",
+                        "predefined_type" => "Predefined type",
+                        "object_type" => "Object type",
+                        "material" => "Material",
+                        "profile" => "Profile",
+                        "mirror" => "Mirror",
+                        "rotation" => "Rotation",
+                        "attachment" => "Attachment",
+                        _ => key,
+                    },
+                    if p["locks"][key] == "fixed" { "Fixed" } else { "Free" }
+                ),
+                shown(if key == "profile" && v["library"].is_string() { &v["library"] } else { v }),
+                p["locks"][key].as_str().unwrap_or("free").to_owned(),
+            ));
+        }
+    }
+    details
+}
 fn transfer(ctx: &Bound<'_, PyAny>, pack: Option<String>) -> PyResult<()> {
     let py = ctx.py();
     let title = if pack.is_some() {
@@ -316,40 +350,18 @@ impl PresetsProvider {
             if source == "model" || source == "mine" {
                 verbs.push("delete");
             }
-            let mut details = Vec::new();
-            for section in ["values", "record"] {
-                for (key, v) in p[section].as_object().into_iter().flatten() {
-                    details.push((
-                        format!(
-                            "{} · {}",
-                            match key.as_str() {
-                                "class" => "IFC class",
-                                "predefined_type" => "Predefined type",
-                                "object_type" => "Object type",
-                                "material" => "Material",
-                                "profile" => "Profile",
-                                "mirror" => "Mirror",
-                                "rotation" => "Rotation",
-                                "attachment" => "Attachment",
-                                _ => key,
-                            },
-                            if p["locks"][key] == "fixed" {
-                                "Fixed"
-                            } else {
-                                "Free"
-                            }
-                        ),
-                        shown(if key == "profile" && v["library"].is_string() {
-                            &v["library"]
-                        } else {
-                            v
-                        }),
-                        p["locks"][key].as_str().unwrap_or("free"),
-                    ));
-                }
-            }
+            let details = details(&p);
             items.push(json!({"key":p["uid"],"name":p["name"],"category":p["pack"],"source":source,"preset":p,"verbs":verbs,"defaults":details,
                 "thumb":p["values"]["profile"]["library"].as_str().map(|k|format!("profile:{k}"))}));
+        }
+        // Presets saved to a project, My library or a shared library.
+        let scene = ctx.getattr_opt("scene")?.filter(|s| s.hasattr("_root").unwrap_or(false));
+        for mut row in super::destinations::items(py, scene.as_ref(), &["presets"])? {
+            let mut rows: Vec<Value> = details(&row["preset"]).into_iter().map(|d| json!(d)).collect();
+            rows.extend(row["defaults"].as_array().cloned().unwrap_or_default());
+            row["defaults"] = json!(rows);
+            row["thumb"] = json!(row["preset"]["values"]["profile"]["library"].as_str().map(|k| format!("profile:{k}")));
+            items.push(row);
         }
         json(py)?.call_method1("loads", (json!(items).to_string(),))
     }
@@ -550,9 +562,8 @@ pub(crate) fn capture_preset(win: &Bound<'_, PyAny>, group: &Bound<'_, PyAny>) -
             .ok_or_else(|| PyValueError::new_err("Missing sketch"))?;
         values["profile"] = json!({"drawing":drawing});
     }
-    edit(
-        &ctx,
-        json!({"uid":uid(py)?,"name":group.getattr("name")?.str()?.to_string(),"pack":"This project","node":"","primitive":"sweep","values":values,"record":record,"locks":{"profile":"fixed"},"naming":"","rev":1}),
-        "Save as preset",
-    )
+    let name = group.getattr("name")?.str()?.to_string();
+    let id = uid(py)?;
+    let preset = json!({"uid":id,"name":name,"pack":"My presets","node":"","primitive":"sweep","values":values,"record":record,"locks":{"profile":"fixed"},"naming":"","rev":1});
+    super::destinations::save_preset(win, &name, preset)
 }

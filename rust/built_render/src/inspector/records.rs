@@ -299,7 +299,7 @@ impl Records {
                             if let Some(i)=choice{
                                 let p=entries[i];
                                 let val=if key=="preset"{p["preset"].clone()}else if let Some(d)=p.get("sketch"){
-                                    if p["source"]=="project"{json!({"sketch":d["uid"]})}else{json!({"drawing":d})}
+                                    if p["key"].as_str().is_some_and(|k|k.starts_with("sketch:")){json!({"sketch":d["uid"]})}else{json!({"drawing":d})}
                                 }else{json!({"library":p["key"]})};
                                 send(out,"sweep.field",json!([owner,key,val]));
                             }
