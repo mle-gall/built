@@ -478,8 +478,8 @@ def test_pbr_shading_changes_pixels_and_keeps_picks(native, tmp_path):
     after = capture(native)
     assert not np.array_equal(before[32, 32], after[32, 32])
     assert [native.pick(x, y) for x, y in points] == picks
-    # Replacing this prototype's records grows the table, then reuses it.
-    # Both paths must keep the recipe/normal-map bindings and the pixels.
+    # Replacing an equal-length table reuses its run. Growing its capacity
+    # must also keep the recipe, normal-map bindings and pixels.
     packed = pack_scene(scene)
     offset, count = map(int, packed.materials[:16].view('<u4')[1:3])
     records = packed.materials[offset * 16:offset * 16 + count * 32]
@@ -489,8 +489,14 @@ def test_pbr_shading_changes_pixels_and_keeps_picks(native, tmp_path):
         native.update_prototype_materials(0, records)
         sizes.append(native.gpu_memory)
         np.testing.assert_array_equal(capture(native), after)
-    assert sizes[-1] > sizes[0]
-    assert any(a == b for a, b in zip(sizes, sizes[1:]))
+    assert sizes == [sizes[0]] * len(sizes)
+    native.update_prototype_materials(0, np.tile(records, 64))
+    grown = native.gpu_memory
+    assert grown > sizes[0]
+    np.testing.assert_array_equal(capture(native), after)
+    native.update_prototype_materials(0, records)
+    assert native.gpu_memory == grown
+    np.testing.assert_array_equal(capture(native), after)
 
 def test_hidden_object_readback_survives_gpu_growth(native):
     """GPU-owned faces must still supply identical ghosts after an append."""
