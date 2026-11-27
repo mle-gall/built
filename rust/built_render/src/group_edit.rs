@@ -169,7 +169,7 @@ enum Component {
     Assembly,
 }
 #[pyclass(unsendable)]
-struct ComponentName {
+struct ComponentForm {
     mode: Component,
     win: Py<PyAny>,
     scene: Py<PyAny>,
@@ -180,7 +180,7 @@ struct ComponentName {
     fallback: String,
 }
 #[pymethods]
-impl ComponentName {
+impl ComponentForm {
     fn __traverse__(&self, visit: PyVisit<'_>) -> Result<(), PyTraverseError> {
         visit.call(&self.win)?;
         visit.call(&self.scene)?;
@@ -190,9 +190,9 @@ impl ComponentName {
         visit.call(&self.groups)
     }
 
-    #[pyo3(signature=(name=None))]
-    fn __call__(&self, py: Python<'_>, name: Option<String>) -> PyResult<()> {
-        let Some(name) = name else { return Ok(()) };
+    fn __call__(&self, py: Python<'_>, answer: &str, values: &Bound<'_, PyAny>) -> PyResult<()> {
+        if answer != "ok" { return Ok(()); }
+        let name: String = values.get_item("text")?.extract()?;
         let win = self.win.bind(py);
         let vp = win.getattr("viewport")?;
         let scene = vp.getattr("scene")?;
@@ -203,6 +203,32 @@ impl ComponentName {
         let name = name.trim();
         let name = if name.is_empty() { self.fallback.as_str() } else { name };
         let history = py.import("built_core.history")?;
+        if !values.get_item("replace")?.is_truthy()? {
+            let copy = py.import("built_core.group")?.getattr("copy_group")?;
+            let copies = PyList::empty(py);
+            for source in self.groups.bind(py).iter() {
+                copies.append(copy.call1((source,))?)?;
+            }
+            let template = if matches!(self.mode, Component::Group) {
+                copies.get_item(0)?
+            } else {
+                let geometry = py.import("built_core")?.call_method1(
+                    "GroupGeometry", (self.faces.bind(py), self.edges.bind(py)))?;
+                let group = geometry.call_method1("build", (&scene, copies.is_empty(), name))?;
+                geometry.call_method1("adopt_exact", (scene.getattr("mesh")?, group.getattr("mesh")?))?;
+                if !copies.is_empty() { group.call_method1("adopt", (copies,))?; }
+                group
+            };
+            template.setattr("name", name)?;
+            template.setattr("component", true)?;
+            if template.getattr("xform")?.is_none() {
+                template.setattr("xform", py.import("built_core")?.call_method0("Matrix4")?)?;
+            }
+            let cmd = history.call_method1("KeepComponentCommand", (template,))?;
+            vp.getattr("history")?.call_method1("execute", (cmd,))?;
+            vp.call_method0("update")?;
+            return Ok(());
+        }
         let kw = PyDict::new(py);
         let cmd = match self.mode {
             Component::Group => history.call_method1(
@@ -244,9 +270,20 @@ impl ComponentName {
                 4000,
             ),
         )?;
+        if values.get_item("axes")?.is_truthy()? {
+            let groups = matching(&scene.getattr("selection")?, "built_core.group", "Group")?;
+            if groups.len() == 1 {
+                win.call_method1("_on_change_axes", (groups.get_item(0)?,))?;
+            }
+        }
         Ok(())
     }
 }
+#[pyfunction]
+fn placing_component(form: &Bound<'_, PyAny>) -> PyResult<bool> {
+    form.call_method1("value", ("replace",))?.is_truthy()
+}
+
 #[pyfunction]
 fn make_component(win: &Bound<'_, PyAny>) -> PyResult<()> {
     if !win.call_method0("_can_make_here")?.is_truthy()? {
@@ -309,10 +346,17 @@ fn make_component(win: &Bound<'_, PyAny>) -> PyResult<()> {
             n += 1;
         }
     };
-    let kw = PyDict::new(py);
-    kw.set_item("text", &suggestion)?;
-    kw.set_item("inspector", true)?;
-    let done = ComponentName {
+    let forms = py.import("built_render.chrome_forms")?;
+    let field = forms.getattr("Field")?;
+    let fields = PyList::empty(py);
+    let focus = PyDict::new(py);
+    focus.set_item("focus", true)?;
+    fields.append(field.call(("text", "edit", translated(py, "Component name:", None)?, &suggestion), Some(&focus))?)?;
+    fields.append(field.call1(("replace", "check", translated(py, "Replace selection with component", None)?, true))?)?;
+    let options = PyDict::new(py);
+    options.set_item("enabled", wrap_pyfunction!(placing_component, py)?)?;
+    fields.append(field.call(("axes", "check", translated(py, "Set axes after creation", None)?, false), Some(&options))?)?;
+    let done = ComponentForm {
         mode,
         win: win.clone().unbind(),
         context: scene.getattr("edit_group")?.unbind(),
@@ -322,15 +366,12 @@ fn make_component(win: &Bound<'_, PyAny>) -> PyResult<()> {
         groups: groups.unbind(),
         fallback: suggestion,
     };
-    kw.set_item("done", Py::new(py, done)?)?;
-    py.import("built_render.chrome_forms")?.getattr("ask_text")?.call(
-        (
-            win,
-            translated(py, "Make component", None)?,
-            translated(py, "Component name:", None)?,
-        ),
-        Some(&kw),
-    )?;
+    let kw = PyDict::new(py);
+    kw.set_item("buttons", [("cancel", translated(py, "Cancel", None)?), ("ok", translated(py, "Create", None)?)])?;
+    kw.set_item("on_done", Py::new(py, done)?)?;
+    let form = forms.getattr("Form")?.call((translated(py, "Make component", None)?, fields), Some(&kw))?;
+    form.setattr("placement", "drawer")?;
+    forms.call_method1("show", (win, form))?;
     Ok(())
 }
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {

@@ -456,6 +456,7 @@ fn join_segments(win: &Bound<'_, PyAny>) -> PyResult<()> {
         .getattr("Form")?
         .call((translated(py, "Weld Edges", None)?, fields), Some(&kw))?;
     form.setattr("join_marks", Py::new(py, JoinMarks { points })?)?;
+    form.setattr("placement", "drawer")?;
     forms.call_method1("show", (win, form))?;
     Ok(())
 }

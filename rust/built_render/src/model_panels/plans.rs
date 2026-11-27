@@ -305,6 +305,7 @@ pub(super) fn plan_options(win: &Obj<'_>, target: &Obj<'_>, group: bool) -> PyRe
         ),
         Some(&opts),
     )?;
+    form.setattr("placement", "drawer")?;
     forms.call_method1("show", (win, form))?;
     Ok(())
 }

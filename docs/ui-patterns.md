@@ -87,8 +87,7 @@ Group commands with the record they affect. Put destructive commands in the reco
   bar stays live. A question sheet, a chrome form or the command palette
   can open over it and take the keys while they are up.
 - **Esc** closes the innermost thing: a menu, then a field being typed in,
-  then the search text, then the sheet (when it can close: the start page
-  with only a blank model behind it cannot). The model's view gets the
+  then the search text, then the sheet. The model's view gets the
   keyboard back.
 - **Search.** Typing anywhere (no field focused) types into the search;
   ⌘F focuses it. The provider filters: a search looks across every

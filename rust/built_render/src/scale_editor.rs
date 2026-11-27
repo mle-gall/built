@@ -186,6 +186,7 @@ pub(crate) fn ask_scale(window: &Obj, group: Py<PyAny>, done: Option<Py<PyAny>>)
     let form = forms
         .getattr("Form")?
         .call((tr(py, "Scale")?, fields), Some(&kw))?;
+    form.setattr("placement", "drawer")?;
     forms.call_method1("show", (window, form))?;
     Ok(())
 }

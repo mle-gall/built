@@ -142,7 +142,7 @@ def test_show_home_puts_the_page_on_the_sheet(win, monkeypatch, tmp_path):
     assert ws.shown(win) and cs.current(win) is ws.page(win).sheet
     assert getattr(win, "_home", None) is None          # no Qt dialog
     sh = sheet(win)
-    assert sh["id"] == "start" and sh["closable"] is False   # blank untitled behind: no return
+    assert sh["id"] == "start" and sh["closable"] is True   # return to the blank document
     assert [v["id"] for v in sh["verbs"]] == ["new", "openfile"]
     assert sh["menus"] == []
     assert [t["label"] for t in sh["tabs"]] == ["Models", "Projects"]
@@ -268,11 +268,11 @@ def test_keys_go_to_the_sheet_but_command_keys_stay_the_windows(win, monkeypatch
     assert cs.claims_key(view, key_event(Qt.Key_K, "k", Qt.ControlModifier)) is False
 
 
-def test_escape_returns_only_to_an_open_document(win, monkeypatch, tmp_path):
+def test_escape_returns_to_the_blank_or_open_document(win, monkeypatch, tmp_path):
     ws.show(win)
-    assert sheet(win)["closable"] is False      # only the blank untitled behind: Esc stays
+    assert sheet(win)["closable"] is True
     ws.action(win, "close")
-    assert ws.shown(win)
+    assert not ws.shown(win)
     a = doc(tmp_path, "open.built")
     assert win.open_path(a)                 # (opening dismisses it)
     frame(win)
