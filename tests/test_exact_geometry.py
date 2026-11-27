@@ -149,8 +149,13 @@ def test_damaged_surface_reference_is_rejected(tmp_path):
             if info.filename == geom["member"]:
                 struct.pack_into("<I", data, geom["arrays"]["face_surface_ref"][2], 99)
             dst.writestr(info, data)
+    target = Scene()
+    target_history = History(target)
+    commands.run(target_history, "add_edge", a=[9, 0, 0], b=[10, 0, 0])
+    prior = target.mesh.capture_state()
     with pytest.raises(ValueError, match="missing plane pool row"):
-        igz.load_into(Scene(), bad)
+        igz.load_into(target, bad)
+    assert target.mesh.capture_state() == prior
 
 
 def test_spherical_poles_have_single_model_vertices():
@@ -331,3 +336,49 @@ def test_angular_tolerance_refines_shared_logical_edge_samples():
     assert edge[0] == edge[-1]
     triangles = {tuple(sorted(e)) for a, b, c in fine["triangles"] for e in ((a, b), (b, c), (c, a))}
     assert all(tuple(sorted(e)) in triangles for e in zip(edge, edge[1:]))
+
+
+def test_mirrored_nonuniform_instance_preserves_definition_plane():
+    from built_core import Vec3
+    from built_core.mesh import Mesh
+
+    mesh = Mesh()
+    face = mesh.add_face([Vec3(0, 0, 0), Vec3(2, 0, 0), Vec3(0, 2, 0)])
+    rows = list(frame().values())
+    store = mesh._store
+    store.bind_exact_plane(face.key, rows)
+    matrix = [-2, 0, 0, 0, 1, 3, 0, 0, 0, 0, 1, 0, 4, 5, 6, 1]
+    placed = store._in_instance_frame(matrix, [0, 0, 0])
+    assert placed.exact_plane(face.key) == [[4, 5, 6], [0, 0, -1], [-1, 0, 0]]
+    assert store.exact_plane(face.key) == rows
+
+
+def test_faceted_sibling_member_survives_an_exact_document_rewrite(tmp_path):
+    import zipfile
+    from built_core import Matrix4, Vec3
+    from built_core.group import Group
+    from built_core.scene import Scene
+    from formats import igz
+
+    scene = Scene()
+    for z in (0, 3):
+        g = Group(name=f"Panel {z}")
+        g.xform = Matrix4()
+        face = g.mesh.add_face([Vec3(0, 0, z), Vec3(2, 0, z), Vec3(0, 2, z)])
+        if z == 0:
+            g.mesh._store.bind_exact_plane(face.key, list(frame().values()))
+        scene.groups.append(g)
+    first, second = [tmp_path / (n + ".built") for n in ("before", "after")]
+    igz.save_scene(scene, first)
+    back = Scene()
+    igz.load_into(back, first)
+    igz.save_scene(back, second)
+
+    def faceted_member(path):
+        with zipfile.ZipFile(path) as z:
+            d = json.loads(z.read("document.json"))
+            blocks = [p["geom"] for p in d["scene"]["protos"]]
+            ordinary, = [b for b in blocks if "face_surface_ref" not in b["arrays"]]
+            return ordinary["arrays"], z.read(ordinary["member"])
+
+    assert faceted_member(first) == faceted_member(second)
