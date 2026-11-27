@@ -43,6 +43,7 @@ key escape
 menu select_all
 menu soften
 wait 350
+state
 key escape
 wait 250
 menu soften
@@ -72,7 +73,8 @@ quit
     states = [json.loads(line.removeprefix("[built] state ")) for line in log.splitlines()
               if line.startswith("[built] state ")]
     assert len(states) >= 2 and all(s["errors"] == 0 for s in states), log
-    assert states[0]["status"] == "Smoothed 12 edge(s)", log
+    assert states[0]["input"]["drawer_operation"], log
+    assert states[1]["status"] == "Smoothed 12 edge(s)", log
     image = SurveyRaster.open(picture)
     assert image.width == 3520 and image.height > 0, log
 
@@ -1013,6 +1015,7 @@ def test_native_animation_forms_and_video_file(tmp_path):
               if x.startswith("[built] state ")]
     assert result.returncode == 0 and len(states) >= 3, result.stderr
     assert [s["form_open"] for s in states[:3]] == [True, True, False], states
+    assert states[0]["input"]["drawer_operation"], states[0]
     assert all(not s["errors"] and not s["blocked_widgets"] for s in states), result.stderr
     movie_bytes = movie.read_bytes()
     if suffix == ".mp4":

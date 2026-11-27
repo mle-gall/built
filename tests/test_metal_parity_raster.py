@@ -388,6 +388,14 @@ def test_partial_texture_alpha_and_billboard_cutout(native,aa):
     cutout=capture(native)[32,32,:3]
     assert cutout[0]<5 and cutout[2]>180
 
+    for mode in ("shaded", "hidden_line", "monochrome", "wireframe"):
+        native.set_style(dict(face_mode=mode, sky=False, edges=False))
+        native.set_textures(1, 1, 2, [[255,255,255,255, 255,0,0,0]])
+        through = capture(native)[32, 32, :3].astype(int)
+        native.set_textures(1, 1, 2, [[255,255,255,255, 255,0,0,255]])
+        silhouette = capture(native)[32, 32, :3].astype(int)
+        assert np.max(np.abs(through - silhouette)) > 35, (mode, through, silhouette)
+
 
 def audit_handoff():
     """Exercise P2 with synthetic P3 alpha/soft handoffs, without changing pack code.
