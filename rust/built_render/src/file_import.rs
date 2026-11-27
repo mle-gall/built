@@ -653,7 +653,7 @@ fn preview_recovery<'p>(
                     },
                 )?;
             }
-            detail.push(message(py,"Face {first_face} · {method} · {faces} faces\nPlanar faces: {planar_faces} · Curved supports: {curved_supports}\nMaximum residual: {max_residual_m} m\nInput volume (m³): {input_volume_m3}\nOutput volume (m³): {output_volume_m3}",&vars)?);
+            detail.push(message(py,"{method} · Faces: {faces} · First face: {first_face}\nPlanar faces: {planar_faces} · Curved supports: {curved_supports}\nMaximum residual: {max_residual_m} m\nInput volume (m³): {input_volume_m3}\nOutput volume (m³): {output_volume_m3}",&vars)?);
             detail.extend(row.get_item("untouched")?.extract::<Vec<String>>()?);
         }
     }
