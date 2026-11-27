@@ -999,6 +999,31 @@ to `live_set`. The assembly creates the child placement. The row uid uses
 the content key and the placement uid uses the same key with `:owner`
 appended.
 
+### J1 protocol fixtures
+
+`tests/test_live_junction.py::knee_fixture` builds the end cut, adds the
+plate, then adds a 2 × 2 bolt group and a weld. A plate uses a sweep preset
+with an IfcPlate record. Its `thickness` field is the length of its local
+Z path in millimetres. A component part takes the uid of a placed or kept
+component. Part poses use `at.frame` and an optional three-axis millimetre
+offset. A child role can reference a parent role or an earlier part by
+`@key`, optionally overriding its contact face or end.
+
+A bolt detail contains a `part.fastener` and ordinary hole cuts on the
+ordered plies. Expansion supplies a bore for each ply unless the template
+specifies its own hole on that ply. The metric table supplies bolt heads,
+nuts, washers and stock lengths. A fastener defaults to ISO 4017, two washers and a nut. Its grip
+defaults to the sum of ply thicknesses. The template's nested Repeat uses
+counts including the source. Each hole stores the Repeat uid inside its
+hole specification so its diameter, depth and bore frame remain available
+alongside the station source.
+
+A `part.weld` uses the stock section of role `a` projected onto
+`b.contact`. Its record contains length in millimetres. An optional
+`edges` array selects profile edge roles and `bead: true` creates the
+triangular fillet. A `part.glue` stores contact area in square millimetres.
+The junction exposes the measured `length` or `area` as a derived field.
+
 ## 13. Risks
 
 | Risk | Mitigation |
@@ -1019,6 +1044,6 @@ appended.
 |---|---|---|
 | Q1 | A junction applied along a Repeat (the purlin cleats): one row with per-station overrides, or one row per meeting? | **One row with `along`**, like a repeated cutter: new copies get their cleat in the same step, skips and overrides stay with their purlin by station key, and the file stays small. A station that needs a different detail is detached into its own junction. |
 | Q2 | IFC for child junctions: aggregate their parts flat into the top junction's assembly, or nest one `IfcElementAssembly` per child junction? | **Flat.** One assembly per connection is what Tekla, Advance Steel and most checkers expect; each child junction still writes its own `IfcRelConnectsWithRealizingElements` (plate to rafter realized by the weld; plate to column realized by the bolts), and `Built_Junction` on each part names the child detail it came from. |
-| Q3 | Bolt, nut and washer geometry: generated from standard tables and shared per size, or one Library component file per size? | **Generated from tables**, shared per (standard, d, length): no file per size, exact cylinders for STEP, one definition for every bolt of a size. Library components stay for hangers, brackets and couplers. |
+| Q3 | Bolt, nut and washer geometry: generated from standard tables and shared per size, or one Library component file per size? | **Implemented in J1.** ISO 4014/4017 bolts use generated, shared definitions keyed by standard, diameter, length and grip. Grip sets the nut and washer positions. Library components stay for hangers, brackets and couplers. |
 | Q4 | Should the Wall tool apply the corner detail when a wall ends on another wall? | **Yes**, as part of the Wall tool's own commit, with the marker and Undo: it is the tool's visible behaviour, not a silent suggestion. Existing walls get corners only through the review. |
 | Q5 | Release: one level (cuts stay live cut rows, a plate stays a sweep), or bake everything? | **One level**, consistent with Repeat's Release; "Release all" in the same menu bakes everything in one step. |

@@ -495,3 +495,28 @@ def test_grip_drag_tracks_its_axis_across_an_occluding_face():
     assert machine.get("grip_value") == pytest.approx(30)
     machine.event(dict(pointer, px=(45, 0)), host)
     assert host.offset == pytest.approx(45)
+
+
+@pytest.mark.parametrize("depth,countersink", [("through", None), (15, None),
+                                               ("through", {"d": 22, "angle": 90})])
+def test_hole_cut_depth_and_undo(depth, countersink):
+    scene = Scene()
+    history = History(scene)
+    make_member(history, [[0, 0, 0], [1, 0, 0]])
+    target = scene.groups[0]
+    before = solid_volume(target)
+    frame = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, .5, 0, .0725, 1]
+    hole = {"d": 12, "depth": depth, "segments": 24, "frame": frame,
+            "countersink": countersink}
+    apply(history, "live_set", row={"uid": "c070000000000101", "kind": "cut",
+          "owner": target.uid, "cutter": {"hole": hole}})
+    from math import pi, sin
+    removed = before - solid_volume(target)
+    area = 12 * .006 ** 2 * sin(2 * pi / 24)
+    expected = area * (.145 if depth == "through" else .015)
+    if countersink:
+        assert expected < removed < 1.1 * expected
+    else:
+        assert removed == pytest.approx(expected, rel=2e-4)
+    apply(history, "undo")
+    assert solid_volume(target) == pytest.approx(before)
