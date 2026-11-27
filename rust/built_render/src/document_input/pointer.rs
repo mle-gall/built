@@ -179,6 +179,31 @@ fn document_wheel(v: &Obj, ev: &Obj) -> PyResult<()> {
         .transpose()?
         .unwrap_or(0);
     v.setattr("_input_serial", serial + 1)?;
+    if ev
+        .call_method0("modifiers")?
+        .bitand(host(py)?.getattr("Qt")?.getattr("ShiftModifier")?)?
+        .is_truthy()?
+    {
+        let tool = tool(v)?;
+        if opt(&tool, "accepts_array")?.is_truthy()?
+            && v.call_method0("_array_pending")?.is_truthy()?
+        {
+            let direction = ev
+                .call_method0("angleDelta")?
+                .call_method0("y")?
+                .extract::<f64>()?
+                .signum() as i64;
+            let n = tool
+                .call_method1("_state", ("repeat_count",))?
+                .extract::<i64>()
+                .unwrap_or(1);
+            if direction != 0 {
+                tool.call_method1("on_array_value", (v, (n + direction).clamp(1, 10000), "x"))?;
+            }
+            ev.call_method0("accept")?;
+            return update(v);
+        }
+    }
     if crate::navigation::slide(v, ev)? {
         return update(v);
     }

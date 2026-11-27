@@ -220,7 +220,7 @@ fn on_array_value<'py>(a: &Args<'py>) -> Reply<'py> {
         "_send",
         (
             &viewport,
-            fields!(py; "type" => "array", "count" => &count, "mode" => &mode).into_any(),
+            fields!(py; "type" => "array", "count" => &count, "mode" => &mode, "step" => a.get_item(4)?).into_any(),
         ),
     )?;
     if result.get_item("redraw")?.is_truthy()? {
@@ -515,7 +515,7 @@ pub(super) const METHODS: &[Method] = &[
     ("host_swing_angle", Mode::Method, host_swing_angle, &["self", "viewport", "_"], "", ""),
     ("on_release", Mode::Method, on_release, &["self", "viewport"], "None", "A real DRAG from the centre fixes the rotation axis along it\n(the classic fold gesture); a plain click keeps the inferred plane.\nThe gesture lives in :class:`ProtractorBase`, shared with the\nProtractor tool."),
     ("on_value", Mode::Method, on_value, &["self", "viewport", "value"], "", ""),
-    ("on_array_value", Mode::Method, on_array_value, &["self", "viewport", "count", "mode"], "", ""),
+    ("on_array_value", Mode::Method, on_array_value, &["self", "viewport", "count", "mode", "step=None"], "", ""),
     ("array_pending", Mode::Method, array_pending, &["self", "viewport"], "", ""),
     ("close_array_window", Mode::Method, close_array_window, &["self"], "", ""),
     ("host_park_rotation", Mode::Method, host_park_rotation, &["self", "viewport", "_"], "", ""),

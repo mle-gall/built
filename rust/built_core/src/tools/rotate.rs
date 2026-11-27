@@ -51,6 +51,9 @@ impl Rotate {
                 args: args.clone(),
             });
             if result.ok {
+                if args["copy"] == true {
+                    args["repeat_uid"] = json!(crate::element_ids::new_uid());
+                }
                 self.window = Some(Window {
                     args,
                     angle,
@@ -71,7 +74,7 @@ impl Rotate {
     fn retype(
         &mut self,
         value: Option<f64>,
-        array: Option<(i64, &str)>,
+        array: Option<(i64, &str, Option<f64>)>,
         host: &mut dyn ToolHost,
     ) -> Reply {
         let Some(w) = &mut self.window else {
@@ -81,20 +84,41 @@ impl Rotate {
             self.window = None;
             return Reply::ignored();
         }
-        let angles = if let Some((count, mode)) = array {
-            if count < 1 || w.args["copy"] != true {
+        let array = array.or_else(|| {
+            (w.args["copy"] == true && w.args["placements"].as_array()?.len() == 1)
+                .then_some((1, "spacing", value))
+        });
+        let mut rule = None;
+        let angles = if let Some((count, mode, step)) = array {
+            if w.args["copy"] != true {
                 return Reply::ignored();
             }
-            (1..=count)
-                .map(|i| {
-                    let k = if mode == "/" {
-                        i as f64 / count as f64
-                    } else {
-                        i as f64
+            let span = w.angle.abs();
+            let (count, increment, field) = match mode {
+                "spacing" | "fit_max" => {
+                    let Some(step) = step.filter(|n| n.is_finite() && *n > 0.) else {
+                        return Reply::ignored();
                     };
-                    w.angle * k
-                })
-                .collect()
+                    let count = if mode == "spacing" {
+                        (span / step + 1e-10).floor()
+                    } else {
+                        (span / step - 1e-12).ceil()
+                    } as i64;
+                    let increment = if mode == "spacing" {
+                        step
+                    } else {
+                        span / count as f64
+                    };
+                    (count, increment.copysign(w.angle), json!({(mode): step}))
+                }
+                "/" => (count, w.angle / count as f64, json!({"divide":count})),
+                _ => (count, w.angle, json!({"count":count})),
+            };
+            if !(1..=10000).contains(&count) {
+                return Reply::ignored();
+            }
+            rule = Some(field);
+            (1..=count).map(|i| increment * i as f64).collect()
         } else if let Some(v) = value {
             vec![w.sign * v]
         } else {
@@ -110,6 +134,13 @@ impl Rotate {
             return Reply::ignored();
         }
         w.args["angles"] = json!(angles);
+        if let Some(rule) = rule {
+            w.args["repeat_rule"] = rule;
+            w.args["repeat_angle"] = json!(w.angle);
+        } else if let Some(args) = w.args.as_object_mut() {
+            args.remove("repeat_rule");
+            args.remove("repeat_angle");
+        }
         let result = host.run(&Command {
             name: "rotate_selection",
             args: w.args.clone(),
@@ -123,7 +154,8 @@ impl Rotate {
             return Reply::ignored();
         }
         w.revision = result.revision;
-        if let Some((count, _)) = array {
+        if array.is_some() {
+            let count = angles.len();
             host.message("{n} copies", &[("n", count.to_string())]);
         } else {
             w.angle = angles[0];
@@ -150,6 +182,7 @@ impl Tool for Rotate {
     fn state(&self) -> Json {
         json!({ "start_point": self.centre, "ref_point": self.reference, "copy": self.copy,
              "array_token": self.window.as_ref().filter(|w| w.args["copy"] == true).map(|w| w.revision),
+             "repeat_count":self.window.as_ref().and_then(|w|w.args["angles"].as_array()).map(Vec::len),
              "retype": self.window.is_some() })
     }
     fn set(&mut self, key: &str, value: &Json) -> bool {
@@ -219,8 +252,8 @@ impl Tool for Rotate {
                 }
                 return self.retype(Some(*v), None, host);
             }
-            ToolEvent::Array { count, mode, .. } if self.reference.is_none() => {
-                return self.retype(None, Some((*count, mode)), host)
+            ToolEvent::Array { count, mode, step } if self.reference.is_none() => {
+                return self.retype(None, Some((*count, mode, *step)), host)
             }
             _ => return Reply::ignored(),
         }

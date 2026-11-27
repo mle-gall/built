@@ -80,13 +80,25 @@ pub(crate) fn load(scene: &Obj<'_>, ext: &Bound<'_, PyDict>) -> PyResult<()> {
     for mut row in rows {
         let id = row.uid.clone();
         if row.v != 1
-            || !matches!(row.kind.as_str(), "test_box" | "sweep" | "sketch" | "cut" | "cut_stack")
+            || !matches!(
+                row.kind.as_str(),
+                "test_box" | "sweep" | "sketch" | "cut" | "cut_stack" | "repeat"
+            )
             || t.rows.contains_key(&id)
         {
             return Ok(());
         }
         if row.kind == "cut" {
             if !t.groups.contains_key(&row.owner) { row.state = "ref_lost".into(); }
+        } else if row.kind=="repeat"{
+            if let Some(g)=group(py,&t,&row.owner){
+                if row.state=="ok"{
+                    let saved=metadata(&g)?.get_item(EXT)?.and_then(|v|v.get_item("stamp").ok()).and_then(|v|v.extract::<String>().ok());
+                    if saved.as_deref()!=Some(&repeat::stamp(&g)?){row.state="stale".into();}
+                }
+            } else {
+                row.state = "ref_lost".into();
+            }
         } else if let Some(k) = t.groups.get(&row.owner) {
             if let Some((stamp, mesh)) = marker(py, *k, attr, &id) {
                 let mesh = mesh.bind(py);

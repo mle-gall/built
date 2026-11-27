@@ -147,6 +147,7 @@ impl Tool for CutTool {
                         .as_ref()
                         .map(|id| json!({"section":id}))
                         .unwrap_or(Json::Null),
+                    "body" if pick["repeat"].is_string() => json!({"repeat":pick["repeat"]}),
                     _ if placed.is_string() && placed.as_str() != Some(target) => {
                         json!({(kind):placed})
                     }

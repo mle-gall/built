@@ -162,11 +162,11 @@ def test_copy_move_array_and_undo(view):
     assert group.xform.column(3).x() == 0
     type_text(view, '3x')
     key(view, Qt.Key_Return)
-    assert len(view.scene.groups) == 4
-    assert sorted(g.xform.column(3).x() for g in view.scene.groups) == [0, 2, 4, 6]
+    assert group in view.scene.groups
+    assert sorted(g.xform.column(3).x() for g in view.scene.groups[-1].children) == [2, 4, 6]
     type_text(view, '/2')
     key(view, Qt.Key_Return)
-    assert sorted(g.xform.column(3).x() for g in view.scene.groups) == [0, 1, 2]
+    assert sorted(g.xform.column(3).x() for g in view.scene.groups[-1].children) == [1, 2]
     view.source_viewport.history.undo()
     assert view.scene.groups == [group]
 

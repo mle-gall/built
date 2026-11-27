@@ -45,7 +45,8 @@ def _copy(vp, distance=3):
 
 
 def _live(scene):
-    return set(scene.mesh.faces) | set(scene.mesh.edges) | set(scene.groups) | set(scene.guides)
+    placements = {g for root in scene.groups for g in (root, *root.children)}
+    return set(scene.mesh.faces) | set(scene.mesh.edges) | placements | set(scene.guides)
 
 
 @pytest.mark.parametrize("kind", ["face", "edge", "group", "component", "guide"])

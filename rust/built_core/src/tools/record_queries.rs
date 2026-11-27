@@ -116,6 +116,34 @@ impl ViewportToolHost {
                 }
                 json!({"name":"Face profile","use":"profile","curves":curves,"next_id":curves.len()+1})
             }
+            "repeat_edge" => {
+                let px: (f64, f64) = args(arg)?;
+                let Some(edge) = hit(view, "pick_edge_any", px)? else {
+                    return Ok(Some(Value::Null));
+                };
+                let scene = view.getattr("scene")?;
+                let group = edge.getattr_opt("group")?.filter(|g| !g.is_none());
+                let (mesh, path) = if let Some(g) = group {
+                    let g = g.getattr_opt("source_occurrence")?.unwrap_or(g);
+                    (
+                        g.getattr("mesh")?,
+                        scene
+                            .call_method1("occurrence_path", (&g,))?
+                            .extract::<Vec<String>>()?,
+                    )
+                } else {
+                    (scene.getattr("mesh")?, Vec::new())
+                };
+                let Some(slot) = edge.getattr_opt("edge_id")? else {
+                    return Ok(Some(Value::Null));
+                };
+                let store = mesh.getattr("_store")?;
+                let Ok(key) = store.call_method1("key_at", ("edge", slot)) else {
+                    return Ok(Some(Value::Null));
+                };
+                let id = store.call_method1("id_of", ("edge", key))?.extract()?;
+                json!({"path":path,"id":crate::element_ids::to_text('e',id)})
+            }
             "sweep_face_ref"=>{
                 let px:(f64,f64)=args(&arg["px"])?;
                 let Some(pair)=hit(view,"pick_face_inference",px)? else{return Ok(Some(Value::Null))};
@@ -160,7 +188,9 @@ impl ViewportToolHost {
                 let ends=group.getattr("ext")?.call_method1("get",("built.live",))?;
                 let points=ends.get_item("path").and_then(|p|p.extract::<Vec<[f64;3]>>()).unwrap_or_default();
                 let start=points.first().zip(points.last()).is_some_and(|(a,b)|local.distance_squared((*a).into())<local.distance_squared((*b).into()));
-                json!({"placement":group.getattr("uid")?.extract::<String>()?,"ring":ring,"face":{"path":path,"id":crate::element_ids::to_text('f',id)},"end":if start {"start"}else{"end"}})
+                let repeat = group.getattr("ext")?.get_item("built.repeat").ok()
+                    .and_then(|m|m.get_item("row").ok()).and_then(|id|id.extract::<String>().ok());
+                json!({"repeat":repeat,"placement":group.getattr("uid")?.extract::<String>()?,"ring":ring,"face":{"path":path,"id":crate::element_ids::to_text('f',id)},"end":if start {"start"}else{"end"}})
             }
             "cut_selection" => {
                 let selected=view.getattr("scene")?.getattr("selection")?;

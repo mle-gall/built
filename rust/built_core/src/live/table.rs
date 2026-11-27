@@ -106,6 +106,8 @@ pub struct Row {
     #[serde(flatten)]
     pub sketch_fields: SketchFields,
     pub kind: String,
+    #[serde(flatten)]
+    pub repeat: super::repeat::Fields,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub cuts: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -206,6 +208,7 @@ impl Row {
 pub struct LiveTable {
     pub presets: Arc<std::collections::BTreeMap<String, super::presets::Preset>>,
     pub cut_targets: OrdSet<String>,
+    pub repeats: OrdSet<String>,
     pub groups: Arc<std::collections::HashMap<String, u64>>,
     pub rows: HashMap<String, Arc<Row>>,
     pub owners: HashMap<String, String>,
@@ -257,6 +260,7 @@ impl LiveTable {
         let row = self.rows.remove(uid)?;
         self.clear_frames(uid);
         self.cut_targets.remove(uid);
+        self.repeats.remove(uid);
         if row.kind != "cut" {
             self.owners.remove(&row.owner);
         }
@@ -295,6 +299,9 @@ impl LiveTable {
         }
         if row.kind != "cut" && !row.owner.is_empty() {
             self.owners.insert(row.owner.clone(), row.uid.clone());
+        }
+        if row.kind == "repeat" {
+            self.repeats.insert(row.uid.clone());
         }
         if !row.cuts.is_empty() {
             self.cut_targets.insert(row.uid.clone());
@@ -377,6 +384,7 @@ mod tests {
 
     fn row(id: &str, owner: &str, inputs: Vec<Reference>) -> Row {
         Row {
+            repeat: Default::default(),
             uid: id.into(),
             owner: owner.into(),
             kind: "test_box".into(),

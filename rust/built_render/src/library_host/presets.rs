@@ -115,14 +115,18 @@ fn edit(ctx: &Bound<'_, PyAny>, preset: Value, title: &str) -> PyResult<()> {
             }
         }
     }
-    let summary = format!(
-        "{} · {} · {}",
-        preset["values"]["profile"]["library"]
-            .as_str()
-            .unwrap_or("Drawn profile"),
-        preset["record"]["material"].as_str().unwrap_or(""),
-        preset["record"]["class"].as_str().unwrap_or("")
-    );
+    let summary = if preset["primitive"] == "repeat" {
+        shown(&preset["values"]["rule"])
+    } else {
+        format!(
+            "{} · {} · {}",
+            preset["values"]["profile"]["library"]
+                .as_str()
+                .unwrap_or("Drawn profile"),
+            preset["record"]["material"].as_str().unwrap_or(""),
+            preset["record"]["class"].as_str().unwrap_or("")
+        )
+    };
     if capture {
         fields.append(field.call(
             ("destination", "choice", "Save to", 0),
@@ -306,7 +310,7 @@ impl PresetsProvider {
         let mut items = Vec::new();
         for (p, source) in rows(ctx)? {
             let mut verbs = vec!["edit", "duplicate", "export"];
-            if matches!(p["primitive"].as_str(),Some("sweep"|"cut")) {
+            if matches!(p["primitive"].as_str(), Some("sweep" | "cut" | "repeat")) {
                 verbs.insert(0, "apply");
             }
             if source == "model" || source == "mine" {
@@ -370,6 +374,36 @@ impl PresetsProvider {
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
         let personal = item.get_item("source")?.eq("mine")?;
         match verb {
+            "apply" if p["primitive"] == "repeat" => {
+                let scene = ctx.getattr("scene")?;
+                let selection = scene.getattr("selection")?;
+                if selection.len()? != 1 {
+                    return flash(ctx, "Select a Repeat to apply the preset");
+                }
+                let g = selection.try_iter()?.next().unwrap()?;
+                let api = py.import("built_core.command_protocol")?;
+                let Some(owner) = g.getattr_opt("uid")? else {
+                    return flash(ctx, "Select a Repeat to apply the preset");
+                };
+                let row = api.call_method1("live_repeat", (&scene, owner))?;
+                if row.is_none() {
+                    return flash(ctx, "Select a Repeat to apply the preset");
+                }
+                let link = PyDict::new(py);
+                link.set_item("uid", data.get_item("uid")?)?;
+                link.set_item("definition", &data)?;
+                row.set_item("repeat_preset", link)?;
+                let kw = PyDict::new(py);
+                kw.set_item("row", row)?;
+                let reply = api.getattr("run")?.call(
+                    (ctx.getattr("vp")?.getattr("history")?, "live_set"),
+                    Some(&kw),
+                )?;
+                if !reply.get_item("ok")?.is_truthy()? {
+                    return flash(ctx, &reply.get_item("error")?.str()?.to_string());
+                }
+                notify(&ctx.getattr("vp")?)?;
+            }
             "apply" if matches!(p["primitive"].as_str(),Some("sweep"|"cut")) => {
                 let win = ctx.getattr("win")?;
                 win.call_method1("_activate_tool", (p["primitive"].as_str().unwrap(),))?;
@@ -449,7 +483,28 @@ pub(crate) fn capture_preset(win: &Bound<'_, PyAny>, group: &Bound<'_, PyAny>) -
     let scene = ctx.getattr("scene")?;
     let row = api.call_method1("live_sweep", (&scene, group.getattr("uid")?))?;
     if row.is_none() {
-        return flash(&ctx, "This element has no reusable recipe");
+        let repeat = api.call_method1("live_repeat", (&scene, group.getattr("uid")?))?;
+        if repeat.is_none() {
+            return flash(&ctx, "This element has no reusable recipe");
+        }
+        let mut values = json!({});
+        let spec: Value = serde_json::from_str(&dumps(py, &repeat)?)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        for field in ["rule", "orientation", "adapt", "ends", "measure"] {
+            if let Some(value) = spec.get(field) {
+                values[field] = value.clone();
+            }
+        }
+        let mut record: Value = serde_json::from_str(&dumps(py, &group.getattr("ifc")?)?)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        if let Some(fields) = record.as_object_mut() {
+            fields.retain(|k, _| matches!(k.as_str(), "class" | "predefined_type" | "object_type" | "material"));
+        }
+        return edit(
+            &ctx,
+            json!({"uid":uid(py)?,"name":group.getattr("name")?.extract::<String>()?,"pack":"This project","node":"","primitive":"repeat","values":values,"record":record,"locks":{},"naming":"","rev":1}),
+            "Save as preset",
+        );
     }
     let row: Value = serde_json::from_str(&dumps(py, &row)?)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;

@@ -9,6 +9,7 @@ pub enum Cutter {
     Plane(Plane),
     Bisector(String),
     Body(String),
+    Repeat(String),
     Section(String),
     Opening(Opening),
 }
@@ -107,6 +108,12 @@ pub(super) fn attach(scene: &Obj<'_>, t: &mut LiveTable, row: &mut Row) -> PyRes
                 placement: uid.clone(),
             });
         }
+        Some(Cutter::Repeat(uid)) if matches!(op, "union" | "subtract" | "trim" | "intersect") => {
+            if !t.rows.get(uid).is_some_and(|r| r.kind == "repeat") {
+                return Err(PyValueError::new_err("Unknown Repeat cutter"));
+            }
+            row.inputs.push(Reference::Row { row: uid.clone() });
+        }
         Some(Cutter::Opening(o)) if op == "subtract" => {
             row.inputs.push(Reference::Placement {
                 placement: o.fill.clone(),
@@ -187,7 +194,7 @@ pub(super) fn end_planes(
         if row.on == Some(false)
             || matches!(
                 row.cutter,
-                Some(Cutter::Body(_) | Cutter::Section(_) | Cutter::Opening(_))
+                Some(Cutter::Body(_) | Cutter::Section(_) | Cutter::Opening(_) | Cutter::Repeat(_))
             )
         {
             continue;
@@ -491,7 +498,7 @@ pub(super) fn live_openings<'p>(
                 && !matches!(cut.operation.as_deref(), None | Some("trim" | "subtract")))
             || !(matches!(
                 cut.cutter,
-                Some(Cutter::Body(_) | Cutter::Section(_) | Cutter::Opening(_))
+                Some(Cutter::Body(_) | Cutter::Section(_) | Cutter::Opening(_) | Cutter::Repeat(_))
             ) || all_operations
                 && target.kind == "cut_stack"
                 && matches!(cut.cutter, Some(Cutter::Plane(_))))
@@ -573,9 +580,51 @@ pub(super) fn bodies<'p>(
         if !(target.kind == "cut_stack" && matches!(cut.cutter, Some(Cutter::Plane(_))))
             && !matches!(
                 cut.cutter,
-                Some(Cutter::Body(_) | Cutter::Section(_) | Cutter::Opening(_))
+                Some(Cutter::Body(_) | Cutter::Section(_) | Cutter::Opening(_) | Cutter::Repeat(_))
             )
         {
+            continue;
+        }
+        if let Some(Cutter::Repeat(uid)) = &cut.cutter {
+            let Some(repeat) = t.rows.get(uid).filter(|r| r.state == "ok") else {
+                return Ok(Err("ref_lost"));
+            };
+            let Some(owner) = group(py, t, &repeat.owner) else {
+                return Ok(Err("ref_lost"));
+            };
+            let Some(source) = repeat.source.as_ref().and_then(|s| group(py, t, s)) else {
+                return Ok(Err("ref_lost"));
+            };
+            let target_inv = reference::frame(t.groups[&target.owner]).inverse();
+            let cls = py.import("built_core.group")?.getattr("Group")?;
+            let mut tools = Vec::new();
+            for station in std::iter::once(Ok(source)).chain(owner.getattr("children")?.try_iter()?)
+            {
+                let station = station?;
+                let tool = cls.call1((station.getattr("mesh")?,))?;
+                tool.setattr(
+                    "xform",
+                    crate::math::Matrix4::from(
+                        target_inv * reference::frame(station.getattr("_doc_key")?.extract()?),
+                    ),
+                )?;
+                let station_uid = station.getattr("uid")?.extract::<String>()?;
+                tools.push((
+                    format!("{id}/{station_uid}"),
+                    cut.operation.clone().unwrap_or_else(|| "subtract".into()),
+                    cut.clearance.unwrap_or(0.),
+                    tool,
+                ));
+            }
+            let subject = cls.call1((&mesh,))?;
+            let mut misses = Vec::new();
+            match crate::solids::body_stack(&subject, tools, &mut None, &mut misses)? {
+                Ok(result) => mesh = result,
+                Err(state) => return Ok(Err(state)),
+            }
+            if let Some((_, state)) = misses.first() {
+                skipped.push((id.clone(), *state));
+            }
             continue;
         }
         *active = Some(id.clone());

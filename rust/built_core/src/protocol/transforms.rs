@@ -233,7 +233,7 @@ fn scale_selection<'py>(
     apply(history, &parts)
 }
 #[pyfunction]
-#[pyo3(signature=(history,center,axis,angles,copy=false,placements=None,vertices=None,edges=None,faces=None,images=None,guides=None,sections=None))]
+#[pyo3(signature=(history,center,axis,angles,copy=false,placements=None,vertices=None,edges=None,faces=None,images=None,guides=None,sections=None,repeat_rule=None,repeat_angle=None,repeat_uid=None))]
 fn rotate_selection<'py>(
     history: &Obj<'py>,
     center: &Obj<'py>,
@@ -247,6 +247,9 @@ fn rotate_selection<'py>(
     images: Option<&Obj<'py>>,
     guides: Option<&Obj<'py>>,
     sections: Option<&Obj<'py>>,
+    repeat_rule: Option<&Obj<'py>>,
+    repeat_angle: Option<f64>,
+    repeat_uid: Option<String>,
 ) -> Reply<'py> {
     let py = history.py();
     let error = "finite centre, axis and angles required";
@@ -278,6 +281,30 @@ fn rotate_selection<'py>(
             "unknown record index",
         )
     };
+    if let (Some(rule), Some(angle)) = (repeat_rule, repeat_angle) {
+        if copy
+            && gs.len() == 1
+            && [vertices, edges, faces, images, guides, sections]
+                .into_iter()
+                .flatten()
+                .all(|v| v.len().ok() == Some(0))
+        {
+            let raw = py
+                .import("json")?
+                .call_method1("dumps", (rule,))?
+                .extract::<String>()?;
+            let rule =
+                serde_json::from_str(&raw).map_err(|e| PyValueError::new_err(e.to_string()))?;
+            let cmd = crate::live::repeat_command(
+                py,
+                &gs.get_item(0)?,
+                serde_json::json!({"polar":{"centre":c.to_array(),"axis":a.to_array(),"angle":angle}}),
+                rule,
+                repeat_uid.unwrap_or_else(crate::element_ids::new_uid),
+            )?;
+            return execute(history, &cmd);
+        }
+    }
     let cmd = crate::tools::polar_history::rotation_command(
         py,
         &local_center(&mesh, c)?,

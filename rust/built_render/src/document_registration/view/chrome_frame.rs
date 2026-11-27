@@ -784,7 +784,9 @@ fn cursor_value<'py>(a: &Args<'py>) -> Reply<'py> {
     } else {
         (caption, value)
     };
-    let (shown,value) = if sweep && !typing {
+    let (shown,value) = if !typing && value == "Repeat run" && tool.hasattr("_repeat_multipliers")? {
+        (tr.call1(("Repeat run",))?, tool.getattr("_repeat_multipliers")?.extract::<String>()?)
+    } else if sweep && !typing {
         let chip=tool.call_method1("_state",("chip",))?;
         let dist:Option<f64>=tool.call_method1("_state",("length",))?.extract()?;
         match dist {

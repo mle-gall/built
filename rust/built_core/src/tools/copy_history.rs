@@ -230,6 +230,17 @@ fn translated(ring: &Bound<'_, PyAny>, delta: DVec3) -> PyResult<Vec<Vec3>> {
         .collect()
 }
 impl MoveCopies {
+    pub(super) fn repeat_source(&self, py: Python<'_>) -> Option<Py<PyAny>> {
+        if self.groups.len() == 1
+            && self.guides.is_empty()
+            && self.faces.is_empty()
+            && self.edges.is_empty()
+        {
+            Some(self.groups[0].clone_ref(py))
+        } else {
+            None
+        }
+    }
     fn member<'py>(&self, py: Python<'py>, d: DVec3) -> PyResult<Member<'py>> {
         let geometry = py.import("built_core.geometry")?;
         let edge = geometry.getattr("Edge")?;
