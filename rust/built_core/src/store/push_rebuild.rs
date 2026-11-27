@@ -96,20 +96,93 @@ pub struct Rebuilt {
 
 /// `RebuildCache`, store path: the memo fields Python keeps, with the same
 /// keys (the token), so a stale scope is stale here too.
+type Scope = (std::sync::Arc<[u32]>, std::sync::Arc<[u32]>);
+
 #[derive(Default)]
 struct Cache {
     token: i64,
     seeds: Vec<u128>,
-    comp: Option<HashMap<u128, u32>>,
+    comp: Option<Vec<u32>>,
     comp_token: i64,
-    scope: Option<(Vec<u32>, Vec<u32>)>,
+    scope: Option<Scope>,
     scope_token: i64,
-    packed: Option<(i64, Option<Vec<u128>>, Option<BTreeSet<u32>>, Tris)>,
+    packed: Option<(i64, Option<Vec<u128>>, Option<BTreeSet<u32>>, Option<RayWindow>, Tris)>,
     dropped: Vec<[V3; 2]>,
     frames: HashMap<u128, (V3, V3)>,
 }
 
+/// A conservative envelope of all parity rays for an axis-aligned cap.
+/// Geometry outside this slab cannot contribute a crossing, including on
+/// the remote side of a closed component.
+#[derive(Clone, Copy, PartialEq)]
+struct RayWindow {
+    axes: [usize; 2],
+    lo: [f64; 2],
+    hi: [f64; 2],
+}
+
+impl RayWindow {
+    fn new(store: &Store, n: V3, probes: &[V3]) -> Option<Self> {
+        if store.state.exact.native.is_some() || probes.is_empty() {
+            return None;
+        }
+        let dir = arr(n);
+        let axis = (0..3)
+            .find(|&k| dir[k].abs() == 1. && dir[(k + 1) % 3] == 0. && dir[(k + 2) % 3] == 0.)?;
+        let axes = [(axis + 1) % 3, (axis + 2) % 3];
+        let mut magnitude = 0f64;
+        for p in store.state.vpos.iter() {
+            for x in p {
+                if !x.is_finite() {
+                    return None;
+                }
+                magnitude = magnitude.max(x.abs());
+            }
+        }
+        let (mut lo, mut hi) = ([f64::INFINITY; 2], [f64::NEG_INFINITY; 2]);
+        for p in probes {
+            let p = arr(*p);
+            if !p.iter().all(|x| x.is_finite()) {
+                return None;
+            }
+            magnitude = magnitude.max(p[axis].abs());
+            for (i, k) in axes.into_iter().enumerate() {
+                lo[i] = lo[i].min(p[k]);
+                hi[i] = hi[i].max(p[k]);
+            }
+        }
+        // The maximum travel along the plane normal is twice the largest
+        // coordinate plus the sample offset. The two tangent slopes of a
+        // jittered axis ray are at most JITTER; include the parity BVH's
+        // coordinate/extent allowance as well.
+        let pad = (2. * magnitude + SAMPLE_OFF) * JITTER + 1e-4 * (1. + magnitude);
+        Some(Self {
+            axes,
+            lo: lo.map(|x| x - pad),
+            hi: hi.map(|x| x + pad),
+        })
+    }
+
+    fn intersects(&self, store: &Store, f: u32) -> bool {
+        let st = &store.state;
+        let rings = *st.frings.get(f as usize);
+        let count: usize = (0..rings.n_rings)
+            .map(|i| *st.ring_sizes.get((rings.ring_start + i) as usize) as usize)
+            .sum();
+        let mut sides = [false; 4];
+        for i in rings.corner_start as usize..rings.corner_start as usize + count {
+            let p = st.vpos.get(*st.corners.get(i) as usize);
+            for (j, k) in self.axes.into_iter().enumerate() {
+                sides[2 * j] |= p[k] >= self.lo[j];
+                sides[2 * j + 1] |= p[k] <= self.hi[j];
+            }
+        }
+        sides.into_iter().all(|yes| yes)
+    }
+}
+
 struct Ctx<'a> {
+    window_min_faces: usize,
     standalone: bool,
     h: Hypot,
     compensated: bool,
@@ -228,14 +301,15 @@ impl Store {
             return fr;
         }
         let rings = self.face_rings(f);
-        let outer = rings.first().cloned().unwrap_or_default();
-        let (c, n, _) = self.cap_frame(&outer, ctx.h, ctx.compensated);
+        let outer = rings.first().map(Vec::as_slice).unwrap_or_default();
+        let (c, n, _) = self.cap_frame(outer, ctx.h, ctx.compensated);
         let fr = (c, normalized(n, ctx.h));
         cache.frames.insert(k, fr);
         fr
     }
 
     fn coplanar_on(&self, f: u32, o: V3, n: V3, cache: &mut Cache, ctx: &Ctx<'_>) -> bool {
+        if !self.may_meet_cap(f, o, n, ON_PLANE) { return false; }
         let (c, fnrm) = self.frame_of(f, cache, ctx);
         if fnrm.dot(n, ctx.h).abs() <= 0.999 {
             return false;
@@ -253,18 +327,14 @@ impl Store {
         if cache.comp.is_some() && cache.comp_token == cache.token {
             return;
         }
-        let (labels, edges) = self.cap_scope(&cache.seeds);
-        let comp: HashMap<u128, u32> = labels.iter().copied().collect();
-        let live: HashSet<u32> = cache.seeds.iter().filter_map(|k| comp.get(k).copied()).collect();
-        cache.scope = (!live.is_empty()).then(|| {
-            (
-                labels
-                    .iter()
-                    .filter(|(_, c)| live.contains(c))
-                    .filter_map(|&(k, _)| self.slot(Kind::Face, k))
-                    .collect(),
-                edges.iter().filter_map(|&k| self.slot(Kind::Edge, k)).collect(),
-            )
+        let mut edges = self.live_slots(Kind::Edge);
+        let comp = self.cap_labels(&edges);
+        let wanted = self.cap_members(&cache.seeds,&comp);
+        cache.scope = wanted.iter().any(|w| *w).then(|| {
+            let mut faces = self.live_slots(Kind::Face);
+            faces.retain(|&f| wanted[comp[f as usize] as usize]);
+            edges.retain(|&e| self.scoped_edge(e,&comp,&wanted));
+            (faces.into(),edges.into())
         });
         cache.scope_token = cache.token;
         cache.comp = Some(comp);
@@ -272,7 +342,7 @@ impl Store {
     }
 
     /// `cache.scope(mesh)`: `None` for the whole mesh.
-    fn scope(&self, cache: &mut Cache) -> Option<(Vec<u32>, Vec<u32>)> {
+    fn scope(&self, cache: &mut Cache) -> Option<Scope> {
         if cache.seeds.is_empty() {
             return None;
         }
@@ -283,7 +353,7 @@ impl Store {
     }
 
     /// `cache.packed(mesh, shadowed, want)`.
-    fn packed(&self, cache: &mut Cache, shadowed: &HashSet<u32>, want: Option<BTreeSet<u32>>, h: Hypot) {
+    fn packed(&self, cache: &mut Cache, shadowed: &HashSet<u32>, want: Option<BTreeSet<u32>>, window: Option<RayWindow>, h: Hypot) {
         let skey = if shadowed.is_empty() {
             None
         } else {
@@ -291,8 +361,8 @@ impl Store {
             ks.sort_unstable();
             Some(ks)
         };
-        if let Some((tok, k, w, _)) = &cache.packed {
-            if *tok == cache.token && *k == skey && *w == want {
+        if let Some((tok, k, w, old_window, _)) = &cache.packed {
+            if *tok == cache.token && *k == skey && *w == want && *old_window == window {
                 return;
             }
         }
@@ -303,11 +373,11 @@ impl Store {
         let faces: Vec<u32> = self
             .live_slots(Kind::Face)
             .into_iter()
-            .filter(|f| !shadowed.contains(f))
+            .filter(|&f| window.is_none_or(|w| w.intersects(self, f)) && !shadowed.contains(&f))
             .filter(|&f| match &want {
                 None => true,
                 Some(w) => comp
-                    .and_then(|c| c.get(&self.key(Kind::Face, f)))
+                    .and_then(|c| c.get(f as usize))
                     .is_some_and(|c| w.contains(c)),
             })
             .collect();
@@ -320,7 +390,7 @@ impl Store {
             e2.push([r[0] - p[0], r[1] - p[1], r[2] - p[2]]);
         }
         let owners = s.owners.iter().map(|&o| o as i64).collect();
-        cache.packed = Some((cache.token, skey, want, Tris::new(a, e1, e2, owners)));
+        cache.packed = Some((cache.token, skey, want, window, Tris::new(a, e1, e2, owners)));
     }
 
     // ---- rebuild_plane -----------------------------------------------------
@@ -338,17 +408,16 @@ impl Store {
         let h = ctx.h;
         let n = normalized(normal, h);
         let (u, w) = plane_basis(n, h);
-        let scope = self.scope(cache);
-        let (scope_faces, scope_edges) = match &scope {
-            Some((f, e)) => (f.clone(), e.clone()),
-            None => (self.live_slots(Kind::Face), self.live_slots(Kind::Edge)),
+        let (scope_faces, scope_edges) = match self.scope(cache) {
+            Some(pair) => pair,
+            None => (self.live_slots(Kind::Face).into(), self.live_slots(Kind::Edge).into()),
         };
         let to2d = |p: V3| {
             let d = p.sub(origin);
             [d.dot(u, h), d.dot(w, h)]
         };
         let plane_edges: Vec<u32> = scope_edges
-            .into_iter()
+            .iter().copied()
             .filter(|&e| self.edge_on_cap_plane(e, origin, n, ON_PLANE, h))
             .collect();
         if plane_edges.len() < 3 {
@@ -380,34 +449,37 @@ impl Store {
         let fresh_set: Vec<u32> = fresh.iter().filter_map(|k| self.live_face(k)).collect();
         let fresh_slots: HashSet<u32> = fresh_set.iter().copied().collect();
         let shadowed = if ctx.keep { self.shadowed(&fresh_set, &scope_faces, cache, ctx) } else { HashSet::new() };
-        if ctx.standalone {
-            self.packed(cache, &shadowed, None, h);
-        } else {
-            self.components(cache);
-            let mut want = BTreeSet::new();
-            for &f in &scope_faces {
-                let k = self.key(Kind::Face, f);
-                let c = cache.comp.as_ref().and_then(|c| c.get(&k).copied());
-                if let Some(c) = c {
-                    if self.coplanar_on(f, origin, n, cache, ctx) {
-                        want.insert(c);
-                    }
-                }
-            }
-            for &f in &fresh_set {
-                if let Some(&c) = cache.comp.as_ref().and_then(|c| c.get(&self.key(Kind::Face, f))) {
-                    want.insert(c);
-                }
-            }
-            self.packed(cache, &shadowed, (!want.is_empty()).then_some(want), h);
-        }
         let mut probes = Vec::with_capacity(regions.len());
         for (outer, holes) in &regions {
             probes.push(planar::region_point(&ctx.metrics, outer, holes).map_err(|_| OpError::Fallback("no region point"))?);
         }
+        let probe_points: Vec<_> = probes.iter().copied().map(lift).collect();
+        let window = if self.state.slots[2].live >= ctx.window_min_faces {
+            RayWindow::new(self, n, &probe_points)
+        } else { None };
+        if ctx.standalone {
+            self.packed(cache, &shadowed, None, window, h);
+        } else {
+            self.components(cache);
+            let mut want = BTreeSet::new();
+            for &f in &fresh_set {
+                if let Some(&c) = cache.comp.as_ref().and_then(|c| c.get(f as usize)) {
+                    want.insert(c);
+                }
+            }
+            for &f in scope_faces.iter() {
+                let c = cache.comp.as_ref().and_then(|c| c.get(f as usize).copied());
+                if let Some(c) = c {
+                    if !want.contains(&c) && self.coplanar_on(f, origin, n, cache, ctx) {
+                        want.insert(c);
+                    }
+                }
+            }
+            self.packed(cache, &shadowed, (!want.is_empty()).then_some(want), window, h);
+        }
         let probe_xy: Vec<XY> = probes.iter().map(|p| (p[0], p[1])).collect();
         let coverage = self.cap_coverage(
-            &scope.as_ref().map(|s| s.0.clone()).unwrap_or_else(|| self.live_slots(Kind::Face)),
+            &scope_faces,
             &fresh_set,
             arr(origin),
             arr(n),
@@ -416,7 +488,7 @@ impl Store {
             h,
             ctx.compensated,
         );
-        let tris = &cache.packed.as_ref().unwrap().3;
+        let tris = &cache.packed.as_ref().unwrap().4;
         let mut rng = PyRandom::new(54321);
         let mut groups: [Vec<(Ring, Vec<Ring>)>; 4] = Default::default();
         for (((outer, holes), probe), (old, skin, new)) in regions.into_iter().zip(probes).zip(coverage) {
@@ -474,7 +546,7 @@ impl Store {
             let (o, n) = self.frame_of(f, cache, ctx);
             let (u, w) = plane_basis(n, h);
             for &g in scope {
-                if fresh_set.contains(&g) {
+                if fresh_set.contains(&g) || !self.may_meet_cap(g, o, n, ON_PLANE) {
                     continue;
                 }
                 let (gc, gn) = self.frame_of(g, cache, ctx);
@@ -562,9 +634,9 @@ impl Store {
         };
         let scope_faces = match self.scope(cache) {
             Some((f, _)) => f,
-            None => self.live_slots(Kind::Face),
+            None => self.live_slots(Kind::Face).into(),
         };
-        let old: Vec<u32> = scope_faces.into_iter().filter(|&f| self.coplanar_on(f, origin, n, cache, ctx)).collect();
+        let old: Vec<u32> = scope_faces.iter().copied().filter(|&f| self.coplanar_on(f, origin, n, cache, ctx)).collect();
         let print_new: BTreeSet<_> = rebuilt
             .iter()
             .map(|(outer, holes, part)| {
@@ -741,7 +813,7 @@ impl Store {
     pub(super) fn single_plane(&self, origin: [f64;3], normal: [f64;3], h: Hypot, compensated: bool)
         -> Result<Option<Vec<super::caps::Cap>>, OpError> {
         let mut paint = Paint::new(HashMap::new(), Vec::new());
-        let mut ctx = Ctx { standalone: true, h, compensated, keep: false, removing: true, metrics: Metrics::native(compensated), paint: &mut paint };
+        let mut ctx = Ctx { window_min_faces: 8192, standalone: true, h, compensated, keep: false, removing: true, metrics: Metrics::native(compensated), paint: &mut paint };
         let plan = self.rebuild_cap_plane(v(origin), v(normal), &PySet::from_keys([]), &mut Vec::new(), &mut Cache::default(), &mut ctx)?;
         Ok(plan.map(|caps| caps.into_iter().map(|(outer, holes, interior)| {
             let rings = std::iter::once(outer).chain(holes).map(|r| r.into_iter().map(arr).collect()).collect();
@@ -751,7 +823,7 @@ impl Store {
 
     pub(super) fn rebuild_single_plane(&mut self, origin: [f64;3], normal: [f64;3], paint: &mut Paint, h: Hypot, compensated: bool, ch: &mut Change)
         -> Result<(usize, Vec<(u128, u32)>), OpError> {
-        let mut ctx = Ctx { standalone: true, h, compensated, keep: false, removing: true, metrics: Metrics::native(compensated), paint };
+        let mut ctx = Ctx { window_min_faces: 8192, standalone: true, h, compensated, keep: false, removing: true, metrics: Metrics::native(compensated), paint };
         let mut bumps = 0;
         self.apply_cap_rebuild(v(origin),v(normal),&PySet::from_keys([]),&mut Vec::new(),&mut Cache::default(),&mut ctx,ch,&mut bumps)?;
         let painted = ctx.paint.order.iter().map(|k| (*k, ctx.paint.made[k])).collect();
@@ -788,7 +860,7 @@ impl Store {
             }
         }
         let mut cache = Cache { comp_token: -1, scope_token: -1, ..Cache::default() };
-        let mut ctx = Ctx { standalone: false, h, compensated, keep, removing, metrics: Metrics::native(compensated), paint };
+        let mut ctx = Ctx { window_min_faces: 8192, standalone: false, h, compensated, keep, removing, metrics: Metrics::native(compensated), paint };
         let mut bumps = 0;
         for round in 0..4 {
             if round > 0 {
@@ -819,15 +891,13 @@ impl Store {
             }
             let mut changed = false;
             for (origin, normal) in unique.into_values() {
-                let before_keys: Vec<u128> = self.live_slots(Kind::Face).into_iter().map(|f| self.key(Kind::Face, f)).collect();
                 let before_state = self.state.clone();
                 let did = self.apply_cap_rebuild(origin, normal, &fresh, &mut op, &mut cache, &mut ctx, ch, &mut bumps)?;
                 if did {
                     let now: Vec<u128> = self.live_slots(Kind::Face).into_iter().map(|f| self.key(Kind::Face, f)).collect();
-                    let before_set: HashSet<u128> = before_keys.iter().copied().collect();
-                    let new = PySet::from_keys(now).difference(before_set.len(), |k| before_set.contains(&k));
                     let mut before = Store::empty(self.state.ns, Default::default());
                     before.state = before_state;
+                    let new = PySet::from_keys(now).difference(before.state.slots[2].live, |k| before.live_face(k).is_some());
                     let mut add = Vec::new();
                     for k in new.iter() {
                         let Some(f) = self.slot(Kind::Face, k) else { continue };
@@ -908,5 +978,83 @@ fn surface(plus: bool, minus: bool, old: bool, skin: u8, fresh: u8, keep: bool, 
         Surface::Sheet
     } else {
         Surface::Discard
+    }
+}
+
+#[cfg(test)]
+mod window_tests {
+    use super::*;
+
+    #[test]
+    fn pruned_and_full_parity_give_identical_cap_edits() {
+        let mut random = PyRandom::new(421);
+        for round in 0..32 {
+            let mut model = Store::empty(2, Default::default());
+            let mut fresh = PySet::new();
+            let mut ch = Change::default();
+            // Closed solids on either side, intersecting sheets and remote
+            // walls. Their faces can contribute to parity without touching
+            // the cap loop.
+            for i in 0..7 {
+                let x = (random.random() * 7.).floor() + (i / 4 * 40) as f64;
+                let y = (random.random() * 7.).floor();
+                let z = if i % 2 == 0 { 0. } else { -2. };
+                let w = 1. + random.random();
+                let verts: [[f64; 3]; 8] = std::array::from_fn(|k| {
+                    [
+                        x + if k & 1 != 0 { w } else { 0. },
+                        y + if k & 2 != 0 { w } else { 0. },
+                        z + if k & 4 != 0 { 2. } else { 0. },
+                    ]
+                });
+                for corners in [
+                    [0, 2, 3, 1],
+                    [4, 5, 7, 6],
+                    [0, 1, 5, 4],
+                    [2, 6, 7, 3],
+                    [0, 4, 6, 2],
+                    [1, 3, 7, 5],
+                ] {
+                    let f = model
+                        .add_face(&[corners.map(|i| verts[i]).to_vec()], &mut ch)
+                        .unwrap();
+                    if i == 0 {
+                        fresh.add(model.key(Kind::Face, f));
+                    }
+                }
+            }
+            let apply = |mut model: Store, window_min_faces| {
+                let mut ch = Change::default();
+                let mut paint = Paint::new(HashMap::new(), Vec::new());
+                let mut ctx = Ctx {
+                    window_min_faces,
+                    standalone: false,
+                    h: Hypot::LibStdCxx,
+                    compensated: true,
+                    keep: round % 2 == 0,
+                    removing: round % 3 == 0,
+                    metrics: Metrics::native(true),
+                    paint: &mut paint,
+                };
+                let mut bumps = 0;
+                let result = model
+                    .apply_cap_rebuild(
+                        V3(0., 0., 0.),
+                        V3(0., 0., 1.),
+                        &fresh,
+                        &mut Vec::new(),
+                        &mut Cache::default(),
+                        &mut ctx,
+                        &mut ch,
+                        &mut bumps,
+                    )
+                    .unwrap();
+                (model, ch, result, bumps)
+            };
+            let (reference, a, ra, ba) = apply(model.clone(), usize::MAX);
+            let (local, b, rb, bb) = apply(model, 0);
+            assert_eq!((a, ra, ba), (b, rb, bb));
+            assert!(reference.state.same_as(&local.state));
+        }
     }
 }

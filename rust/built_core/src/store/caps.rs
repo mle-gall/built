@@ -30,6 +30,25 @@ impl Store {
         Ok(keys)
     }
 
+    /// The centroid cannot reach an axis-aligned cap plane if every
+    /// outer corner lies strictly on one side. Pad for summation error.
+    pub(super) fn may_meet_cap(&self, f: u32, o: V3, n: V3, tol: f64) -> bool {
+        let dir = [n.0,n.1,n.2];
+        let Some(k) = (0..3).find(|&k| dir[k].abs() == 1. && dir[(k+1)%3] == 0. && dir[(k+2)%3] == 0.) else { return true; };
+        let st = &self.state;
+        let r = *st.frings.get(f as usize);
+        if r.n_rings == 0 { return true; }
+        let count = *st.ring_sizes.get(r.ring_start as usize);
+        let origin = [o.0,o.1,o.2][k];
+        let (mut lo,mut hi) = (f64::INFINITY, f64::NEG_INFINITY);
+        for i in 0..count {
+            let x = st.vpos.get(*st.corners.get((r.corner_start+i) as usize) as usize)[k];
+            lo = lo.min(x); hi = hi.max(x);
+        }
+        let margin = (lo.abs().max(hi.abs()) + origin.abs() + 1.) * (count as f64 + 4.) * f64::EPSILON * 4.;
+        !(lo-origin > tol+margin || origin-hi > tol+margin)
+    }
+
     pub fn edge_on_cap_plane(&self, edge: u32, o: V3, n: V3, tol: f64, h: Hypot) -> bool {
         self.state.ends.get(edge as usize).iter().all(|&v| {
             let [x, y, z] = *self.state.vpos.get(v as usize);
@@ -95,7 +114,7 @@ impl Store {
                 .iter()
                 .filter(|&&f| self.state.fflags.get(f as usize) & INTERIOR == 0),
         ) {
-            if !seen.insert(f) {
+            if !seen.insert(f) || !self.may_meet_cap(f, o, n, tol) {
                 continue;
             }
             let rings = self.face_rings(f);
@@ -275,51 +294,49 @@ impl Store {
 impl Store {
     /// Each face's component label and the scoped edge keys. Face labels are
     /// dense list indices, matching the Python union through edges in list order.
-    pub fn cap_scope(&self, seeds: &[u128]) -> (Vec<(u128, u32)>, Vec<u128>) {
+    pub(super) fn cap_labels(&self, edges: &[u32]) -> Vec<u32> {
         use crate::orient::component_root;
-        let faces = self.live_slots(Kind::Face);
-        let edges = self.live_slots(Kind::Edge);
-        let dense = self.state.order[2].dense_of_slot(&self.state.slots[2]);
-        let mut parent: Vec<_> = (0..faces.len() as u32).collect();
-        for &e in &edges {
+        let mut labels: Vec<_> = (0..self.state.slots[2].len() as u32).collect();
+        for &e in edges {
             if let Some((&first, rest)) = self.edge_faces(e).split_first() {
                 for &f in rest {
-                    let a = component_root(&mut parent, dense[first as usize]);
-                    let b = component_root(&mut parent, dense[f as usize]);
-                    parent[a as usize] = b;
+                    let a = component_root(&mut labels, first);
+                    let b = component_root(&mut labels, f);
+                    labels[a as usize] = b;
                 }
             }
         }
-        let labels: Vec<_> = (0..faces.len() as u32)
-            .map(|f| component_root(&mut parent, f))
-            .collect();
-        let wanted: std::collections::HashSet<_> = seeds
-            .iter()
-            .filter_map(|&k| self.slot(Kind::Face, k))
-            .map(|f| labels[dense[f as usize] as usize])
-            .collect();
-        let scoped = if wanted.is_empty() {
-            vec![]
-        } else {
-            edges
-                .into_iter()
-                .filter(|&e| {
-                    let fs = self.edge_faces(e);
-                    fs.is_empty()
-                        || fs
-                            .iter()
-                            .any(|&f| wanted.contains(&labels[dense[f as usize] as usize]))
-                })
-                .map(|e| self.key(Kind::Edge, e))
-                .collect()
-        };
-        (
-            faces
-                .iter()
-                .zip(labels)
-                .map(|(&f, label)| (self.key(Kind::Face, f), label))
-                .collect(),
-            scoped,
-        )
+        for f in self.state.slots[2].live_slots() {
+            labels[f as usize] = component_root(&mut labels, f);
+        }
+        labels
+    }
+
+    pub(super) fn cap_members(&self, seeds: &[u128], labels: &[u32]) -> Vec<bool> {
+        let mut wanted = vec![false; labels.len()];
+        for f in seeds.iter().filter_map(|&key| self.slot(Kind::Face,key)) {
+            wanted[labels[f as usize] as usize] = true;
+        }
+        wanted
+    }
+
+    pub(super) fn scoped_edge(&self, e: u32, labels: &[u32], wanted: &[bool]) -> bool {
+        let fs = self.edge_faces(e);
+        fs.is_empty() || fs.iter().any(|&f| wanted[labels[f as usize] as usize])
+    }
+
+    pub fn cap_scope(&self, seeds: &[u128]) -> (Vec<(u128, u32)>, Vec<u128>) {
+        let edges = self.live_slots(Kind::Edge);
+        let labels = self.cap_labels(&edges);
+        let wanted = self.cap_members(seeds, &labels);
+        let scoped = if wanted.iter().any(|w| *w) {
+            edges.into_iter().filter(|&e| self.scoped_edge(e,&labels,&wanted))
+                .map(|e|self.key(Kind::Edge,e)).collect()
+        } else { Vec::new() };
+        // The published component label is the root's index in face list order.
+        let dense = self.state.order[2].dense_of_slot(&self.state.slots[2]);
+        let faces = self.live_slots(Kind::Face).into_iter()
+            .map(|f|(self.key(Kind::Face,f),dense[labels[f as usize] as usize])).collect();
+        (faces,scoped)
     }
 }
