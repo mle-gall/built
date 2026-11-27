@@ -556,6 +556,7 @@ pub struct ViewportMenu {
     #[pyo3(get, set)]
     at: (f64, f64),
     sel: Vec<Py<PyAny>>,
+    repeat_station: Option<Py<PyAny>>,
     locked_group: Option<Py<PyAny>>,
     locked_image: Option<Py<PyAny>>,
     facts: Facts,
@@ -601,6 +602,7 @@ impl ViewportMenu {
             rows,
             at,
             sel: Vec::new(),
+            repeat_station: None,
             locked_group: None,
             locked_image: None,
             facts: Facts::default(),
@@ -675,6 +677,7 @@ pub fn build<'py>(
         rows: entries(verbs::menu_rows(&f, kind)),
         at: (0.0, 0.0),
         sel: sel.into_iter().map(Bound::unbind).collect(),
+        repeat_station: None,
         locked_group: locked_group.map(|g| g.clone().unbind()),
         locked_image: locked_image.map(|g| g.clone().unbind()),
         facts: f,
@@ -1091,6 +1094,27 @@ fn context_menu_open_at<'py>(view: &Bound<'py, PyAny>, x: f64, y: f64) -> PyResu
         PyList::new(view.py(), items(&source.getattr("scene")?.getattr("selection")?)?)?
     };
     let mut menu = build(&win, Some(view), Some(sel.as_any()), locked_image.as_ref(), locked_group.as_ref())?;
+    if let Some(owner) = picked.getattr_opt("ext")?
+        .and_then(|ext| ext.get_item("built.live").ok()).filter(|m|m.get_item("stations").is_ok()) {
+        let id = owner.get_item("row")?;
+        let hit = tools
+            .call_method1("pick_face_placement", (x, y))?
+            .get_item(1)?;
+        let mut part = (!hit.is_none()).then(|| opt(&hit, "source_occurrence").unwrap_or(hit));
+        while let Some(g) = part {
+            if g.getattr_opt("ext")?
+                .and_then(|e| e.get_item("built.repeat").ok())
+                .and_then(|m| m.get_item("row").ok())
+                .is_some_and(|r| r.eq(&id).unwrap_or(false))
+            {
+                menu.repeat_station = Some(g.unbind());
+                menu.facts.repeat_copy = true;
+                menu.rows = entries(verbs::menu_rows(&menu.facts, &menu.kind));
+                break;
+            }
+            part = opt(&g, "_parent");
+        }
+    }
     if picked.is_none() && locked_image.is_none() && locked_group.is_none() && crate::axes_commands::hit(view, &source.getattr("scene")?, x,y)? {
         menu.kind = "drawing_axes".into();
         menu.title = "Drawing Axes".into();
@@ -1138,7 +1162,12 @@ fn context_menu_action(win: &Bound<'_, PyAny>, view: Option<Bound<'_, PyAny>>, v
         let tool = tool.bind(py);
         return Ok(tool.is(&tools.getattr("tool")?) && tool.call_method1("menu_action", (&tools, vid))?.is_truthy()?);
     }
-    let sel: Vec<_> = menu.sel.iter().map(|e| e.bind(py).clone()).collect();
+    let mut sel: Vec<_> = menu.sel.iter().map(|e| e.bind(py).clone()).collect();
+    if vid == "skiprepeat" {
+        if let Some(station) = &menu.repeat_station {
+            sel = vec![station.bind(py).clone()];
+        }
+    }
     let locked_group = menu.locked_group.as_ref().map(|g| g.bind(py).clone());
     let locked_image = menu.locked_image.as_ref().map(|g| g.bind(py).clone());
     if !run(win, Some(&view), &menu.kind, vid, &sel, locked_group.as_ref(), locked_image.as_ref(), &menu.facts)? {

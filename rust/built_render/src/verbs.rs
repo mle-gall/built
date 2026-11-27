@@ -732,6 +732,7 @@ pub fn dispatch(kind: &str, id: &str) -> (&'static str, String, String) {
         "explodecurve" => slot("_on_explode_curve", ""),
         "bridge" => slot("_on_bridge", ""),
         "open" => tree("open"),
+        "skiprepeat" => glue("skiprepeat", ""),
         "savepreset" => glue("savepreset",""),
         "rename" => glue("rename", ""),
         "lock" => glue("lock", ""),
