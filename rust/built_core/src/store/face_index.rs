@@ -12,7 +12,8 @@
 //! one, until they are many. The answers are the scan's, face for face and in list order: the
 //! same boxes and planes (`scans::face_box`, `scans::face_plane`) from the
 //! same positions.
-use super::keys::{split_key, Kind};
+use super::cow::{CowVec, CHUNK};
+use super::keys::Kind;
 use super::{State, Store};
 use crate::instances::{build_bvh, Node, LEAF};
 use crate::scans::{face_box, face_plane, Box6};
@@ -37,7 +38,61 @@ pub struct FaceIndex {
     /// Faces changed since the build: left out of the leaves, tested directly.
     stale: Arc<FxHashSet<u32>>,
     extra: Arc<Vec<u32>>,
+    /// Per chunk of face slots, the pool chunks its faces' rings lie in at
+    /// `last` (corners, then ring sizes, each `lo..=hi`): a chunk whose own
+    /// columns and those pool chunks are shared with the next state is
+    /// skipped unread.
+    spans: Arc<Vec<[u32; 4]>>,
 }
+
+const NO_SPAN: [u32; 4] = [u32::MAX, 0, u32::MAX, 0];
+
+/// The pool chunks the rings of face chunk `c` lie in.
+fn span(st: &State, c: usize) -> [u32; 4] {
+    let faces = &st.slots[Kind::Face as usize];
+    let mut out = NO_SPAN;
+    for f in (c * CHUNK) as u32..((c + 1) * CHUNK).min(faces.len()) as u32 {
+        if !faces.alive(f) {
+            continue;
+        }
+        let r = *st.frings.get(f as usize);
+        if r.n_rings == 0 {
+            continue;
+        }
+        let sizes = r.ring_start as usize..r.ring_start as usize + r.n_rings as usize;
+        let corners: usize = sizes.clone().map(|k| *st.ring_sizes.get(k) as usize).sum();
+        let (c0, c1) = (r.corner_start as usize / CHUNK, (r.corner_start as usize + corners.max(1) - 1) / CHUNK);
+        let (s0, s1) = (sizes.start / CHUNK, (sizes.end - 1) / CHUNK);
+        out = [out[0].min(c0 as u32), out[1].max(c1 as u32), out[2].min(s0 as u32), out[3].max(s1 as u32)];
+    }
+    out
+}
+
+fn shared<T: Clone>(a: &CowVec<T>, b: &CowVec<T>, lo: u32, hi: u32) -> bool {
+    lo > hi || (lo..=hi).all(|c| a.same_chunk(b, c as usize))
+}
+
+/// Face `f`'s rings, sizes then corners, equal in both states.
+fn same_rings(a: &State, b: &State, f: u32) -> bool {
+    let (ra, rb) = (*a.frings.get(f as usize), *b.frings.get(f as usize));
+    if ra.n_rings != rb.n_rings {
+        return false;
+    }
+    let (mut ca, mut cb) = (ra.corner_start as usize, rb.corner_start as usize);
+    for k in 0..ra.n_rings as usize {
+        let size = *a.ring_sizes.get(ra.ring_start as usize + k);
+        if size != *b.ring_sizes.get(rb.ring_start as usize + k) {
+            return false;
+        }
+        if (0..size as usize).any(|j| a.corners.get(ca + j) != b.corners.get(cb + j)) {
+            return false;
+        }
+        ca += size as usize;
+        cb += size as usize;
+    }
+    true
+}
+
 
 /// Past this many changed faces the tree is built again.
 fn rebuild_past(n: usize) -> usize {
@@ -109,6 +164,7 @@ impl FaceIndex {
             vague: Arc::new(vague),
             stale: Default::default(),
             extra: Default::default(),
+            spans: Arc::new((0..n.div_ceil(CHUNK)).map(|c| span(st, c)).collect()),
         }
     }
 
@@ -123,19 +179,50 @@ impl FaceIndex {
             return Arc::new(Self::build(store));
         }
         let st = &store.state;
+        let old = &self.last;
         // Changed since the last refresh, added to what had changed before.
-        let change = st.changes_since(&self.last);
-        let k = Kind::Face as usize;
         let mut touched: FxHashSet<u32> = (*self.stale).clone();
-        let slot = |key: u128| split_key(key).map(|(_, _, _, s)| s);
-        for &key in change.created[k].iter().chain(&change.removed[k]).chain(&change.modified[k]) {
-            touched.extend(slot(key));
+        let k = Kind::Face as usize;
+        let (fa, fb) = (&st.slots[k], &old.slots[k]);
+        let n_chunks = fa.len().max(fb.len()).div_ceil(CHUNK);
+        let mut spans = (*self.spans).clone();
+        spans.resize(n_chunks, NO_SPAN);
+        for c in 0..n_chunks {
+            let sp = spans[c];
+            if fa.state.same_chunk(&fb.state, c)
+                && st.frings.same_chunk(&old.frings, c)
+                && st.fattr.same_chunk(&old.fattr, c)
+                && st.fflags.same_chunk(&old.fflags, c)
+                && shared(&st.corners, &old.corners, sp[0], sp[1])
+                && shared(&st.ring_sizes, &old.ring_sizes, sp[2], sp[3])
+            {
+                continue;
+            }
+            for f in (c * CHUNK) as u32..((c + 1) * CHUNK).min(fa.len().max(fb.len())) as u32 {
+                let (la, lb) = (fa.alive(f), fb.alive(f));
+                if !la && !lb {
+                    continue;
+                }
+                let i = f as usize;
+                if la != lb || fa.gen(f) != fb.gen(f) || st.fattr.get(i) != old.fattr.get(i)
+                    || st.fflags.get(i) != old.fflags.get(i) || !same_rings(st, old, f)
+                {
+                    touched.insert(f);
+                }
+            }
+            spans[c] = span(st, c);
         }
-        let vertices = &st.slots[Kind::Vertex as usize];
-        for &key in &change.moved {
-            if let Some(v) = slot(key).filter(|&v| vertices.alive(v)) {
-                for e in st.edges_at(v) {
-                    touched.extend(st.edge_faces(e).iter().copied());
+        // Faces at a vertex that moved: same rings, new geometry.
+        let (va, vb) = (&st.slots[Kind::Vertex as usize], &old.slots[Kind::Vertex as usize]);
+        for c in 0..va.len().div_ceil(CHUNK) {
+            if st.vpos.same_chunk(&old.vpos, c) && va.state.same_chunk(&vb.state, c) {
+                continue;
+            }
+            for v in (c * CHUNK) as u32..((c + 1) * CHUNK).min(va.len()) as u32 {
+                if va.alive(v) && (!vb.alive(v) || vb.gen(v) != va.gen(v) || st.vpos.get(v as usize) != old.vpos.get(v as usize)) {
+                    for e in st.edges_at(v) {
+                        touched.extend(st.edge_faces(e).iter().copied());
+                    }
                 }
             }
         }
@@ -157,6 +244,7 @@ impl FaceIndex {
             vague: self.vague.clone(),
             stale: Arc::new(touched),
             extra: Arc::new(extra),
+            spans: Arc::new(spans),
         })
     }
 
