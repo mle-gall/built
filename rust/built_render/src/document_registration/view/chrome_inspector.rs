@@ -847,28 +847,46 @@ fn link_action<'py>(a: &Args<'py>) -> Reply<'py> {
 /// A complete curve group can be an arbitrary polyline. Radius and
 /// resegmentation are available only for a regular circular shape.
 fn complete_curve(scene: &Obj<'_>, sel: &Bound<'_, PyList>) -> PyResult<bool> {
-    if sel.len() < 2 { return Ok(false); }
+    if sel.len() < 2 {
+        return Ok(false);
+    }
     let first = sel.get_item(0)?;
-    let Some(tag) = first.getattr_opt("curve")? else { return Ok(false) };
-    if tag.is_none() { return Ok(false); }
+    let Some(tag) = first.getattr_opt("curve")? else {
+        return Ok(false);
+    };
+    if tag.is_none() {
+        return Ok(false);
+    }
     let mesh = scene.getattr("mesh")?;
     for e in sel.iter().skip(1) {
-        let Some(other) = e.getattr_opt("curve")? else { return Ok(false) };
-        if !tag.eq(other)? { return Ok(false); }
+        let Some(other) = e.getattr_opt("curve")? else {
+            return Ok(false);
+        };
+        if !tag.eq(other)? {
+            return Ok(false);
+        }
     }
     Ok(mesh.call_method1("curve_edges", (first,))?.len()? == sel.len())
 }
 
 fn regular_curve<'py>(scene: &Obj<'py>, sel: &Bound<'py, PyList>) -> Reply<'py> {
     let py = scene.py();
-    if sel.len() > 4096 { return Ok(none(py)); }
-    py.import("built_core")?.getattr("curve_segments")?.call_method1("read_curve", (scene.getattr("mesh")?, sel.get_item(0)?))
+    if sel.len() > 4096 {
+        return Ok(none(py));
+    }
+    py.import("built_core")?
+        .getattr("curve_segments")?
+        .call_method1("read_curve", (scene.getattr("mesh")?, sel.get_item(0)?))
 }
 
 pub(super) fn curve_of<'py>(a: &Args<'py>) -> Reply<'py> {
     let scene = a.get_item(0)?;
     let sel = list(&a.get_item(1)?)?;
-    if complete_curve(&scene, &sel)? { regular_curve(&scene, &sel) } else { Ok(none(a.py())) }
+    if complete_curve(&scene, &sel)? {
+        regular_curve(&scene, &sel)
+    } else {
+        Ok(none(a.py()))
+    }
 }
 
 pub(super) fn status_text<'py>(a: &Args<'py>) -> Reply<'py> {

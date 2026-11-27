@@ -688,32 +688,50 @@ impl Store {
 
     /// The run's vertices in walking order.
     pub(crate) fn weld_chain(&self, run: &[u32]) -> Option<Vec<u32>> {
-        if run.len() < 2 { return None; }
+        if run.len() < 2 {
+            return None;
+        }
         let mut degree = HashMap::new();
-        if run.iter().copied().collect::<HashSet<_>>().len() != run.len() { return None; }
+        if run.iter().copied().collect::<HashSet<_>>().len() != run.len() {
+            return None;
+        }
         for &e in run {
             for v in *self.state.ends.get(e as usize) {
                 let n = degree.entry(v).or_insert(0);
                 *n += 1;
-                if *n > 2 { return None; }
+                if *n > 2 {
+                    return None;
+                }
             }
         }
         let ends = degree.values().filter(|&&n| n == 1).count();
-        if ends != 0 && ends != 2 { return None; }
+        if ends != 0 && ends != 2 {
+            return None;
+        }
         let chain = self.chain(run);
         (chain.len() == degree.len()).then_some(chain)
     }
 
     pub(crate) fn weld_edges(&mut self, run: &[u32], id: i128) -> Result<(), &'static str> {
-        let chain = self.weld_chain(run).ok_or("Select one connected edge chain")?;
+        let chain = self
+            .weld_chain(run)
+            .ok_or("Select one connected edge chain")?;
         let points: Vec<_> = chain.into_iter().map(|v| self.def_point(v)).collect();
         let tol = self.tol_for(points.iter().copied());
         let circle = bound::fit_circle(&points, tol).filter(|c| {
             let mut sweep: f64 = 0.;
-            for (a,b) in points.iter().zip(points.iter().cycle().skip(1)).take(run.len()) {
-                let Some([u,v]) = c.interval(*a,*b,None) else { return false };
-                if sweep * (v-u) < 0. { return false; }
-                sweep += v-u;
+            for (a, b) in points
+                .iter()
+                .zip(points.iter().cycle().skip(1))
+                .take(run.len())
+            {
+                let Some([u, v]) = c.interval(*a, *b, None) else {
+                    return false;
+                };
+                if sweep * (v - u) < 0. {
+                    return false;
+                }
+                sweep += v - u;
             }
             sweep.abs() <= std::f64::consts::TAU + 1e-10
         });
@@ -721,20 +739,34 @@ impl Store {
             self.bind_circle(run, circle)?;
         } else if let Some(curved) = self.state.exact.curved.as_mut() {
             let curved = Arc::make_mut(curved);
-            for e in run { curved.edges.remove(e); }
+            for e in run {
+                curved.edges.remove(e);
+            }
         }
         // Changing the boundary can also invalidate a previously bound wall.
         if let Some(current) = self.state.exact.curved.clone() {
-            let incident: HashSet<_> = run.iter().flat_map(|&e| self.edge_faces(e).iter().copied()).collect();
-            let invalid: Vec<_> = incident.into_iter().filter(|f| {
-                current.face(*f).is_some_and(|s| !self.face_holds(*f,s,&current.edges))
-            }).collect();
+            let incident: HashSet<_> = run
+                .iter()
+                .flat_map(|&e| self.edge_faces(e).iter().copied())
+                .collect();
+            let invalid: Vec<_> = incident
+                .into_iter()
+                .filter(|f| {
+                    current
+                        .face(*f)
+                        .is_some_and(|s| !self.face_holds(*f, s, &current.edges))
+                })
+                .collect();
             if !invalid.is_empty() {
                 let curved = Arc::make_mut(self.state.exact.curved.as_mut().unwrap());
-                for f in invalid { curved.faces.remove(&f); }
+                for f in invalid {
+                    curved.faces.remove(&f);
+                }
             }
         }
-        for &e in run { self.set_edge_curve(e, id); }
+        for &e in run {
+            self.set_edge_curve(e, id);
+        }
         Ok(())
     }
 
