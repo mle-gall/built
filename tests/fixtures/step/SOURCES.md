@@ -21,3 +21,19 @@ also moves the second pcurve off the seam and checks rejection.
 
 `rational-sheet.step` is an authored GPL-3.0-or-later quadratic-by-linear
 NURBS surface with two rational boundary curves. Its middle weight is 0.75.
+
+`extrusion.step` and `revolution.step` are GPL-3.0-or-later variants of
+the authored capped cylinder. One sweeps its circular bottom rim along the
+axis. The other revolves a straight generator about the same axis.
+
+The files in `stepmesh/` are independently generated AP214 fixtures from
+the [stepmesh 0.1.0 crate](https://crates.io/crates/stepmesh/0.1.0).
+The upstream package offers MIT or Apache-2.0. These copies use the MIT
+option and include its notice in `stepmesh/LICENSE`. Its fixture manifest
+gives two box occurrences totalling 12,000 mm³, a one-inch cube of
+16,387.064 mm³, and a shelled box of 7,000 mm³.
+The cone, cylinder, sphere, and torus cover planar conic trims, singular
+poles, and periodic seams rounded by the source exporter.
+
+The GPL-3.0-or-later `capped-cylinder-ap203.step` uses the authored cylinder
+geometry with a configuration-controlled product definition.

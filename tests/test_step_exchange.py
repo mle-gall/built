@@ -7,8 +7,9 @@ from built_core.scene import Scene
 from formats import step
 
 
-def test_cylinder_seam_and_cap_survive_exchange(tmp_path):
-    src = Path(__file__).parent / "fixtures" / "step" / "capped-cylinder.step"
+@pytest.mark.parametrize("name", ["capped-cylinder", "capped-cylinder-ap203"])
+def test_cylinder_seam_and_cap_survive_exchange(tmp_path, name):
+    src = Path(__file__).parent / "fixtures" / "step" / (name + ".step")
     prepared = step.prepare_step(src)
     assert (prepared["exact"], prepared["faceted"], prepared["problems"]) == (1, 0, [])
     scene = Scene()
@@ -338,3 +339,142 @@ def test_step_preserves_hard_planar_divisions(tmp_path, soft, expected):
     assert path.read_text().count("= ADVANCED_FACE(") == expected
     assert len(scene.mesh.faces) == 2
     assert step.prepare_step(path)["exact"] == 1
+
+def test_oblique_cylinder_recovery_preserves_ids_and_reopens(tmp_path):
+    from built_core import Vec3
+    from built_core.history import History
+    from built_core.protocol import commands
+
+    scene = Scene()
+    mesh = scene.mesh
+    for outer, _, _ in ruled_band()["faces"]:
+        mesh.add_face([Vec3(x, y, z + (0.25*x if z else -0.1*y)) for x,y,z in outer])
+    keys = [f.key for f in mesh.faces]
+    history = History(scene)
+    params = dict(faces=keys, tolerance=0.001)
+    plan = commands.run(history, "recover_exact_geometry", **params)
+    assert "mitre" in plan["method"]
+    assert plan["input_volume_m3"] < plan["output_volume_m3"]
+    assert commands.run(history, "recover_exact_geometry", preview=False, **params)["ok"]
+    assert [f.key for f in mesh.faces] == keys
+    path = tmp_path / "mitre.step"
+    step.save_step(scene, path)
+    assert "= ELLIPSE(" in path.read_text()
+    assert step.prepare_step(path)["exact"] == 1
+    history.undo()
+    assert [f.key for f in mesh.faces] == keys
+
+@pytest.mark.parametrize("name,entity", [("extrusion", "SURFACE_OF_LINEAR_EXTRUSION"), ("revolution", "SURFACE_OF_REVOLUTION")])
+def test_swept_surface_roundtrip(tmp_path, name, entity):
+    path = Path(__file__).parent / "fixtures" / "step" / (name + ".step")
+    doc = step.prepare_step(path)
+    assert doc["exact"] == 1 and not doc["problems"]
+    scene = Scene()
+    step.apply_step(scene, doc)
+    out = tmp_path / path.name
+    step.save_step(scene, out)
+    assert "= " + entity + "(" in out.read_text()
+    assert step.prepare_step(out)["exact"] == 1
+
+def test_mapped_rigid_instances_share_one_shape(tmp_path):
+    src = Path(__file__).parent / "fixtures" / "step" / "capped-cylinder.step"
+    text = src.read_text().replace("#73 = SHAPE_DEFINITION_REPRESENTATION(#71,#63);", """#73 = SHAPE_DEFINITION_REPRESENTATION(#71,#80);
+#75 = REPRESENTATION_MAP(#9,#63);
+#76 = MAPPED_ITEM('prototype',#75,#9);
+#77 = MAPPED_ITEM('prototype',#75,#30);
+#80 = SHAPE_REPRESENTATION('',(#76,#77),#5);""")
+    path = tmp_path / "mapped.step"
+    path.write_text(text)
+    doc = step.prepare_step(path)
+    assert doc["exact"] == 1 and not doc["problems"]
+    root, = doc["groups"]
+    a, b = root.children
+    assert a.mesh is b.mesh
+    assert sorted(g.xform.copyDataTo()[11] for g in (a,b)) == [0., 0.025]
+
+
+def test_multiple_bodies_keep_one_product_after_native_save(tmp_path):
+    from built_core import Vec3
+    from formats import igz
+
+    scene=Scene()
+    for x in (0,2):
+        scene.mesh.add_face([Vec3(x,0,0),Vec3(x+1,0,0),Vec3(x,1,0)])
+    out=tmp_path / "two-bodies.step"
+    step.save_step(scene,out)
+    fresh=Scene()
+    step.apply_step(fresh,step.prepare_step(out))
+    native=tmp_path / "two-bodies.built"
+    igz.save_scene(fresh,native)
+    reopened=Scene()
+    igz.load_into(reopened,native)
+    step.save_step(reopened,out)
+    assert out.read_text().count("= PRODUCT_DEFINITION(") == 1
+    assert out.read_text().count("= SHAPE_DEFINITION_REPRESENTATION(") == 1
+    assert step.prepare_step(out)["exact"] == 2
+
+
+@pytest.mark.parametrize("name", ["assembly_two_boxes", "box_inch", "shelled_box", "cone", "cylinder", "sphere", "torus"])
+def test_public_ap214_fixture_reopens(tmp_path, name):
+    path = Path(__file__).parent / "fixtures" / "step" / "stepmesh" / (name + ".step")
+    data = step.prepare_step(path)
+    assert data["exact"] == 1 and not data["problems"]
+    scene = Scene()
+    step.apply_step(scene, data)
+    output = tmp_path / "roundtrip.step"
+    step.save_step(scene, output)
+    result = step.prepare_step(output)
+    assert result["exact"] == 1 and not result["problems"]
+    if name == "assembly_two_boxes":
+        first, second = result["groups"][0].children
+        assert first.mesh is second.mesh
+        assert first.xform.copyDataTo() != second.xform.copyDataTo()
+
+
+def test_recovery_multiple_group_meshes_undo_together():
+    from built_core import Vec3, command_protocol
+    from built_core.group import Group
+    from built_core.history import CompoundCommand, History
+
+    scene = Scene()
+    history = History(scene)
+    commands = []
+    for x in (0, 1):
+        group = Group(name=str(x))
+        scene.groups.append(group)
+        mesh = group.mesh
+        face = mesh.add_face([Vec3(0,0,0),Vec3(1,0,0),Vec3(x,1,0)])
+        report, command = command_protocol._plan_recovery(mesh, [face.key], 0.0001)
+        assert report["faces"] == 1
+        commands.append(command)
+    result = command_protocol.execute(history, CompoundCommand(commands))
+    assert result["ok"]
+    assert all(g.mesh._store.has_exact_bindings for g in scene.groups)
+    history.undo()
+    assert all(not g.mesh._store.has_exact_bindings for g in scene.groups)
+
+
+def test_selected_step_delivery_keeps_the_cylindrical_wall(tmp_path):
+    from built_core import deliveries
+
+    path = Path(__file__).parent / "fixtures" / "step" / "capped-cylinder.step"
+    scene = Scene()
+    step.apply_step(scene, step.prepare_step(path))
+    group, = scene.groups
+    scene.edit_group = group
+    scene.selection = {group.mesh.faces[0]}
+    out = tmp_path / "wall.step"
+    step.save_step(deliveries.scoped(scene, {"scope": "selection", "format": "step"}), out)
+    assert "= CYLINDRICAL_SURFACE(" in out.read_text()
+    assert step.prepare_step(out)["exact"] == 1
+
+
+def test_planar_pcurve_with_wrong_radius_is_rejected(tmp_path):
+    source = Path(__file__).parent / "fixtures" / "step" / "stepmesh" / "cylinder.step"
+    authored = "#49 = CIRCLE('',#50,5.);"
+    broken = tmp_path / "displaced-cap-rim.step"
+    text = source.read_text()
+    assert text.count(authored) == 1
+    broken.write_text(text.replace(authored, "#49 = CIRCLE('',#50,4.);"))
+    with pytest.raises(ValueError, match="planar conic pcurve disagrees"):
+        step.prepare_step(broken)
