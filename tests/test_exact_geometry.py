@@ -415,3 +415,27 @@ def test_cylinder_facets_remain_valid_after_tool_and_undo(operation):
     h.undo()
     assert mesh.capture_state() == before
     mesh._store.check()
+
+
+def test_materialization_refuses_welding_two_disjoint_shells_together():
+    from copy import deepcopy
+    from built_core.history import History
+    from built_core.protocol import commands
+    from built_core.scene import Scene
+
+    scene = Scene()
+    h = History(scene)
+    shape = cylinder()
+    topo = shape["topology"]
+    face = deepcopy(topo["faces"][0])
+    face["id"] += 100
+    for use in face["loops"][0]:
+        use["edge"] += 100
+    topo["faces"].append(face)
+    for e in list(topo["edges"]):
+        topo["edges"].append(dict(e, id=e["id"]+100, vertices=[v+100 for v in e["vertices"]]))
+    topo["vertices"].update({100+k: v for k, v in list(topo["vertices"].items())})
+    before = scene.mesh.capture_state()
+    result = commands.run(h, "materialize_exact_geometry", geometry=shape)
+    assert not result["ok"] and "distinct model samples" in str(result["error"])
+    assert scene.mesh.capture_state() == before

@@ -446,14 +446,16 @@ impl patch::Mesh {
             .into_pyarray(py);
         let welded = mesh.call_method1("bulk_weld", (points,))?;
         let indices: Vec<usize> = welded.get_item(1)?.extract()?;
+        // Coincident uses already share the same model point index. Welding
+        // any other pair can join disjoint shells, even when no individual
+        // triangle has a repeated corner.
+        let mut used = std::collections::HashSet::with_capacity(indices.len());
+        if indices.iter().any(|&i| !used.insert(i)) {
+            return Err(PyValueError::new_err("store weld collapses distinct model samples"));
+        }
         let mut corners = Vec::<i64>::with_capacity(3 * self.triangles.len());
         for tri in &self.triangles {
             let [a, b, c] = tri.map(|i| indices[i]);
-            if a == b || b == c || c == a {
-                return Err(PyValueError::new_err(
-                    "store weld collapses an exact display triangle",
-                ));
-            }
             corners.extend([a as i64, b as i64, c as i64]);
         }
         let n = self.triangles.len();
