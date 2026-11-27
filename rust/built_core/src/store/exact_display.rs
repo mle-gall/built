@@ -162,8 +162,11 @@ impl Store {
             }
             chain.push((dv[b as usize] as i64, self.def_point(b)));
             let d = de[e as usize] as usize;
+            // A straight generator between two faces of one support is part
+            // of the surface: soft. A curve drawn on it (a line around a
+            // cylinder) keeps its own flags, so it stays visible.
             let mut flags = logical.flags[d];
-            if self.same_support_edge(e) {
+            if self.curved_edge(e).is_none() && self.same_support_edge(e) {
                 flags |= SOFT;
             }
             for w in chain.windows(2) {

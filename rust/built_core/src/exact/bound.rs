@@ -223,6 +223,22 @@ pub(crate) fn conic(c: DVec3, a: DVec3, b: DVec3) -> Option<Curve> {
 }
 
 impl Support {
+    /// A pool surface as a self-contained support (its generator curve,
+    /// if any, carried along as curve 0).
+    pub(crate) fn from_pool(curves: &[Curve], surface: &Surface) -> Option<Self> {
+        Some(match surface {
+            Surface::Extrusion { generator, vector } => Self {
+                surface: Surface::Extrusion { generator: 0, vector: *vector },
+                generator: Some(curves.get(*generator as usize)?.clone()),
+            },
+            Surface::Revolution { generator, origin, axis } => Self {
+                surface: Surface::Revolution { generator: 0, origin: *origin, axis: *axis },
+                generator: Some(curves.get(*generator as usize)?.clone()),
+            },
+            other => Self::new(other.clone()),
+        })
+    }
+
     pub(crate) fn new(surface: Surface) -> Self {
         Self {
             surface,

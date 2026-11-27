@@ -435,6 +435,14 @@ def test_line_around_a_cylinder_follows_the_surface():
     assert len(at_one) == len(path) - 1
     assert kinds(curves(scene, "face"), "surface") == ["cylinder"]
     assert len(curves(scene, "face")) == 24 + len(path) - 1
+    # The drawn circle stays a visible edge; the split generators stay soft.
+    import numpy as np
+    d = st.display_arrays(True)
+    owner, flags = np.asarray(d["edge_owner"]), np.asarray(d["flags"])
+    for i, e in enumerate(scene.mesh.edges):
+        a, b = e.v0.position, e.v1.position
+        if abs(a.z() - 1) < 1e-9 and abs(b.z() - 1) < 1e-9:
+            assert ((flags[owner == i] & 1) == 0).all()
     assert st.surface_path([5, 5, 5], [6, 6, 6]) is None
 
 
@@ -473,6 +481,24 @@ def test_refused_step_leaves_bindings_unchanged():
     result = commands.run(h, "push_pull", face=cap(scene, 2).key, distance=0)
     assert not result["ok"]
     assert bindings(scene) == before
+
+
+def test_imported_step_torus_seams_draw_soft_with_exact_normals():
+    from pathlib import Path
+    import numpy as np
+    from formats import step
+    data = step.prepare_step(Path(__file__).parent / "fixtures" / "step" / "stepmesh" / "torus.step")
+    scene = Scene()
+    step.apply_step(scene, data)
+    st = scene.groups[0].mesh._store
+    assert st.native_exact and st.counts() == (1, 2, 1)
+    d = st.display_arrays(True)
+    owner, flags = np.asarray(d["edge_owner"]), np.asarray(d["flags"])
+    # One face, two seams each used twice: neither is a crease.
+    assert all(((flags[owner == e] & 1) == 1).all() for e in (0, 1))
+    n = np.asarray(d["corner_normals"])
+    assert len(n) == len(d["corners"]) and np.isfinite(n).all()
+    assert np.allclose(np.linalg.norm(n, axis=1), 1, atol=1e-6)
 
 
 def test_native_cylinder_seam_draws_soft():

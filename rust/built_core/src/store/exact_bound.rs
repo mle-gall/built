@@ -1235,7 +1235,7 @@ impl Store {
     /// support's straight parameter line between them, as a polyline in
     /// store coordinates. Its ends lie on the facets under them and its
     /// corners where it crosses the facets' generators (on the exact
-    /// surface). A path within 3° of a parameter line snaps onto it, so a
+    /// surface). A path within 10° of a parameter line snaps onto it, so a
     /// line around a cylinder is its circle and one along it a generator,
     /// both exact. None when `a` and `b` are not on one curved support.
     pub(crate) fn surface_path(&self, a: [f64; 3], b: [f64; 3]) -> Option<SurfacePath> {
@@ -1265,7 +1265,7 @@ impl Store {
         let mut ub = lift(ub, ua);
         let (du, dv) = s.derivatives_at((ua + ub) * 0.5)?;
         let (mu, mv) = ((ub.x - ua.x).abs() * du.length(), (ub.y - ua.y).abs() * dv.length());
-        let snap = (3f64).to_radians().tan();
+        let snap = (10f64).to_radians().tan();
         if mv < snap * mu {
             ub.y = ua.y;
         } else if mu < snap * mv {

@@ -1305,10 +1305,47 @@ impl PyMeshStore {
                 edge_ids.push(e as i64);
             }
         }
-        for (tri, &f) in mesh.triangles.iter().zip(&mesh.face_ids) {
+        // Exact normals at each corner from the face's support, outward
+        // along the face's sense, in this store's frame.
+        let topology = patch.topology();
+        let supports: Vec<Option<crate::exact::bound::Support>> = topology
+            .faces
+            .iter()
+            .map(|f| {
+                patch
+                    .rows
+                    .surfaces
+                    .get(f.surface as usize)
+                    .and_then(|s| crate::exact::bound::Support::from_pool(&patch.rows.curves, s))
+            })
+            .collect();
+        let mut corner_normals: Vec<[f64; 3]> = Vec::with_capacity(3 * mesh.triangles.len());
+        let mirrored = self.inner.state.frame.mirrored();
+        for (i, (tri, &f)) in mesh.triangles.iter().zip(&mesh.face_ids).enumerate() {
             let mut tri = *tri;
-            if self.inner.state.frame.mirrored() {
+            let mut uv = mesh.parameters.get(i).copied();
+            if mirrored {
                 tri.swap(1, 2);
+                if let Some(uv) = uv.as_mut() {
+                    uv.swap(1, 2);
+                }
+            }
+            let face = topology.faces.get(f as usize);
+            let sense = if face.is_some_and(|x| x.reversed) { -1. } else { 1. };
+            for k in 0..3 {
+                let n = match (supports.get(f as usize).and_then(Option::as_ref), uv) {
+                    (Some(s), Some(uv)) => s.normal(uv[k]),
+                    _ => None,
+                };
+                corner_normals.push(match n {
+                    Some(n) => {
+                        let p = glam::DVec3::from(mesh.points[tri[k]]);
+                        let a = glam::DVec3::from(self.inner.model_point(p.to_array()));
+                        let b = glam::DVec3::from(self.inner.model_point((p + n * sense).to_array()));
+                        (b - a).normalize_or_zero().to_array()
+                    }
+                    None => [f64::NAN; 3],
+                });
             }
             display.corners.extend(tri.map(|v| v as i64));
             display.ring_counts.push(1);
@@ -1349,6 +1386,8 @@ impl PyMeshStore {
                 .into_pyarray(py),
         )?;
         out.set_item("edge_owner", edge_ids.into_pyarray(py))?;
+        let normals = numpy::ndarray::Array2::from_shape_fn((corner_normals.len(), 3), |(i, j)| corner_normals[i][j]);
+        out.set_item("corner_normals", normals.into_pyarray(py))?;
         Ok(out)
     }
 
