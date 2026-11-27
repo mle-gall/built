@@ -185,7 +185,7 @@ Bindings live in copy-on-write chunks of 512 slots (`store/exact.rs` `ChunkMap`)
 
 Line draws straight segments. A segment inside one facet can divide it, and a segment across facets forms a chord. Line on Surface follows a circle or generator when the stroke lies within 10° of that parameter direction. Its preview follows the support and its endpoints snap to facet generators.
 
-Weld Edges groups a single connected open or closed edge chain. A circular chain also receives exact intervals. Erasing a branch rejoins compatible collinear pieces at the released junction and keeps the longer piece’s persistent id.
+Weld Edges groups a single connected open or closed edge chain. A circular chain also receives exact intervals. Erasing a branch rejoins compatible pieces at a valence-two junction and keeps the longer piece’s persistent id. Temporary vertices inside curve segments disappear. An original arc corner keeps its vertex and recovers its curve group. The file records those junctions by persistent vertex and edge ids. Distinct edge flags, tags, or original face attributes at a dissolved seam preserve the boundary corners.
 
 Commands state their intent through `exact_bound::with_intent`: fit runs, keep chords, project divided vertices, keep the base face. Bindings save in the format-2 exact pool (`ext["built.exact_geometry"].curved`, one JSON row per block, element ids in file space; block array `face_surface_curved`), set the critical feature, and pickle after the store.
 

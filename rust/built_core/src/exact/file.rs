@@ -40,7 +40,7 @@ struct Header {
 #[serde(deny_unknown_fields)]
 pub(crate) struct CurvedRows {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub split_runs: Vec<[u64;3]>,
+    pub split_runs: Vec<([u64;3],bool)>,
     pub edges: Vec<(u64, super::bound::EdgeBind)>,
     pub faces: Vec<(u64, super::bound::Support)>,
 }
@@ -235,7 +235,7 @@ pub(crate) fn encode(
                     .ok_or_else(|| bad("missing origin"))?;
                 Ok(eid::pack(origin as u32, eid::counter(id)))
             };
-            for id in rows.split_runs.iter_mut().flatten() { *id = file_id(*id)?; }
+            for id in rows.split_runs.iter_mut().flat_map(|(ids, _)| ids.iter_mut()) { *id = file_id(*id)?; }
             for r in &mut rows.edges {
                 r.0 = file_id(r.0)?;
             }
@@ -721,7 +721,7 @@ pub(crate) fn curved_rows(arrays: &Obj<'_>, table: &PlaneTable, map: Option<&[u3
         }
     };
     let mut split_runs = rows.split_runs.clone();
-    for id in split_runs.iter_mut().flatten() { *id = remap(*id)?; }
+    for id in split_runs.iter_mut().flat_map(|(ids, _)| ids.iter_mut()) { *id = remap(*id)?; }
     Ok(Some(CurvedRows {
         split_runs,
         edges: rows.edges.iter().map(|(id, b)| Ok((remap(*id)?, b.clone()))).collect::<PyResult<_>>()?,

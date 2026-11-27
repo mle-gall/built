@@ -61,31 +61,40 @@ pub(crate) fn chains<V: Copy + Eq + Hash>(ends: &[[V; 2]], breaks: &HashSet<V>) 
     result
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct CurveJunction {
+    pub tags: [i128; 2],
+    pub subdivision: bool,
+}
+
 impl Store {
     /// File ids survive group renumbering at import. Store the two edge
     /// references so an unrelated curve touching the same vertex can never
     /// acquire a sibling relationship.
-    pub(crate) fn split_run_ids(&self) -> Vec<[u64; 3]> {
+    pub(crate) fn split_run_ids(&self) -> Vec<([u64; 3], bool)> {
         let mut rows = Vec::new();
-        for (&key, tags) in self.state.split_runs.iter() {
+        for (&key, junction) in self.state.split_runs.iter() {
             let Some(v) = self.slot(Kind::Vertex, key) else {
                 continue;
             };
             let mut pair = self
                 .edges_at(v)
-                .filter(|&e| tags.contains(self.state.ecurve.get(e as usize)));
+                .filter(|&e| junction.tags.contains(self.state.ecurve.get(e as usize)));
             if let (Some(a), Some(b), None) = (pair.next(), pair.next(), pair.next()) {
                 let mut ends = [a, b].map(|e| self.pid(Kind::Edge, e));
                 ends.sort();
-                rows.push([self.pid(Kind::Vertex, v), ends[0], ends[1]]);
+                rows.push((
+                    [self.pid(Kind::Vertex, v), ends[0], ends[1]],
+                    junction.subdivision,
+                ));
             }
         }
         rows.sort();
         rows
     }
 
-    pub(crate) fn restore_split_runs(&mut self, rows: &[[u64; 3]]) {
-        for &[vertex, first, second] in rows {
+    pub(crate) fn restore_split_runs(&mut self, rows: &[([u64; 3], bool)]) {
+        for &([vertex, first, second], subdivision) in rows {
             let Some(v) = self.slot_of_pid(Kind::Vertex, vertex) else {
                 continue;
             };
@@ -106,7 +115,8 @@ impl Store {
             }
             tags.sort();
             let key = self.key(Kind::Vertex, v);
-            std::sync::Arc::make_mut(&mut self.state.split_runs).insert(key, tags);
+            std::sync::Arc::make_mut(&mut self.state.split_runs)
+                .insert(key, CurveJunction { tags, subdivision });
         }
     }
 
@@ -152,8 +162,8 @@ impl Store {
                 .collect();
             let chains = chains(&ends, &breaks);
             if !breaks.is_empty() {
-                // Remember only straight subdivisions. Original curve corners
-                // remain vertices when their attached branch is erased.
+                // A temporary subdivision can collapse; an authored corner
+                // rejoins the group while keeping its original vertex.
                 let splits: Vec<_> = breaks
                     .iter()
                     .filter_map(|&v| {
@@ -164,13 +174,14 @@ impl Store {
                         let p = self.def_point(v);
                         let u = self.def_point(self.other_end(a, v)) - p;
                         let w = self.def_point(self.other_end(b, v)) - p;
-                        (self
+                        let straight =
+                            u.dot(w) < 0. && u.cross(w).length() < 1e-8 * u.length() * w.length();
+                        let subdivision = self
                             .state
                             .split_runs
-                            .contains_key(&self.key(Kind::Vertex, v))
-                            || (u.dot(w) < 0.
-                                && u.cross(w).length() < 1e-8 * u.length() * w.length()))
-                        .then_some((v, a, b))
+                            .get(&self.key(Kind::Vertex, v))
+                            .map_or(straight, |prior| prior.subdivision);
+                        Some((v, a, b, subdivision))
                     })
                     .collect();
                 for (i, chain) in chains.into_iter().enumerate() {
@@ -185,11 +196,15 @@ impl Store {
                         self.set_edge_curve(edges[e], tag);
                     }
                 }
-                for (v, a, b) in splits {
+                for (v, a, b, subdivision) in splits {
                     let mut tags = [a, b].map(|e| *self.state.ecurve.get(e as usize));
                     tags.sort();
+                    if !subdivision && tags[0] == tags[1] {
+                        continue;
+                    }
                     let key = self.key(Kind::Vertex, v);
-                    std::sync::Arc::make_mut(&mut self.state.split_runs).insert(key, tags);
+                    std::sync::Arc::make_mut(&mut self.state.split_runs)
+                        .insert(key, CurveJunction { tags, subdivision });
                 }
             }
         }

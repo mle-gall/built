@@ -155,6 +155,7 @@ impl Store {
         loops: &[Vec<Point>],
         ends: &[[Point; 2]],
         h: Hypot,
+        protected: &HashSet<u128>,
     ) -> Result<Erasure, OpError> {
         let mut out = Erasure::default();
         if !loops.is_empty() {
@@ -208,7 +209,8 @@ impl Store {
             else {
                 continue;
             };
-            out.edges.push(self.key(Kind::Edge, e));
+            let edge_key = self.key(Kind::Edge, e);
+            out.edges.push(edge_key);
             let ends = *self.state.ends.get(e as usize);
             let faces = self.edge_faces(e).to_vec();
             if faces.len() == 2 && faces[0] == faces[1] {
@@ -222,6 +224,9 @@ impl Store {
             }
             if let Some(pair) = self.erase_pair(&faces, h) {
                 if let Some(merged) = self.erase_merge(pair, h, &mut out)? {
+                    if !protected.contains(&edge_key) {
+                        endpoints.extend(ends);
+                    }
                     dead.extend(pair);
                     self.index_erase_face(merged, &targets, &mut index);
                     if faces.len() > 2 {
@@ -237,8 +242,6 @@ impl Store {
                     continue;
                 }
             }
-            // A successfully dissolved coplanar seam is already simplified
-            // by the normal face-healing pass, in its original store order.
             endpoints.extend(ends);
             let [a, b] = ends;
             let key = segment(
@@ -279,6 +282,28 @@ impl Store {
         Ok(out)
     }
 
+    fn rejoin_curve(&mut self, key: u128, tags: [i128; 2]) {
+        if tags[0] != tags[1] {
+            for s in self.live_slots(Kind::Edge) {
+                if *self.state.ecurve.get(s as usize) == tags[1] {
+                    self.set_edge_curve(s, tags[0]);
+                }
+            }
+        }
+        let junctions = std::sync::Arc::make_mut(&mut self.state.split_runs);
+        junctions.remove(&key);
+        if tags[0] != tags[1] {
+            for j in junctions.values_mut() {
+                for tag in &mut j.tags {
+                    if *tag == tags[1] {
+                        *tag = tags[0];
+                    }
+                }
+                j.tags.sort();
+            }
+        }
+    }
+
     fn curve_corner_can_heal(&self, v: u32, e: u32, f: u32) -> bool {
         let faces = self.edge_faces(e);
         let other = self.edge_faces(f);
@@ -313,7 +338,13 @@ impl Store {
             let mut tags = [e, f].map(|s| *self.state.ecurve.get(s as usize));
             tags.sort();
             let vk = self.key(Kind::Vertex, v);
-            let split = self.state.split_runs.get(&vk) == Some(&tags);
+            let junction = self
+                .state
+                .split_runs
+                .get(&vk)
+                .filter(|j| j.tags == tags)
+                .copied();
+            let split = junction.is_some();
             if tags[0] != tags[1] && !split {
                 continue;
             }
@@ -329,6 +360,10 @@ impl Store {
             let straight = u.dot(w) < 0.
                 && u.cross(w).length()
                     <= crate::exact::bound::tolerance(p.abs().max_element()) * (u - w).length();
+            if junction.is_some_and(|j| !j.subdivision) && !straight {
+                self.rejoin_curve(vk, tags);
+                continue;
+            }
             if straight {
                 if !self.collapsible(v, h) {
                     continue;
@@ -381,15 +416,8 @@ impl Store {
             if let Some(curve) = curve {
                 let _ = self.bind_circle(&[joined], curve);
             }
-            if tags[0] != tags[1] {
-                for s in self.live_slots(Kind::Edge) {
-                    if *self.state.ecurve.get(s as usize) == tags[1] {
-                        self.set_edge_curve(s, tags[0]);
-                    }
-                }
-            }
-            if self.state.split_runs.contains_key(&vk) {
-                std::sync::Arc::make_mut(&mut self.state.split_runs).remove(&vk);
+            if split {
+                self.rejoin_curve(vk, tags);
             }
             self.finish(change);
         }

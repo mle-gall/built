@@ -675,3 +675,42 @@ def test_welding_a_non_circular_chain_drops_partial_circle_bindings():
     assert not curves(scene)
     hist.undo()
     assert bindings(scene) == previous
+
+
+@pytest.mark.parametrize("different_paint", [False, True])
+def test_erasing_coplanar_seam_preserves_material_boundary_corners(different_paint):
+    from built_core import Vec3
+    scene, hist = doc()
+    mesh = scene.mesh
+    for left, right in ((0, 2), (2, 3)):
+        mesh.add_face([Vec3(left, 0, 0), Vec3(right, 0, 0), Vec3(right, 2, 0), Vec3(left, 2, 0)])
+    if different_paint:
+        mesh.faces[0].attrs["color"] = [1., 0., 0.]
+    seam = next(e for e in mesh.edges if len(e.faces) == 2)
+    longer = next(e for e in mesh.edges if e.a.y() == e.b.y() == 0 and abs(e.a.x()-e.b.x()) == 2)
+    pid = mesh._store.id_of("edge", longer.key)
+    run(hist, "erase", edges=[seam.key])
+    assert len(mesh.faces) == 1
+    assert len(mesh.faces[0].vertices) == (6 if different_paint else 4)
+    assert any(mesh._store.id_of("edge", e.key) == pid for e in mesh.edges)
+    hist.undo()
+    assert len(mesh.faces) == 2
+
+
+def test_erasing_branch_at_authored_arc_corner_rejoins_group_and_keeps_vertex(tmp_path):
+    from formats import igz
+
+    scene, hist = doc()
+    points = ring(n=12)[:5]
+    run(hist, "add_arc", points=points)
+    run(hist, "add_edge", a=points[2], b=[0, 0, 0])
+    assert len({e.curve for e in scene.mesh.edges if e.curve is not None}) == 2
+    path = tmp_path / "original-corner.built"
+    igz.save_scene(scene, path)
+    reopened, history = doc()
+    igz.load_into(reopened, path)
+    branch = next(e for e in reopened.mesh.edges if e.curve is None)
+    run(history, "erase", edges=[branch.key])
+    assert len(reopened.mesh.vertices) == 5
+    assert len(curves(reopened)) == 4
+    assert len({e.curve for e in reopened.mesh.edges}) == 1

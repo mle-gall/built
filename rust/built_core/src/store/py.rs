@@ -3076,13 +3076,15 @@ impl PyMeshStore {
             .map(|r| (r.seams, r.healed_faces, r.orphan_vertices, r.dirty)))
     }
 
-    fn erase_selection(&mut self, loops: Vec<Vec<[f64;3]>>, ends: Vec<[[f64;3];2]>, hypot: &str)
+    #[pyo3(signature=(loops, ends, hypot, protected=None))]
+    fn erase_selection(&mut self, loops: Vec<Vec<[f64;3]>>, ends: Vec<[[f64;3];2]>, hypot: &str, protected: Option<Vec<u128>>)
         -> PyResult<Option<(usize, Vec<u128>, Vec<u128>, Vec<(u128,Vec<u128>,bool)>, Vec<super::erase::Plane>, Vec<u128>)>> {
         let h = crate::hypot_of(hypot)?;
         // Publish only a representable edit. The object fallback must see the
         // original incidence, revision and key allocator.
         let mut work = self.inner.clone();
-        match work.erase_selection(&loops,&ends,h) {
+        let protected = protected.unwrap_or_default().into_iter().collect();
+        match work.erase_selection(&loops,&ends,h,&protected) {
             Ok(out) => {
                 self.inner = work;
                 Ok(Some((out.dirty,out.edges,out.faces,out.merges,out.slits,out.across)))
