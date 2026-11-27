@@ -51,7 +51,11 @@ def test_records_provenance_patch_undo(host):
     for i, g in enumerate((a, b)):
         assert g.ifc["psets"]["Survey"]["Inspected"]["value"] is True
         assert g.ifc["psets"]["Survey"]["Count"]["value"] == i + 1
-    assert a.ifc["guid"] != b.ifc["guid"]
+    # Existing records keep the GlobalIds their uid paths derive
+    # (docs/persistent-ids.md §7.1): distinct per placement, none stored.
+    from core.ifc_identity import component_guid
+    assert "guid" not in a.ifc and "guid" not in b.ifc
+    assert component_guid(s, a.uid) != component_guid(s, b.uid)
     commands.undo(vp.history)
     assert [a.ifc, b.ifc] == before
     with pytest.raises(ValueError):
