@@ -14,6 +14,7 @@ pub mod assemble;
 mod chunk;
 pub mod pack;
 pub(crate) mod plain_edit;
+mod rich_edit;
 pub mod packed_scene;
 pub mod sources;
 pub mod updates;

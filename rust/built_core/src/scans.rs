@@ -114,6 +114,7 @@ pub struct MeshScan {
     ebox: Option<Vec<Box6>>,
     fplane: Option<Vec<Plane>>,
     graph: Option<crate::store::drawing::DrawingGraph>,
+    frame_vertices: Option<crate::store::drawing::FrameVertices>,
     ecells: Option<FxHashMap<(i64, i64, i64), Vec<u32>>>,
 }
 
@@ -150,6 +151,7 @@ impl MeshScan {
             fplane: None,
             ecells: None,
             graph: None,
+            frame_vertices: None,
         }
     }
 
@@ -169,6 +171,10 @@ impl MeshScan {
 
     pub(crate) fn edge_ends(&self, e: usize) -> [u32; 2] {
         self.ends[e]
+    }
+
+    pub(crate) fn vertex_slot_indices(&self) -> &[u32] {
+        &self.vdense
     }
 
     pub(crate) fn positions(&self) -> &[[f64; 3]] {
@@ -802,6 +808,13 @@ impl MeshScan {
         // revision's scan can carry it over (`refreshed`).
         let backed = self.state.is_some();
         let id = |i: usize, live: &[u32]| if backed { live[i] as usize } else { i };
+        let dead = removed.into_iter().filter(|&i| i < self.ends.len()).map(|i| id(i, &self.live[1])).collect();
+        if let Some(st) = self.state.as_ref().filter(|st| {
+            st.frame.origin != [0.; 3] && self.ends.len() >= 32768 && self.n_listed == self.pos.len()
+        }) {
+            let vertices = self.frame_vertices.get_or_insert_with(|| crate::store::drawing::FrameVertices::new(st));
+            return Ok(vertices.cycles(st, a, b, dead, extra, limit, both));
+        }
         let graph = self.graph.get_or_insert_with(|| {
             let mut graph = crate::store::drawing::DrawingGraph::default();
             for (i, ends) in self.ends.iter().enumerate() {
@@ -809,7 +822,6 @@ impl MeshScan {
             }
             graph
         });
-        let dead = removed.into_iter().filter(|&i| i < self.ends.len()).map(|i| id(i, &self.live[1])).collect();
         Ok(graph.cycles(a, b, dead, extra, limit, both))
     }
 

@@ -438,6 +438,7 @@ fn patch_store<'p>(
             && p.anchor == origin
             && p.faces == count / 3
             && p.edges == slots.len()
+            && st.eflags.iter().all(|&flag|flag & mask==0)
             && st.ecurve.iter().all(|&v| v < 0)
     });
     let source = patch.map(|p| p.after);

@@ -21,6 +21,8 @@ type FxHashSet<T> = std::collections::HashSet<T, super::cow::FxBuild>;
 use std::sync::Arc;
 
 pub struct FaceIndex {
+    pub(super) orientation: Arc<std::sync::OnceLock<Option<super::push_orientation::OrientationCache>>>,
+    pub(super) cap: Arc<std::sync::OnceLock<super::cap_blocks::CapBlocks>>,
     revision: u64,
     lineage: u64,
     /// The last state the tree was brought to: the next refresh diffs
@@ -123,6 +125,19 @@ pub enum Query {
 }
 
 impl FaceIndex {
+    /// The next raised neighbour needs component labels and orientation,
+    /// even if the first extrusion on a flat sheet needed neither.
+    pub(super) fn prepare_push(&self, store: &Store, h: super::geometry::Hypot, compensated: bool) {
+        if store.lineage != self.lineage || store.state.ns != self.last.ns {
+            return;
+        }
+        self.cap.get_or_init(|| super::cap_blocks::CapBlocks::new(store));
+        self.orientation.get_or_init(|| {
+            let scan = crate::scans::MeshScan::from_state(store.state.clone(), crate::scans::RINGS);
+            super::push_orientation::OrientationCache::new(store, &scan, &store.live_slots(Kind::Face), h, compensated)
+        });
+    }
+
     pub fn build(store: &Store) -> Self {
         let st = &store.state;
         let slots = store.live_slots(Kind::Face);
@@ -153,6 +168,8 @@ impl FaceIndex {
             (slots, Vec::new())
         };
         FaceIndex {
+            orientation: Default::default(),
+            cap: Default::default(),
             revision: store.revision,
             lineage: store.lineage,
             last: st.clone(),
@@ -233,6 +250,8 @@ impl FaceIndex {
         let mut extra: Vec<u32> = touched.iter().copied().filter(|&f| faces.alive(f)).collect();
         extra.sort_unstable();
         Arc::new(FaceIndex {
+            orientation: self.orientation.clone(),
+            cap: self.cap.clone(),
             revision: store.revision,
             lineage: store.lineage,
             last: st.clone(),

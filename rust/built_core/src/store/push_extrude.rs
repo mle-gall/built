@@ -172,7 +172,7 @@ impl Store {
             DVec3::from_array(drag_normal.unwrap_or_else(|| point(self.face_normal(face, h))));
         let closed = self.push_closed();
         if closed && !oriented {
-            let flips = self.orient_push_faces(&faces, Some(&[idx]), h, compensated);
+            let flips = self.orient_push_faces(&faces, Some(&[idx]), h, compensated, index.map(|i| i.as_ref()));
             result.turn_paint(self, paint, flips, swapped);
         }
         let normal = DVec3::from_array(point(self.face_normal(face, h)));
@@ -188,7 +188,7 @@ impl Store {
             None
         };
         if was_solid && !closed && !oriented {
-            let flips = self.orient_push_faces(&faces, Some(&[idx]), h, compensated);
+            let flips = self.orient_push_faces(&faces, Some(&[idx]), h, compensated, index.as_deref());
             result.turn_paint(self, paint, flips, swapped);
         }
         let original = paint.class(self, face);
@@ -264,7 +264,8 @@ impl Store {
         if class != 0 {
             result.give(paint, shell.cap, class);
         }
-        let fresh: HashSet<_> = self.state.changes_since(&before).created[2].iter().copied().collect();
+        let fresh: HashSet<_> = self.state.changed_face_slots(&before, false).into_iter()
+            .map(|slot| self.key(Kind::Face, slot)).collect();
         // Preserve Python set iteration order for the solid rebuild. The
         // sheet dissolve only tests membership in its fresh-face set.
         let solid = backed && was_solid;
@@ -290,7 +291,7 @@ impl Store {
             result.dedupe(self, paint, d, k);
         }
         if let Some(keys) = rebuild_keys {
-            let rebuilt = self.rebuild_push_planes(
+            let rebuilt = self.rebuild_push_indexed(
                 keys,
                 &seeds,
                 keep,
@@ -299,6 +300,7 @@ impl Store {
                 compensated,
                 h,
                 ch,
+                index.clone(),
             )?;
             result.bumps += rebuilt.bumps;
             result.painted.extend(rebuilt.painted);
@@ -322,7 +324,7 @@ impl Store {
                         .is_some_and(|f| self.push_component_closed(f))
                 };
             if orient {
-                result.flipped = self.orient_push(&seed_set, h, compensated);
+                result.flipped = self.orient_push_indexed(&seed_set, h, compensated, index.as_deref());
             }
         }
         Ok(result)

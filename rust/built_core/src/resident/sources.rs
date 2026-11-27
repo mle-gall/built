@@ -63,7 +63,7 @@ fn owned<A: Clone, D: Dimension>(view: ArrayView<'_, A, D>) -> Array<A, D> {
 /// keeps them (f32 for a file's own arrays, f64 for an edited mesh or one
 /// moved to another frame): the face mapping is resolved per distinct
 /// normal, so the last bit decides which faces share one.
-enum Points {
+pub(super) enum Points {
     Single(Array2<f32>),
     Double(Array2<f64>),
 }
@@ -192,7 +192,7 @@ fn integers(array: &Obj<'_>) -> PyResult<Vec<i64>> {
 /// Use the GL mapping and side resolution, before triangulation splits
 /// corners: `(maps, paints)` per face.
 #[allow(clippy::too_many_arguments)]
-fn material_columns<'py>(
+pub(super) fn material_columns<'py>(
     py: Python<'py>,
     points: &Points,
     corners: &[i64],
@@ -320,6 +320,34 @@ fn material_columns<'py>(
         maps.row_mut(*face).iter_mut().zip(row).for_each(|(slot, v)| *slot = v);
     }
     Ok((maps.into_pyarray(py).into_any(), paints))
+}
+
+pub(super) fn palette(rows: &[Obj<'_>]) -> PyResult<(Array2<u8>, Vec<bool>)> {
+    let mut palette = Array2::<u8>::from_elem((rows.len(), 4), 210);
+    let mut hidden_rows = vec![false; rows.len()];
+    for (k, own) in rows.iter().enumerate() {
+        palette[[k, 3]] = 0;
+        hidden_rows[k] = own.call_method1("get", ("hidden",))?.is_truthy()?;
+        let color = value(own, "color")?;
+        if let Some(color) = &color {
+            let rgb = rgb_bytes(color)?;
+            for axis in 0..3 {
+                palette[[k, axis]] = rgb[axis];
+            }
+            palette[[k, 3]] = alpha(own)?;
+        }
+        // Texture-only and opacity-only faces also need a nonzero opacity byte.
+        let pbr = present(own, "pbr")?;
+        if pbr && color.is_none() {
+            for axis in 0..3 {
+                palette[[k, axis]] = 255;
+            }
+        }
+        if own.call_method1("get", ("texture",))?.is_truthy()? || present(own, "opacity")? || pbr {
+            palette[[k, 3]] = alpha(own)?;
+        }
+    }
+    Ok((palette, hidden_rows))
 }
 
 /// The bake's eleven arrays for one prototype (`mesh` drawn under `paint`):
@@ -545,30 +573,7 @@ fn source_arrays<'py>(
     for own in table.try_iter()? {
         rows.push(effective(own?)?);
     }
-    let mut palette = Array2::<u8>::from_elem((rows.len(), 4), 210);
-    let mut hidden_rows = vec![false; rows.len()];
-    for (k, own) in rows.iter().enumerate() {
-        palette[[k, 3]] = 0;
-        hidden_rows[k] = own.call_method1("get", ("hidden",))?.is_truthy()?;
-        let color = value(own, "color")?;
-        if let Some(color) = &color {
-            let rgb = rgb_bytes(color)?;
-            for axis in 0..3 {
-                palette[[k, axis]] = rgb[axis];
-            }
-            palette[[k, 3]] = alpha(own)?;
-        }
-        // Texture-only and opacity-only faces also need a nonzero opacity byte.
-        let pbr = present(own, "pbr")?;
-        if pbr && color.is_none() {
-            for axis in 0..3 {
-                palette[[k, axis]] = 255;
-            }
-        }
-        if own.call_method1("get", ("texture",))?.is_truthy()? || present(own, "opacity")? || pbr {
-            palette[[k, 3]] = alpha(own)?;
-        }
-    }
+    let (palette, hidden_rows) = palette(&rows)?;
     let attributes: Vec<i64> = attr.iter().map(|a| a + 1).collect();
     if attributes.iter().any(|a| *a < 0 || *a as usize >= rows.len()) {
         return Err(PyValueError::new_err("face attribute out of range"));

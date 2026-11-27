@@ -155,7 +155,7 @@ pub(crate) struct Writes {
 }
 
 impl Writes {
-    fn from_runs(old: &[u8], new: &[u8], runs: &[(usize,usize,usize)], stride: usize) -> Self {
+    pub(crate) fn from_runs(old: &[u8], new: &[u8], runs: &[(usize,usize,usize)], stride: usize) -> Self {
         let mut plan = Self::default();
         let mut at = 0;
         for &(o, n, len) in runs {
@@ -185,6 +185,10 @@ impl Memo {
     fn find(&self, w: &Words) -> Option<&Entry> {
         let s = &self.shards[shard_of(w, self.shards.len())];
         s.lookup.get(w).map(|&at| &s.entries[at as usize])
+    }
+
+    pub(crate) fn has_hard_edge(&self, key: &[u8; 24]) -> bool {
+        self.find(&words(key)).is_some_and(|entry| entry.hard != 0)
     }
 
     fn entry(&mut self, k: &[u8; 24]) -> &mut Entry {

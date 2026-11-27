@@ -81,6 +81,16 @@ impl Store {
         h: Hypot,
         compensated: bool,
     ) -> Vec<u128> {
+        self.orient_push_indexed(seeds, h, compensated, None)
+    }
+
+    pub(super) fn orient_push_indexed(
+        &mut self,
+        seeds: &HashSet<Cell>,
+        h: Hypot,
+        compensated: bool,
+        index: Option<&super::face_index::FaceIndex>,
+    ) -> Vec<u128> {
         let faces = self.live_slots(Kind::Face);
         let vertices = self.push_seed_vertices(seeds);
         let touched: Vec<_> = faces
@@ -89,7 +99,7 @@ impl Store {
             .filter_map(|(i, &f)| self.touches_push_vertex(f, &vertices).then_some(i as u32))
             .collect();
         let scope = (!touched.is_empty()).then_some(touched.as_slice());
-        self.orient_push_faces(&faces, scope, h, compensated)
+        self.orient_push_faces(&faces, scope, h, compensated, index)
     }
 
     pub(super) fn orient_push_faces(
@@ -98,15 +108,26 @@ impl Store {
         scope: Option<&[u32]>,
         h: Hypot,
         compensated: bool,
+        index: Option<&super::face_index::FaceIndex>,
     ) -> Vec<u128> {
         let scan = MeshScan::from_state(self.state.clone(), RINGS | EFACES | FFLAGS);
-        let geom = Geom::of(&scan, h, compensated);
+        let cached = index
+            .and_then(|index| {
+                index
+                    .orientation
+                    .get_or_init(|| super::push_orientation::OrientationCache::new(self, &scan, faces, h, compensated))
+                    .as_ref()
+            })
+            .and_then(|cache| cache.geometry(self, &scan, faces, h, compensated));
         let params = Params {
             seed: 12345,
             rays: 7,
             jitter: 3e-4,
         };
-        let decision = orient(&scan, &geom, scope, &params);
+        let decision = match cached {
+            Some((geom, probes)) => crate::orient::orient_with_probes(&scan, &geom, scope, &params, Some(probes)),
+            None => orient(&scan, &Geom::of(&scan, h, compensated), scope, &params),
+        };
         let marks: Vec<_> = decision
             .marks
             .into_iter()
