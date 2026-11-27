@@ -748,6 +748,7 @@ fn command_action<'py>(a: &Args<'py>) -> Reply<'py> {
                         let machine=tool.getattr("_machine")?;
                         if let Ok(preset)=action.get_item("preset"){
                             machine.call_method1("set",("preset",preset))?;
+                            py.import("built_render.wgpu_library")?.call_method1("_remember",(&view,action.get_item("key")?))?;
                         }else if let Ok(sketch)=action.get_item("sketch"){
                             machine.call_method1("set",("sketch",sketch))?;
                         }else{
@@ -779,6 +780,8 @@ pub(super) fn command_query<'py>(a: &Args<'py>) -> Reply<'py> {
         let needle=query.extract::<String>()?.to_lowercase();
         let (actions, results)=(empty(py), empty(py));
         let presets=py.import("built_render.wgpu_library")?.getattr("PresetsProvider")?.call0()?;
+        let recent:Vec<String>=py.import("built_render.wgpu_library")?.call_method1("_state",(&view,))?.get_item("recent")?.extract()?;
+        let mut matches=Vec::new();
         for entry in presets.call_method1("items",(&ctx,))?.try_iter()?{
             let entry=entry?;
             let p=entry.get_item("preset")?;
@@ -789,9 +792,17 @@ pub(super) fn command_query<'py>(a: &Args<'py>) -> Reply<'py> {
             let profile=p.get_item("values")?.get_item("profile")?.call_method1("get",("library","Drawn profile"))?.str()?.to_string();
             let detail=format!("{} · {} · {}",profile,record.call_method1("get",("material",""))?.str()?,record.call_method1("get",("class",""))?.str()?);
             if format!("{name} {pack} {detail}").to_lowercase().contains(&needle){
-                results.append((name,pack,detail,true))?;
-                actions.append(entry)?;
+                let id:String=p.get_item("uid")?.extract()?;
+                let source:String=entry.get_item("source")?.extract()?;
+                let at=recent.iter().position(|r|r==&id);
+                let group=if at.is_some(){"Recent".to_string()}else{match source.as_str(){"model"=>"This project".into(),"mine"=>"My presets".into(),_=>pack}};
+                matches.push((at.unwrap_or(usize::MAX),group,name,detail,entry));
             }
+        }
+        matches.sort_by(|a,b|(&a.0,&a.1,&a.2).cmp(&(&b.0,&b.1,&b.2)));
+        for (_,group,name,detail,entry) in matches{
+            results.append((name,group,detail,true))?;
+            actions.append(entry)?;
         }
         for profile in provider.call_method1("items",(ctx,))?.try_iter()?{
             let profile=profile?;

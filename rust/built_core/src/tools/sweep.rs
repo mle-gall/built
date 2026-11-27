@@ -273,12 +273,13 @@ impl Tool for SweepTool {
                 self.edit = None;
                 self.rotation = fields["rotation"].as_f64().unwrap_or(0.);
                 self.mirror = fields["mirror"] == true;
-                self.attachment = ATTACH
+                let index = ATTACH
                     .iter()
                     .map(|a| a.0)
                     .chain(self.extra_attachments())
                     .position(|s| fields["attachment"] == s)
                     .unwrap_or(0);
+                self.attachment = index;
                 self.chosen = Some(value.clone());
             }
             "edit" => {

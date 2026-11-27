@@ -111,7 +111,7 @@ impl Ui {
                             .show(ui, |ui| {
                                 if self.cmd_results.is_empty() && !self.cmd_query.is_empty() {
                                     ui.label(
-                                        egui::RichText::new("No command matches")
+                                        egui::RichText::new(if self.cmd_scope=="Sweep presets" {"No matching presets or profiles"}else{"No command matches"})
                                             .font(body())
                                             .color(FAINT),
                                     );
@@ -126,10 +126,12 @@ impl Ui {
                                     } else {
                                         label.clone()
                                     };
+                                    let preset=self.cmd_scope=="Sweep presets";
+                                    if preset && (i==0 || self.cmd_results[i-1].1!=*path){kit::caption(ui,path);}
                                     let row = command_row(
                                         ui,
                                         &text,
-                                        path,
+                                        if preset {""}else{path},
                                         key,
                                         *enabled,
                                         self.cmd_at == i,

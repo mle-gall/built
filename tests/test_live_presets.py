@@ -82,3 +82,42 @@ def test_future_primitive_slots_and_unused_preset_save(tmp_path):
     apply(h, "preset_delete", uid=rows[0]["uid"])
     apply(h, "undo")
     assert len([p for p, src in live.preset_catalog(scene) if src == "model"]) == 2
+
+
+def test_capture_values_feed_tool_and_active_node_default():
+    from built_core import ToolMachine
+    from core import bim_registry
+    from tests.test_structure import model
+
+    scene, registry, *_ = model()
+    registry["structure"]["active"] = "ref"
+    scene.plugin_data["bim_registry"] = registry
+    history = History(scene)
+    p = steel()
+    tool = ToolMachine("sweep")
+    assert tool.set("preset", p)
+    apply(history, "create_sweeps", sweeps=[dict(preset_uid=p["uid"], path={"points": [[0, 0, 0], [3, 0, 0]]})])
+    assert bim_registry.get(scene)["structure"]["nodes"]["ref"]["recipe"]["default_preset"] == p["uid"]
+    apply(history, "undo")
+    assert "default_preset" not in bim_registry.get(scene)["structure"]["nodes"]["ref"]["recipe"]
+
+
+def test_library_browse_and_duplicate(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from built_render.wgpu_library import PresetsProvider
+
+    monkeypatch.setenv("BUILT_SETTINGS_DIR", str(tmp_path))
+    scene = Scene()
+    history = History(scene)
+    ctx = SimpleNamespace(scene=scene, core=lambda key, **kw: commands.run(history, key, **kw),
+                          vp=SimpleNamespace(notify_scene_changed=lambda: None))
+    provider = PresetsProvider()
+    all_items = provider.items(ctx)
+    assert {e["category"] for e in all_items} >= {"MEP", "Architecture", "Steel AISC", "Timber C16/C24"}
+    pipe = next(e for e in all_items if e["name"] == "Pipe")
+    assert pipe["preset"]["record"]["class"] == "IfcPipeSegment"
+    provider.run(ctx, "duplicate", pipe)
+    copy, = [p for p in provider.items(ctx) if p["source"] == "model"]
+    assert copy["key"] != pipe["key"] and copy["name"] == "Pipe copy"
+    provider.confirmed(ctx, "delete", copy["key"], "")
+    assert not [p for p in provider.items(ctx) if p["source"] == "model"]
