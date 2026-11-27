@@ -478,3 +478,12 @@ def test_planar_pcurve_with_wrong_radius_is_rejected(tmp_path):
     broken.write_text(text.replace(authored, "#49 = CIRCLE('',#50,4.);"))
     with pytest.raises(ValueError, match="planar conic pcurve disagrees"):
         step.prepare_step(broken)
+
+
+def test_background_open_and_insert_keep_source_recovery_counts():
+    from built_core import DocumentOpen
+
+    path = Path(__file__).parent / "data" / "skp_arcs_2021.skp"
+    command = DocumentOpen(path, insert=True).wait()
+    _, _, history, _ = DocumentOpen(path).wait()
+    assert command._skp_recovery_counts == history._skp_recovery_counts == (48, 0)

@@ -91,6 +91,17 @@ impl Progress {
     }
 }
 
+/// The worker discards its parser payload before handing the document to the UI.
+fn attach_recovery_counts(owner: &Bound<'_, PyAny>, payload: &Bound<'_, PyDict>) -> PyResult<()> {
+    if let (Some(arcs), Some(faces)) = (
+        payload.get_item("exact_arc_edges")?,
+        payload.get_item("exact_strip_faces")?,
+    ) {
+        owner.setattr("_skp_recovery_counts", (arcs, faces))?;
+    }
+    Ok(())
+}
+
 /// Stage the import undo step on the worker as well as its geometry. Redo
 /// restores the built objects, so the command can release all parser inputs.
 fn read_skp<'py>(
@@ -116,6 +127,7 @@ fn read_skp<'py>(
         args.get_item("progress")?.as_ref(),
         None,
     )?;
+    attach_recovery_counts(&history, payload.cast::<PyDict>()?)?;
     before.apply(scene)?;
     let command = Py::new(
         py,
@@ -154,11 +166,9 @@ fn prepare(
             .get_item("empty")?
             .is_some_and(|v| v.is_truthy().unwrap_or(false));
         crate::skp::skp_apply(&scene, &payload, args.get_item("progress")?.as_ref(), None)?;
-        return Ok(Py::new(
-            py,
-            crate::skp::SkpInsertion::stage(&scene, &payload, empty)?,
-        )?
-        .into_any());
+        let command = Py::new(py, crate::skp::SkpInsertion::stage(&scene, &payload, empty)?)?;
+        attach_recovery_counts(command.bind(py).as_any(), &payload)?;
+        return Ok(command.into_any());
     }
     let source = path.extract::<std::path::PathBuf>(py)?;
     let skp = if source

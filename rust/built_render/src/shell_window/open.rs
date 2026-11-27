@@ -286,22 +286,14 @@ fn start(win: &Obj, path: &Obj, install: &Obj, target: Option<&Obj>) -> PyResult
     }
     Ok(true)
 }
-fn finish_import(win: &Obj, path: &Obj, empty: bool) -> PyResult<bool> {
+fn finish_import(win: &Obj, path: &Obj, empty: bool, result: &Obj) -> PyResult<bool> {
     win.call_method0("_refresh_scene_tabs")?;
     win.call_method0("_update_title")?;
     win.getattr("viewport")?.call_method0("update")?;
-    let text = if empty {
-        "{name} has no geometry — nothing to import."
-    } else {
-        "Imported {name}"
-    };
-    win.call_method0("statusBar")?.call_method1(
-        "showMessage",
-        (
-            trf(win.py(), text, &[("name", path.getattr("name")?)])?,
-            if empty { 8000 } else { 3000 },
-        ),
-    )?;
+    let counts = result.getattr_opt("_skp_recovery_counts")?
+        .map(|value| value.extract()).transpose()?;
+    let summary = crate::file_converters::skp_summary(&path.getattr("name")?, empty, counts)?;
+    win.call_method0("statusBar")?.call_method1("showMessage", summary)?;
     Ok(true)
 }
 #[pyfunction]
@@ -319,7 +311,7 @@ fn install_insertion(win: &Obj, path: &Obj, _bar: &Obj, command: &Obj) -> PyResu
     if !empty {
         win.call_method0("_on_zoom_extents")?;
     }
-    finish_import(win, path, empty)
+    finish_import(win, path, empty, command)
 }
 #[pyfunction]
 fn install_skp(win: &Obj, path: &Obj, bar: &Obj, staged: &Obj) -> PyResult<bool> {
@@ -337,7 +329,7 @@ fn install_skp(win: &Obj, path: &Obj, bar: &Obj, staged: &Obj) -> PyResult<bool>
         doc.setattr("_after_picture", PyList::empty(py))?;
     }
     history.setattr("max_steps", vp.getattr("history")?.getattr("max_steps")?)?;
-    vp.call_method1("set_document", (&scene, history))?;
+    vp.call_method1("set_document", (&scene, &history))?;
     win.setattr("_import_name", path.getattr("name")?)?;
     win.setattr("_autosaved_version", py.None())?;
     win.setattr("_saved_version", -1)?;
@@ -382,7 +374,7 @@ fn install_skp(win: &Obj, path: &Obj, bar: &Obj, staged: &Obj) -> PyResult<bool>
     {
         win.call_method0("_refresh_worksession")?;
     }
-    finish_import(win, path, empty)
+    finish_import(win, path, empty, &history)
 }
 pub(crate) fn register(parent: &Bound<PyModule>) -> PyResult<()> {
     let py = parent.py();

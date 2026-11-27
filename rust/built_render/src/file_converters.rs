@@ -84,6 +84,26 @@ fn import_dwg(win: &Bound<'_, PyAny>, path: &Bound<'_, PyAny>) -> PyResult<bool>
     imported
 }
 
+pub(crate) fn skp_summary(
+    name: &Bound<'_, PyAny>,
+    empty: bool,
+    counts: Option<(usize, usize)>,
+) -> PyResult<(String, u32)> {
+    let py = name.py();
+    let args = PyDict::new(py);
+    args.set_item("name", name)?;
+    let (message, duration) = if empty {
+        ("{name} has no geometry — nothing to import.", 8000)
+    } else if let Some((arcs, faces)) = counts {
+        args.set_item("arcs", arcs)?;
+        args.set_item("faces", faces)?;
+        ("Imported {name} · Circular edges: {arcs} · Recovered faces: {faces}", 8000)
+    } else {
+        ("Imported {name}", 3000)
+    };
+    Ok((translated(py, message, Some(&args))?.extract()?, duration))
+}
+
 #[pyfunction]
 fn import_skp(win: &Bound<'_, PyAny>, path: &Bound<'_, PyAny>) -> PyResult<bool> {
     let py = win.py();
@@ -151,22 +171,19 @@ fn import_skp(win: &Bound<'_, PyAny>, path: &Bound<'_, PyAny>) -> PyResult<bool>
             win.call_method1("_prepare_import_display", (cmd, &cb))?;
             bar.call_method0("close")?;
             win.getattr("viewport")?.call_method0("update")?;
-            win.setattr("_import_name", name)?;
+            win.setattr("_import_name", &name)?;
             win.call_method0("_update_title")?;
             let empty = payload.call_method1("get", ("empty",))?.is_truthy()?;
-            let (caption, ms) = if empty {
-                ("{name} has no geometry — nothing to import.", 8000)
-            } else {
+            if !empty {
                 win.call_method0("_on_zoom_extents")?;
-                let arcs=payload.call_method1("get",("exact_arc_edges",0))?.extract::<usize>()?;
-                if arcs>0{
-                    args.set_item("arcs",arcs)?;
-                    args.set_item("faces",payload.call_method1("get",("exact_strip_faces",0))?)?;
-                    ("Imported {name} · {arcs} circular edges, {faces} recovered faces",8000)
-                }else{("Imported {name}",3000)}
-            };
-            win.call_method0("statusBar")?
-                .call_method1("showMessage", (translated(py, caption, Some(&args))?, ms))?;
+            }
+            let payload = payload.cast::<PyDict>()?;
+            let counts = payload.get_item("exact_arc_edges")?
+                .zip(payload.get_item("exact_strip_faces")?)
+                .map(|(arcs, faces)| -> PyResult<_> { Ok((arcs.extract()?, faces.extract()?)) })
+                .transpose()?;
+            let summary = skp_summary(&name, empty, counts)?;
+            win.call_method0("statusBar")?.call_method1("showMessage", summary)?;
             return Ok(true);
         } else {
             dialogs.call_method1(
