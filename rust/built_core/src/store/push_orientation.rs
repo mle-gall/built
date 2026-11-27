@@ -92,13 +92,9 @@ impl OrientationCache {
         if self.h != h || self.compensated != compensated {
             return None;
         }
-        let change = store.state.changes_since(&self.state);
         let mut dirty = vec![false; store.state.slots[2].len()];
-        for key in change.created[2].iter().chain(&change.modified[2]) {
-            dirty[store.slot(Kind::Face, *key)? as usize] = true;
-        }
-        if !change.moved.is_empty() {
-            return None;
+        for f in store.state.changed_face_geometry(&self.state)? {
+            dirty[f as usize] = true;
         }
         let dense = store.state.order[0].dense_of_slot(&store.state.slots[0]);
         if scan.positions().len() != store.n(Kind::Vertex) {

@@ -55,8 +55,28 @@ impl<'py> AttrChanges<'py> {
         }
         let inverse = matrix.inverse();
         let minv = crate::math::Matrix4::from(inverse).into_pyobject(py)?;
-        let mut candidates = Vec::new();
+        // UVs travel only with faces whose every corner moved. Check the
+        // native rings before looking up Python paint rows. Most pointer
+        // moves carry a single vertex, even on a fully textured document.
+        let st = &store.inner.state;
+        let mut moved = vec![false; st.slots[Kind::Vertex as usize].len()];
+        for &key in moving {
+            if let Some(v) = store.inner.slot(Kind::Vertex, key) {
+                moved[v as usize] = true;
+            }
+        }
         for slot in store.inner.live_slots(Kind::Face) {
+            let face = st.frings.get(slot as usize);
+            let mut corner = face.corner_start as usize;
+            let carried = (0..face.n_rings).all(|r| {
+                let n = *st.ring_sizes.get((face.ring_start + r) as usize) as usize;
+                let start = corner;
+                corner += n;
+                (start..corner).all(|i| moved[*st.corners.get(i) as usize])
+            });
+            if !carried {
+                continue;
+            }
             let key = store.inner.key(Kind::Face, slot);
             let row = if let Some(own) = self.own.get_item(key)? {
                 own
@@ -67,11 +87,9 @@ impl<'py> AttrChanges<'py> {
                 }
                 self.table.get_item(index - 1)?
             };
-            if row.call_method1("get", ("texture",))?.is_truthy()? {
-                candidates.push(key);
+            if !row.call_method1("get", ("texture",))?.is_truthy()? {
+                continue;
             }
-        }
-        for key in store.carried_faces(candidates, moving.to_vec())? {
             let attrs = self.face(store, key)?;
             let tex = attrs.get_item("texture")?;
             let mut uvw = tex.call_method1("get", ("uvw",))?;
@@ -149,9 +167,7 @@ impl PyMeshStore {
         let mut folded = Vec::new();
         // This scan compares the actual post-rounding positions. If it succeeds,
         // no receiver exists and the general weld scan would repeat its work.
-        let free_move = delta
-            .filter(|_| !carry)
-            .and_then(|d| work.inner.move_unjoined_slots(&source, d));
+        let free_move = delta.and_then(|d| work.inner.move_unjoined_slots(&source, d));
         let may_join = delta.is_some() && free_move.is_none();
         let (mut dirty, moved, before) = if let Some(slots) = free_move {
             let keys = slots

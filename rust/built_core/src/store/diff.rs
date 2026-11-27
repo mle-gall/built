@@ -184,6 +184,42 @@ fn same_col<T: Clone>(a: &CowVec<T>, b: &CowVec<T>) -> bool {
     a.len() == b.len() && (0..a.n_chunks()).all(|c| a.same_chunk(b, c))
 }
 
+impl State {
+    /// Newly live face slots, and optionally faces with different ring
+    /// descriptors. Append-only ring pools make descriptor identity enough
+    /// once their common prefix has been checked.
+    pub(super) fn changed_face_slots(&self, before: &Self, rings: bool) -> Vec<u32> {
+        let (now, old) = (&self.slots[2], &before.slots[2]);
+        let mut changed = Vec::new();
+        for c in 0..now.len().div_ceil(CHUNK) {
+            if now.state.same_chunk(&old.state, c)
+                && (!rings || self.frings.same_chunk(&before.frings, c))
+            {
+                continue;
+            }
+            for i in c * CHUNK..((c + 1) * CHUNK).min(now.len()) {
+                let f = i as u32;
+                if now.alive(f) && (!old.alive(f) || now.gen(f) != old.gen(f)
+                    || (rings && self.frings.get(i) != before.frings.get(i)))
+                {
+                    changed.push(f);
+                }
+            }
+        }
+        changed
+    }
+
+    /// A geometry cache also needs unchanged coordinates and ring pools.
+    /// A coordinate edit takes the full geometry route.
+    pub(super) fn changed_face_geometry(&self, before: &Self) -> Option<Vec<u32>> {
+        (self.ns == before.ns && self.frame == before.frame
+            && same_prefix(&self.vpos, &before.vpos)
+            && same_prefix(&self.corners, &before.corners)
+            && same_prefix(&self.ring_sizes, &before.ring_sizes))
+            .then(|| self.changed_face_slots(before, true))
+    }
+}
+
 fn same_prefix<T: Clone + PartialEq>(a: &CowVec<T>, b: &CowVec<T>) -> bool {
     a.chunks().zip(b.chunks()).enumerate().all(|(i, (x, y))| {
         let n = x.len().min(y.len());

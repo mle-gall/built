@@ -409,15 +409,10 @@ impl Store {
         if cache.blocks.as_ref().is_none_or(|(token, _)| *token != cache.token) {
             let blocks = if let Some(i) = &cache.index {
                 let base = i.cap.get_or_init(|| super::cap_blocks::CapBlocks::new(self));
-                let mut b = base.faces.clone();
-                let delta = self.state.changes_since(&base.base);
-                b.extra = delta.created[2]
-                    .iter()
-                    .chain(&delta.modified[2])
-                    .filter_map(|&k| self.slot(Kind::Face, k))
-                    .collect();
-                if delta.moved.is_empty() {
-                    b
+                if let Some(extra) = self.state.changed_face_geometry(&base.base) {
+                    let mut blocks = base.faces.clone();
+                    blocks.extra = extra;
+                    blocks
                 } else {
                     FaceBlocks::new(self)
                 }
@@ -954,7 +949,8 @@ impl Store {
         const HASH_MODULUS: u128 = (1u128 << 61) - 1;
         if slots.live >> 2 <= old.live && slots.len() <= size && size <= super::keys::MAX_SLOTS as usize
             && first / HASH_MODULUS == last / HASH_MODULUS && before.ns == self.state.ns {
-            let [_, _, mut added] = self.state.changes_since(before).created;
+            let mut added: Vec<_> = self.state.changed_face_slots(before, false).into_iter()
+                .map(|slot| self.key(Kind::Face, slot)).collect();
             added.sort_unstable_by_key(|&key| crate::pyset::hash(key) & (size - 1));
             return PySet::from_keys(added);
         }
