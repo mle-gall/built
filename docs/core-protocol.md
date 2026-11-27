@@ -128,8 +128,10 @@ lists are the contract to build to):
 |---|---|---|
 | Placement (group, component instance, nested part) | `Group.uid` (a string) | saved with the document; a copy gets its own; linked parts derive theirs from the source |
 | Tag | `Layer.key` (names are labels) | saved |
-| Material | its name in `scene.materials` | saved; a rename is a remove plus a create until materials get keys as tags did |
+| Material | its name in `scene.materials`; persistent `uid` (`element_ids.material_uid`) | name saved, a rename is a remove plus a create in the feed; the uid is saved and kept across rename and edits |
 | Mesh | `"m<n>"`, given the first time the protocol names a mesh (`core.protocol.keys.mesh_key`) | this session. The loose model and each geometry definition have a key. An active native occurrence view uses its definition’s key. |
+| Definition | persistent uid, 16 hex (`element_ids.definition_uid`); the loose geometry is `0000000000000000` | saved in the geometry block (`docs/persistent-ids.md`); a copied mesh is a new definition |
+| Element (persistent) | text id `f:<origin hex>:<counter hex>` (`v:` / `e:` / `f:`) | saved; unique per definition and kind, never reused; follows the element across edits (`docs/persistent-ids.md` §4) |
 | Element | `(mesh key, element key)`. The element key is the int every `Vertex` / `Edge` / `Face` already carries | this session; unique across meshes in the process; kept across undo / redo, remove / relink and the store's restores; a deep copy is new elements with new keys |
 
 Element keys of a store-backed mesh encode `namespace << 40 | kind << 38 |
@@ -142,9 +144,12 @@ Mesh references accepted by queries (`resolve_mesh`): omitted or `"active"`
 (the open mesh), `"loose"`, a mesh key, a placement UID, or an occurrence UID path
 (the definition drawn by that placement).
 
-Never persisted: mesh keys and element keys (persisting element keys is
-`.igz` format 4, out of scope). A consumer that outlives the session keys
-by placement uid and positions.
+Never persisted: mesh keys and session element keys. A consumer that
+outlives the session names elements by persistent id: the element id
+within its definition, or with the placement uid path for one occurrence
+(`docs/persistent-ids.md` §3.1). Feed records carry both (§4.1); queries
+and commands accept either (`f:…` strings are ids); `resolve` turns ids
+back into keys.
 
 ## 3. Queries
 
@@ -164,6 +169,7 @@ an undo snapshot or materialises a store.
 | `selection` | — | `{mesh, placements: [uid], vertex, edge, face: [key]}` (elements of the open mesh) |
 | `select` | `faces?, edges?, vertices?: [key]`, `mode: replace \| add \| remove \| clear` | `selection` plus `missing`. Not a History step: selection is view state |
 | `feed` | `since_revision` | §4 as JSON |
+| `resolve` | `ids` (text ids), `mesh?` (also a definition uid) | `{mesh, definition, keys: {id: key or null}, missing}` |
 
 Planned: `faces_around(vertices)` (the store's, for the renderer's partial
 rebake), `faces_on_plane(point, normal)` and `face_at(ray)` (an agent naming
@@ -206,7 +212,16 @@ MeshChange
   modified     {vertex, edge, face: [key]}
   moved        [vertex key]
   revision     the store's revision after the step (None for Python)
+  definition   the mesh's persistent definition uid
+  ids          {vertex, edge, face: {key: element id}} for every key above
+  derived      [{kind, id, parent}]: new elements that came from a removed one
+  merged       [{kind, id, parent}]: removed elements another one took over
 ```
+
+`Step` also carries `document`, the document's persistent id. The ids of
+§4.1 are filled after the step's succession pass (`docs/persistent-ids.md`
+§4): a removed face's id may reappear on a created key (the larger half
+of a split), so a consumer that follows ids compares id sets, not keys.
 
 **Store-backed mesh: the store's change record.** Before the step the feed
 takes the mesh's `capture_state()` (the store snapshot, O(1), plus the

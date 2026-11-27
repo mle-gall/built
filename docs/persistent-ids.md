@@ -1,7 +1,8 @@
 # Persistent ids
 
-Status: **design, for review** (2026-11-27). Nothing here is implemented
-yet. Phase 2 implements it after review.
+Status: **approved 2026-11-27** with the §9 recommendations as written;
+**implemented** (Phase 2). §10 lists where the implementation differs from
+the text below and what is left for later.
 
 Today, only placements (`Group.uid`), tags, tag folders, sheets,
 deliveries and BCF topics keep an identity across sessions. Vertices,
@@ -540,3 +541,99 @@ Tasks write `ifc_guid: null` today (`built_render/src/tasks.rs`). New:
 | Q12 | Element ids for solid operation results? | **Fresh, with donor lineage.** Revisit if users pin faces of solids. |
 | Q13 | Annotations by uid, `erase_stroke` and other indices? | **Accept both**, uid preferred. Index arguments stay for existing scripts. |
 | Q14 | Phase 2 size | One lane. The store and file work carries the risk; protocol and exporters are small. Rule 1 hooks touch the drawing and push/pull files that BIGMESH does not own (BIGMESH works in the resident pack, the snap index and the panels). |
+
+## 10. Implementation notes (Phase 2)
+
+Code: `rust/built_core/src/element_ids.rs` (origins, minting, text form,
+definition and material uids), `store/ids.rs` (the id column),
+`store/succession.rs` (Rules 1 and 2), `file_ids.rs` (format 2 header,
+block ids, row uids), `doc/history/dispatch.rs` (succession after each
+step), `doc/feed/capture.rs` (feed ids). Tests:
+`tests/test_persistent_ids.py`, `tests/test_persistent_ids_perf.py`
+(perf-marked), Rust unit tests in those modules.
+
+Where the implementation differs from the text above:
+
+- **Succession runs after each History step**, on the open mesh (and the
+  undo/redo target), comparing the state before with the state after, not
+  inside each kernel op. It is a pure function of the two states, so a
+  redo that restores the step's state gets the same ids. Steps that edit
+  other meshes than the open one (Explode's source, a definition shared
+  back) rely on Rule 0 and on their own id handling (Explode's keep-if-free,
+  Make Group and Split into Pieces through the store's `extract`).
+- **Merge**: the *larger* original keeps its id (the text said "first in
+  mesh order"); split and merge then follow one rule, largest overlap
+  first.
+- **Pushing a lone face**: the kernel keeps the original face as the
+  bottom of the new box; succession hands its id to the moved top, as §4
+  says, and the bottom gets the top's fresh id (`derived`).
+- **Derived uids** (migration, linked definitions) are the first 16 hex of
+  SHA-256 of their name, not UUID5. Linked definitions are named after the
+  source document id and the source definition uid
+  (`built:link:v1:def:<doc id>:<uid>`): a linked mesh is shared by every
+  placement of that source, so it cannot carry a placement-scoped uid.
+  Occurrence references still go through the link wrapper's uid path.
+- **Section planes**: integer uids of older files are kept as they are
+  (unique and stable in their file; saved views and sheets refer to them);
+  new planes get 16-hex uids.
+- **Scenes in sheets**: frames keep `view_key: "scene:<name>"` (every
+  sheet consumer reads it) and gain `view_uid`; on load a frame whose
+  scene was renamed follows the uid.
+- **Row uids** are kept unique per table at save: a row duplicated with
+  its original's uid takes a new one there.
+- **glTF**: `built_def` sits in the node extras next to `built_uid` (the
+  link reads node extras).
+- **BCF**: the export writes `IfcGuid` on each component (the GlobalId the
+  IFC export writes, `core.ifc_identity.component_guid`); stored tasks keep
+  their `authoring_tool_id` as the placement uid, and the `built:<path>#id`
+  form is accepted when reading.
+- **IFC**: a record's stored `guid` still wins; otherwise the GlobalId is
+  `stable_guid(namespace, "occurrence", *uid path)`. The namespace is the
+  stored one or the document id, and the export no longer writes it.
+  Records created by the inspector still get a stored GUID at creation, as
+  before.
+
+Left for later (not needed by any consumer yet):
+
+- the operation log itself (§6.2): the feed carries everything it needs;
+- material uids in `Step.materials` (names only, as before);
+- a new document id on "Save a Copy" and template instances (both keep the
+  id today);
+- per-face ids in glTF (§7.3, Q11);
+- `ext` maps on rows other than placements and the document.
+
+## 11. Reserved for exact geometry
+
+Exact geometry is a separate design lane ([exact-geometry.md](exact-geometry.md),
+its §2 asks for this reservation): a face may carry an exact surface
+(plane, cylinder, cone, sphere, torus, NURBS) and an edge an exact curve
+(line, arc, ellipse, NURBS), kept through edits where possible. Format 2
+reserves its place so it needs no format 3:
+
+| Reserved | Where | Meaning when implemented |
+|---|---|---|
+| `built.exact_geometry.v1` | the `requires` list | Set by every file that carries exact data, so an older editor refuses it before it can drop bindings. Ordinary format-2 files omit it. |
+| `ext["built.exact_geometry"]` | the document's top-level `ext` map | Version, units, the immutable type-tagged geometry pools and their binary members. |
+| `face_surface_id` / `face_surface_ref` | geometry block arrays, paired | Sparse, sorted by packed face id (`<u8`): the faces bound to a surface, and each one's pool index (`<u4`). |
+| `edge_exact_curve_id` / `edge_exact_curve_ref` | geometry block arrays, paired | The same for edges and exact curves. |
+| `face_surface_*`, `edge_exact_curve_*`, `face_loop_*`, `coedge_*` | geometry block array name families | The sparse sense, edge interval, face loop range and coedge columns. |
+
+Bindings are keyed by packed element id within the block's definition,
+never by slot or position. A block without them is faceted: no bytes, no
+memory, no migration. The existing `edge_curve` column (segment groups) is
+unchanged.
+
+This build refuses a file that lists `built.exact_geometry.v1` in
+`requires`, carries the `ext` namespace, or has an array of a reserved
+family ("needs features this build of Built lacks"). Refusing rather than
+dropping means no exact data is ever lost by a build without the feature.
+
+In memory the store has `State.exact` (`store/exact.rs`): optional
+per-slot `face_surface` and `edge_exact_curve` pool indices, `None` for an
+all-faceted mesh. They are part of the snapshot, so undo, redo and
+restores carry them; a new slot starts faceted; and the succession pass
+(§4, Rule 1) gives the successor that inherits an id the binding of the
+element it came from (unit test
+`the_inheriting_half_also_inherits_an_exact_surface`). Pools, evaluators,
+the file arrays' reader and writer, and binding repair after a duplicate
+id are the exact-geometry lane's.
