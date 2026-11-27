@@ -1332,6 +1332,7 @@ impl Renderer {
         if reuse.is_none() && (s.edge_data.len()+slack[2]*48).next_power_of_two() > self.device.limits().max_storage_buffer_binding_size as usize {
             return Err(PyValueError::new_err("edge capacity exceeds storage binding limit"));
         }
+        let old_count_for_ranges = s.p as usize;
         if id == s.p as usize {
             if s.material_data.len() + 16 > self.device.limits().max_storage_buffer_binding_size as usize {
                 return Err(PyValueError::new_err("material headers exceed storage binding limit"));
@@ -1349,7 +1350,7 @@ impl Renderer {
             s.template_data.splice(old_p*20..old_p*20, [0;20]);
             s.template_data.extend_from_slice(&[0;20]);
         }
-        s.face_ranges = face_ranges(&s.material_data, s.p);
+        if id == old_count_for_ranges {s.face_ranges = face_ranges(&s.material_data, s.p);}
         s.material_shifts[id] = vertex_base as i64 + shifts[0];
         s.prototype_data[id*32..(id+1)*32].copy_from_slice(bounds);
         // Back in its own range after a patched expansion: only what moved
@@ -1892,6 +1893,13 @@ impl Renderer {
                 .collect();
             let offset = (s.p as usize + prototype) * 20;
             let command: [u32; 5] = bytemuck::pod_read_unaligned(&s.template_data[offset..offset + 20]);
+            // Canonical records already put profile candidates behind the hard
+            // edges. A soft source edge absent from the hard stream cannot
+            // move a record across this boundary.
+            if s.edge_memos.iter().any(|(id,m)| *id==prototype && !m.profiles_reordered
+                && command[4] as usize == m.hard*6 && keys.iter().all(|k| !m.has_hard_edge(k))) {
+                continue;
+            }
             let range = (command[2] / 6) as usize * 48..((command[2] + command[0]) / 6) as usize * 48;
             let records = &s.edge_data[range.clone()];
             let mut sorted = Vec::with_capacity(records.len());
@@ -2055,16 +2063,37 @@ impl Renderer {
         Ok(())
     }
     fn update_prototype_materials(&mut self, id: usize, data: PyReadonlyArray1<'_, u8>) -> PyResult<()> {
+        self.patch_prototype_materials(id, data, Vec::new(), false)
+    }
+
+    /// Runs of unchanged corner rows (old index, new index, count).
+    #[pyo3(signature = (id, data, runs, matching_back=false))]
+    fn patch_prototype_materials(&mut self, id: usize, data: PyReadonlyArray1<'_, u8>,
+        runs: Vec<(usize,usize,usize)>, matching_back: bool) -> PyResult<()> {
         self.sun.invalidate();
         let data = data.as_slice()?;
         let s = self.scene.as_mut().ok_or_else(|| PyValueError::new_err("no scene"))?;
-        if id >= s.p as usize || data.len()%32 != 0 { return Err(PyValueError::new_err("invalid material rows")); }
+        if id >= s.p as usize || data.len()%32 != 0 || (matching_back && !data.is_empty()) { return Err(PyValueError::new_err("invalid material rows")); }
         let limit = self.device.limits().max_storage_buffer_binding_size as usize;
         // The sparse table owns one disjoint run per prototype. Find a gap
         // among the other live runs so edits can reuse their old allocation.
         let at = material_room(&s.material_data, s.p as usize, id, data.len(), limit)
             .ok_or_else(|| PyValueError::new_err("material records exceed storage binding limit"))?;
-        let mut header = [0u32;4];
+        let old: [u32;4] = bytemuck::pod_read_unaligned(&s.material_data[id*16..(id+1)*16]);
+        let old_count=old[2] as usize;
+        let mut end=0;
+        for &(src,dst,n) in &runs {
+            if src.checked_add(n).is_none() || dst<end || dst.checked_add(n).is_none_or(|v|v>data.len()/32) {
+                return Err(PyValueError::new_err("invalid material copy range"));
+            }
+            end=dst+n;
+        }
+        let gpu=&self.textures.materials;
+        let plan=(!runs.is_empty() && !s.material_layout_dirty && old[1] as usize*16==at
+            && at+data.len()<=gpu.size() as usize && gpu.usage().contains(wgpu::BufferUsages::COPY_SRC)
+            && at+old_count*32<=s.material_data.len() && runs.iter().all(|&(src,_,n)|src+n<=old_count))
+            .then(||edge_memo::Writes::from_runs(&s.material_data[at..at+old_count*32],data,&runs,32));
+        let mut header = [0, 0, 0, u32::from(matching_back)];
         if !data.is_empty() {
             let face: Command = bytemuck::pod_read_unaligned(&s.template_data[id*20..id*20+20]);
             header = [face.base as u32, (at/16) as u32, (data.len()/32) as u32, 0];
@@ -2077,6 +2106,12 @@ impl Renderer {
         // Preserve unchanged blocks on the device, including complete rows
         // when a material or mapping changed on only part of a large mesh.
         let mut writes: Vec<std::ops::Range<usize>> = Vec::new();
+        if let Some(plan)=plan {
+            move_buffer_spans(&self.device,&self.queue,gpu,at,&plan.moves);
+            writes=plan.upload;
+            for (_,dst,n) in plan.moves {target[dst..dst+n].copy_from_slice(&data[dst..dst+n]);}
+            for r in &writes{target[r.clone()].copy_from_slice(&data[r.clone()]);}
+        }else{
         for (i, (old, new)) in target.chunks_mut(4096).zip(data.chunks(4096)).enumerate() {
             if old != new {
                 old.copy_from_slice(new);
@@ -2087,6 +2122,7 @@ impl Renderer {
                     writes.push(begin..begin + new.len());
                 }
             }
+        }
         }
         s.face_ranges = face_ranges(&s.material_data, s.p);
         // Write only this prototype's header and its new records into the
@@ -2113,7 +2149,7 @@ impl Renderer {
         let capacity = grown_capacity(materials.size() as usize, s.material_data.len()).min(limit);
         self.gpu_memory = self.gpu_memory.saturating_sub(materials.size());
         self.textures.materials = capacity_buffer(&self.device, &s.material_data, capacity,
-            wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST);
+            wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::COPY_DST);
         self.gpu_memory += self.textures.materials.size();
         self.texture_groups = [&self.draw, &self.xray].iter().map(|p| self.textures.bind(&self.device,p)).collect();
         self.aa.bind_textures(&self.device, &self.textures);
@@ -2139,7 +2175,7 @@ impl Renderer {
         scene.material_data = resident.clone();
         let data = resident.as_slice();
         self.gpu_memory = self.gpu_memory.saturating_sub(self.textures.materials.size());
-        self.textures.materials = buffer(&self.device, data, wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST);
+        self.textures.materials = buffer(&self.device, data, wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::COPY_DST);
         self.gpu_memory += self.textures.materials.size();
         self.texture_groups = [&self.draw, &self.xray].iter().map(|p| self.textures.bind(&self.device,p)).collect();
         self.aa.bind_textures(&self.device, &self.textures);

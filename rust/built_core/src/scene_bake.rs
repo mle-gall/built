@@ -24,10 +24,10 @@ struct Retained {
     material: Option<MaterialMemo>,
 }
 
-struct Prepared {
+pub(crate) struct Prepared {
     retained: Option<Retained>,
-    triangles: Vec<([u32; 3], [V3; 3], [u8; 4])>,
-    faces: Vec<usize>,
+    pub(crate) triangles: Vec<([u32; 3], [V3; 3], [u8; 4])>,
+    pub(crate) faces: Vec<usize>,
     visible_triangles: usize,
     visible_edges: usize,
     edges: Vec<[u32; 2]>,
@@ -78,7 +78,7 @@ fn prepare(
 /// corner (NaN: none). Where given it replaces the soft-fan average, so a
 /// curved support shades from its own normals (store/exact_display.rs).
 #[allow(clippy::too_many_arguments)]
-fn prepare_with(
+pub(crate) fn prepare_with(
     p: &[V3],
     c: &[u32],
     sizes: &[i64],
@@ -878,7 +878,7 @@ mod tests {
 }
 
 // Separate stream preserves the geometry ABI shared with the edge renderer.
-fn material_vertex(p: V3, maps: &[f32; 16], paints: [u32; 3]) -> [u8; 32] {
+pub(crate) fn material_vertex(p: V3, maps: &[f32; 16], paints: [u32; 3]) -> [u8; 32] {
     let mut out = [0; 32];
     for (k, m) in maps.chunks_exact(4).enumerate() {
         let uv = p.0 * m[0] + p.1 * m[1] + p.2 * m[2] + m[3];

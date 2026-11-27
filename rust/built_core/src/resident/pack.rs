@@ -714,7 +714,7 @@ pub fn pack_scene<'py>(
                 Some(cache)
             }
         }
-    } else if !edit_sources.is_empty() || with_maps {
+    } else if with_maps && edit_sources.is_empty() {
         Some(Bound::new(py, crate::scene_bake::GeometryCache::empty())?)
     } else { None };
     let built = assemble(py, &meshes, codes, worlds, flags, paints, tints, &coordinates, billboard_codes, with_maps, &previous_origin, wide, &hypot, cache.as_ref().map(|v| v.get()))?;

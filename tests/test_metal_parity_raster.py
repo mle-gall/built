@@ -926,8 +926,8 @@ def test_filtered_face_has_no_colour_depth_or_reveal_geometry(native, grouped):
     np.testing.assert_array_equal(filtered, capture(native))
 
 
-@pytest.mark.parametrize("painted", [False, True])
-def test_large_mesh_edits_match_a_fresh_pack_and_frame(native, monkeypatch, painted):
+@pytest.mark.parametrize("variant", ["plain", "painted", "back", "matching", "texture", "soft"])
+def test_large_mesh_edits_match_a_fresh_pack_and_frame(native, monkeypatch, variant):
     from built_core import InstanceUpdates, Vec3, pack_scene
     from tests.test_big_model_budgets import _grid
     from tests.test_wgpu_updates import assert_matches_fresh_pack
@@ -935,10 +935,23 @@ def test_large_mesh_edits_match_a_fresh_pack_and_frame(native, monkeypatch, pain
     scene = Scene()
     mesh = scene.loose_mesh
     _grid(mesh, 182)
-    if painted:
-        mesh._attr_table.append(dict(color=(.4, .7, .9)))
-        for key in mesh._store.keys("face")[::3]:
+    if variant == "soft":
+        for key in mesh._store.keys("edge")[::11]:
+            mesh._store.set_edge_flags(key, 1)
+    if variant in {"painted", "back", "matching", "texture"}:
+        from pathlib import Path
+        row = dict(color=(.4, .7, .9))
+        if variant == "back":
+            row["back"] = dict(color=(.8, .1, .3))
+        if variant == "matching":
+            row["back"] = dict(color=row["color"])
+        if variant == "texture":
+            row["texture"] = dict(path=str(Path(__file__).resolve().parents[1] /
+                                           "resources/textures/checker.png"), sw=2., sh=1.)
+        mesh._attr_table.append(row)
+        for key in mesh._store.keys("face")[::1 if variant == "matching" else 3]:
             mesh._store.set_face_attr(key, 0)
+    before = mesh.capture_state()
     packed = pack_scene(scene)
     updates = InstanceUpdates(scene, packed)
     packed.upload(native)
@@ -963,18 +976,27 @@ def test_large_mesh_edits_match_a_fresh_pack_and_frame(native, monkeypatch, pain
 
     # Add a visible cell immediately to the left of the origin, then move
     # a shared corner. Both frames must draw the same edges and triangles.
-    mesh.add_face([Vec3(-1,0,0), Vec3(0,0,0), Vec3(0,1,0), Vec3(-1,1,0)])
+    added = mesh.add_face([Vec3(-1,0,0), Vec3(0,0,0), Vec3(0,1,0), Vec3(-1,1,0)])
+    if variant == "matching":
+        mesh._store.set_face_attr(added.key, 0)
+        assert packed.materials[:16].view(np.uint32)[3] == 1
     assert np.any(original != check())
     assert updates.face_ranges(mesh, [mesh.faces[0]]) == [(0, 0, 2)]
-    if painted:
+    if variant in {"painted", "back", "matching", "texture"}:
         mesh.faces[0].attrs["color"] = (.9, .2, .1)
+        if variant == "matching":
+            mesh.faces[0].attrs["back"] = dict(color=(.9, .2, .1))
+        elif variant == "back":
+            mesh.faces[0].attrs["opacity"] = .5
     else:
         assert not mesh.faces[0].attrs
     mesh.faces[0].interior = True
     mesh.move_vertex(mesh.vertices[0], Vec3(.5,.5,.25))
     check()
+    mesh.restore_state(before)
+    np.testing.assert_array_equal(original, check())
 
-def test_painted_curved_edits_match_fresh_frames(native):
+def test_painted_curved_edits_match_fresh_frames(native, monkeypatch):
     from built_core import InstanceUpdates, Vec3, pack_scene
     from tests.test_big_model_budgets import _grid
     from tests.test_exact_edit import cylinder, run
@@ -997,7 +1019,11 @@ def test_painted_curved_edits_match_fresh_frames(native):
     packed.upload(native)
     corner = mesh.vertex_at(Vec3(-1., 1., 0.))
     def check():
-        updates.apply(*updates.diff(scene), native)
+        with monkeypatch.context() as scoped:
+            def unexpected(*args, **kwargs):
+                pytest.fail("curved material edit staged the whole prototype")
+            scoped.setattr("built_core.pack_scene", unexpected)
+            updates.apply(*updates.diff(scene), native)
         frame = capture(native)
         assert_matches_fresh_pack(updates, scene)
         fresh = pack_scene(scene)

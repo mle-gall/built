@@ -15,7 +15,7 @@ use rayon::prelude::*;
 type Obj<'p> = Bound<'p, PyAny>;
 
 static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
-fn token() -> u64 {
+pub(super) fn token() -> u64 {
     NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
 }
 
@@ -84,11 +84,11 @@ fn face(store: &Store, points: &[V3], slot: u32, hypot: Hypot, color: [u8; 4]) -
 /// Runs of unchanged bytes in document order, and the newly encoded
 /// vertices between them. All offsets are relative to this prototype.
 #[derive(Default)]
-struct Edit {
-    copies: Vec<(usize, usize, usize)>,
+pub(super) struct Edit {
+    pub(super) copies: Vec<(usize, usize, usize)>,
     writes: Vec<(usize, usize, usize)>,
-    data: Vec<u8>,
-    len: usize,
+    pub(super) data: Vec<u8>,
+    pub(super) len: usize,
 }
 
 impl Edit {
@@ -104,11 +104,11 @@ impl Edit {
         }
         runs.push((src, dst, len));
     }
-    fn keep(&mut self, src: u32, len: usize) {
+    pub(super) fn keep(&mut self, src: u32, len: usize) {
         Self::run(&mut self.copies, src as usize, self.len, len);
         self.len += len;
     }
-    fn write(&mut self, data: &[u8]) {
+    pub(super) fn write(&mut self, data: &[u8]) {
         Self::run(&mut self.writes, self.data.len(), self.len, data.len());
         self.data.extend_from_slice(data);
         self.len += data.len();
@@ -118,10 +118,10 @@ impl Edit {
             target[d..d + n].copy_from_slice(&self.data[s..s + n]);
         }
     }
-    fn ordered(&self) -> bool {
+    pub(super) fn ordered(&self) -> bool {
         self.copies.windows(2).all(|w| w[0].0 + w[0].2 <= w[1].0)
     }
-    fn in_place(&self, target: &mut [u8]) {
+    pub(super) fn in_place(&self, target: &mut [u8]) {
         // Source and destination runs are both monotone. Left shifts can
         // overwrite only already-consumed left shifts; right shifts mirror it.
         for &(s, d, n) in &self.copies {
@@ -136,7 +136,7 @@ impl Edit {
         }
         self.apply_writes(target);
     }
-    fn reverse(&self, original: &[u8]) -> Self {
+    pub(super) fn reverse(&self, original: &[u8]) -> Self {
         let mut undo = Self::default();
         for &(s, d, n) in &self.copies {
             let from = undo.len;
@@ -147,7 +147,7 @@ impl Edit {
         undo.write(&original[from..]);
         undo
     }
-    fn expanded(&self, original: &[u8]) -> Vec<u8> {
+    pub(super) fn expanded(&self, original: &[u8]) -> Vec<u8> {
         if self.copies.is_empty() {
             return self.data.clone();
         }
