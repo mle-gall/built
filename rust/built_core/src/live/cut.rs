@@ -249,7 +249,14 @@ pub(super) fn end_planes(
         let Some(normal) = normal.try_normalize() else {
             return Ok(Err("end_unresolved"));
         };
-        origin += normal * row.anchor.as_ref().map_or(0., |a| a.offset / 1000.);
+        let offset = row.anchor.as_ref().map(|a| a.offset).unwrap_or_else(|| {
+            if matches!(row.cutter, Some(Cutter::Bisector(_))) {
+                row.clearance.unwrap_or(0.)
+            } else {
+                0.
+            }
+        });
+        origin += normal * (offset / 1000.);
         result.push(EndPlane {
             uid: id.clone(),
             end,
@@ -723,6 +730,9 @@ pub(crate) fn pushed_row<'p>(
         let mut edit = (**cut).clone();
         let delta = distance * 1000.;
         match edit.cutter.as_mut() {
+            Some(Cutter::Bisector(_)) if edit.anchor.is_none() => {
+                edit.clearance = Some(edit.clearance.unwrap_or(0.) + delta);
+            }
             Some(Cutter::Plane(p)) if edit.anchor.is_none() => {
                 let normal = crate::math::xyz(&face.call_method0("normal")?)?;
                 p.origin = (DVec3::from(p.origin) + distance * normal).to_array();

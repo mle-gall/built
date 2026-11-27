@@ -146,7 +146,7 @@ impl Tool for CutTool {
                 if click && !self.hover.is_null() {
                     let uid = crate::element_ids::new_uid();
                     let row = json!({"kind":"cut","owner":target,"uid":uid,"cutter":self.hover,"name":self.preset["name"],
-                        "operation":OPS[self.operation],"anchor":anchor,"clearance":if kind=="body"{self.offset}else{0.},"on":true,"end":self.end});
+                        "operation":OPS[self.operation],"anchor":anchor,"clearance":if matches!(kind,"body"|"bisector"){self.offset}else{0.},"on":true,"end":self.end});
                     let answer = host.run(&Command {
                         name: "live_set",
                         args: json!({"row":row}),

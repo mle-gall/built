@@ -266,3 +266,23 @@ def test_hosted_opening_on_a_pitched_wall_follows_its_placement(tmp_path):
     igz.load_into(reopened, path)
     assert rows_of(reopened, "cut")[0]["state"] == "ok"
     assert solid_volume(reopened.groups[0]) == pytest.approx(before - .25)
+
+
+def test_pushpull_on_a_mitre_face_edits_its_live_joint(monkeypatch):
+    from tests.test_fuzz_engine import _push, _StubVP
+
+    monkeypatch.setattr(_StubVP, "notify_scene_changed", lambda self: None, raising=False)
+
+    scene = Scene()
+    h = History(scene)
+    make_member(h, [[0, 0, 0], [2, 0, 0]])
+    make_member(h, [[2, 0, 0], [2, 1, 0]])
+    target, other = scene.groups
+    apply(h, "live_set", row=dict(kind="cut", owner=target.uid, uid="c070000000000012",
+                                  operation="trim", cutter={"bisector": other.uid}))
+    face = max(target.mesh.faces, key=lambda f: f.centroid().x())
+    _push(scene, h, face, .01, group=target)
+    assert rows_of(scene, "cut")[0]["clearance"] == pytest.approx(10)
+    assert extent(target)[0] == pytest.approx(2.0225 + 2**.5*.01)
+    apply(h, "undo")
+    assert extent(target)[0] == pytest.approx(2.0225)
