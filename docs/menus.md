@@ -253,12 +253,12 @@ Generated from the fixture (`(system …)` rows are AppKit's own).
 | File ▸ Import | Built Model as a Group (.built, .igz)… | `import:igz` |  |
 | File ▸ Import | Wavefront OBJ (.obj)… | `import:obj` |  |
 | File ▸ Import | STL (.stl)… | `import:stl` |  |
+| File ▸ Import | Drawing into a Sketch (.dxf, .svg, .dwg)… | `import:sketch` |  |
 | File ▸ Import | Photogrammetric Mesh (WebODM)… | `import:photomesh` |  |
 | File ▸ Import | Georeference (KML / GeoJSON)… | `import:alignment` |  |
 | File ▸ Import | Survey Points (UTM CSV)… | `import:survey_points` |  |
 | File ▸ Import | Orthomosaic (GeoTIFF)… | `import:orthomosaic` |  |
 | File ▸ Import | Image (PNG / JPG)… | `import:image` |  |
-| File ▸ Import | Drawing into a Sketch (.dxf, .svg, .dwg)… | `import:sketch` |  |
 | File | Link a Document… | `link` |  |
 | File | Reload Linked Files | `reload_links` |  |
 | File | Export ▸ |  |  |
