@@ -1601,7 +1601,7 @@ impl Workspace {
             };
             rows.push((
                 c.getattr("name")?,
-                format!("{} {shape} · {n} {}", c.getattr("paper")?.str()?, if n == 1 { "item" } else { "items" }),
+                format!("{} {shape} · {n} {}", c.getattr("paper")?.str()?, crate::settings_rows::tr(s.py(), if n == 1 { "item" } else { "items" })?),
                 c.is(&cur),
             ));
         }
@@ -1637,11 +1637,7 @@ impl Workspace {
         let paper = format!(
             "{} {}",
             c.getattr("paper")?.str()?,
-            if c.getattr("landscape")?.is_truthy()? {
-                "landscape"
-            } else {
-                "portrait"
-            }
+            crate::settings_rows::tr(py, if c.getattr("landscape")?.is_truthy()? { "landscape" } else { "portrait" })?
         );
         let frame = match Self::_frame(s)? {
             Some(f) => Some(f.into_bound(py)),
@@ -1651,7 +1647,7 @@ impl Workspace {
             if f.getattr("perspective")
                 .is_ok_and(|v| v.is_truthy().unwrap_or(false))
             {
-                "No scale".into()
+                crate::settings_rows::tr(py, "No scale")?
             } else {
                 py.import("built_core.composition")?
                     .call_method1("format_scale", (f.getattr("scale_n")?,))?
@@ -1892,18 +1888,15 @@ impl Workspace {
     fn _add_sheet(s: &Bound<'_, Self>) -> PyResult<()> {
         let py = s.py();
         let sheets = Self::_sheets(s)?.into_bound(py);
-        let template = super::sheet_template(py)?;
-        let mut sheet = py.None().into_bound(py);
-        if let Some(path) = template {
-            sheet = py
-                .import("built_core")?
-                .call_method1("sheet_from_template", (path.to_string_lossy().as_ref(),))?;
-        }
-        if sheet.is_none() {
-            sheet = py.import("built_core.composition")?.call_method0("Composicion")?;
-            sheet
-                .getattr("frames")?
-                .call_method1("append", (sheet.call_method0("default_frame")?,))?;
+        let sheet = py.import("built_core.composition")?.call_method0("Composicion")?;
+        let current = s.getattr("composer")?.getattr("comp")?;
+        if !current.is_none() {
+            for field in ["paper", "landscape", "margin_mm", "border", "border_mm", "border_color",
+                          "border_radius_mm", "border_style"] {
+                sheet.setattr(field, current.getattr(field)?)?;
+            }
+            let block = py.import("copy")?.call_method1("deepcopy", (current.getattr("cajetin")?,))?;
+            sheet.setattr("cajetin", block)?;
         }
         let args = PyDict::new(py);
         args.set_item("n", sheets.len()? + 1)?;
@@ -1918,7 +1911,8 @@ impl Workspace {
             &py.import("built_core.history")?
                 .call_method1("InsertSheetCommand", (sheet,))?,
         )?;
-        Self::_show(s, sheets.len()? as isize - 1)
+        Self::_show(s, sheets.len()? as isize - 1)?;
+        Self::_tool(s, "vista")
     }
     fn _duplicate_sheet(s: &Bound<'_, Self>, index: isize) -> PyResult<()> {
         let py = s.py();

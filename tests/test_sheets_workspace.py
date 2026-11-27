@@ -322,7 +322,13 @@ def test_sheet_list_add_duplicate_rename_reorder_delete(host):
     ws = _sheets(host)
     comps = host.viewport.scene.compositions
     first = comps[0].name
+    from built_core.composition import Cajetin
+    comps[0].paper, comps[0].border = "A2", True
+    comps[0].cajetin = Cajetin(proyecto="Details")
     _act(host, "add")
+    assert (comps[1].paper, comps[1].border) == ("A2", True)
+    assert comps[1].cajetin.proyecto == "Details" and comps[1].cajetin is not comps[0].cajetin
+    assert not comps[1].frames and ws.composer.tool_mode == "vista"
     assert len(comps) == 2 and ws.composer.comp is comps[1]
     _act(host, "dup\x1f0")
     assert len(comps) == 3 and comps[1].name.startswith(first)

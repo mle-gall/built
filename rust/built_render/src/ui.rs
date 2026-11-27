@@ -3314,50 +3314,13 @@ fn inspector_rows(ui: &mut egui::Ui, rows: &[(String, String)], edits: &mut std:
         // "\u{1d}color\u{1d}<id>\u{1d}#rrggbb": a swatch; a click opens the picker.
         if let Some(rest) = value.strip_prefix("\u{1d}color\u{1d}") {
             let (id, hex) = rest.split_once('\u{1d}').unwrap_or((rest, ""));
-            let mut swatch_rect = Rect::NOTHING;
-            ui.horizontal(|ui| {
-                ui.add_space(SPACE_S);
-                let (lr, _) = ui.allocate_exact_size(vec2(88.0, CONTROL_H), Sense::hover());
-                ui.painter().text(lr.left_center(), egui::Align2::LEFT_CENTER, label, meta(), DIM);
-                let (r, resp) = ui.allocate_exact_size(vec2((ui.available_width() - 8.0).max(60.0), CONTROL_H), Sense::click());
-                paint_state(ui, r, state_of(&resp, false, true), R_ROW);
-                let sw = Rect::from_min_size(r.min + vec2(3.0, 3.0), vec2(36.0, 18.0));
-                ui.painter().rect_filled(sw, CornerRadius::same(4), parse_hex(hex).unwrap_or(SWATCH_FALLBACK));
-                ui.painter().rect_stroke(sw, CornerRadius::same(4), Stroke::new(1.0_f32, EDGE), egui::StrokeKind::Inside);
-                ui.painter().text(pos2(sw.max.x + 8.0, r.center().y), egui::Align2::LEFT_CENTER, hex.to_uppercase(), body(), INK);
-                swatch_rect = r;
-                if resp.on_hover_text("Pick a colour").clicked() {
-                    edits.insert("\u{1d}pick".into(), id.to_owned());
-                    edits.insert("\u{1d}pickc".into(), hex.to_owned());
+            let c = parse_hex(hex).unwrap_or(SWATCH_FALLBACK);
+            let mut rgb = [c.r(), c.g(), c.b()];
+            kit::property_control(ui, label, |ui| {
+                if kit::colour_well(ui, &mut rgb).changed() {
+                    actions.push(format!("edit\u{1f}{id}\u{1f}#{:02x}{:02x}{:02x}", rgb[0], rgb[1], rgb[2]));
                 }
             });
-            if edits.get("\u{1d}pick").map(String::as_str) == Some(id) {
-                let mut c = edits.get("\u{1d}pickc").and_then(|h| parse_hex(h)).unwrap_or(SWATCH_FALLBACK);
-                let mut done = false;
-                egui::Area::new(egui::Id::new("insp_color"))
-                    .pivot(egui::Align2::RIGHT_TOP)
-                    .fixed_pos(pos2(swatch_rect.max.x, swatch_rect.max.y + 4.0))
-                    .order(egui::Order::Tooltip)
-                    .show(ui.ctx(), |ui| {
-                        glass(Surface::Raised).inner_margin(Margin::same(10)).show(ui, |ui| {
-                            egui::widgets::color_picker::color_picker_color32(ui, &mut c, egui::widgets::color_picker::Alpha::Opaque);
-                            ui.add_space(SPACE_S);
-                            ui.horizontal(|ui| {
-                                if chip_button(ui, "Apply") {
-                                    actions.push(format!("edit\u{1f}{id}\u{1f}#{:02x}{:02x}{:02x}", c.r(), c.g(), c.b()));
-                                    done = true;
-                                }
-                                if chip_button(ui, "Cancel") { done = true; }
-                            });
-                        });
-                    });
-                if done {
-                    edits.remove("\u{1d}pick");
-                    edits.remove("\u{1d}pickc");
-                } else {
-                    edits.insert("\u{1d}pickc".into(), format!("#{:02x}{:02x}{:02x}", c.r(), c.g(), c.b()));
-                }
-            }
             continue;
         }
         if let Some(rest) = value.strip_prefix("\u{1d}edit\u{1d}") {

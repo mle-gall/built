@@ -1224,7 +1224,7 @@ impl Page {
         // The sheet's border: its display list (sheets::items_c).
         if let Some(ops) = doc.raw_border.as_ref() {
             let place = crate::sheet_display::Place { origin: self.to_screen(0.0, 0.0), zoom: self.zoom };
-            crate::sheet_display::paint(&painter, ctx, &mut self.pictures, ops, place);
+            crate::sheet_display::paint(&painter, ctx, &mut self.pictures, ops, place, None);
         }
         let guide = ACCENT.gamma_multiply(0.45);
         for x in &doc.guides_v {
@@ -1246,14 +1246,16 @@ impl Page {
                     let inner = painter.with_clip_rect(rect.intersect(painter.clip_rect()));
                     for layer in [&self.ops, &self.annots] {
                         if let Some(ops) = layer.get(&item.key) {
-                            crate::sheet_display::paint(&inner, ctx, &mut self.pictures, ops, place);
+                            crate::sheet_display::paint(&inner, ctx, &mut self.pictures, ops, place, None);
                         }
                     }
-                    crate::sheet_display::paint(&painter, ctx, &mut self.pictures, &item.data["display"], place);
+                    crate::sheet_display::paint(&painter, ctx, &mut self.pictures, &item.data["display"], place, None);
                 }
                 _ => {
                     let place = crate::sheet_display::Place { origin: rect.min, zoom: self.zoom };
-                    crate::sheet_display::paint(&painter, ctx, &mut self.pictures, &item.data["display"], place);
+                    let dimension = matches!(item.kind.as_str(), "dimension" | "angular" | "radial");
+                    let ink = (dimension && self.selection.contains(&item.key)).then_some(ACCENT);
+                    crate::sheet_display::paint(&painter, ctx, &mut self.pictures, &item.data["display"], place, ink);
                 }
             }
         }
@@ -1267,6 +1269,7 @@ impl Page {
         let single = self.selection.len() == 1;
         for k in &self.selection {
             let Some(i) = self.item(*k) else { continue };
+            if matches!(i.kind.as_str(), "dimension" | "angular" | "radial") { continue; }
             let r = self.screen_rect(self.ink_of(i));
             painter.rect_stroke(r, 0, Stroke::new(1.5_f32, ACCENT), egui::StrokeKind::Outside);
             if single && !i.locked && i.editable {

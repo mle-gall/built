@@ -810,7 +810,28 @@ pub mod molecules {
     }
     /// Opaque document and plugin colours use the same editable RGB well.
     pub fn colour_well(ui: &mut egui::Ui, rgb: &mut [u8; 3]) -> egui::Response {
-        ui.color_edit_button_srgb(rgb)
+        let key = ui.next_auto_id().with("hex");
+        ui.horizontal(|ui| {
+            let mut picker = ui.color_edit_button_srgb(rgb);
+            let value = format!("#{:02X}{:02X}{:02X}", rgb[0], rgb[1], rgb[2]);
+            let mut text = ui.data(|d| d.get_temp::<String>(key)).unwrap_or(value);
+            let edit = ui.add(field(&mut text).id(key).desired_width(68.).char_limit(7));
+            if edit.lost_focus() && !ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                let digits = text.trim_start_matches('#');
+                if digits.len() == 6 {
+                    if let Ok(hex) = u32::from_str_radix(digits, 16) {
+                        let next = [(hex >> 16) as u8, (hex >> 8) as u8, hex as u8];
+                        if *rgb != next {
+                            *rgb = next;
+                            picker.mark_changed();
+                        }
+                    }
+                }
+            }
+            let focused = edit.has_focus();
+            ui.data_mut(|d| if focused { d.insert_temp(key, text); } else { d.remove::<String>(key); });
+            picker
+        }).inner
     }
 
     /// Keep both ends visible in a narrow path field. Editing always uses

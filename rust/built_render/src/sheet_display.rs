@@ -170,15 +170,19 @@ fn rounded_points(p: &[Pos2], rx: f32, ry: f32) -> Vec<Pos2> {
 }
 
 /// Paint `ops` (one item's display list) at `place`.
-pub fn paint(painter: &egui::Painter, ctx: &egui::Context, pictures: &mut Pictures, ops: &J, place: Place) {
+pub fn paint(painter: &egui::Painter, ctx: &egui::Context, pictures: &mut Pictures, ops: &J, place: Place, highlight: Option<Color32>) {
     let Some(ops) = ops.as_array() else { return };
     let z = place.zoom;
     let mut clip: Option<Vec<Pos2>> = None;
     let mut clip_rect = painter.clip_rect();
     let mut shapes: Vec<Shape> = Vec::new();
     for op in ops {
-        let stroke = stroke_of(op, z);
-        let brush = fill_of(op);
+        let mut stroke = stroke_of(op, z);
+        if let (Some(ink), Some((pen, _))) = (highlight, stroke.as_mut()) {
+            pen.color = ink;
+            pen.width = pen.width.max(1.5);
+        }
+        let brush = fill_of(op).map(|colour| highlight.unwrap_or(colour));
         match op["op"].as_str().unwrap_or("") {
             "line" => {
                 let p = &op["pts"];
@@ -338,7 +342,7 @@ mod tests {
         ]);
         let out = ctx.run(egui::RawInput::default(), |ctx| {
             paint(&ctx.layer_painter(egui::LayerId::background()), ctx, &mut Pictures::default(),
-                  &ops, Place { origin: Pos2::ZERO, zoom: 1.0 });
+                  &ops, Place { origin: Pos2::ZERO, zoom: 1.0 }, None);
         });
         let chip = Rect::from_min_max(pos2(10.,20.), pos2(18.,25.));
         assert!(out.shapes.iter().any(|s| s.clip_rect == chip));

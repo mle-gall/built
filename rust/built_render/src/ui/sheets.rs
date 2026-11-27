@@ -120,15 +120,15 @@ impl Sheets {
         ui.horizontal(|ui| {
             ui.set_min_height(28.0);
             ui.add_space(SPACE_S);
-            ui.label(egui::RichText::new("Sheets").font(title()).color(INK));
+            ui.label(egui::RichText::new(super::tr("Sheets")).font(title()).color(INK));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 let cur = s.list.iter().position(|r| r.2);
-                let dots = (String::new(), "⋯".to_owned(), "This sheet: rename, duplicate, move, delete".to_owned(), String::new(), -1i8, cur.is_some());
+                let dots = (String::new(), "⋯".to_owned(), super::tr("This sheet: rename, duplicate, move, delete"), String::new(), -1i8, cur.is_some());
                 let before = ui.cursor();
                 if item_button(ui, &dots, None) {
                     if let Some(i) = cur { s.row_menu = Some((i, pos2(before.max.x - 180.0, before.min.y + 30.0))); }
                 }
-                let add = (String::new(), "+".to_owned(), "New sheet".to_owned(), String::new(), -1i8, true);
+                let add = (String::new(), "+".to_owned(), super::tr("New sheet"), String::new(), -1i8, true);
                 if item_button(ui, &add, None) { out.push("add".into()); }
             });
         });
@@ -181,13 +181,13 @@ impl Sheets {
         let s = self;
         if !s.exports.is_empty() {
             ui.add_space(SPACE_S);
-            caption(ui, "Export");
+            caption(ui, &super::tr("Export"));
             ui.add_space(SPACE_XS);
             ui.horizontal_wrapped(|ui| {
                 ui.spacing_mut().item_spacing = vec2(SPACE_XS, SPACE_XS);
                 ui.add_space(SPACE_S);
                 for (id, label, enabled) in &s.exports {
-                    let item = (id.clone(), label.clone(), String::new(), String::new(), -1i8, *enabled);
+                    let item = (id.clone(), super::tr(label), String::new(), String::new(), -1i8, *enabled);
                     if item_button(ui, &item, None) { out.push(format!("export{SEP}{id}")); }
                 }
             });
@@ -209,7 +209,7 @@ impl Sheets {
             ui.spacing_mut().item_spacing = vec2(0.0, SPACE_XS);
             for (si, (caption_text, rows)) in s.inspector.iter().enumerate() {
                 if si > 0 { ui.add_space(SPACE_S); }
-                if !caption_text.is_empty() { caption(ui, caption_text); ui.add_space(SPACE_XS); }
+                if !caption_text.is_empty() { caption(ui, &super::tr(caption_text)); ui.add_space(SPACE_XS); }
                 sheet_rows(ui, rows, &mut s.edits, &mut s.pick, out);
             }
         });
@@ -416,7 +416,7 @@ impl Ui {
                 glass(Surface::Raised).inner_margin(Margin::same(6)).show(ui, |ui| {
                     ui.set_width(180.0);
                     ui.spacing_mut().item_spacing = vec2(0.0, 1.0);
-                    let row = |id: &str, label: &str, enabled: bool| (id.to_owned(), label.to_owned(), String::new(), String::new(), -1i8, enabled);
+                    let row = |id: &str, label: &str, enabled: bool| (id.to_owned(), super::tr(label), String::new(), String::new(), -1i8, enabled);
                     if menu_row(ui, &row("rename", "Rename…", true)) { rename = true; }
                     if menu_row(ui, &row("dup", "Duplicate", true)) { clicked = Some(format!("dup{SEP}{i}")); }
                     if menu_row(ui, &row("up", "Move earlier", i > 0)) { clicked = Some(format!("up{SEP}{i}")); }
@@ -466,7 +466,7 @@ impl Ui {
         let mut out: Vec<String> = Vec::new();
         let tool_icon = self.sheets.tools.iter().flatten().find(|t| t.id == self.sheets.active).and_then(|t| t.icon.clone());
         // A passing message from Python (an export done) wins; else the page says what it does.
-        let hint = if self.sheets.hint.is_empty() { self.page.hint().to_string() } else { self.sheets.hint.clone() };
+        let hint = if self.sheets.hint.is_empty() { super::tr(self.page.hint()) } else { self.sheets.hint.clone() };
         let s = &mut self.sheets;
         // Same place and id as the model's bar: the band above it is the same.
         egui::Area::new(egui::Id::new("bottom"))
@@ -486,7 +486,7 @@ impl Ui {
                             let g = ui.painter().layout_no_wrap(text.clone(), meta(), DIM);
                             let (r, resp) = ui.allocate_exact_size(vec2(g.size().x + 16.0, 28.0), Sense::hover());
                             ui.painter().galley(pos2(r.min.x + 8.0, r.center().y - g.size().y / 2.0), g, DIM);
-                            resp.on_hover_text(tip);
+                            resp.on_hover_text(super::tr(tip));
                         }
                         bar_divider(ui);
                         ui.add_space(SPACE_S);
@@ -496,7 +496,7 @@ impl Ui {
                             ui.add_space(SPACE_XS);
                         }
                         if !s.tool.is_empty() {
-                            ui.label(egui::RichText::new(&s.tool).font(strong(TYPE_BODY)).color(INK));
+                            ui.label(egui::RichText::new(super::tr(&s.tool)).font(strong(TYPE_BODY)).color(INK));
                             ui.add_space(SPACE_S);
                         }
                         // The right end: the cursor on the paper, then the zoom field.
@@ -518,7 +518,7 @@ impl Ui {
                         let buf = s.zoom_buf.get_or_insert_with(|| s.zoom.clone());
                         let resp = ui.add(super::kit::field(buf).font(body()).margin(Margin::symmetric(6, 3))
                             .desired_width(52.0).horizontal_align(egui::Align::RIGHT));
-                        let resp = resp.on_hover_text("Zoom: type a percentage and press Enter");
+                        let resp = resp.on_hover_text(super::tr("Zoom: type a percentage and press Enter"));
                         if resp.lost_focus() {
                             if ui.input(|i| i.key_pressed(egui::Key::Enter)) && buf.trim() != s.zoom {
                                 out.push(format!("zoom{SEP}{}", buf.trim()));
@@ -527,7 +527,7 @@ impl Ui {
                         } else if !resp.has_focus() {
                             s.zoom_buf = None;      // follows the page until typed into
                         }
-                        if text_button(ui, "Fit", "Fit the page in the window", true) { out.push("fit".into()); }
+                        if text_button(ui, &super::tr("Fit"), &super::tr("Fit the page in the window"), true) { out.push("fit".into()); }
                     });
                 });
             });
@@ -554,7 +554,8 @@ fn sheet_rows(ui: &mut egui::Ui, rows: &[(String, String)], edits: &mut std::col
         ui.painter().galley(pos2(lr.min.x, lr.center().y - g.size().y / 2.0), g, DIM);
     };
     let mut buttons: Vec<(String, String)> = Vec::new();
-    for (label, value) in rows {
+    for (source, value) in rows {
+        let label = source;
         let parts: Vec<&str> = value.split(ED).collect();
         let kind = if value.starts_with(ED) { parts.get(1).copied().unwrap_or_default() } else { "" };
         let id = parts.get(2).copied().unwrap_or_default();
@@ -591,7 +592,7 @@ fn sheet_rows(ui: &mut egui::Ui, rows: &[(String, String)], edits: &mut std::col
                     if kit::colour_well(ui, &mut rgb).changed() {
                         out.push(format!("edit{SEP}{id}{SEP}#{:02x}{:02x}{:02x}", rgb[0], rgb[1], rgb[2]));
                     }
-                    if !value.is_empty() && kit::quiet(ui, "Clear").clicked() {
+                    if !value.is_empty() && kit::quiet(ui, &super::tr("Clear")).clicked() {
                         out.push(format!("edit{SEP}{id}{SEP}"));
                     }
                 });
@@ -629,9 +630,9 @@ fn sheet_rows(ui: &mut egui::Ui, rows: &[(String, String)], edits: &mut std::col
                     let pending = buf.clone();
                     ui.horizontal(|ui| {
                         ui.add_space(SPACE_S);
-                        if chip_button(ui, "Apply  ⌘↩") { out.push(format!("edit{SEP}{id}{SEP}{pending}")); }
+                        if chip_button(ui, &format!("{}  ⌘↩", super::tr("Apply"))) { out.push(format!("edit{SEP}{id}{SEP}{pending}")); }
                         ui.add_space(SPACE_XS);
-                        if chip_button(ui, "Revert") { edits.remove(id); }
+                        if chip_button(ui, &super::tr("Revert")) { edits.remove(id); }
                     });
                 }
             }

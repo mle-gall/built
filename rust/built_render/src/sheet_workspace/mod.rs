@@ -274,12 +274,6 @@ fn _cajetin_template(py: Python<'_>) -> PyResult<(String, Option<String>)> {
         template_name(py, "composer/default_cajetin")?,
     ))
 }
-fn sheet_template(py: Python<'_>) -> PyResult<Option<std::path::PathBuf>> {
-    template_name(py, "composer/default_template")?
-        .map(|n| Ok(app_data(py)?.join("plantillas").join(format!("{n}.json"))))
-        .transpose()
-}
-
 #[pyfunction]
 fn is_shell(win: &Obj<'_>) -> bool {
     !win.is_none()
