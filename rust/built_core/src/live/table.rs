@@ -108,9 +108,9 @@ pub struct Row {
     pub kind: String,
     #[serde(default = "one")]
     pub v: u32,
-    #[serde(default = "unit")]
+    #[serde(default = "unit", skip_serializing_if = "is_unit")]
     pub size: [f64; 3],
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub open_top: bool,
     #[serde(default)]
     pub inputs: Vec<Reference>,
@@ -139,6 +139,9 @@ fn one() -> u32 {
 }
 fn unit() -> [f64; 3] {
     [1.; 3]
+}
+fn is_unit(size: &[f64; 3]) -> bool {
+    *size == unit()
 }
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum Key {

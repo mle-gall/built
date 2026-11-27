@@ -125,6 +125,7 @@ dependencies = [
  "ab_glyph",
  "bincode",
  "block2",
+ "built_draft2d",
  "built_python_bindings",
  "built_step",
  "core-foundation",
@@ -159,6 +160,16 @@ dependencies = [
  "zmij",
  "zune-core",
  "zune-jpeg",
+]
+
+[[package]]
+name = "built_draft2d"
+version = "0.1.0"
+dependencies = [
+ "glam",
+ "roxmltree",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

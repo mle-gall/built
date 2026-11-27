@@ -8,6 +8,7 @@ mod joints;
 mod presets;
 pub(crate) mod profile;
 mod reference;
+pub mod sketch;
 mod sweep;
 pub(crate) use file::{load, save};
 mod table;
@@ -105,6 +106,11 @@ fn metadata<'p>(g: &Obj<'p>) -> PyResult<Bound<'p, PyDict>> {
 fn evaluate(scene: &Obj<'_>, t: &LiveTable, row: &Row) -> PyResult<&'static str> {
     let py = scene.py();
     if row.kind == "sketch" {
+        // Open ends and crossings first (the Sketch workspace shows them);
+        // then what a sweep needs from the drawing (one region).
+        if let Some(state) = sketch::evaluate(row) {
+            return Ok(state);
+        }
         return Ok(drawn_profile::outline(&serde_json::json!(row), 24)
             .err()
             .unwrap_or("ok"));
@@ -188,7 +194,12 @@ fn run(scene: &Obj<'_>, t: &mut LiveTable, seeds: HashSet<String>) -> PyResult<(
             continue;
         }
         let state = evaluate(scene, t, row)?;
-        t.set_state(&uid, state);
+        if state != sketch::UNCHANGED {
+            t.set_state(&uid, state);
+        } else if row.state.is_empty() {
+            // A user of an open sketch with nothing good to keep yet.
+            t.set_state(&uid, "profile_open");
+        }
     }
     Ok(())
 }
@@ -855,7 +866,49 @@ fn live_set<'p>(history: &Obj<'p>, row: &Obj<'p>) -> PyResult<Bound<'p, PyDict>>
     if !matches!(row.kind.as_str(), "test_box" | "sweep" | "sketch") || row.v != 1 {
         return Err(PyValueError::new_err("unsupported recipe"));
     }
+    if row.kind == "sketch" {
+        sketch::validate(&row).map_err(PyValueError::new_err)?;
+    }
     edit(history, Edit::Set(row))
+}
+/// Done in the Sketch workspace: the sketch row and every user of it
+/// re-evaluated, one History step. A new sketch gets a fresh uid.
+#[pyfunction]
+fn sketch_commit<'p>(history: &Obj<'p>, row: &Obj<'p>) -> PyResult<Bound<'p, PyDict>> {
+    let row = row.call_method0("copy")?.cast_into::<PyDict>()?;
+    row.set_item("kind", "sketch")?;
+    if row.get_item("uid")?.is_none_or(|u| u.is_none()) {
+        row.set_item("uid", eid::new_uid())?;
+    }
+    let _ = row.del_item("state");
+    let reply = live_set(history, row.as_any())?;
+    reply.set_item("uid", row.get_item("uid")?)?;
+    Ok(reply)
+}
+/// The regions, area and problems of a sketch row, and its attachment
+/// points: what a user of the sketch reads.
+#[pyfunction]
+fn sketch_profile<'p>(scene: &Obj<'p>, uid: &str) -> PyResult<Obj<'p>> {
+    let py = scene.py();
+    let t = current(py, root(scene)?).unwrap_or_default();
+    let Some(row) = t.rows.get(uid).filter(|r| r.kind == "sketch") else {
+        return Ok(py.None().into_bound(py));
+    };
+    let s = sketch::body(row).map_err(PyValueError::new_err)?;
+    let p = built_draft2d::profile(&s);
+    let names: Vec<String> = built_draft2d::sketch::ATTACH.iter().map(|n| n.to_string()).chain(s.points.iter().map(|p| p.name.clone())).collect();
+    let attach: serde_json::Map<String, serde_json::Value> =
+        names.iter().filter_map(|n| s.attachment(n).map(|at| (n.clone(), serde_json::json!([at.x, at.y])))).collect();
+    to_py(
+        py,
+        &serde_json::json!({
+            "state": row.state, "ok": p.ok(), "area": p.area,
+            "regions": p.regions.len(),
+            "holes": p.regions.iter().map(|r| r.holes.len()).sum::<usize>(),
+            "problems": p.problems, "attach": attach, "default": s.attach,
+            "curves": s.curves.iter().map(|c| c.id).collect::<Vec<_>>(),
+        }),
+    )
 }
 #[pyfunction]
 fn live_release<'p>(history: &Obj<'p>, uid: String) -> PyResult<Bound<'p, PyDict>> {
@@ -877,6 +930,8 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(sweep_profile, m)?)?;
     m.add_function(wrap_pyfunction!(create_sweeps, m)?)?;
     m.add_function(wrap_pyfunction!(live_set, m)?)?;
+    m.add_function(wrap_pyfunction!(sketch_commit, m)?)?;
+    m.add_function(wrap_pyfunction!(sketch_profile, m)?)?;
     m.add_function(wrap_pyfunction!(live_release, m)?)?;
     m.add_function(wrap_pyfunction!(live_reevaluate, m)?)?;
     m.add_function(wrap_pyfunction!(live_rows, m)?)
