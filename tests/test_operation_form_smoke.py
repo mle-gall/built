@@ -1006,7 +1006,7 @@ def test_native_mesh_units_and_model_menu(tmp_path, suffix):
         f"wait 600\nmenu open_path:{path}\nwait 300\nstate\nkey escape\nwait 200\nstate\n"
         f"menu open_path:{path}\nwait 250\nkey enter\nwait 700\nstate\n"
         "menu scene_add\nmenu scene_duplicate\nmenu export:obj\nwait 250\nstate\n"
-        "key escape\nwait 120\nkey escape\nwait 120\nkey escape\nwait 300\nstate\nquit\n")
+        "key escape\nwait 300\nstate\nquit\n")
     result = run([str(BIN), "--root", str(ROOT), "--venv", str(ROOT / ".venv"), "--new-instance",
                   "--size", "960x700", "--script", str(steps),
                   str(ROOT / "tests/fixtures/shell/slab-and-cube.igz")],
