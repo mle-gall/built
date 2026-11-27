@@ -160,3 +160,41 @@ def test_arraying_existing_cutter_updates_the_cut_and_undo():
     assert original - solid_volume(beam) == pytest.approx(3 * one)
     apply(history, "undo")
     assert original - solid_volume(beam) == pytest.approx(one)
+
+
+def test_bound_edge_redivides_and_preserves_station_uids():
+    import pytest
+    from built_core import element_ids
+    scene, history, (host, source) = setup_groups(2)
+    apply(history, "live_set", row=box(host))
+    edge = next(e for e in host.mesh.edges if abs(e.a.x() - e.b.x()) > .9)
+    pid = host.mesh._store.id_of("edge", edge.key)
+    bound = {"edge": {"path": [host.uid], "id": element_ids.id_text("edge", pid)}}
+    apply(history, "live_set", row=dict(repeat(source), run=bound))
+    assembly = scene.groups[-1]
+    old = [g.uid for g in assembly.children]
+    before = assembly.children[-1].xform.data()[12]
+    apply(history, "live_set", row=box(host, size=[3, 1, 1]))
+    assert assembly.children[-1].xform.data()[12] == pytest.approx(3 * before)
+    assert [g.uid for g in assembly.children] == old
+
+
+def test_polar_copy_field_spacing_and_fit_share_the_array_window():
+    from tests.test_rotate_array import _Vp, _rotate_copy
+    from tools.rotate import RotateTool
+    scene, history, (source,) = setup_groups(1)
+    apply(history, "live_set", row=box(source))
+    scene.selection = [source]
+    vp = _Vp(scene)
+    tool = RotateTool()
+    _rotate_copy(vp, tool, 90)
+    assert tool.on_value(vp, 30.)
+    first = scene.groups[-1]
+    uids = [c.uid for c in first.children]
+    assert len(uids) == 3
+    assert tool.on_array_value(vp, 1, "fit_max", step=24.)
+    assert len(scene.groups[-1].children) == 4
+    assert [c.uid for c in scene.groups[-1].children][:3] == uids
+    assert scene.groups[-1].uid == first.uid
+    vp.history.undo()
+    assert scene.groups == [source]
