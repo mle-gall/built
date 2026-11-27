@@ -27,7 +27,7 @@ fn set_group_axes<'py>(
     green: &Obj<'py>,
 ) -> Reply<'py> {
     let py = history.py();
-    let group = one(history, placement)?;
+    let scene = history.getattr("scene")?;
     let basis = py
         .import("built_core")?
         .getattr("ToolMachine")?
@@ -40,11 +40,49 @@ fn set_group_axes<'py>(
     let frame = py.import("built_core.axes")?.call_method1(
         "frame_matrix",
         (
-            local(history, origin)?,
+            if placement.is_none() && scene.getattr("edit_group")?.is_none() {
+                vec3(origin)?
+            } else {
+                local(history, origin)?
+            },
             vec3(&basis.get_item(0)?)?,
             vec3(&basis.get_item(1)?)?,
             vec3(&basis.get_item(2)?)?,
         ),
+    )?;
+    let group = if placement.is_none() {
+        scene.getattr("edit_group")?
+    } else {
+        one(history, placement)?
+    };
+    if group.is_none() {
+        let after = if frame.call_method0("isIdentity")?.is_truthy()? {
+            py.None().into_bound(py)
+        } else {
+            frame
+        };
+        let cmd = py.import("built_core")?.call_method1(
+            "DrawingAxesCommand",
+            (scene.getattr("world_drawing_frame")?, after),
+        )?;
+        return execute(history, &cmd);
+    }
+    // Picked points are in the open occurrence's coordinates. The command
+    // stores the frame in the target's parent coordinate system.
+    let mut parent = glam::DMat4::IDENTITY;
+    for level in scene.getattr("_edit_stack")?.try_iter()? {
+        let owner = level?.get_item("group")?;
+        if owner.is(&group) {
+            break;
+        }
+        let pose = owner.getattr("xform")?;
+        if !pose.is_none() {
+            parent *= crate::math::mat(&pose)?;
+        }
+    }
+    let frame = Bound::new(
+        py,
+        crate::math::Matrix4::from(parent.inverse() * crate::math::mat(&frame)?),
     )?;
     execute(
         history,

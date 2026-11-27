@@ -166,9 +166,47 @@ fn axes_meshes<'py>(s: &RecordStep, py: Python<'py>, _scene: &Obj<'py>) -> PyRes
     Ok(if is_instance(&g)? { vec![g.getattr("mesh")?] } else { Vec::new() })
 }
 
+/// Rebuild the live occurrence view after its definition basis changed.
+fn refresh_open_axes(scene: &Obj<'_>, target: &Obj<'_>) -> PyResult<()> {
+    let open = scene.getattr("edit_group")?;
+    if open.is_none() || !open.getattr("mesh")?.is(&target.getattr("mesh")?) {
+        return Ok(());
+    }
+    let level = scene.getattr("_edit_stack")?.get_item(-1)?;
+    let py = scene.py();
+    let mut frame = py
+        .import("built_core.group")?
+        .call_method1("group_frame", (&open,))?;
+    if level.get_item("affine")?.is_truthy()? {
+        let mut world = DMat4::IDENTITY;
+        for row in scene.getattr("_edit_stack")?.try_iter()? {
+            let pose = row?.get_item("group")?.getattr("xform")?;
+            if !pose.is_none() {
+                world *= crate::math::mat(&pose)?;
+            }
+        }
+        let origin = scene
+            .getattr("mesh")?
+            .getattr("_store")?
+            .getattr("frame_origin")?;
+        let view = py.import("built_core.store_mesh")?.call_method1(
+            "instance_view",
+            (open.getattr("mesh")?, world.to_cols_array(), origin, true),
+        )?;
+        frame = view.getattr("_store")?.call_method0("tool_placement")?;
+        let axes = open.getattr("axes")?;
+        if !axes.is_none() {
+            frame = frame.mul(axes)?;
+        }
+        scene.setattr("mesh", view)?;
+    }
+    level.set_item("frame", frame)
+}
+
 fn run_axes(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResult<()> {
     let edit = s.arg(py, 2);
     if edit.call_method1("apply", (scene, s.arg(py, 0), s.arg(py, 1)))?.is_truthy()? {
+        refresh_open_axes(scene, &s.arg(py, 0))?;
         version(scene)?;
     }
     // A classic group swaps its axes (a field); an instance re-expresses
@@ -181,10 +219,12 @@ fn after_axes(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>, phase: Option<&st
     let edit = s.arg(py, 2);
     if phase == Some("undo") && s.is_direct() && !edit.call_method0("fields_only")?.is_truthy()? {
         if edit.call_method1("undo", (s.arg(py, 0),))?.is_truthy()? {
+            refresh_open_axes(scene, &s.arg(py, 0))?;
             return version(scene);
         }
         return Ok(());
     }
+    refresh_open_axes(scene, &s.arg(py, 0))?;
     version(scene)
 }
 
@@ -208,6 +248,7 @@ steps! {
     RotateGroup = "RotateGroupCommand";
     ScaleGroup = "ScaleGroupCommand";
     FlipGroups = "FlipGroupsCommand";
+    DrawingAxes = "DrawingAxesCommand";
     ChangeAxes = "ChangeAxesCommand";
 }
 
@@ -278,6 +319,38 @@ impl FlipGroups {
         let py = slf.py();
         let step: &RecordStep = &*slf.as_super();
         PyList::new(py, flip_meshes(step, py, &py.None().into_bound(py))?)
+    }
+}
+
+fn set_world_axes(step: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResult<()> {
+    scene.setattr("world_drawing_frame", step.arg(py, 1))?;
+    version(scene)
+}
+fn replay_world_axes(
+    step: &RecordStep,
+    py: Python<'_>,
+    scene: &Obj<'_>,
+    phase: Option<&str>,
+) -> PyResult<()> {
+    scene.setattr(
+        "world_drawing_frame",
+        step.arg(py, usize::from(phase != Some("undo"))),
+    )?;
+    version(scene)
+}
+#[pymethods]
+impl DrawingAxes {
+    #[new]
+    fn new(before: Obj<'_>, after: Obj<'_>) -> PyClassInitializer<Self> {
+        let step = RecordStep::new(
+            "DrawingAxesCommand",
+            set_world_axes,
+            vec![("before", before), ("after", after)],
+        )
+        .rows()
+        .explicit_inverse()
+        .hook(After(replay_world_axes));
+        PyClassInitializer::from(step).add_subclass(Self)
     }
 }
 

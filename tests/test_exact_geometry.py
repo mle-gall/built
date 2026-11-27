@@ -698,3 +698,23 @@ def test_store_face_picker_returns_exact_ray_parameter():
     assert hit[0] == 0
     assert hit[1] == pytest.approx(2 - math.sqrt(1 - .43**2), abs=1e-10)
     assert picker.first(origin, direction, {group.mesh.faces[0].key}) is None
+
+
+def test_reorienting_open_cylinder_keeps_analytic_faces_and_element_ids():
+    from built_core import Matrix4
+    from built_core.protocol import commands
+
+    scene, history, group = native_cylinder()
+    group.xform = Matrix4()
+    st = group.mesh._store
+    keys = [list(st.keys(kind)) for kind in ("vertex", "edge", "face")]
+    scene.begin_group_edit(group)
+    result = commands.run(history, "set_group_axes", placement=None,
+                          origin=[4, 2, 1], red=[4, 3, 1], green=[3, 2, 1])
+    assert result["ok"], result
+    assert st.native_exact
+    assert [list(st.keys(k)) for k in ("vertex", "edge", "face")] == keys
+    st.check()
+    history.undo()
+    assert st.native_exact
+    st.check()

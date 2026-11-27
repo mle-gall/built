@@ -576,3 +576,79 @@ mod curved_cost {
         }
     }
 }
+
+/// Carry analytic parameters through a rigid change of definition coordinates.
+/// UVs, curve intervals and the slot-to-support maps keep their meaning.
+impl ExactColumns {
+    pub(super) fn change_axes(&mut self, m: glam::DMat4) -> Result<(), &'static str> {
+        use crate::exact::{Curve, Frame, Surface};
+        let point = |p| m.transform_point3(p);
+        let vector = |v| m.transform_vector3(v);
+        let frame = |f: &mut Frame| {
+            f.origin = point(f.origin);
+            f.axis = vector(f.axis);
+            f.reference = vector(f.reference);
+        };
+        let curve = |c: &mut Curve| match c {
+            Curve::Line { origin, direction } => {
+                *origin = point(*origin);
+                *direction = vector(*direction);
+            }
+            Curve::Ellipse { frame: f, .. } | Curve::Circle { frame: f, .. } => frame(f),
+            Curve::Spline { controls, .. } => controls
+                .iter_mut()
+                .for_each(|p| *p = point(p.truncate()).extend(p.w)),
+        };
+        let surface = |s: &mut Surface| match s {
+            Surface::Plane { frame: f }
+            | Surface::Sphere { frame: f, .. }
+            | Surface::Cone { frame: f, .. }
+            | Surface::Cylinder { frame: f, .. }
+            | Surface::Torus { frame: f, .. } => frame(f),
+            Surface::Spline { controls, .. } => controls
+                .iter_mut()
+                .for_each(|p| *p = point(p.truncate()).extend(p.w)),
+            Surface::Extrusion { vector: v, .. } => *v = vector(*v),
+            Surface::Revolution { origin, axis, .. } => {
+                *origin = point(*origin);
+                *axis = vector(*axis);
+            }
+        };
+        if let Some(native) = &mut self.native {
+            let mut rows = native.rows.clone();
+            if let Some(t) = &mut rows.topology {
+                for p in t.vertices.values_mut() {
+                    *p = point(*p);
+                }
+            }
+            rows.curves.iter_mut().for_each(curve);
+            rows.surfaces.iter_mut().for_each(surface);
+            *native = Arc::new(super::native::NativePatch::new(rows)?);
+        }
+        if let Some(planes) = &mut self.planes {
+            Arc::make_mut(planes).iter_mut().for_each(frame);
+        }
+        if let Some(arcs) = &mut self.arcs {
+            for arc in Arc::make_mut(arcs).values_mut() {
+                frame(Arc::make_mut(&mut arc.frame));
+            }
+        }
+        if let Some(curved) = &mut self.curved {
+            let c = Arc::make_mut(curved);
+            for chunk in c.edges.chunks.iter_mut().flatten() {
+                for e in Arc::make_mut(chunk).values_mut() {
+                    curve(&mut e.curve);
+                }
+            }
+            for chunk in c.faces.chunks.iter_mut().flatten() {
+                for f in Arc::make_mut(chunk).values_mut() {
+                    surface(&mut f.surface);
+                    if let Some(g) = &mut f.generator {
+                        curve(g);
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+}

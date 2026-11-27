@@ -33,6 +33,7 @@ fn busy(scene: &Obj<'_>) -> PyResult<bool> {
         || scene.getattr("show_hidden_objects")?.is_truthy()?
         || scene.getattr("show_hidden_geometry")?.is_truthy()?
         || scene.getattr("custom_scales")?.is_truthy()?
+        || !scene.getattr("world_drawing_frame")?.is_none()
         || !scene.getattr("back_face_color")?.is_none()
         || scene.getattr("layers")?.len()? > 1
     {
@@ -87,6 +88,7 @@ pub fn scene_clear(scene: &Obj<'_>) -> PyResult<()> {
         scene.setattr("show_hidden_objects", false)?;
         scene.setattr("show_hidden_geometry", false)?;
         scene.setattr("show_axes", true)?;
+        scene.setattr("world_drawing_frame", scene.py().None())?;
         scene.setattr("north_deg", 0.0)?;
         scene.setattr("version", scene.getattr("version")?.add(1)?)?;
     }

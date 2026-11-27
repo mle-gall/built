@@ -696,7 +696,7 @@ fn scene_drawing_frame<'py>(me: &Obj<'py>) -> PyResult<Obj<'py>> {
     if levels.is_truthy()? {
         return levels.get_item(-1)?.call_method1(intern!(py, "get"), (intern!(py, "frame"),));
     }
-    Ok(none(py))
+    me.getattr("world_drawing_frame")
 }
 
 /// The real loose mesh regardless of the edit context.
@@ -1130,6 +1130,7 @@ fn build_scene<'py>(m: &Bound<'py, PyModule>) -> PyResult<Obj<'py>> {
         ("show_hidden_objects", f.clone()),
         ("show_hidden_geometry", f.clone()),
         ("show_axes", t.clone()),
+        ("world_drawing_frame", nothing.clone()),
         ("north_deg", 0.0f64.into_pyobject(py)?.into_any()),
         ("hide_similar_components", f.clone()),
         ("show_section_cuts", t.clone()),

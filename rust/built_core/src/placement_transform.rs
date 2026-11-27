@@ -137,21 +137,13 @@ impl GroupTransform {
 
 fn reexpress(g: &Obj<'_>, delta: &Obj<'_>) -> PyResult<()> {
     let proto = g.getattr("mesh")?;
-    let moved = g
-        .py()
-        .import("built_core")?
-        .call_method1("group_transformed_mesh", (&proto, delta))?;
-    proto.call_method1("restore_state", (moved.call_method0("capture_state")?,))?;
-    let kids = g.getattr("children")?;
-    if kids.is_truthy()? {
-        for child in kids.try_iter()? {
-            let child = child?;
-            let m = child.getattr("xform")?;
-            if !m.is_none() {
-                child.setattr("xform", delta.mul(m)?)?;
-            }
-        }
+    if let Some(store) = proto.getattr_opt("_store")? {
+        store.call_method1("_change_definition_axes", (delta.call_method0("data")?,))?;
+        proto.call_method0("_bump")?;
+    } else {
+        move_mesh(&proto, delta, None)?;
     }
+    g.py().import("built_core")?.call_method1("group_remap_uvws", (&proto, delta))?;
     Ok(())
 }
 
@@ -160,6 +152,7 @@ struct AxesEdit {
     delta: Option<Py<PyAny>>,
     axes: Option<Py<PyAny>>,
     instances: Vec<(Py<PyAny>, Py<PyAny>, Py<PyAny>)>,
+    children: Vec<(Py<PyAny>, Py<PyAny>)>,
 }
 #[pymethods]
 impl AxesEdit {
@@ -169,6 +162,7 @@ impl AxesEdit {
             delta: None,
             axes: None,
             instances: Vec::new(),
+            children: Vec::new(),
         }
     }
     fn fields_only(&self) -> bool {
@@ -182,17 +176,15 @@ impl AxesEdit {
             g.setattr("axes", copy_matrix(frame)?)?;
             return Ok(true);
         }
-        let inv = frame.call_method0("inverted")?;
-        if !inv.get_item(1)?.is_truthy()? {
-            return Ok(false);
-        }
-        let delta = inv.get_item(0)?.mul(pose)?;
-        let inverted = delta.call_method0("inverted")?;
-        if !inverted.get_item(1)?.is_truthy()? {
-            self.delta = None;
-            return Ok(false);
-        }
-        let inverse = inverted.get_item(0)?;
+        // A scaled occurrence retains its stretch in the placement. Express
+        // the requested origin and directions in definition coordinates.
+        let old = crate::math::mat(&pose)?;
+        let local = old.inverse() * crate::math::mat(frame)?;
+        let Some(x) = local.x_axis.truncate().try_normalize() else { return Ok(false) };
+        let Some(z) = x.cross(local.y_axis.truncate()).try_normalize() else { return Ok(false) };
+        let basis = glam::DMat4::from_cols(x.extend(0.), z.cross(x).extend(0.), z.extend(0.), local.w_axis);
+        let delta = Bound::new(py, Matrix4::from(basis.inverse()))?.into_any();
+        let inverse = Bound::new(py, Matrix4::from(basis))?.into_any();
         let mesh = g.getattr("mesh")?;
         let mut seen = HashSet::new();
         let mut instances = Vec::new();
@@ -212,6 +204,19 @@ impl AxesEdit {
             instances.push(g.clone());
         }
         reexpress(g, &delta)?;
+        let mut seen_children = HashSet::new();
+        self.children.clear();
+        for instance in &instances {
+            for child in instance.getattr("children")?.try_iter()? {
+                let child = child?;
+                if seen_children.insert(child.as_ptr()) {
+                    let before = child.getattr("xform")?;
+                    let after = if before.is_none() { delta.clone() } else { delta.mul(&before)? };
+                    self.children.push((child.clone().unbind(), before.unbind()));
+                    child.setattr("xform", after)?;
+                }
+            }
+        }
         self.delta = Some(delta.unbind());
         self.instances.clear();
         for part in &instances {
@@ -238,6 +243,7 @@ impl AxesEdit {
         };
         let inverse = delta.bind(py).call_method0("inverted")?.get_item(0)?;
         reexpress(g, &inverse)?;
+        for (child, pose) in &self.children { child.bind(py).setattr("xform", pose.bind(py))?; }
         for (part, axes, pose) in &self.instances {
             let part = part.bind(py);
             part.setattr("xform", copy_matrix(pose.bind(py))?)?;
