@@ -198,3 +198,42 @@ def test_polar_copy_field_spacing_and_fit_share_the_array_window():
     assert scene.groups[-1].uid == first.uid
     vp.history.undo()
     assert scene.groups == [source]
+
+
+def test_notched_adaptive_parts_match_the_boolean_kernel(tmp_path):
+    import pytest
+    from built_core.group import Group
+    from built_core.history import History
+    from built_core.solids import run, solid_volume
+    from scripts.repeat_storyboard import build
+
+    build(tmp_path)
+    scene = Scene()
+    igz.load_into(scene, tmp_path / "portal.built")
+    history = History(scene)
+    row = next(r for r in queries.live_rows(scene) if r["uid"] == f"{210:016x}")
+    assembly = next(g for g in scene.groups if g.uid == row["owner"])
+    stocks = []
+    for placed in assembly.children:
+        stock = Group(placed.mesh)
+        stock.xform = placed.xform
+        stocks.append(stock)
+    apply(history, "create_sweeps", sweeps=[{
+        "profile": {"library": "basic/timber", "params": {"width": 120, "height": 55}},
+        "path": {"points": [[-.2, .3, 3.39], [3.65, .3, 4.82]]}, "attachment": "centre",
+    }])
+    tool = scene.groups[-1]
+    apply(history, "live_set", row=dict(kind="cut", owner=row["source"], uid=f"{399:016x}",
+                                        operation="subtract", cutter={"body": tool.uid}))
+    for stock, station in zip(stocks, assembly.children, strict=True):
+        _, (reference,) = run("subtract", [tool, stock])
+        assert solid_volume(station) == pytest.approx(solid_volume(reference), rel=1e-7)
+        assert len(station.mesh.faces) == len(reference.mesh.faces) > 6
+        def points(group):
+            return sorted(tuple(round(k, 6) for k in group.xform.map(v.position).toTuple())
+                          for v in group.mesh.vertices)
+        # The kernel returns a group in model space.
+        from built_core import Matrix4
+        if reference.xform is None:
+            reference.xform = Matrix4()
+        assert points(station) == points(reference)
