@@ -918,3 +918,44 @@ def test_filtered_face_has_no_colour_depth_or_reveal_geometry(native, grouped):
     clean.attrs["color"] = (1., 0., 0.)
     pack_scene(reference).upload(native)
     np.testing.assert_array_equal(filtered, capture(native))
+
+
+def test_large_mesh_edits_match_a_fresh_pack_and_frame(native, monkeypatch):
+    from built_core import InstanceUpdates, Vec3, pack_scene
+    from tests.test_big_model_budgets import _grid
+    from tests.test_wgpu_updates import assert_matches_fresh_pack
+
+    scene = Scene()
+    mesh = scene.loose_mesh
+    _grid(mesh, 182)
+    packed = pack_scene(scene)
+    updates = InstanceUpdates(scene, packed)
+    packed.upload(native)
+    native.set_style(dict(sky=False, edges=True, profiles=True))
+    original = capture(native)
+    base = int(packed.commands[0]['base'])
+    size = len(packed.vertices)
+
+    def check():
+        with monkeypatch.context() as scoped:
+            def unexpected(*args, **kwargs):
+                pytest.fail("local edit packed the entire prototype")
+            scoped.setattr('built_core.pack_scene', unexpected)
+            updates.apply(*updates.diff(scene), native)
+        assert int(packed.commands[0]['base']) == base
+        assert len(packed.vertices) == size
+        incremental = capture(native)
+        assert_matches_fresh_pack(updates, scene)
+        pack_scene(scene).upload(native)
+        np.testing.assert_array_equal(incremental, capture(native))
+        return incremental
+
+    # Add a visible cell immediately to the left of the origin, then move
+    # a shared corner. Both frames must draw the same edges and triangles.
+    mesh.add_face([Vec3(-1,0,0), Vec3(0,0,0), Vec3(0,1,0), Vec3(-1,1,0)])
+    assert np.any(original != check())
+    assert updates.face_ranges(mesh, [mesh.faces[0]]) == [(0, 0, 2)]
+    assert not mesh.faces[0].attrs
+    mesh.faces[0].interior = True
+    mesh.move_vertex(mesh.vertices[0], Vec3(.5,.5,.25))
+    check()

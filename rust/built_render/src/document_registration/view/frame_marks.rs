@@ -122,6 +122,11 @@ fn face_ranges<'py>(a: &Args<'py>) -> Reply<'py> {
     let packed = view.getattr("packed")?;
     let scene = view.getattr("scene")?;
     let mesh = scene.getattr("mesh")?;
+    let tracker = attr(&view, "_instance_updates")?;
+    if let Some(lookup) = tracker.getattr_opt("face_ranges")? {
+        let found = lookup.call1((&mesh, &faces))?;
+        if !found.is_none() { return Ok(found); }
+    }
     let mut cache = attr(&packed, "_face_ranges")?;
     if cache.is_none() {
         cache = PyDict::new(py).into_any();

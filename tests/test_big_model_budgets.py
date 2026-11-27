@@ -9,10 +9,9 @@ machine already busy (the full suite on every core) a miss is reported and
 skipped, with the figures, rather than failed: the quiet single-worker pass
 (``-m perf -p no:xdist``) is the one that holds them.
 
-An edit of a 200k-face mesh rebakes its prototype, but the steps after it
-carry what they derived from the last bake over (the renderer's edge
-expansion, the snap trees) and the command's face searches use a box tree
-patched from the store's diff, so a commit stays within its budget.
+Commit timings include the tool action, idle processing and the next frame.
+The interactive edit targets are 50 ms (120 ms for Push/Pull), with a
+20 percent allowance in the budget assertions.
 """
 import math
 import os
@@ -28,8 +27,10 @@ pytestmark = pytest.mark.perf
 
 # One table: what each interaction may cost, in milliseconds.
 BUDGET_MS = {
-    "line_commit_200k": 120,     # release to the next frame, on the 200k mesh
-    "erase_commit_200k": 120,
+    "line_commit_200k": 60,     # release to the next frame, on the 200k mesh
+    "erase_commit_200k": 60,
+    "move_commit_200k": 60,
+    "push_commit_200k": 144,
     "select_hover_200k": 3,      # median of a Select hover over the 200k mesh
     "select_all_view_frame": 100,  # the frame that shows a select-all's highlight
     "select_all_panel_frame": 50,  # worst frame while the panels catch up
@@ -230,6 +231,40 @@ def test_big_model_interaction_budgets(tmp_path):
             _settle(host, 3)
         ms["select_all_view_frame"] = min(shown)
         ms["select_all_panel_frame"] = min(worst)
+
+        vp.camera.fit_to(V(0, 0, 0), V(12, 8, 0))
+        _settle(host)
+        moves, pushes = [], []
+        for k in range(3):
+            p = V(1 + k, 7, 0)
+            q = V(p.x() + .3, p.y() + .2, 0)
+            host.menu("tool:move")
+            vertex = vp.scene.mesh.vertex_at(p)
+            before = vertex.position_tuple()
+            move(p)
+            click(p)
+            _settle(host)
+            move(q)
+            _settle(host)
+            moves.append(timed(lambda: click(q)))
+            assert vertex.position_tuple() != before
+            _key(host, Qt.Key_Escape.value)
+
+        for k in range(3):
+            p = V(8.5 + k, 1.5, 0)
+            q = V(p.x(), p.y() + .6, 0)
+            host.menu("tool:pushpull")
+            move(p)
+            click(p)
+            _settle(host)
+            move(q)
+            _settle(host)
+            faces = len(vp.scene.mesh.faces)
+            pushes.append(timed(lambda: click(q)))
+            assert len(vp.scene.mesh.faces) > faces
+            _key(host, Qt.Key_Escape.value)
+        ms["move_commit_200k"] = min(moves)
+        ms["push_commit_200k"] = min(pushes)
 
     table = "\n".join(f"  {k:<24} {ms[k]:8.1f} ms  (budget {v} ms)" for k, v in BUDGET_MS.items())
     print("\nbig model budgets:\n" + table)

@@ -164,6 +164,8 @@ struct Command {
     base: i32,
     start: u32,
 }
+fn edit_slack(count: usize) -> usize { (count / 64).clamp(64, 16384) }
+
 struct TimingSlot {
     read: wgpu::Buffer,
     active: Vec<&'static str>,
@@ -472,6 +474,28 @@ fn grown_buffer(d: &wgpu::Device, q: &wgpu::Queue, old: &wgpu::Buffer, used: usi
     // Submitted now: writes queued after this land after the copy.
     q.submit([encoder.finish()]);
     grown
+}
+
+/// Relocate equal spans on the GPU. A scratch copy keeps the old bytes
+/// available even when sources and destinations overlap in both directions.
+fn move_buffer_spans(device: &wgpu::Device, queue: &wgpu::Queue, target: &wgpu::Buffer,
+                     base: usize, moves: &[(usize,usize,usize)]) {
+    if moves.is_empty() { return; }
+    let size = moves.iter().map(|(_,_,n)| *n as u64).sum();
+    let scratch = device.create_buffer(&wgpu::BufferDescriptor { label: Some("relocate prototype spans"),
+        size, usage: wgpu::BufferUsages::COPY_SRC | wgpu::BufferUsages::COPY_DST, mapped_at_creation: false });
+    let mut encoder = device.create_command_encoder(&Default::default());
+    let mut at = 0;
+    for &(src,_,len) in moves {
+        encoder.copy_buffer_to_buffer(target,(base+src) as u64,&scratch,at,len as u64);
+        at += len as u64;
+    }
+    at = 0;
+    for &(_,dst,len) in moves {
+        encoder.copy_buffer_to_buffer(&scratch,at,target,(base+dst) as u64,len as u64);
+        at += len as u64;
+    }
+    queue.submit([encoder.finish()]);
 }
 
 fn bind_prototypes(d: &wgpu::Device, layout: &wgpu::BindGroupLayout,
@@ -1052,6 +1076,11 @@ impl Renderer {
             .map(|t| t.config.width as u64 * t.config.height as u64)
             .sum::<u64>().saturating_add(live) * per_pixel
     }
+    /// Estimated heap bytes held by live edge adjacency caches.
+    #[getter]
+    fn edge_cache_bytes(&self) -> usize {
+        self.scene.as_ref().map_or(0, |s| s.edge_memos.iter().map(|m| m.1.retained_bytes()).sum())
+    }
     /// Packed little-endian arrays; reject malformed uploads before reaching wgpu.
     fn set_scene(&mut self, prototypes: PrototypeArrays<'_>, instances: PyReadonlyArray1<'_, u8>) -> PyResult<()> {
         let raw = instances.as_slice()?;
@@ -1075,8 +1104,8 @@ impl Renderer {
         }
         let geometry = upload.0.take().unwrap();
         let instances = raw;
-        let scene_upload::Geometry { edges: expanded_v, vertices: face_v, indices: face_ix,
-            commands: expanded_cmd, shifts: material_shifts, bounds, codes } = geometry;
+        let scene_upload::Geometry { edges: mut expanded_v, vertices: face_v, indices: face_ix,
+            commands: mut expanded_cmd, shifts: material_shifts, bounds, codes, memos } = geometry;
         let p = bounds.as_slice();
         let n = codes.len();
         let count = p.len() / 32;
@@ -1087,6 +1116,10 @@ impl Renderer {
             return Err(PyValueError::new_err("scene capacity exceeds storage binding limit"));
         }
         self.sun.invalidate();
+        let keep_edge_slack = expanded_v.len() <= limit;
+        if !keep_edge_slack {
+            edges::remove_slack(&mut expanded_v, &mut expanded_cmd, count);
+        }
         let (v, ix, cmd) = (face_v.as_slice(), face_ix.as_slice(), expanded_cmd.as_slice());
         if expanded_v.len() as u64 > self.device.limits().max_storage_buffer_binding_size as u64 {
             return Err(PyValueError::new_err("edge records exceed storage binding limit"));
@@ -1155,6 +1188,15 @@ impl Renderer {
                 as u64 + self.textures.bytes + self.textures.materials.size();
         self.pick_read = PickRead::DIRTY; self.scene_epoch += 1;
         self.material_transparency = true; // unclassified raw scenes use conservative OIT
+        let mut replaced = std::collections::HashMap::new();
+        for (id, memo) in &memos {
+            let face: Command = bytemuck::pod_read_unaligned(&cmd[id * 20..][..20]);
+            let edge: Command = bytemuck::pod_read_unaligned(&cmd[(count + id) * 20..][..20]);
+            let nf = face.count as usize;
+            let ne = memo.records.len() / 48;
+            replaced.insert(*id, [face.base as usize, nf + edit_slack(nf),
+                face.first as usize, nf + edit_slack(nf), edge.first as usize / 6, ne + if keep_edge_slack { edit_slack(ne) } else { 0 }]);
+        }
         self.scene = Some(Scene {
             edge_data: expanded_v,
             edge_records,
@@ -1175,8 +1217,8 @@ impl Renderer {
             capacity,
             vertex_bytes: v.len(),
             index_data: face_ix,
-            replaced: std::collections::HashMap::new(),
-            edge_memos: Vec::new(),
+            replaced,
+            edge_memos: memos,
             flags: instances
                 .chunks_exact(80)
                 .map(|r| u32::from_le_bytes(r[72..76].try_into().unwrap()))
@@ -1231,7 +1273,7 @@ impl Renderer {
         // A big prototype as the bake gives it (one vertex per index, in
         // order) keeps its expansion: the next rebake patches it, and only
         // the bytes that moved are uploaded when it goes back in place.
-        let trivial = (faces as usize) / 3 >= edge_memo::KEEP_PAST && ix.len() / 4 == v.len() / 28
+        let trivial = v.len() / 28 <= edge_memo::MAX_VERTICES && (faces as usize) / 3 >= edge_memo::KEEP_PAST && ix.len() / 4 == v.len() / 28
             && faces % 3 == 0 && (ix.len() / 4 - faces as usize) % 2 == 0
             && ix.chunks_exact(4).enumerate().all(|(i, c)| u32::from_le_bytes(c.try_into().unwrap()) == i as u32);
         let mut patch = None;
@@ -1300,10 +1342,16 @@ impl Renderer {
         // goes up (the face vertices and records that differ from those
         // already there, the indices past the old ones).
         let ranged = match (&patch, reuse) {
-            (Some(record_changes), Some(_)) => {
+            (Some((face_changes, record_changes)), Some(_)) => {
                 let old = &s.index_data[index_base*4..index_base*4+indices.len()];
                 let first = old.chunks_exact(4).zip(indices.chunks_exact(4)).position(|(a, b)| a != b).map_or(indices.len(), |i| i*4);
-                Some((vec![0..face.len()], first..indices.len(), record_changes.clone()))
+                move_buffer_spans(&self.device, &self.queue, &s.vertex, vertex_base * 28, &face_changes.moves);
+                move_buffer_spans(&self.device, &self.queue, &s.edge_records, edge_base * 48, &record_changes.moves);
+                for &(_, dst, size) in &record_changes.moves {
+                    let base = edge_base * 48 + dst;
+                    s.edge_data[base..base+size].copy_from_slice(&edge[dst..dst+size]);
+                }
+                Some((face_changes.upload.clone(), first..indices.len(), record_changes.upload.clone()))
             }
             _ => None,
         };
@@ -1362,8 +1410,10 @@ impl Renderer {
         }
         let soft = gpu_commands(&s.template_data, s.p as usize, false);
         let hard = gpu_commands(&s.template_data, s.p as usize, true);
-        let quads = quad_indices(widest_edge_row(&s.template_data, s.p as usize).max(1));
-        if quads.len() as u64 > s.quad_index.size() { s.quad_index = buffer(&self.device, &quads, wgpu::BufferUsages::INDEX); }
+        let quads = widest_edge_row(&s.template_data, s.p as usize).max(1);
+        if quads as u64 * 24 > s.quad_index.size() {
+            s.quad_index = buffer(&self.device, &quad_indices(quads + quads / 64), wgpu::BufferUsages::INDEX);
+        }
         for (target, data, usage) in [
             (&mut s.protos, &s.prototype_data, wgpu::BufferUsages::STORAGE),
             (&mut s.template, &soft, wgpu::BufferUsages::COPY_SRC),
@@ -1382,7 +1432,7 @@ impl Renderer {
             memo.records = edge;
             let s = self.scene.as_mut().expect("the scene just written");
             s.edge_memos.push((id, memo));
-            if s.edge_memos.len() > 2 {
+            while s.edge_memos.len() > 2 || s.edge_memos.iter().map(|m| m.1.retained_bytes()).sum::<usize>() > edge_memo::CACHE_BYTES {
                 s.edge_memos.remove(0);
             }
         }
@@ -1809,7 +1859,13 @@ impl Renderer {
                 } else { hard.extend(edge); }
             }
             let count = (hard.len()/48*6) as u32;
-            hard.extend(soft); s.edge_data[range.clone()].copy_from_slice(&hard);
+            hard.extend(soft);
+            if s.edge_data[range.clone()] != hard {
+                // Exclusion sorting changes the physical record order.
+                // The next replacement must restore the entire edge range.
+                s.edge_memos.retain(|m| m.0 != prototype);
+                s.edge_data[range.clone()].copy_from_slice(&hard);
+            }
             s.template_data[offset+16..offset+20].copy_from_slice(&count.to_le_bytes());
             touched.push(range);
         }

@@ -59,6 +59,7 @@ pub fn build_snap_index(
         let protos: Vec<InstanceProto> = data
             .into_par_iter()
             .map(|d| prepared(d).map(|(a, b, c, segments, curves)| InstanceProto {
+                source: None,
                 inner: std::sync::Arc::new(instances::Proto::new(a, b, c, segments)),
                 curves,
             }))
@@ -108,7 +109,7 @@ fn prepared((tri, pos, edges, keep, curve_ids): (&[f32], &[f64], &[i64], &[bool]
         b.push(std::array::from_fn(|i| t[3 + i] as f64 - v[i]));
         c.push(std::array::from_fn(|i| t[6 + i] as f64 - v[i]));
     }
-    let mut segments = Vec::new();
+    let mut segments = Vec::with_capacity(keep.iter().filter(|&&k| k).count());
     let mut curves: Vec<Vec<[f64; 6]>> = Vec::new();
     let mut named = HashMap::new();
     for (i, e) in edges.chunks_exact(2).enumerate() {
@@ -154,6 +155,6 @@ pub fn patch_snap_proto(py: Python<'_>, old: PyRef<'_, InstanceProto>, input: In
     py.detach(|| {
         let (a, b, c, segments, curves) = prepared(data)?;
         let inner = previous.patched(a, b, c, segments);
-        Ok(InstanceProto { inner: std::sync::Arc::new(inner), curves })
+        Ok(InstanceProto { source: None, inner: std::sync::Arc::new(inner), curves })
     })
 }

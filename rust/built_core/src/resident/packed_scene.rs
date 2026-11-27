@@ -27,6 +27,58 @@ use pyo3::{
 
 type Obj<'py> = Bound<'py, PyAny>;
 
+pub(super) fn owned_room(
+    slf: &Bound<'_, PackedScene>,
+    code: usize,
+) -> PyResult<Option<(usize, usize, usize)>> {
+    let py = slf.py();
+    let s = slf.borrow();
+    let tables = [
+        &s.commands,
+        &s.edge_commands,
+        &s.hidden_commands,
+        &s.hidden_edge_commands,
+    ]
+    .map(|t| bytes(t.bind(py)));
+    let [faces, edges, hidden_faces, hidden_edges] = tables;
+    let tables = [faces?, edges?, hidden_faces?, hidden_edges?];
+    let count_of = |table: &[u8], code: usize| u32_at(table, code * COMMAND_BYTES) as usize;
+    let base_of = |code: usize| {
+        i32::from_le_bytes(
+            tables[0][code * COMMAND_BYTES + 12..code * COMMAND_BYTES + 16]
+                .try_into()
+                .expect("four bytes"),
+        )
+    };
+    let prototypes = tables[0].len() / COMMAND_BYTES;
+    if code < prototypes {
+        let owned: usize = tables.iter().map(|t| count_of(t, code)).sum();
+        let base = base_of(code);
+        // Two codes never share a range in the bake; check anyway,
+        // a shared one must not be overwritten for both.
+        let sharing = (0..prototypes)
+            .filter(|c| base_of(*c) == base && tables.iter().any(|t| count_of(t, *c) > 0))
+            .count();
+        // Large bakes leave a gap before the next live prototype.
+        // Its draw commands retain their actual counts as it grows.
+        let available = if owned >= 196608 && base >= 0 {
+            let end = (0..prototypes)
+                .map(base_of)
+                .filter(|&b| b > base)
+                .min()
+                .map(|b| b as usize)
+                .unwrap_or(bytes(s.vertices.bind(py))?.len() / VERTEX_BYTES);
+            end.saturating_sub(base as usize)
+        } else {
+            owned
+        };
+        if sharing == 1 && base >= 0 {
+            return Ok(Some((base as usize, owned, available)));
+        }
+    }
+    Ok(None)
+}
+
 /// Bytes of one instance row: a 4×4 f32 world matrix and four u32 of info.
 pub const INSTANCE_BYTES: usize = 80;
 /// Bytes of one indexed indirect command: count, instances, first, base, start.
@@ -37,6 +89,12 @@ const MATERIAL_UNIT: usize = 16;
 const MATERIAL_RECORD: usize = 32;
 pub const OBJECT_HIDDEN: u32 = 1 << 4;
 pub const VISIBILITY_FILTERED: u32 = 1 << 5;
+
+fn copy_changed(target: &mut [u8], source: &[u8]) {
+    for (dst, src) in target.chunks_mut(4096).zip(source.chunks(4096)) {
+        if dst != src { dst.copy_from_slice(src); }
+    }
+}
 
 /// The array's bytes: it must be C-contiguous (every packed buffer is).
 fn bytes<'a>(array: &'a Obj<'_>) -> PyResult<&'a [u8]> {
@@ -541,24 +599,14 @@ impl PackedScene {
         }
         let used = {
             let s = slf.borrow();
-            let tables = [&s.commands, &s.edge_commands, &s.hidden_commands, &s.hidden_edge_commands].map(|t| bytes(t.bind(py)));
-            let [faces, edges, hidden_faces, hidden_edges] = tables;
-            let tables = [faces?, edges?, hidden_faces?, hidden_edges?];
-            let count_of = |table: &[u8], code: usize| u32_at(table, code * COMMAND_BYTES) as usize;
-            let base_of = |code: usize| i32::from_le_bytes(tables[0][code * COMMAND_BYTES + 12..code * COMMAND_BYTES + 16].try_into().expect("four bytes"));
-            let prototypes = tables[0].len() / COMMAND_BYTES;
-            if code < prototypes {
-                let owned: usize = tables.iter().map(|t| count_of(t, code)).sum();
-                let base = base_of(code);
-                // Two codes never share a range in the bake; check anyway,
-                // a shared one must not be overwritten for both.
-                let sharing = (0..prototypes).filter(|c| base_of(*c) == base && tables.iter().any(|t| count_of(t, *c) > 0)).count();
-                if total <= owned && sharing == 1 && base >= 0 {
-                    let base = base as usize;
+            if let Some((base,_,available)) = owned_room(slf,code)? {
+                if total <= available {
                     let (target_v, target_i) = (bytes_mut(s.vertices.bind(py))?, bytes_mut(s.indices.bind(py))?);
                     let range = |unit: usize| base * unit..(base + total) * unit;
-                    target_v.get_mut(range(VERTEX_BYTES)).ok_or_else(|| PyValueError::new_err("prototype range out of bounds"))?.copy_from_slice(new_v);
-                    target_i.get_mut(range(INDEX_BYTES)).ok_or_else(|| PyValueError::new_err("prototype range out of bounds"))?.copy_from_slice(new_i);
+                    let target = target_v.get_mut(range(VERTEX_BYTES)).ok_or_else(|| PyValueError::new_err("prototype range out of bounds"))?;
+                    copy_changed(target, new_v);
+                    let target = target_i.get_mut(range(INDEX_BYTES)).ok_or_else(|| PyValueError::new_err("prototype range out of bounds"))?;
+                    copy_changed(target, new_i);
                     return Ok(base);
                 }
             }
@@ -569,7 +617,7 @@ impl PackedScene {
         let room = match room.cast_into::<Room>() {
             Ok(room) if room.borrow().vertices.as_ptr() == current && used + total <= room.borrow().capacity() => room,
             _ => {
-                let mut fresh = Room::with_capacity(used + total + (total * 4).max(used / 32).max(4096));
+                let mut fresh = Room::with_capacity(used + total + (total / 64).max(used / 32).max(4096));
                 {
                     let s = slf.borrow();
                     fresh.vertices[..used * VERTEX_BYTES].copy_from_slice(bytes(s.vertices.bind(py))?);

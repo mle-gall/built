@@ -84,7 +84,10 @@ impl State {
                 }
                 || edge_faces(a, s) != edge_faces(b, s)
         });
-        let pools_shared = same_col(&a.corners, &b.corners) && same_col(&a.ring_sizes, &b.ring_sizes);
+        // Ring edits append to the pools. If the common prefix is equal,
+        // unchanged face descriptors read identical data from both states,
+        // including across undo and branches of history.
+        let pools_shared = same_prefix(&a.corners, &b.corners) && same_prefix(&a.ring_sizes, &b.ring_sizes);
         diff_kind(a, b, Kind::Face, &mut ch, |c| {
             pools_shared
                 && a.frings.same_chunk(&b.frings, c)
@@ -179,6 +182,13 @@ fn diff_kind(
 
 fn same_col<T: Clone>(a: &CowVec<T>, b: &CowVec<T>) -> bool {
     a.len() == b.len() && (0..a.n_chunks()).all(|c| a.same_chunk(b, c))
+}
+
+fn same_prefix<T: Clone + PartialEq>(a: &CowVec<T>, b: &CowVec<T>) -> bool {
+    a.chunks().zip(b.chunks()).enumerate().all(|(i, (x, y))| {
+        let n = x.len().min(y.len());
+        a.same_chunk(b, i) || x[..n] == y[..n]
+    })
 }
 
 fn layer_name(st: &State, l: u32) -> Option<&str> {
