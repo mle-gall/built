@@ -57,6 +57,9 @@ struct Args {
     venv: Option<PathBuf>,
     size: (f64, f64),
     new_instance: bool,
+    /// `--present`: a scripted run in a visible, focused window (a demo
+    /// beat played for screen recording; scripts/play_beat.py).
+    present: bool,
     measure: bool,
     check: bool,
     gallery: bool,
@@ -77,7 +80,7 @@ impl Args {
     /// windows open behind whatever the user is doing. `BUILT_BACKGROUND=1`
     /// asks for the same on any launch.
     fn background(&self) -> bool {
-        self.check || self.measure || self.script.is_some()
+        self.check || self.measure || (self.script.is_some() && !self.present)
             || std::env::var_os("BUILT_BACKGROUND").is_some_and(|v| v != "0")
     }
 }
@@ -99,10 +102,11 @@ fn parse_args(mut it: impl Iterator<Item = String>) -> Result<Args, String> {
             }
             "--gallery" => { a.gallery = true; a.new_instance = true; },
             "--new-instance" | "--new-window" => a.new_instance = true,
+            "--present" => a.present = true,
             "--measure" => a.measure = true,
             "--check" => a.check = true,
             "-h" | "--help" => {
-                println!("built [file] [--script f] [--shots dir] [--settings dir] [--root dir] \
+                println!("built [file] [--script f [--present]] [--shots dir] [--settings dir] [--root dir] \
                           [--venv dir] [--size WxH] [--new-instance] [--gallery] [--measure] [--check]\nbuilt --mcp\nbuilt -i document -p [-o output.pdf]");
                 std::process::exit(0);
             }
@@ -1538,6 +1542,15 @@ mod profile_tests {
     }
 
     #[test]
+    fn a_presented_script_runs_in_front_and_a_plain_one_behind() {
+        if std::env::var_os("BUILT_BACKGROUND").is_some_and(|v| v != "0") { return; }
+        let plain = parse_args(["--script", "beat"].map(str::to_owned).into_iter()).unwrap();
+        assert!(plain.background() && plain.temporary_profile());
+        let shown = parse_args(["--script", "beat", "--present"].map(str::to_owned).into_iter()).unwrap();
+        assert!(shown.present && !shown.background() && shown.temporary_profile());
+    }
+
+    #[test]
     fn desktop_open_waits_for_a_window_and_routes_later_files_immediately() {
         let mut files = LaunchFiles::default();
         let id = WindowId::from(1);
@@ -1897,6 +1910,7 @@ impl App {
 /// `Args::background`, read from the raw command line.
 fn app_args_background() -> bool {
     let args: Vec<String> = std::env::args().skip(1).collect();
-    args.iter().any(|a| a == "--check" || a == "--measure" || a == "--script")
+    let present = args.iter().any(|a| a == "--present");
+    args.iter().any(|a| a == "--check" || a == "--measure" || (a == "--script" && !present))
         || std::env::var_os("BUILT_BACKGROUND").is_some_and(|v| v != "0")
 }
