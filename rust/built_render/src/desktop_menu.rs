@@ -14,6 +14,11 @@ struct Desktop {
     checks: Option<Checks>,
     shortcuts: std::collections::HashMap<String, String>,
 }
+impl Desktop {
+    fn enabled(&self, id: &str) -> bool {
+        id != "weld_edges" || self.checks.as_ref().is_some_and(|checks| checks.4)
+    }
+}
 type Buttons = Vec<(String, (f32, f32))>;
 thread_local! { static BUTTONS: RefCell<Buttons> = RefCell::default(); }
 pub fn take_buttons() -> Buttons {
@@ -198,7 +203,7 @@ pub(crate) fn show(ui: &mut Ui, extensions: &[extension_menu::Row], enabled: boo
                                 ),
                                 Row::Entry(id) => {
                                     if let Some(e) = model_menu::entries().iter().find(|e| e.id == id) {
-                                        item(ui, e.id, e.label, e.shortcut, id != "weld_edges" || state.checks.as_ref().is_some_and(|c| c.4), entry_check(state, id), &mut selected);
+                                        item(ui, e.id, e.label, e.shortcut, state.enabled(id), entry_check(state, id), &mut selected);
                                     }
                                 }
                                 Row::Sub(title) => {
@@ -303,7 +308,7 @@ impl Command {
     }
     #[pyo3(name = "isEnabled")]
     fn enabled(&self) -> bool {
-        true
+        DESKTOP.with_borrow(|state| state.enabled(&self.id))
     }
     fn set_shortcut(&self, key: &str, factory: bool) {
         DESKTOP.with_borrow_mut(|s| {
