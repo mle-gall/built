@@ -425,6 +425,13 @@ def test_public_ap214_fixture_reopens(tmp_path, name):
     step.save_step(scene, output)
     result = step.prepare_step(output)
     assert result["exact"] == 1 and not result["problems"]
+    if name == "torus":
+        mesh = result["groups"][0].mesh
+        assert mesh._store.native_exact and len(mesh.faces) == 1
+        uses, = mesh._store.face_boundary_uses(mesh.faces[0].key)
+        edges = [int(e) for e in mesh._store.ids("edge")]
+        assert len(edges) == 2
+        assert sorted(uses) == sorted((e, sense) for e in edges for sense in (False, True))
     if name == "assembly_two_boxes":
         first, second = result["groups"][0].children
         assert first.mesh is second.mesh
@@ -487,3 +494,64 @@ def test_background_open_and_insert_keep_source_recovery_counts():
     command = DocumentOpen(path, insert=True).wait()
     _, _, history, _ = DocumentOpen(path).wait()
     assert command._skp_recovery_counts == history._skp_recovery_counts == (48, 0)
+
+
+def test_step_import_feedback_has_one_result_and_optional_details(native_host, monkeypatch, tmp_path, caplog):
+    import re
+    import built_render
+    from built_render import chrome_dialogs as dialogs
+
+    win = native_host.window
+    monkeypatch.setattr(dialogs, "async_host", lambda _: win)
+    fixtures = Path(__file__).parent / "fixtures" / "step"
+    assert built_render.import_file(win, fixtures / "stepmesh/torus.step", "step")
+    rows = [r for r in dialogs.history(win) if "torus.step" in r.title]
+    assert [(r.title, r.tone) for r in rows] == [("Imported torus.step · 1 exact body", "success")]
+
+    damaged = tmp_path / "partial.step"
+    data = (fixtures / "mixed-parts.step").read_text()
+    damaged.write_text(re.sub(r"(ORIENTED_EDGE\([^\n]+),\.T\.\);", r"\1,.F.);", data, count=1))
+    assert not built_render.import_file(win, damaged, "step")
+    sheet = dialogs.current_sheet(win)
+    assert sheet.default == sheet.cancel == "cancel"
+    assert [key for key, _, _, role in sheet.buttons if role == 1] == ["cancel"]
+    assert "1 of 2 bodies" in sheet.text and "damaged closed shell" in sheet.text
+    assert "ValueError" not in sheet.text and "BREP_WITH_VOIDS #" in caplog.text
+    assert dialogs.sheet_buttons(sheet)[-1] == ("details", "Details", "", 6)
+    dialogs.answer(win, "details")
+    assert "BREP_WITH_VOIDS #" in dialogs.sheet_buttons(sheet)[-1][2]
+    dialogs.answer(win, "details")
+    assert not sheet.details_open and dialogs.current_sheet(win) is sheet
+    dialogs.answer(win, "import")
+    partial, = [r for r in dialogs.history(win) if "partial.step" in r.title]
+    assert (partial.tone, partial.action_label) == ("warning", "Show")
+    assert partial.title == "Imported partial.step · 1 faceted body · 1 rejected body"
+    partial.action()
+    assert not dialogs.current_sheet(win).details_open
+    dialogs.answer(win, "ok")
+
+    invalid = tmp_path / "unreadable.step"
+    invalid.write_bytes(b"not a STEP document")
+    assert not built_render.import_file(win, invalid, "step")
+    failure, = [r for r in dialogs.history(win) if "unreadable.step" in r.title]
+    assert (failure.tone, failure.action_label) == ("warning", "Show")
+    failure.action()
+    assert "ValueError" not in dialogs.current_sheet(win).text
+    dialogs.answer(win, "details")
+    assert dialogs.sheet_buttons(dialogs.current_sheet(win))[-1][2]
+    dialogs.answer(win, "ok")
+
+
+def test_fragmented_planar_sheet_shares_support_but_keeps_hard_topology(tmp_path):
+    from built_core import Vec3
+
+    scene = Scene()
+    for i in range(8):
+        scene.mesh.add_face([Vec3(i, 0, 0), Vec3(i+1, 0, 0), Vec3(i+1, 1, 0), Vec3(i, 1, 0)])
+    path = tmp_path / "strip.step"
+    step.save_step(scene, path)
+    text = path.read_text()
+    assert text.count("= ADVANCED_FACE(") == 8
+    assert text.count("= PLANE(") == 1
+    assert text.count("= EDGE_CURVE(") == 25
+    assert step.prepare_step(path)["exact"] == 1

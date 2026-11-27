@@ -42,6 +42,7 @@ def test_faceted_exchange_scale(tmp_path, definitions):
     start = time.perf_counter()
     step.save_step(scene, path)
     exported = time.perf_counter()
+    export_peak = peak_mib()
     del scene, roots
     prepared = step.prepare_step(path)
     step.apply_step(Scene(), prepared)
@@ -49,7 +50,7 @@ def test_faceted_exchange_scale(tmp_path, definitions):
     assert prepared["exact"] == definitions + 3 and not prepared["problems"]
     print(f"{definitions*676+3:,} faces, {path.stat().st_size:,} bytes, "
           f"export {exported-start:.3f} s, import {imported-exported:.3f} s, "
-          f"peak {peak_mib():.0f} MiB")
+          f"export peak {export_peak:.0f} MiB, overall peak {peak_mib():.0f} MiB")
 
 
 @pytest.mark.parametrize("definitions", [1500, 3000, 9000])
