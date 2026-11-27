@@ -11,6 +11,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+# Persistent ids drawn here follow a fixed seed, so saves match the record.
+os.environ.setdefault("BUILT_IDS_SEED", "1")
 
 from built_core import Matrix4 as QMatrix4x4, Vec3 as QVector3D
 

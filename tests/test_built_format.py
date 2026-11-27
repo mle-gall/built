@@ -48,7 +48,7 @@ def test_precise_scene(tmp_path, monkeypatch, engine):
     monkeypatch.setattr(_native, "native", _native.available() if engine else None)
     monkeypatch.setattr(igz, "_NATIVE_JSON_MIN", 0)
     data = manifest(path)
-    assert data["built_format"] == 1 and "igz_format" not in data
+    assert data["built_format"] == 2 and "igz_format" not in data
     assert data["scene"]["geom"]["arrays"]["pos"][0] == "<f8"
     with zipfile.ZipFile(path) as z:
         members = igz._read_geometry_members(z, path, data["scene"], built_format=True)
@@ -86,7 +86,7 @@ def test_export_warns_once_before_replacing(tmp_path):
     np.testing.assert_array_equal([built.position(v) for v in reopened.mesh.vertices], rounded)
 
 
-@pytest.mark.parametrize("marker", [{"igz_format": 3}, {"built_format": 2},
+@pytest.mark.parametrize("marker", [{"igz_format": 3}, {"built_format": 3},
                                     {"built_format": 1, "igz_format": 3}])
 def test_f64_is_scoped_to_built_v1(tmp_path, marker):
     path = tmp_path / "input.built"

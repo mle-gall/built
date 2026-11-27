@@ -96,6 +96,7 @@
     "phase": "undo",
     "command": "Move",
     "complete": true,
+    "document": null,
     "meshes": [],
     "placements": {
       "created": [],

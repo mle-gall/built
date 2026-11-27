@@ -101,8 +101,30 @@ def test_feed_records_agree(runs):
 
 def test_the_same_document_saves_the_same_bytes(runs):
     py, rs = runs
-    for name in ("doc.igz", "doc.built"):
+    # Built format 2 (persistent ids) has no Python reference: its bytes are
+    # checked against the recorded rust/*.built archives in `run`.
+    for name in ("doc.igz",):
         assert py["initial"][name]["file_hash"] == rs["initial"][name]["file_hash"], name
+
+
+def _persistent_id_changes(py, rs):
+    """The Python reference predates persistent ids (docs/persistent-ids.md):
+    sheet items saved with an empty uid now get one, and a record patched
+    without a GUID keeps the GlobalId its uid path derives instead of
+    gaining a stored one (§7.1). Copy those two differences across."""
+    if isinstance(py, dict) and isinstance(rs, dict):
+        out = {}
+        for k, v in py.items():
+            if k == "uid" and v == "" and isinstance(rs.get(k), str):
+                out[k] = rs[k]
+            elif k == "guid" and "class" in py and k not in rs:
+                continue
+            else:
+                out[k] = _persistent_id_changes(v, rs.get(k)) if k in rs else v
+        return out
+    if isinstance(py, list) and isinstance(rs, list) and len(py) == len(rs):
+        return [_persistent_id_changes(a, b) for a, b in zip(py, rs)]
+    return py
 
 
 def test_save_open_save_is_stable(runs):
@@ -117,7 +139,8 @@ def test_reopened_documents_agree(runs):
     py, rs = runs
     for when in ("initial", "final", "shared"):
         for name in ("doc.igz", "doc.built"):
-            assert norm(py[when][name]["reopened"]) == norm(rs[when][name]["reopened"]), (when, name)
+            expected = _persistent_id_changes(py[when][name]["reopened"], rs[when][name]["reopened"])
+            assert norm(expected) == norm(rs[when][name]["reopened"]), (when, name)
 
 
 def test_a_tag_made_by_a_command_keeps_its_uid(runs):
@@ -134,7 +157,12 @@ def test_a_tag_made_by_a_command_keeps_its_uid(runs):
 
 def test_geometry_history_agrees(runs):
     python, rust = runs
-    assert norm(rust["geometry"]) == norm(python["geometry"])
+    # Format 2 archives carry ids the Python reference never wrote.
+    def without_built(g):
+        g = dict(g)
+        g["archive_hashes"] = {k: v for k, v in g["archive_hashes"].items() if k != "built"}
+        return g
+    assert norm(without_built(rust["geometry"])) == norm(without_built(python["geometry"]))
 
 
 def test_scene_folder_edits_match_archived_replay():

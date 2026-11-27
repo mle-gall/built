@@ -82,7 +82,10 @@ def test_ownership_resync_and_refusals():
     assert other.ext is None and not scene.layer_folders
     g.ifc['class'] = 'IfcColumn'
     st.file(scene, [g.uid], 'sections').do(scene)
-    guid = g.ifc['guid']
+    # An existing record keeps the GlobalId its uid path derives: filing it
+    # stores no GUID (docs/persistent-ids.md §7.1); resync keeps whatever
+    # it has.
+    guid = g.ifc.get('guid')
     assert g.ifc['class'] == 'IfcColumn'
     recipe.update(object_type='Updated', classifications=[dict(system='discipline', code='A')])
     g.ifc['psets']['Pset_ColumnCommon'] = {'Status': {'kind': 'enum', 'value': 'EXISTING'}}
@@ -91,7 +94,7 @@ def test_ownership_resync_and_refusals():
     cmd.do(scene)
     assert g.ifc['classifications'][0] == prior['classifications'][0]
     assert g.ifc['classifications'][1]['code'] == 'A'
-    assert g.ifc['guid'] == guid and g.ifc['object_type'] == 'Updated'
+    assert g.ifc.get('guid') == guid and g.ifc['object_type'] == 'Updated'
     for field in ('name', 'tag', 'description', 'quantities', 'custom'):
         assert g.ifc[field] == prior[field]
     assert g.ifc['psets']['Survey']['B']['value'] == 99

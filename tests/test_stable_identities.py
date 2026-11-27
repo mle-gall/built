@@ -12,7 +12,7 @@ from core.bim import tag_group, tag_faces
 from built_core.group import Group, copy_group
 from built_core.mesh import Mesh
 from built_core.scene import Scene
-from core.ifc_identity import compressed_guid, copied_face_attrs
+from core.ifc_identity import component_guid, compressed_guid, copied_face_attrs
 from formats import igz, clip_payload as clip
 from formats.ifc import save_ifc
 
@@ -45,7 +45,10 @@ def test_export_copy_reload_and_legacy(tmp_path):
     version = s.content_version
     assert guids(s, path) == first
     assert s.content_version == version
-    assert g.ifc['guid'] in first
+    # The GlobalId derives from the placement's persistent uid path; the
+    # export stores no GUID in the record (docs/persistent-ids.md §7.1).
+    assert 'guid' not in g.ifc
+    assert component_guid(s, g.uid) in first
     igz.save_scene(s, tmp_path / 'model.igz')
     loaded = Scene()
     igz.load_into(loaded, tmp_path / 'model.igz')
@@ -53,10 +56,10 @@ def test_export_copy_reload_and_legacy(tmp_path):
     duplicate = copy_group(g)
     s.groups.append(duplicate)
     copied = guids(s, path)
-    assert duplicate.ifc['guid'] != g.ifc['guid']
+    assert component_guid(s, duplicate.uid) != component_guid(s, g.uid)
     assert len(copied) == len(set(copied))
     tag_group(g, 'IfcSlab', 'Renamed')
-    assert g.ifc['guid'] in first
+    assert component_guid(s, g.uid) in first
 
 
 def test_shared_face_tags_are_scoped_to_placements(tmp_path):
@@ -163,8 +166,8 @@ def test_legacy_file_gets_identities_on_export(tmp_path):
     igz.load_into(loaded, tmp_path / 'legacy.igz')
     assert 'guid' not in loaded.groups[0].ifc
     assert 'ifc_identity' not in loaded.plugin_data
-    guids(loaded, tmp_path / 'out.ifc')
-    assert loaded.groups[0].ifc['guid']
+    out = guids(loaded, tmp_path / 'out.ifc')
+    assert component_guid(loaded, loaded.groups[0].uid) in out
     assert all(k in loaded.plugin_data['ifc_identity']
                for k in ('project', 'site', 'building', 'storey'))
 
