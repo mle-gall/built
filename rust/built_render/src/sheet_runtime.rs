@@ -969,7 +969,7 @@ pub fn action(win: &Bound<'_, PyAny>, arg: &str) -> PyResult<()> {
     let view = view_of(win).map(Bound::unbind).unwrap_or_else(|| py.None());
     let ctx = Py::new(py, Ctx { win: win.clone().unbind(), view, replaced: false })?;
     let provider = st.borrow().provider.clone_ref(py);
-    if verb == "focus" && built.hasattr("_library_rows")? && args.first().is_some_and(|k| !k.starts_with("online:")) {
+    if verb == "focus" && built.hasattr("_checked")? && built.hasattr("_library_rows")? && args.first().is_some_and(|k| !k.starts_with("online:")) {
         provider.bind(py).call_method1("focus_component", (&ctx, &built, &args[0]))?;
         repaint(win);
         return Ok(());
