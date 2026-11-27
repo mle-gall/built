@@ -219,6 +219,9 @@ fn geometry_record(mut geometry: Geometry, mesh: &Owned) -> PyResult<Owned> {
 async fn capture_geometry(mesh: Owned) -> PyResult<Owned> {
     let deferred = Python::attach(|py| -> PyResult<_> {
         let m = mesh.bind(py);
+        if m.getattr("__dict__")?.contains("_deferred_exact")? {
+            m.call_method0("_materialize")?;
+        }
         Ok(m.get_type()
             .is(&py.import("built_core.mesh")?.getattr("DeferredMesh")?)
             .then(|| {

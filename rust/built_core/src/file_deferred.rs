@@ -62,7 +62,11 @@ fn igz_geometry_arrays<'p>(
             }
             let dtype = spec.get_item(0)?.extract::<String>()?;
             if !matches!(dtype.as_str(), "<f4" | "<i4" | "<i8" | "|u1")
-                && !(dtype == "<u4" && key == "face_surface_ref")
+                && !(dtype == "<u4"
+                    && matches!(
+                        key.as_str(),
+                        "face_surface_ref" | "edge_exact_curve_ref" | "face_loop_patch"
+                    ))
                 && !(dtype == "<u8" && key.ends_with("_id"))
                 && !(dtype == "<f8" && (checked || built_format && key == "pos"))
             {
@@ -379,6 +383,10 @@ struct Builder {
     source: Py<PyAny>,
     precise: bool,
     json: bool,
+    planes: Option<Vec<(u64, crate::exact::Frame)>>,
+    native: Option<Py<PyAny>>,
+    table: Option<Py<crate::exact::file::PlaneTable>>,
+    id_map: Option<Vec<u32>>,
 }
 #[pymethods]
 impl Builder {
@@ -386,6 +394,15 @@ impl Builder {
         let py = mesh.py();
         let codec = api(py)?;
         let s = self.source.bind(py);
+        if let (Some(a), Some(table)) = (&self.native, &self.table) {
+            return crate::exact::file::build_native(
+                mesh,
+                s,
+                a.bind(py),
+                table.bind(py).get(),
+                self.id_map.as_deref(),
+            );
+        }
         if self.json {
             codec.call_method1(
                 "_load_mesh_json",
@@ -437,6 +454,9 @@ impl Builder {
                 crate::store::ids_py::apply_source_ids(mesh, s)?;
             }
         }
+        if let Some(rows) = &self.planes {
+            crate::exact::file::bind(mesh, rows.clone())?;
+        }
         Ok(())
     }
 }
@@ -484,6 +504,10 @@ fn igz_load_mesh(mesh: &Obj<'_>, payload: &Obj<'_>, geom: Option<&Obj<'_>>) -> P
                     source: src.clone().unbind(),
                     precise: false,
                     json: true,
+                    planes: None,
+                    native: None,
+                    table: None,
+                    id_map: None,
                 },
             )?;
             if module
@@ -518,17 +542,6 @@ fn update_curves(module: &Bound<'_, PyModule>, curves: &Obj<'_>) -> PyResult<()>
 #[pyfunction]
 fn igz_load_geometry<'p>(mesh: &Obj<'p>, meta: &Obj<'p>, geom: &Obj<'p>) -> PyResult<()> {
     let py = mesh.py();
-    if let Some(cache) = geom.getattr_opt("_exact_meshes")? {
-        let prepared = cache.call_method1("pop", (meta.as_ptr() as usize, py.None()))?;
-        if !prepared.is_none() {
-            return crate::kernel::store_views::lifecycle::become_store(
-                mesh,
-                &prepared.getattr("_store")?,
-                &prepared.getattr("_attr_table")?,
-                Some(&prepared.getattr("_attr_own")?),
-            );
-        }
-    }
     let codec = api(py)?;
     let np = py.import("numpy")?;
     let module = py.import("built_core.mesh")?;
@@ -555,7 +568,10 @@ fn igz_load_geometry<'p>(mesh: &Obj<'p>, meta: &Obj<'p>, geom: &Obj<'p>) -> PyRe
         .map(|m| m.extract::<Vec<u32>>())
         .transpose()?;
     let plane_table = geom.getattr_opt("_exact_planes")?;
-    let mut bindings = if let Some(table) = &plane_table {
+    let native = a.contains("face_loop_patch")? && plane_table.is_some();
+    let mut bindings = if native {
+        None
+    } else if let Some(table) = &plane_table {
         if a.contains("face_surface_id")? || a.contains("face_surface_ref")? {
             Some(crate::exact::file::decode(
                 &a,
@@ -570,7 +586,12 @@ fn igz_load_geometry<'p>(mesh: &Obj<'p>, meta: &Obj<'p>, geom: &Obj<'p>) -> PyRe
     };
     s.set_item(
         "ids",
-        crate::file_ids::source_ids_checked(meta, &a, id_map, bindings.is_some())?,
+        crate::file_ids::source_ids_checked(
+            meta,
+            &a,
+            id_map.clone(),
+            bindings.is_some() || native,
+        )?,
     )?;
     if let Some(rows) = &mut bindings {
         if let Ok(raw) = s.as_any().get_item("ids")?.get_item(2) {
@@ -677,15 +698,34 @@ fn igz_load_geometry<'p>(mesh: &Obj<'p>, meta: &Obj<'p>, geom: &Obj<'p>) -> PyRe
     let precise = pos
         .getattr("dtype")?
         .eq(np.call_method1("dtype", ("<f8",))?)?;
+    let exact = bindings.is_some() || native;
     let builder = Py::new(
         py,
         Builder {
             source: s.clone().into_any().unbind(),
             precise,
             json: false,
+            planes: bindings,
+            native: native.then(|| a.clone().unbind()),
+            table: plane_table
+                .map(|t| {
+                    t.cast_into::<crate::exact::file::PlaneTable>()
+                        .map(|v| v.unbind())
+                })
+                .transpose()?,
+            id_map,
         },
     )?;
-    if bindings.is_none()
+    if exact
+        && module
+            .getattr("DeferredMesh")?
+            .call_method1("defer", (mesh, &builder, item("counts")?.len()?, &s))?
+            .is_truthy()?
+    {
+        mesh.setattr("_deferred_exact", true)?;
+        return Ok(());
+    }
+    if !exact
         && !precise
         && py
             .import("core._native")?
@@ -699,9 +739,7 @@ fn igz_load_geometry<'p>(mesh: &Obj<'p>, meta: &Obj<'p>, geom: &Obj<'p>) -> PyRe
         return Ok(());
     }
     builder.call1(py, (mesh,))?;
-    if let Some(rows) = bindings {
-        crate::exact::file::bind(mesh, rows)?;
-    }
+
     Ok(())
 }
 #[pyfunction]

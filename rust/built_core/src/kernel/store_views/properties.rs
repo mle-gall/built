@@ -177,7 +177,8 @@ fn face_attrs<'py>(view: &Obj<'py>) -> PyResult<Obj<'py>> {
     let attrs = attribute_owner(&mesh)?;
     let own = attrs.getattr("_attr_own")?.cast_into::<PyDict>()?;
     let key = view.getattr("key")?;
-    if let Some(d) = own.get_item(&key)? {
+    let attr_key = crate::store::py::PyMeshStore::attribute_key(&store, key.extract()?)?;
+    if let Some(d) = own.get_item(attr_key)? {
         if !d.is_none() {
             return Ok(d);
         }
@@ -191,15 +192,18 @@ fn face_attrs<'py>(view: &Obj<'py>) -> PyResult<Obj<'py>> {
     } else {
         copy_attrs(&attrs.getattr("_attr_table")?.get_item(index)?)?
     };
-    own.set_item(key, &row)?;
+    own.set_item(attr_key, &row)?;
     Ok(row.into_any())
 }
 
 #[pyfunction]
 fn set_face_attrs(view: &Obj<'_>, value: &Obj<'_>) -> PyResult<()> {
-    attribute_owner(&view.getattr("_m")?)?
+    let (mesh, store) = owner(view)?;
+    let key =
+        crate::store::py::PyMeshStore::attribute_key(&store, view.getattr("key")?.extract()?)?;
+    attribute_owner(&mesh)?
         .getattr("_attr_own")?
-        .set_item(view.getattr("key")?, value)
+        .set_item(key, value)
 }
 
 pub(super) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {

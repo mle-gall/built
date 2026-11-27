@@ -17,10 +17,12 @@ fn namespace(py: Python<'_>) -> PyResult<u64> {
         .extract()
 }
 #[pyfunction]
+#[pyo3(signature=(mesh,matrix,origin,for_edit=false))]
 pub(super) fn instance_view<'py>(
     mesh: &Obj<'py>,
     matrix: &Obj<'py>,
     origin: &Obj<'py>,
+    for_edit: bool,
 ) -> PyResult<Option<Obj<'py>>> {
     let py = mesh.py();
     let module = api(py)?;
@@ -33,7 +35,7 @@ pub(super) fn instance_view<'py>(
     }
     let view = match mesh
         .getattr("_store")?
-        .call_method1("_instance_view", (mesh, matrix, origin))
+        .call_method1("_instance_view", (mesh, matrix, origin, for_edit))
     {
         Ok(v) => v,
         Err(e) if e.is_instance_of::<PyValueError>(py) => return Ok(None),
@@ -47,6 +49,9 @@ pub(super) fn instance_view<'py>(
         Some(&mesh.getattr("_attr_own")?),
     )?;
     result.setattr("_instance_definition", mesh)?;
+    if for_edit {
+        result.setattr("_instance_edit", true)?;
+    }
     Ok(Some(result))
 }
 fn allocate<'py>(class: &Obj<'py>) -> PyResult<Obj<'py>> {
@@ -104,6 +109,7 @@ fn deepcopy_mesh<'py>(mesh: &Obj<'py>, memo: &Obj<'py>) -> PyResult<Obj<'py>> {
             &copy,
             &store.getattr("frame_matrix")?,
             &store.getattr("frame_origin")?,
+            d.contains("_instance_edit")?,
         )?
         .unwrap_or_else(|| py.None().into_bound(py));
         memo.set_item(addr, &copy)?;

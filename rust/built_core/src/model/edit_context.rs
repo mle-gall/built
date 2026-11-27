@@ -148,8 +148,13 @@ pub fn begin_group_edit<'py>(scene: &Obj<'py>, group: &Obj<'py>) -> PyResult<()>
         last.call_method1("get", ("affine",))?.is_truthy()?
     };
     if !group.getattr("xform")?.is_none() || affine_above {
-        let world = scene.getattr("_root")?.call_method1("_edit_matrix", (group,))?;
-        active = module(py, "built_core.store_mesh")?.call_method1("instance_view", (group.getattr("mesh")?, world))?;
+        let world = scene
+            .getattr("_root")?
+            .call_method1("_edit_matrix", (group,))?;
+        active = module(py, "built_core.store_mesh")?.call_method1(
+            "instance_view",
+            (group.getattr("mesh")?, world, [0.; 3], true),
+        )?;
         if !active.is_none() {
             frame = active.getattr("_store")?.call_method0("tool_placement")?;
             let axes = group.getattr("axes")?;

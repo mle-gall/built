@@ -114,7 +114,14 @@ pub(crate) fn command_explode_geometry(
     let inverse = matrix
         .filter(|m| m.determinant() != 0.)
         .map(|m| Matrix4::from(m.inverse()));
-    let (added, mut copies) = super::transfer::paste(mesh, group_mesh, matrix.map(Matrix4::from), inverse, paint)?;
+    let source = PyMeshStore::facet_copy(group_mesh)?;
+    let (added, mut copies) = super::transfer::paste(
+        mesh,
+        source.as_ref().unwrap_or(group_mesh),
+        matrix.map(Matrix4::from),
+        inverse,
+        paint,
+    )?;
     mesh.call_method0("resplit_curves")?;
     let store = mesh.getattr("_store")?;
     let planes = overlapping_planes(&PyMeshStore::read(&store)?.inner, &added, h);

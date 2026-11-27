@@ -82,6 +82,10 @@ pub(super) fn plan_of<'py>(mesh: &Obj<'py>) -> PyResult<Option<Obj<'py>>> {
         return Ok(None);
     }
     let d = mesh.getattr("__dict__")?.cast_into::<PyDict>()?;
+    if d.contains("_deferred_exact")? {
+        mesh.call_method0("_materialize")?;
+        return Ok(None);
+    }
     if let Some(p) = d.get_item("_deferred_plan")?.filter(|v| !v.is_none()) {
         return Ok(Some(p));
     }

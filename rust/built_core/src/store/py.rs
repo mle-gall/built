@@ -94,6 +94,7 @@ pub struct PyMeshStore {
 /// An occurrence uses the same keys and generation floors as its definition.
 #[pyclass(extends=PyMeshStore, frozen)]
 struct InstanceStore {
+    for_edit: bool,
     definition: Py<PyMeshStore>,
     mesh: Py<PyAny>,
 }
@@ -102,7 +103,11 @@ impl InstanceStore {
     fn refresh(slf: &Bound<'_, Self>) -> PyResult<()> {
         let definition = slf.get().definition.bind(slf.py()).try_borrow()?;
         if definition.inner.revision != slf.as_super().try_borrow()?.inner.revision {
-            slf.as_super().try_borrow_mut()?._publish_frame(&definition)?;
+            let mut view = slf.as_super().try_borrow_mut()?;
+            view._publish_frame(&definition)?;
+            if slf.get().for_edit && view.inner.state.exact.native.is_some() {
+                view.inner = view.inner.facet_view().map_err(PyValueError::new_err)?;
+            }
         }
         Ok(())
     }
@@ -152,6 +157,27 @@ impl InstanceMethod {
         let result = self.method.bind(py).call(args, kwargs);
         let current = view.as_super().try_borrow()?;
         if current.inner.revision != start {
+            if result.is_err()
+                && view.get().for_edit
+                && view
+                    .get()
+                    .definition
+                    .bind(py)
+                    .try_borrow()?
+                    .inner
+                    .state
+                    .exact
+                    .native
+                    .is_some()
+            {
+                drop(current);
+                let definition = view.get().definition.bind(py).try_borrow()?;
+                let mut staged = view.as_super().try_borrow_mut()?;
+                staged._publish_frame(&definition)?;
+                staged.inner = staged.inner.facet_view().map_err(PyValueError::new_err)?;
+                return result;
+            }
+
             let mut definition = view.get().definition.bind(py).try_borrow_mut()?;
             if definition.inner.revision != start {
                 drop(current);
@@ -167,6 +193,36 @@ impl InstanceMethod {
             if let Some(snap) = exact {
                 definition.inner.restore(snap, None).map_err(PyValueError::new_err)?;
             } else {
+                if let Some(patch) = &definition.inner.state.exact.native {
+                    let attrs = view
+                        .get()
+                        .mesh
+                        .bind(py)
+                        .getattr("_attr_own")?
+                        .cast_into::<PyDict>()?;
+                    if !attrs.is_empty() {
+                        let source = definition
+                            .inner
+                            .facet_view()
+                            .map_err(PyValueError::new_err)?;
+                        for (&f, slot) in patch
+                            .mesh()
+                            .map_err(PyValueError::new_err)?
+                            .face_ids
+                            .iter()
+                            .zip(source.live_slots(Kind::Face))
+                        {
+                            let key = source.key(Kind::Face, slot);
+                            if let Some(row) =
+                                attrs.get_item(definition.inner.key(Kind::Face, f as u32))?
+                            {
+                                if current.inner.slot(Kind::Face, key).is_some() {
+                                    attrs.set_item(key, row.call_method0("copy")?)?;
+                                }
+                            }
+                        }
+                    }
+                }
                 definition._publish_frame(&current)?;
             }
             drop(definition);
@@ -188,12 +244,77 @@ impl PyMeshStore {
         Ok(())
     }
 
+    /// A material edit on an exact occurrence addresses the entire logical face.
+    pub(crate) fn attribute_key(store: &Bound<'_, PyAny>, key: u128) -> PyResult<u128> {
+        let Ok(instance) = store.cast::<InstanceStore>() else {
+            return Ok(key);
+        };
+        if !instance.get().for_edit {
+            return Ok(key);
+        }
+        let definition = instance.get().definition.bind(store.py()).try_borrow()?;
+        let Some(patch) = &definition.inner.state.exact.native else {
+            return Ok(key);
+        };
+        let view = instance.as_super().try_borrow()?;
+        let Some(slot) = view.inner.slot(Kind::Face, key) else {
+            return Ok(key);
+        };
+        let order = view.order_of(Kind::Face).1;
+        let index = order[slot as usize] as usize;
+        Ok(patch
+            .mesh()
+            .map_err(PyValueError::new_err)?
+            .face_ids
+            .get(index)
+            .map_or(key, |f| definition.inner.key(Kind::Face, *f as u32)))
+    }
+
     /// Native queries must observe the latest definition when reading an occurrence.
     pub(crate) fn read<'py>(store: &Bound<'py, PyAny>) -> PyResult<PyRef<'py, Self>> {
         if let Ok(view) = store.cast::<InstanceStore>() {
             InstanceStore::refresh(view)?;
         }
         Ok(store.extract()?)
+    }
+
+    /// Read a faceted transfer source without changing its shared definition.
+    pub(crate) fn facet_copy<'p>(mesh: &Bound<'p, PyAny>) -> PyResult<Option<Bound<'p, PyAny>>> {
+        let object = mesh.getattr("_store")?;
+        let Ok(st) = object.cast::<Self>() else {
+            return Ok(None);
+        };
+        let st = st.try_borrow()?;
+        let Some(patch) = &st.inner.state.exact.native else {
+            return Ok(None);
+        };
+        let tmp = mesh
+            .py()
+            .import("built_core.store_mesh")?
+            .call_method0("StoreMesh")?;
+        let store = st.inner.facet_view().map_err(PyValueError::new_err)?;
+        let old = mesh.getattr("_attr_own")?.cast_into::<PyDict>()?;
+        let attrs = PyDict::new(mesh.py());
+        if !old.is_empty() {
+            for (&f, slot) in patch
+                .mesh()
+                .map_err(PyValueError::new_err)?
+                .face_ids
+                .iter()
+                .zip(store.live_slots(Kind::Face))
+            {
+                if let Some(row) = old.get_item(st.inner.key(Kind::Face, f as u32))? {
+                    attrs.set_item(store.key(Kind::Face, slot), row)?;
+                }
+            }
+        }
+        crate::kernel::store_views::lifecycle::become_store(
+            &tmp,
+            Bound::new(mesh.py(), Self::wrap(store))?.as_any(),
+            &mesh.getattr("_attr_table")?,
+            Some(attrs.as_any()),
+        )?;
+        Ok(Some(tmp))
     }
 
     fn wrap(inner: Store) -> Self {
@@ -676,6 +797,25 @@ impl PyMeshStore {
             .map_err(PyValueError::new_err)
     }
 
+    #[getter]
+    fn native_exact(&self) -> bool {
+        self.inner.state.exact.native.is_some()
+    }
+
+    fn face_boundary_uses(&self, key: u128) -> PyResult<Vec<Vec<Option<(u64, bool)>>>> {
+        let f = live_of(&self.inner, Kind::Face, key)?;
+        Ok(self
+            .inner
+            .boundary_edges(f)
+            .into_iter()
+            .map(|r| {
+                r.into_iter()
+                    .map(|c| c.map(|(e, rev)| (self.inner.pid(Kind::Edge, e), rev)))
+                    .collect()
+            })
+            .collect())
+    }
+
     /// Give a live element another id (succession, Explode's keep-if-free).
     fn set_id(&mut self, kind: &str, key: u128, id: u64) -> PyResult<()> {
         let k = kind_of(kind)?;
@@ -743,12 +883,16 @@ impl PyMeshStore {
             .map_err(|err| PyValueError::new_err(err.to_string()))?;
         // Persistent ids after the store (older archives end before them).
         bytes.extend(bincode::serialize(&self.inner.state.ids).map_err(|err| PyValueError::new_err(err.to_string()))?);
-        if self.inner.state.exact.planes.is_some() {
+        if !self.inner.state.exact.is_faceted() {
             let planes: Vec<_> = self.inner.bound_planes().collect();
             bytes.extend(
                 bincode::serialize(&planes)
                     .map_err(|err| PyValueError::new_err(err.to_string()))?,
             );
+        }
+        if let Some(patch) = &self.inner.state.exact.native {
+            serde_json::to_writer(&mut bytes, &patch.rows)
+                .map_err(|err| PyValueError::new_err(err.to_string()))?;
         }
         Ok(pyo3::types::PyBytes::new(py, &bytes))
     }
@@ -778,7 +922,23 @@ impl PyMeshStore {
                     store.bind_plane(slot, p).map_err(PyValueError::new_err)?;
                 }
                 if cursor.position() != bytes.len() as u64 {
-                    return Err(PyValueError::new_err("extra exact mesh archive data"));
+                    let rows = serde_json::from_slice(&bytes[cursor.position() as usize..])
+                        .map_err(|err| {
+                            PyValueError::new_err(format!("invalid exact archive: {err}"))
+                        })?;
+                    let patch =
+                        super::native::NativePatch::new(rows).map_err(PyValueError::new_err)?;
+                    let topology = patch.topology();
+                    if [
+                        topology.vertices.len(),
+                        topology.edges.len(),
+                        topology.faces.len(),
+                    ] != Kind::ALL.map(|k| store.n(k))
+                    {
+                        return Err(PyValueError::new_err("invalid exact archive size"));
+                    }
+                    store.state.exact.native = Some(Arc::new(patch));
+                    store.check().map_err(PyValueError::new_err)?;
                 }
             }
         }
@@ -796,7 +956,7 @@ impl PyMeshStore {
     ) -> PyResult<Option<(Bound<'py, PyDict>, Vec<String>)>> {
         let packed = py.detach(|| {
             let mut d = self.inner.dense();
-            if d.ring_counts.iter().any(|&n| n > 2) {
+            if self.inner.state.exact.native.is_none() && d.ring_counts.iter().any(|&n| n > 2) {
                 return None;
             }
             let mut vertices = Vec::new();
@@ -812,6 +972,11 @@ impl PyMeshStore {
                 }
                 *k
             };
+            if self.inner.state.exact.native.is_some() {
+                for i in 0..d.pos.len() {
+                    vertex(i as i64);
+                }
+            }
             let edges: Vec<i32> = d.edges.iter().flatten().copied().map(&mut vertex).collect();
             let rings: Vec<i32> = d.corners.iter().copied().map(vertex).collect();
             let ids = [vids, self.inner.live_pids(Kind::Edge), self.inner.live_pids(Kind::Face)];
@@ -881,14 +1046,107 @@ impl PyMeshStore {
         dense_dict(py, d)
     }
 
+    /// Resident draw data. Logical element order remains the editing API.
+    #[pyo3(signature=(bake=false))]
+    fn display_arrays<'py>(&self, py: Python<'py>, bake: bool) -> PyResult<Bound<'py, PyDict>> {
+        let Some(patch) = &self.inner.state.exact.native else {
+            return self.arrays(py);
+        };
+        let mesh = patch.mesh().map_err(PyValueError::new_err)?;
+        let logical = self.inner.dense();
+        let mut display = super::read::Dense::default();
+        display.pos = mesh
+            .points
+            .iter()
+            .map(|&p| self.inner.model_point(p))
+            .collect();
+        let mut edge_ids = Vec::new();
+        for (&e, points) in &mesh.edge_samples {
+            for pair in points.windows(2) {
+                display.edges.push([pair[0] as i64, pair[1] as i64]);
+                display.flags.push(logical.flags[e as usize]);
+                display.layer.push(logical.layer[e as usize]);
+                display.curve.push(logical.curve[e as usize]);
+                edge_ids.push(e as i64);
+            }
+        }
+        for (tri, &f) in mesh.triangles.iter().zip(&mesh.face_ids) {
+            let mut tri = *tri;
+            if self.inner.state.frame.mirrored() {
+                tri.swap(1, 2);
+            }
+            display.corners.extend(tri.map(|v| v as i64));
+            display.ring_counts.push(1);
+            display.ring_sizes.push(3);
+            display.face_attr.push(logical.face_attr[f as usize]);
+        }
+        if bake {
+            // The resident baker synthesizes a drawable edge for every ring
+            // side. Register interior triangle sides as smooth and suppressed.
+            let mut sides = std::collections::HashSet::new();
+            let key = |a: i64, b: i64| (a.min(b), a.max(b));
+            for &[a, b] in &display.edges {
+                sides.insert(key(a, b));
+            }
+            for triangle in display.corners.chunks_exact(3) {
+                for (a, b) in [
+                    (triangle[0], triangle[1]),
+                    (triangle[1], triangle[2]),
+                    (triangle[2], triangle[0]),
+                ] {
+                    if sides.insert(key(a, b)) {
+                        display.edges.push([a, b]);
+                        display.flags.push(9);
+                        display.layer.push(-1);
+                        display.curve.push(-1);
+                        edge_ids.push(-1);
+                    }
+                }
+            }
+        }
+        let out = dense_dict(py, display)?;
+        out.set_item(
+            "face_owner",
+            mesh.face_ids
+                .iter()
+                .map(|&f| f as i64)
+                .collect::<Vec<_>>()
+                .into_pyarray(py),
+        )?;
+        out.set_item("edge_owner", edge_ids.into_pyarray(py))?;
+        Ok(out)
+    }
+
     fn tool_face_picker(&self, py: Python<'_>, hypot: &str) -> PyResult<crate::pick::FacePicker> {
         let hypot = crate::hypot_of(hypot)?;
         Ok(py.detach(|| crate::pick::FacePicker::from_store(&self.inner, hypot)))
     }
 
+    fn native_edge_point(&self, index: usize, t: f64) -> Option<crate::math::Vec3> {
+        let p = self
+            .inner
+            .state
+            .exact
+            .native
+            .as_ref()?
+            .edge_point(index, t)?;
+        Some(glam::DVec3::from(self.inner.model_point(p.to_array())).into())
+    }
+
     fn nearest_edges(&self, py: Python<'_>, matrix: [f64;16], width: f64, height: f64,
                      x: f64, y: f64, radius: f64) -> Vec<(usize,f64,f64)> {
         let camera = crate::pick::Projector::new(&matrix, width, height);
+        if let Some(patch) = &self.inner.state.exact.native {
+            return py.detach(|| {
+                patch.near_edges(
+                    &camera,
+                    |p| self.inner.model_point(p.to_array()),
+                    x,
+                    y,
+                    radius,
+                )
+            });
+        }
         let dense = self.order_of(Kind::Edge).1;
         py.detach(|| {
             let index = {
@@ -1406,10 +1664,19 @@ impl PyMeshStore {
     }
 
     /// `Mesh.find_edge(v0, v1)`: the edge key, or None.
-    fn find_edge(&self, a: u128, b: u128) -> PyResult<Option<u128>> {
+    #[pyo3(signature=(a,b,edge_id=None))]
+    fn find_edge(&self, a: u128, b: u128, edge_id: Option<u64>) -> PyResult<Option<u128>> {
         let va = any_of(&self.inner, Kind::Vertex, a)?;
         let vb = any_of(&self.inner, Kind::Vertex, b)?;
-        Ok(self.inner.find_edge(va, vb).map(|e| self.inner.key(Kind::Edge, e)))
+        let edge = if let Some(id) = edge_id {
+            self.inner.slot_of_pid(Kind::Edge, id).filter(|&e| {
+                let ends = *self.inner.state.ends.get(e as usize);
+                ends == [va, vb] || ends == [vb, va]
+            })
+        } else {
+            self.inner.find_edge(va, vb)
+        };
+        Ok(edge.map(|e| self.inner.key(Kind::Edge, e)))
     }
 
     /// Keys of the faces `fold_nonplanar_faces` would fold, list order.
@@ -3687,10 +3954,23 @@ impl PyMeshStore {
         Ok(Self::wrap(store))
     }
 
-    fn _instance_view<'py>(slf: &Bound<'py, Self>, mesh: Py<PyAny>, matrix: [f64; 16], origin: [f64; 3])
-        -> PyResult<Bound<'py, InstanceStore>> {
-        let base = slf.try_borrow()?._in_instance_frame(matrix, origin)?;
-        let instance = InstanceStore { definition: slf.clone().unbind(), mesh };
+    #[pyo3(signature=(mesh,matrix,origin,for_edit=false))]
+    fn _instance_view<'py>(
+        slf: &Bound<'py, Self>,
+        mesh: Py<PyAny>,
+        matrix: [f64; 16],
+        origin: [f64; 3],
+        for_edit: bool,
+    ) -> PyResult<Bound<'py, InstanceStore>> {
+        let mut base = slf.try_borrow()?._in_instance_frame(matrix, origin)?;
+        if for_edit && base.inner.state.exact.native.is_some() {
+            base.inner = base.inner.facet_view().map_err(PyValueError::new_err)?;
+        }
+        let instance = InstanceStore {
+            for_edit,
+            definition: slf.clone().unbind(),
+            mesh,
+        };
         Bound::new(slf.py(), (instance, base))
     }
 
@@ -3811,6 +4091,10 @@ fn reader(snap: &Snapshot) -> Store {
 
 #[pymethods]
 impl PyStoreSnapshot {
+    fn display_arrays<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        PyMeshStore::wrap(reader(&self.inner)).display_arrays(py, false)
+    }
+
     pub(crate) fn canonical(&self) -> Self {
         Self { inner: self.definition.as_deref().unwrap_or(&self.inner).clone(), definition: None }
     }

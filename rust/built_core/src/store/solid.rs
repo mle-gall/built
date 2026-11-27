@@ -5,6 +5,9 @@ use crate::store::geometry::{triangles, Hypot, V3};
 
 impl Store {
     pub fn face_triangles(&self, f: u32, normal: Option<[f64; 3]>, h: Hypot) -> Vec<[[f64; 3]; 3]> {
+        if let Some(triangles) = self.native_triangles(f) {
+            return triangles;
+        }
         let rings = self.face_rings(f);
         if rings.first().is_none_or(|r| r.len() < 3) {
             return Vec::new();
@@ -56,6 +59,12 @@ impl Store {
     pub fn face_set_volume(&self, faces: &[u32], h: Hypot) -> Option<f64> {
         let mut uses = FxHashMap::default();
         for &f in faces {
+            if self.state.exact.native.is_some() {
+                for (e, _) in self.boundary_edges(f).into_iter().flatten().flatten() {
+                    *uses.entry((e, e)).or_insert(0usize) += 1;
+                }
+                continue;
+            }
             for r in self.face_rings(f) {
                 for (&a, &b) in r.iter().zip(r.iter().cycle().skip(1)) {
                     *uses.entry((a.min(b), a.max(b))).or_insert(0usize) += 1;

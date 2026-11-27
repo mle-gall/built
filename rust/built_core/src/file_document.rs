@@ -321,11 +321,8 @@ fn igz_load_into_inner<'p>(
                     .map_err(|e| PyValueError::new_err(e.to_string()))?;
                 geom.setattr("_exact_pool_digest", pyo3::types::PyBytes::new(py, &Sha256::digest(pool)))?;
             }
-            geom.setattr(
-                "_exact_planes",
-                Py::new(py, crate::exact::file::PlaneTable(planes))?,
-            )?;
-            let validated = PyDict::new(py);
+            geom.setattr("_exact_planes", Py::new(py, planes)?)?;
+            let mut bound = false;
             for block in codec
                 .call_method1("_mesh_blocks", (&payload,))?
                 .try_iter()?
@@ -344,17 +341,27 @@ fn igz_load_into_inner<'p>(
                             .any(|p| name.starts_with(p))
                     })
                 }) {
-                    let temp = codec.getattr("Mesh")?.call0()?;
-                    codec.call_method1("_load_geometry", (&temp, &meta, &geom))?;
-                    validated.set_item(meta.as_ptr() as usize, temp)?;
+                    let arrays = codec.call_method1("_document_geometry_arrays", (&meta, &geom))?;
+                    let table = geom.getattr("_exact_planes")?;
+                    let table = table.cast::<crate::exact::file::PlaneTable>()?.get();
+                    if arrays.contains("face_loop_patch")? {
+                        let pool = arrays
+                            .get_item("face_loop_patch")?
+                            .extract::<numpy::PyReadonlyArray1<u32>>()?;
+                        if !matches!(pool.as_slice()?,[i] if (*i as usize)<table.1.len()) {
+                            return Err(PyValueError::new_err("missing native patch pool row"));
+                        }
+                    } else {
+                        crate::exact::file::decode(&arrays, &table.0, None)?;
+                    }
+                    bound = true;
                 }
             }
-            if validated.is_empty() {
+            if !bound {
                 return Err(PyValueError::new_err(
                     "damaged exact geometry (unbound pool)",
                 ));
             }
-            geom.setattr("_exact_meshes", validated)?;
         }
         let survey = codec.call_method1("_unpack_photo_mesh", (&payload, &archive))?;
         Ok((mat, geom, survey))

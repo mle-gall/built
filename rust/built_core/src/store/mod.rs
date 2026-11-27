@@ -61,6 +61,7 @@ pub mod ids;
 pub(crate) mod ids_py;
 pub mod succession;
 pub mod exact;
+pub(crate) mod native;
 pub mod intersect;
 pub mod offset;
 pub mod pieces;

@@ -73,7 +73,7 @@ impl Frame {
         })
     }
 
-    fn mirrored(&self) -> bool {
+    pub(crate) fn mirrored(&self) -> bool {
         self.placement
             .as_ref()
             .is_some_and(|p| p.basis.determinant() < 0.)

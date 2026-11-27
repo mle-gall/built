@@ -171,12 +171,16 @@ fn registers(this: &O<'_>, v: &O<'_>) -> PyResult<bool> {
     }
 }
 #[pyfunction]
-fn find_edge<'p>(this: &O<'p>, v0: &O<'p>, v1: &O<'p>) -> PyResult<O<'p>> {
+#[pyo3(signature=(this,v0,v1,edge_id=None))]
+fn find_edge<'p>(this: &O<'p>, v0: &O<'p>, v1: &O<'p>, edge_id: Option<u64>) -> PyResult<O<'p>> {
     let py = this.py();
     if v0.is_none() || v1.is_none() {
         return Ok(none(py));
     }
-    match st(this)?.call_method1("find_edge", (v0.getattr("key")?, v1.getattr("key")?)) {
+    match st(this)?.call_method1(
+        "find_edge",
+        (v0.getattr("key")?, v1.getattr("key")?, edge_id),
+    ) {
         Ok(k) => maybe_view(this, "EdgeView", k),
         Err(e)
             if e.is_instance_of::<PyKeyError>(py)

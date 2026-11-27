@@ -98,6 +98,30 @@ fn geometry<'py>(
                 let rings = PyList::empty(py);
                 let corners = PyList::empty(py);
                 if let Some(st) = &st {
+                    if st
+                        .getattr_opt("native_exact")?
+                        .is_some_and(|v| v.is_truthy().unwrap_or(false))
+                    {
+                        let uses = st.call_method1("face_boundary_uses", (&k,))?;
+                        let loops = PyList::empty(py);
+                        for ring in uses.try_iter()? {
+                            let coedges = PyList::empty(py);
+                            for entry in ring?.try_iter()? {
+                                let entry = entry?;
+                                if entry.is_none() {
+                                    coedges.append(py.None())?;
+                                } else {
+                                    let (id, reversed) = entry.extract::<(u64, bool)>()?;
+                                    let row = PyDict::new(py);
+                                    row.set_item("edge_id", crate::element_ids::to_text('e', id))?;
+                                    row.set_item("reversed", reversed)?;
+                                    coedges.append(row)?;
+                                }
+                            }
+                            loops.append(coedges)?;
+                        }
+                        r.set_item("boundary_uses", loops)?;
+                    }
                     for ring in st.call_method1("face_positions", (&k,))?.try_iter()? {
                         let pts = PyList::empty(py);
                         for p in ring?.try_iter()? {

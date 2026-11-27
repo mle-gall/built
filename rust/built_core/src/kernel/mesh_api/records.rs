@@ -202,9 +202,14 @@ fn _note_refusal(step: &str, err: &O<'_>) -> PyResult<()> {
     }
     Ok(())
 }
-#[pyfunction(signature=(mesh,matrix,origin=[0.;3]))]
-fn instance_view<'p>(mesh: &O<'p>, matrix: &O<'p>, origin: [f64; 3]) -> PyResult<O<'p>> {
-    kernel(mesh.py())?.call_method1("instance_view", (mesh, matrix, origin))
+#[pyfunction(signature=(mesh,matrix,origin=[0.;3],for_edit=false))]
+fn instance_view<'p>(
+    mesh: &O<'p>,
+    matrix: &O<'p>,
+    origin: [f64; 3],
+    for_edit: bool,
+) -> PyResult<O<'p>> {
+    kernel(mesh.py())?.call_method1("instance_view", (mesh, matrix, origin, for_edit))
 }
 #[pyfunction(signature=(version,archive,cls=None))]
 fn _unpickle_mesh<'p>(version: &O<'p>, archive: &O<'p>, cls: Option<&O<'p>>) -> PyResult<O<'p>> {

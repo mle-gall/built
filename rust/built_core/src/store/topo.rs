@@ -457,12 +457,20 @@ impl Store {
     /// Its edges stay. A gone face is still detached (Python walks its
     /// loops whether or not it is listed).
     pub fn remove_face(&mut self, f: u32, ch: &mut Change) {
-        for ring in self.face_rings(f) {
-            let n = ring.len();
-            for i in 0..n {
-                if let Some(e) = self.find_edge(ring[i], ring[(i + 1) % n]) {
-                    if self.ef_remove(e, f) {
-                        ch.modified[1].push(self.key(Kind::Edge, e));
+        let mut detach = |st: &mut Self, e| {
+            if st.ef_remove(e, f) {
+                ch.modified[1].push(st.key(Kind::Edge, e));
+            }
+        };
+        if self.state.exact.native.is_some() {
+            for (edge, _) in self.boundary_edges(f).into_iter().flatten().flatten() {
+                detach(self, edge);
+            }
+        } else {
+            for ring in self.face_rings(f) {
+                for (&a, &b) in ring.iter().zip(ring.iter().cycle().skip(1)) {
+                    if let Some(edge) = self.find_edge(a, b) {
+                        detach(self, edge);
                     }
                 }
             }
@@ -484,11 +492,16 @@ impl Store {
         }
         let rings = self.face_rings(f);
         let mut takes: std::collections::HashMap<u32, usize> = std::collections::HashMap::new();
-        for ring in &rings {
-            let n = ring.len();
-            for i in 0..n {
-                if let Some(e) = self.find_edge(ring[i], ring[(i + 1) % n]) {
-                    *takes.entry(e).or_default() += 1;
+        if self.state.exact.native.is_some() {
+            for (edge, _) in self.boundary_edges(f).into_iter().flatten().flatten() {
+                *takes.entry(edge).or_default() += 1;
+            }
+        } else {
+            for ring in &rings {
+                for (&a, &b) in ring.iter().zip(ring.iter().cycle().skip(1)) {
+                    if let Some(edge) = self.find_edge(a, b) {
+                        *takes.entry(edge).or_default() += 1;
+                    }
                 }
             }
         }
@@ -779,13 +792,42 @@ impl Store {
     /// The invariants above, for tests: `Err` names the first one broken.
     pub fn check(&self) -> Result<(), String> {
         let st = &self.state;
+        if let Some(patch) = &st.exact.native {
+            let topo = patch.topology();
+            if [topo.vertices.len(), topo.edges.len(), topo.faces.len()]
+                != Kind::ALL.map(|k| self.n(k))
+            {
+                return Err("native topology size mismatch".into());
+            }
+            let mut incidences = vec![Vec::new(); topo.edges.len()];
+            for f in &topo.faces {
+                let rings: Vec<Vec<_>> = f
+                    .loops
+                    .iter()
+                    .map(|r| r.iter().map(|c| patch.start(c)).collect())
+                    .collect();
+                if rings != self.face_rings(f.id as u32) {
+                    return Err("native boundary use mismatch".into());
+                }
+                for e in f.loops.iter().flatten().filter_map(|c| c.edge) {
+                    incidences[e as usize].push(f.id as u32);
+                }
+            }
+            for e in &topo.edges {
+                if self.edge_faces(e.id as u32) != incidences[e.id as usize]
+                    || *st.ends.get(e.id as usize) != e.vertices.map(|v| v as u32)
+                {
+                    return Err("native edge incidence mismatch".into());
+                }
+            }
+        }
         let mut pairs = HashSet::new();
         for e in st.slots[1].live_slots() {
             let [a, b] = *st.ends.get(e as usize);
             if !self.alive(Kind::Vertex, a) || !self.alive(Kind::Vertex, b) {
                 return Err(format!("edge {e} on a gone vertex"));
             }
-            if !pairs.insert((a.min(b), a.max(b))) {
+            if !pairs.insert((a.min(b), a.max(b))) && st.exact.native.is_none() {
                 return Err(format!("duplicate edge {e}"));
             }
             for &f in self.edge_faces(e) {

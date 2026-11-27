@@ -2,7 +2,7 @@
 //! Definition-local f64 supports. Generator references point only into the
 //! curve table, making cycles unrepresentable.
 pub(crate) mod file;
-mod patch;
+pub(crate) mod patch;
 mod spline;
 use glam::{DQuat, DVec3, DVec4};
 use serde::{Deserialize, Serialize};
@@ -75,7 +75,7 @@ impl Frame {
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
-enum Curve {
+pub(crate) enum Curve {
     Line {
         origin: DVec3,
         direction: DVec3,
@@ -125,7 +125,7 @@ impl Curve {
             }
         }
     }
-    fn point(&self, t: f64) -> Result<DVec3> {
+    pub(crate) fn point(&self, t: f64) -> Result<DVec3> {
         check(t.is_finite(), "nonfinite curve parameter")?;
         let p = match self {
             Self::Line { origin, direction } => *origin + *direction * t,
@@ -146,7 +146,7 @@ impl Curve {
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case", deny_unknown_fields)]
-enum Surface {
+pub(crate) enum Surface {
     Plane {
         frame: Frame,
     },
@@ -257,7 +257,7 @@ impl Surface {
             ),
         }
     }
-    fn point(&self, curves: &[Curve], u: f64, v: f64) -> Result<DVec3> {
+    pub(crate) fn point(&self, curves: &[Curve], u: f64, v: f64) -> Result<DVec3> {
         check(
             u.is_finite() && v.is_finite(),
             "nonfinite surface parameter",
@@ -322,18 +322,30 @@ impl Surface {
 
 #[derive(Debug, Default, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-struct Rows {
+pub(crate) struct Rows {
     #[serde(default)]
-    topology: Option<patch::Topology>,
-    curves: Vec<Curve>,
-    surfaces: Vec<Surface>,
+    pub(crate) topology: Option<patch::Topology>,
+    pub(crate) curves: Vec<Curve>,
+    pub(crate) surfaces: Vec<Surface>,
+}
+
+impl Rows {
+    pub(crate) fn validate_pool(&self) -> Result<()> {
+        for c in &self.curves {
+            c.validate()?;
+        }
+        for s in &self.surfaces {
+            s.validate(&self.curves)?;
+        }
+        Ok(())
+    }
 }
 
 use pyo3::{exceptions::PyValueError, prelude::*};
 /// Immutable geometry pool for native scripting; indices are local to this pool.
 #[pyclass(frozen, module = "built_core.command_protocol")]
 pub struct ExactGeometry {
-    rows: Rows,
+    pub(crate) rows: Rows,
     mesh: std::sync::OnceLock<Result<patch::Mesh>>,
 }
 #[pymethods]
@@ -451,7 +463,9 @@ impl patch::Mesh {
         // triangle has a repeated corner.
         let mut used = std::collections::HashSet::with_capacity(indices.len());
         if indices.iter().any(|&i| !used.insert(i)) {
-            return Err(PyValueError::new_err("store weld collapses distinct model samples"));
+            return Err(PyValueError::new_err(
+                "store weld collapses distinct model samples",
+            ));
         }
         let mut corners = Vec::<i64>::with_capacity(3 * self.triangles.len());
         for tri in &self.triangles {

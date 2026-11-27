@@ -41,6 +41,34 @@ fn materialize(mesh: &Obj<'_>) -> PyResult<()> {
     let py = mesh.py();
     let api = py.import("built_core.store_mesh")?;
     let state = mesh.getattr("__dict__")?.cast_into::<PyDict>()?;
+    // Publish only after first-use validation succeeds. A damaged trim
+    // leaves the original deferred definition available for diagnostics.
+    if state.contains("_deferred_exact")? {
+        let staged = api.getattr("StoreMesh")?.call0()?;
+        state.as_any().get_item("_deferred")?.call1((&staged,))?;
+        for k in [
+            "_deferred_exact",
+            "_deferred",
+            "_deferred_nfaces",
+            "_deferred_source",
+        ] {
+            state.del_item(k)?;
+        }
+        super::lifecycle::become_store(
+            mesh,
+            &staged.getattr("_store")?,
+            &staged.getattr("_attr_table")?,
+            Some(&staged.getattr("_attr_own")?),
+        )?;
+        let observe = py
+            .import("built_core.mesh")?
+            .getattr("on_mesh_materialized")?
+            .call_method0("get")?;
+        if !observe.is_none() {
+            observe.call1((mesh,))?;
+        }
+        return Ok(());
+    }
     let source = state.as_any().get_item("_deferred_source")?;
     let mut block = !source.is_none();
     if block {

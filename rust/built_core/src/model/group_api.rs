@@ -790,6 +790,9 @@ fn local_points<'py>(mesh: &Obj<'py>) -> PyResult<Obj<'py>> {
     kw.set_item("dtype", np.getattr("float64")?)?;
     let array = |pos: &Obj<'py>| -> PyResult<Obj<'py>> { np.call_method("array", (pos,), Some(&kw)) };
     let mesh_mod = py.import("built_core.mesh")?;
+    if mesh.getattr("__dict__")?.contains("_deferred_exact")? {
+        mesh.call_method0("_materialize")?;
+    }
     let t = mesh.get_type();
     if t.is(&mesh_mod.getattr("DeferredMesh")?) {
         let d = mesh.getattr(intern!(py, "__dict__"))?;
@@ -807,8 +810,16 @@ fn local_points<'py>(mesh: &Obj<'py>) -> PyResult<Obj<'py>> {
         // The store's dense positions, in `mesh.vertices` order: walking the
         // views made a cached Vec3 per vertex, and selecting a linked file
         // measures every mesh of it (the selection box).
-        let pos = mesh.getattr(intern!(py, "__dict__"))?.get_item("_store")?.call_method0(intern!(py, "arrays"))?.get_item("pos")?;
-        return if pos.len()? > 0 { array(&pos)?.call_method1("reshape", (-1, 3)) } else { Ok(none(py)) };
+        let pos = mesh
+            .getattr(intern!(py, "__dict__"))?
+            .get_item("_store")?
+            .call_method0(intern!(py, "display_arrays"))?
+            .get_item("pos")?;
+        return if pos.len()? > 0 {
+            array(&pos)?.call_method1("reshape", (-1, 3))
+        } else {
+            Ok(none(py))
+        };
     }
     let verts = mesh.getattr(intern!(py, "vertices"))?;
     if !verts.is_truthy()? {

@@ -48,6 +48,7 @@ impl Column {
 
 #[derive(Clone, Debug, Default)]
 pub struct ExactColumns {
+    pub(crate) native: Option<Arc<super::native::NativePatch>>,
     pub(crate) planes: Option<Arc<Vec<crate::exact::Frame>>>,
     face_surface: Column,
     edge_exact_curve: Column,
@@ -114,6 +115,16 @@ impl ExactColumns {
     }
 
     pub fn same_live(&self, other: &Self, kind: Kind, live: impl Fn(u32) -> bool) -> bool {
+        match (&self.native, &other.native) {
+            (None, None) => (),
+            (Some(a), Some(b)) if Arc::ptr_eq(a, b) => (),
+            (Some(a), Some(b))
+                if serde_json::to_vec(&a.rows).ok() == serde_json::to_vec(&b.rows).ok() =>
+            {
+                ()
+            }
+            _ => return false,
+        }
         if self.shared(other, kind) {
             return true;
         }
@@ -145,7 +156,7 @@ impl ExactColumns {
     }
 
     pub fn is_faceted(&self) -> bool {
-        self.face_surface.0.is_none() && self.edge_exact_curve.0.is_none()
+        self.native.is_none() && self.face_surface.0.is_none() && self.edge_exact_curve.0.is_none()
     }
 }
 

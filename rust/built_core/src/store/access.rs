@@ -20,10 +20,15 @@ impl Store {
     /// smaller disk cycle, like `Mesh.find_edge`.
     pub fn find_edge(&self, a: u32, b: u32) -> Option<u32> {
         let (small, other) = if self.degree(a) <= self.degree(b) { (a, b) } else { (b, a) };
-        self.edges_at(small).find(|&e| {
+        let mut matching = self.edges_at(small).filter(|&e| {
             let [p, q] = *self.state.ends.get(e as usize);
             (p == small && q == other) || (q == small && p == other)
-        })
+        });
+        let edge = matching.next()?;
+        if self.state.exact.native.is_some() && matching.next().is_some() {
+            return None;
+        }
+        Some(edge)
     }
 
     /// A face's rings as vertex slots (outer first, then holes).

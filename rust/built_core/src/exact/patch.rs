@@ -7,41 +7,41 @@ use std::collections::{BTreeMap, HashMap};
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(deny_unknown_fields)]
-pub(super) struct Edge {
-    id: u64,
-    curve: u32,
-    vertices: [u64; 2],
-    interval: [f64; 2],
+pub(crate) struct Edge {
+    pub(crate) id: u64,
+    pub(crate) curve: u32,
+    pub(crate) vertices: [u64; 2],
+    pub(crate) interval: [f64; 2],
 }
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(deny_unknown_fields)]
-struct Coedge {
-    edge: Option<u64>,
-    pole: Option<u64>,
+pub(crate) struct Coedge {
+    pub(crate) edge: Option<u64>,
+    pub(crate) pole: Option<u64>,
     #[serde(default)]
-    projected: bool,
+    pub(crate) projected: bool,
     #[serde(default)]
-    reversed: bool,
-    uv: [DVec2; 2],
-    tolerance: f64,
+    pub(crate) reversed: bool,
+    pub(crate) uv: [DVec2; 2],
+    pub(crate) tolerance: f64,
 }
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(deny_unknown_fields)]
-pub(super) struct Face {
-    id: u64,
-    surface: u32,
-    reversed: bool,
-    loops: Vec<Vec<Coedge>>,
+pub(crate) struct Face {
+    pub(crate) id: u64,
+    pub(crate) surface: u32,
+    pub(crate) reversed: bool,
+    pub(crate) loops: Vec<Vec<Coedge>>,
 }
 #[derive(Deserialize, Serialize, Clone, Debug, Default)]
 #[serde(deny_unknown_fields)]
-pub(super) struct Topology {
+pub(crate) struct Topology {
     pub tolerance: f64,
     #[serde(default)]
     normal_tolerance: Option<f64>,
-    vertices: BTreeMap<u64, DVec3>,
-    edges: Vec<Edge>,
-    faces: Vec<Face>,
+    pub(crate) vertices: BTreeMap<u64, DVec3>,
+    pub(crate) edges: Vec<Edge>,
+    pub(crate) faces: Vec<Face>,
 }
 
 impl Curve {
@@ -463,14 +463,16 @@ fn check_loops(loops: &[Vec<Coedge>]) -> Result<()> {
     Ok(())
 }
 
-#[derive(Default, Serialize)]
-pub(super) struct Mesh {
-    pub(super) points: Vec<[f64; 3]>,
-    pub(super) triangles: Vec<[usize; 3]>,
-    face_ids: Vec<u64>,
+#[derive(Default, Debug, Serialize)]
+pub(crate) struct Mesh {
+    pub(crate) points: Vec<[f64; 3]>,
+    pub(crate) triangles: Vec<[usize; 3]>,
+    pub(crate) face_ids: Vec<u64>,
+    #[serde(skip)]
+    pub(crate) parameters: Vec<[DVec2; 3]>,
     /// Each ordered polyline names one logical edge. Shared uses index the
     /// very same positions as the adjacent triangles.
-    edge_samples: BTreeMap<u64, Vec<usize>>,
+    pub(crate) edge_samples: BTreeMap<u64, Vec<usize>>,
 }
 
 impl Topology {
@@ -719,14 +721,21 @@ impl Mesh {
                         )?;
                         continue;
                     }
-                    accepted.push(indices);
+                    let mut parameters = c.map(|v| v.uv);
+                    if f.reversed {
+                        parameters.swap(1, 2);
+                    }
+                    accepted.push((indices, parameters));
                 }
             }
             if mids.is_empty() {
                 check(!accepted.is_empty(), "empty trimmed face")?;
                 self.face_ids
                     .resize(self.face_ids.len() + accepted.len(), f.id);
-                self.triangles.extend(accepted);
+                for (indices, parameters) in accepted {
+                    self.triangles.push(indices);
+                    self.parameters.push(parameters);
+                }
                 return Ok(());
             }
             check(

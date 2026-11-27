@@ -107,7 +107,18 @@ pub(crate) fn source_ids_checked<'p>(
         for name in names.try_iter()? {
             let name: String = name?.extract()?;
             if RESERVED_ARRAY_PREFIXES.iter().any(|p| name.starts_with(p))
-                && !(planes && matches!(name.as_str(), "face_surface_id" | "face_surface_ref"))
+                && !(planes
+                    && matches!(
+                        name.as_str(),
+                        "face_surface_id"
+                            | "face_surface_ref"
+                            | "face_loop_patch"
+                            | "coedge_topology"
+                            | "coedge_edge_id"
+                            | "coedge_vertex_id"
+                            | "edge_exact_curve_id"
+                            | "edge_exact_curve_ref"
+                    ))
             {
                 return Err(PyValueError::new_err(format!(
                     "This document needs features this build of Built lacks: {EXACT_GEOMETRY} ({name})"

@@ -156,6 +156,34 @@ fn bind_exact_plane<'py>(
     execute(history, &cmd)
 }
 
+/// Insert one logical exact definition and an identity placement.
+#[pyfunction]
+#[pyo3(signature=(history,geometry,name="Exact geometry"))]
+fn add_exact_geometry<'py>(history: &Obj<'py>, geometry: &Obj<'py>, name: &str) -> Reply<'py> {
+    let py = history.py();
+    let json = py
+        .import("json")?
+        .call_method1("dumps", (geometry,))?
+        .extract::<String>()?;
+    let exact = crate::exact::ExactGeometry::new(&json)?;
+    let patch =
+        crate::store::native::NativePatch::new(exact.rows).map_err(PyValueError::new_err)?;
+    let group = py.import("built_core.group")?.call_method0("Group")?;
+    let mesh = group.getattr("mesh")?;
+    mesh.getattr("_store")?
+        .cast::<crate::store::py::PyMeshStore>()?
+        .try_borrow_mut()?
+        .inner
+        .install_patch(std::sync::Arc::new(patch))
+        .map_err(PyValueError::new_err)?;
+    group.setattr("name", name)?;
+    group.setattr("xform", py.import("built_core")?.call_method0("Matrix4")?)?;
+    execute(
+        history,
+        &history_command(py, "InsertGroupCommand", (group,))?,
+    )
+}
+
 /// Insert a model-tolerance tessellation in a single undoable edit.
 #[pyfunction]
 fn materialize_exact_geometry<'py>(history:&Obj<'py>, geometry:&Obj<'py>)->Reply<'py> {
@@ -170,6 +198,7 @@ pub(crate) fn register(root: &Bound<'_, PyModule>) -> PyResult<()> {
     let py = root.py();
     let m = PyModule::new(py, "built_core.command_protocol")?;
     m.add_class::<crate::exact::ExactGeometry>()?;
+    m.add_function(wrap_pyfunction!(add_exact_geometry, &m)?)?;
     m.add_function(wrap_pyfunction!(bind_exact_plane, &m)?)?;
     m.add_function(wrap_pyfunction!(materialize_exact_geometry, &m)?)?;
     m.add_function(wrap_pyfunction!(api::run, &m)?)?;

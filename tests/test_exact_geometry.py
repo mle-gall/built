@@ -386,17 +386,16 @@ def test_faceted_sibling_member_survives_an_exact_document_rewrite(tmp_path):
 
 @pytest.mark.parametrize("operation", ["reverse_faces", "erase", "erase_stroke", "divide_edges",
                                         "move_vertices", "rotate_selection", "scale_selection",
-                                        "push_pull"])
-def test_cylinder_facets_remain_valid_after_tool_and_undo(operation):
-    from built_core.history import History
+                                        "push_pull", "follow_me", "rebuild_cap", "offset_outline",
+                                        "join_edges", "move_selection", "add_face", "add_edges", "add_arc",
+                                        "flip_selection", "purge_debris"])
+def test_native_cylinder_remains_valid_after_tool_and_undo(operation):
     from built_core.protocol import commands
-    from built_core.scene import Scene
 
-    scene = Scene()
-    h = History(scene)
-    assert commands.run(h, "materialize_exact_geometry", geometry=cylinder())["ok"]
+    scene, h, group = native_cylinder()
+    scene.begin_group_edit(group)
+    assert group.mesh._store.native_exact
     mesh = scene.mesh
-    before = mesh.capture_state()
     face, edge = mesh.faces[0].key, mesh.edges[0].key
     vertices = [v.key for v in mesh.vertices]
     args = {
@@ -408,12 +407,23 @@ def test_cylinder_facets_remain_valid_after_tool_and_undo(operation):
         "rotate_selection": dict(vertices=vertices, axis=[0, 0, 1], center=[0, 0, 0], angles=[40]),
         "scale_selection": dict(vertices=vertices, anchor=[0, 0, 0], factors=[1, 2, 1]),
         "push_pull": dict(face=face, distance=0.1),
+        "follow_me": dict(face=face, path=[[1, 0, 0], [2, 0, 0], [2, 1, 0]]),
+        "rebuild_cap": dict(face=face),
+        "offset_outline": dict(face=face, distance=.001),
+        "join_edges": dict(edges=[edge, mesh.edges[1].key]),
+        "move_selection": dict(faces=[face], delta=[0, 0, .1]),
+        "add_face": dict(outer=[[1, 0, 0], [1.1, 0, 0], [1, 0, .1]]),
+        "add_edges": dict(segments=[[[1, 0, 0], [2, 0, 0]]]),
+        "add_arc": dict(points=[[1, 0, 0], [1.1, .2, 0], [1.3, 0, 0]]),
+        "flip_selection": dict(faces=[face], center=[0, 0, 0], axis=[1, 0, 0]),
+        "purge_debris": {},
     }[operation]
     result = commands.run(h, operation, **args)
     assert result["ok"], result["error"]
     mesh._store.check()
     h.undo()
-    assert mesh.capture_state() == before
+    assert group.mesh._store.native_exact
+    group.mesh._store.check()
     mesh._store.check()
 
 
@@ -464,3 +474,193 @@ def test_link_reload_observes_a_changed_support_in_an_unchanged_block(tmp_path):
     reader = LinkMeshes(path, {}, previous)
     igz.load_into(second, path, link_meshes=reader)
     assert second.mesh._store.exact_plane(second.mesh.faces[0].key) == rows
+
+
+def native_cylinder():
+    from built_core.history import History
+    from built_core.protocol import commands
+    from built_core.scene import Scene
+
+    scene = Scene()
+    history = History(scene)
+    result = commands.run(history, "add_exact_geometry", geometry=cylinder(), name="Cylinder")
+    assert result["ok"], result
+    return scene, history, scene.groups[0]
+
+
+def test_native_cylinder_identity_and_display(tmp_path):
+    import pickle
+    from built_core.scene import Scene
+    from formats import igz
+
+    scene, _, group = native_cylinder()
+    def check(mesh):
+        st = mesh._store
+        assert st.counts() == (2, 3, 1)
+        assert st.native_exact
+        bottom, top, seam = map(int, st.ids("edge"))
+        assert st.face_boundary_uses(mesh.faces[0].key) == [
+            [(bottom, False), (seam, False), (top, True), (seam, True)]]
+        arrays = st.display_arrays()
+        assert set(arrays["face_owner"]) == {0}
+        assert len(arrays["corners"]) > 30
+        assert set(arrays["edge_owner"]) == {0, 1, 2}
+        return list(st.ids("edge"))
+    ids = check(group.mesh)
+    assert check(pickle.loads(pickle.dumps(group.mesh))) == ids
+    path = tmp_path / "cylinder.built"
+    igz.save_scene(scene, path)
+    opened = Scene()
+    igz.load_into(opened, path)
+    assert check(opened.groups[0].mesh) == ids
+
+
+def test_native_cylinder_fallback_undo():
+    from built_core.protocol import commands
+    scene, history, group = native_cylinder()
+    scene.begin_group_edit(group)
+    assert group.mesh._store.native_exact
+    assert len(scene.mesh.faces) > 10
+    result = commands.run(history, "add_edge", a=[1, 0, 0], b=[3, 0, 0])
+    assert result["ok"], result
+    assert not group.mesh._store.native_exact
+    history.undo()
+    assert group.mesh._store.native_exact
+    assert group.mesh._store.counts() == (2, 3, 1)
+    history.redo()
+    assert not group.mesh._store.native_exact
+
+
+def test_native_explode_fallback_preserves_definition_for_undo():
+    from built_core.protocol import commands
+    scene, history, group = native_cylinder()
+    result = commands.run(history, "explode_group", placement=group.uid)
+    assert result["ok"], result
+    assert len(scene.mesh.faces) > 10
+    scene.mesh._store.check()
+    history.undo()
+    assert scene.groups[0].mesh._store.native_exact
+
+
+def test_two_meridians_with_same_vertices_resolve_by_edge_id():
+    from built_core.history import History
+    from built_core.protocol import commands
+    from built_core.scene import Scene
+
+    half = math.pi / 2
+    vertices = {0: [0, 0, -1], 1: [0, 0, 1]}
+    curves = [dict(type="circle", radius=1, frame=dict(origin=[0, 0, 0],
+                   reference=[sign, 0, 0], axis=[0, -sign, 0])) for sign in (1, -1)]
+    uv = [(0, -half), (math.pi, -half), (math.pi, half), (0, half)]
+    ring = [dict(**binding, uv=[uv[i], uv[(i+1) % 4]], tolerance=.005)
+            for i, binding in enumerate([dict(pole=0), dict(edge=1), dict(pole=1),
+                                           dict(edge=0, reversed=True)])]
+    shape = dict(curves=curves, surfaces=[dict(type="sphere", radius=1, frame=frame())],
+                 topology=dict(tolerance=.01, vertices=vertices,
+                               edges=[dict(id=i, curve=i, vertices=[0, 1], interval=[-half, half])
+                                      for i in range(2)],
+                               faces=[dict(id=0, surface=0, reversed=False, loops=[ring])]))
+    scene = Scene()
+    assert commands.run(History(scene), "add_exact_geometry", geometry=shape)["ok"]
+    mesh = scene.groups[0].mesh
+    a, b = mesh.vertices
+    assert mesh.find_edge(a, b) is None
+    for i, edge_id in enumerate(mesh._store.ids("edge")):
+        assert mesh.find_edge(a, b, edge_id=int(edge_id)).key == mesh.edges[i].key
+
+
+def test_native_pool_damage_rejected_at_open_coedge_damage_on_first_use(tmp_path):
+    import zipfile
+    from built_core.scene import Scene
+    from formats import igz
+
+    doc, _, _ = native_cylinder()
+    src = tmp_path / "original.built"
+    igz.save_scene(doc, src)
+    for kind in ("pool", "coedge"):
+        out = tmp_path / (kind + ".built")
+        with zipfile.ZipFile(src) as z, zipfile.ZipFile(out, "w") as dst:
+            manifest = json.loads(z.read("document.json"))
+            block = manifest["scene"]["protos"][0]["geom"]
+            for info in z.infolist():
+                data = z.read(info)
+                if kind == "pool" and info.filename == "document.json":
+                    manifest["ext"]["built.exact_geometry"]["patches"][0]["curves"][0]["circle"]["radius"] = -1
+                    data = json.dumps(manifest).encode()
+                if kind == "coedge" and info.filename == block["member"]:
+                    data = bytearray(data)
+                    offset = block["arrays"]["coedge_edge_id"][2]
+                    data[offset:offset+8] = data[offset+8:offset+16]
+                dst.writestr(info, data)
+        opened = Scene()
+        if kind == "pool":
+            with pytest.raises(ValueError, match="radius"):
+                igz.load_into(opened, out)
+        else:
+            igz.load_into(opened, out)
+            mesh = opened.groups[0].mesh
+            assert mesh.__dict__["_deferred_exact"]
+            for _ in range(2):
+                with pytest.raises(ValueError, match="coedge refers"):
+                    _ = mesh._store
+
+
+def test_paint_follows_logical_face_through_fallback():
+    from built_core.protocol import commands
+    scene, history, group = native_cylinder()
+    scene.begin_group_edit(group)
+    color = [.2, .4, .8]
+    assert commands.run(history, "paint_material", faces=[scene.mesh.faces[0].key], color=color)["ok"]
+    assert group.mesh._store.native_exact
+    assert group.mesh.faces[0].attrs["color"] == color
+    assert commands.run(history, "add_edge", a=[1, 0, 0], b=[2, 0, 0])["ok"]
+    assert all(face.attrs["color"] == color for face in group.mesh.faces)
+    history.undo()
+    assert group.mesh._store.native_exact
+    assert group.mesh.faces[0].attrs["color"] == color
+    history.undo()
+    assert "color" not in group.mesh.faces[0].attrs
+
+
+@pytest.mark.parametrize("operation", ["bevel_selection", "orient_faces", "resegment_curve", "intersect_faces",
+                                        "repair_solid", "split_into_pieces", "solid_operation"])
+def test_inapplicable_cylinder_tool_preserves_exact_state(operation):
+    from built_core.protocol import commands
+    scene, history, group = native_cylinder()
+    before = group.mesh.capture_state()
+    if operation in ("repair_solid", "split_into_pieces", "solid_operation"):
+        args = dict(placement=group.uid) if operation != "solid_operation" else dict(operation="union", placements=[group.uid])
+    else:
+        scene.begin_group_edit(group)
+        f, e = scene.mesh.faces[0].key, scene.mesh.edges[0].key
+        args = {
+            "bevel_selection": dict(edges=[e], radius=.001, segments=1),
+            "orient_faces": dict(face=f),
+            "resegment_curve": dict(edge=e, segments=6),
+            "intersect_faces": dict(mode="selection", faces=[f, scene.mesh.faces[1].key]),
+        }[operation]
+    result = commands.run(history, operation, **args)
+    assert not result["ok"]
+    assert group.mesh._store.native_exact
+    assert before == group.mesh.capture_state()
+    group.mesh._store.check()
+
+
+def test_native_group_cross_document_clipboard():
+    from copy import deepcopy
+    from built_core import Vec3
+    from built_core.history import History
+    from built_core.protocol import commands
+    from built_core.scene import Scene
+    from formats import clip_payload
+    _, _, source = native_cylinder()
+    clipboard = clip_payload.decode(clip_payload.encode(dict(
+        groups=[deepcopy(source)], edges=[], faces=[], ref=Vec3())))
+    target = Scene()
+    history = History(target)
+    result = commands.run(history, "paste_clipboard", clipboard=clipboard, offset=[4, 0, 0])
+    assert result["ok"], result
+    copied = target.groups[0].mesh
+    assert copied._store.native_exact
+    assert copied._store.counts() == (2, 3, 1)
+    assert copied._store.face_boundary_uses(copied.faces[0].key)[0][1][0] == int(copied._store.ids("edge")[2])

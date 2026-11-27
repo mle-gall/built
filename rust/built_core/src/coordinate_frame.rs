@@ -76,8 +76,10 @@ impl MeshFrame {
         let parent = d.get_item("_frame_parent")?.filter(|p| !p.is_none());
         let frame = (origin, &matrix).into_pyobject(py)?;
         let local = if let Some(def) = &definition {
-            def.getattr("_store")?
-                .call_method1("_instance_view", (def, &matrix, origin))?
+            def.getattr("_store")?.call_method1(
+                "_instance_view",
+                (def, &matrix, origin, d.contains("_instance_edit")?),
+            )?
         } else if let Some(p) = parent.as_ref() {
             if matches(p, origin, &matrix)? {
                 if !p.getattr("revision")?.eq(st.getattr("revision")?)? {

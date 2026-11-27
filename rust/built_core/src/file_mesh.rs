@@ -659,9 +659,22 @@ fn plain_store_records<'py>(mesh: &Obj<'py>) -> PyResult<Option<Dict<'py>>> {
 #[pyo3(signature=(mesh,geom_sink=None))]
 fn igz_mesh_json<'py>(mesh: &Obj<'py>, geom_sink: Option<&Obj<'py>>) -> PyResult<Dict<'py>> {
     let py = mesh.py();
-    let plan = py
-        .import("built_core")?
-        .call_method1("plan_of", (mesh,))?;
+    if mesh.getattr("__dict__")?.contains("_deferred_exact")? {
+        mesh.call_method0("_materialize")?;
+    }
+    let compatibility = geom_sink.is_none_or(|s| {
+        s.getattr_opt("id_origins")
+            .ok()
+            .flatten()
+            .is_none_or(|a| a.is_none())
+    });
+    let source = if compatibility && mesh.getattr("__dict__")?.contains("_store")? {
+        crate::store::py::PyMeshStore::facet_copy(mesh)?
+    } else {
+        None
+    };
+    let mesh = source.as_ref().unwrap_or(mesh);
+    let plan = py.import("built_core")?.call_method1("plan_of", (mesh,))?;
     let codec = py.import("built_core.formats.igz")?;
     let out = PyDict::new(py);
     if !plan.is_none() && geom_sink.is_none() {
