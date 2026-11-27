@@ -1,5 +1,8 @@
 {
   "commands": [
+    "live_set",
+    "live_release",
+    "live_reevaluate",
     "set_location",
     "set_model_units",
     "set_annotation_font",
