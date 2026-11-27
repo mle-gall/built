@@ -55,7 +55,12 @@ impl Ui {
     /// The Tasks destination in the dock's content area.
     pub(super) fn tasks_destination(ui: &mut egui::Ui, data: &Value, pane: &mut TaskPane, cmds: &mut Vec<String>) {
         let attention = data["unresolved"].as_u64().unwrap_or(0);
-        kit::inspector_title(ui, "Tasks", &if attention > 0 { format!("{attention} need attention") } else { String::new() });
+        let summary = match attention {
+            0 => String::new(),
+            1 => "1 needs attention".to_owned(),
+            n => format!("{n} need attention"),
+        };
+        kit::inspector_title(ui, "Tasks", &summary);
         ui.add_space(SPACE_XS);
         let composer_h = if pane.compose { 165.0 } else { BUTTON_H + SPACE_M };
         let height = (ui.available_height() - composer_h).max(80.0);
@@ -76,7 +81,7 @@ impl Ui {
                         wrapped(ui, "External agents cannot edit this model. Allow them in Settings › AI.", meta(), FAINT);
                     }
                 });
-                if !data["access"].as_bool().unwrap_or(false) && kit::row_link(ui, "Open Settings › AI").clicked() {
+                if !data["access"].as_bool().unwrap_or(false) && kit::row_link(ui, "Open AI settings").clicked() {
                     cmds.push("task:settings:".into());
                 }
                 return;
@@ -132,7 +137,7 @@ impl Ui {
                     wrapped(ui, description, body(), DIM);
                 }
                 ui.horizontal(|ui| {
-                    kit::status_chip(ui, text(d, "label"), kit::task_tone(text(d, "tone")));
+                    kit::status_chip(ui, text(d, "label"), DIM);
                     ui.label(egui::RichText::new(format!("{agent}{}", if d["pinned"].as_bool().unwrap_or(false) { " · pinned" } else { "" })).font(meta()).color(FAINT));
                 });
                 let summary = text(d, "summary");
@@ -155,7 +160,7 @@ impl Ui {
                 let question = text(d, "question");
                 if !question.is_empty() {
                     ui.add_space(SPACE_XS);
-                    ui.label(egui::RichText::new("Question").font(caption_font()).color(QUESTION));
+                    ui.label(egui::RichText::new("Question").font(caption_font()).color(DIM));
                     wrapped(ui, question, body(), INK);
                 }
                 if let Some(note) = d["note"].as_str() {
@@ -170,8 +175,6 @@ impl Ui {
             ui.horizontal(|ui| {
                 ui.set_min_height(CONTROL_H);
                 ui.add_space(SPACE_S);
-                let (r, _) = ui.allocate_exact_size(vec2(8.0, CONTROL_H), Sense::hover());
-                kit::dot(ui.painter(), r.center(), ACCENT);
                 ui.label(egui::RichText::new(format!("{} modified", changes.len())).font(meta()).color(DIM));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if kit::row_link(ui, "Show in Project").clicked() {
@@ -215,8 +218,7 @@ impl Ui {
                 pane.requesting = None;
             }
         } else {
-            ui.horizontal_wrapped(|ui| {
-                ui.add_space(SPACE_S);
+            egui::Frame::new().inner_margin(egui::Margin::symmetric(SPACE_S as i8, 0)).show(ui, |ui| ui.horizontal_wrapped(|ui| {
                 ui.spacing_mut().item_spacing = vec2(SPACE_XS, SPACE_XS);
                 if can("can_accept") && kit::sheet_button(ui, "Accept changes", "", 1) {
                     cmds.push(format!("task:accept:{guid}"));
@@ -228,7 +230,7 @@ impl Ui {
                 if can("can_revert") && kit::panel_button(ui, "Revert task", "", 2, None).on_hover_text("Undo this task's changes as one step").clicked() {
                     cmds.push(format!("task:revert:{guid}"));
                 }
-            });
+            }));
         }
     }
 
