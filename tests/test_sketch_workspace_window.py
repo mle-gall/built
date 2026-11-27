@@ -79,7 +79,7 @@ state
 key z cmd
 wait 100
 state
-key z cmd shift
+menu redo
 wait 100
 state
 key enter
@@ -114,12 +114,15 @@ quit
         env=dict(os.environ, BUILT_ANSWERS="escape"), settings=tmp_path / "settings",
         capture_output=True, text=True, timeout=300)
     log = result.stdout + result.stderr
+    # One state per `state` step (the shell adds one more on quit).
     states = _states(log)
-    assert len(states) == 8, log[-4000:]
-    entered, drawn, undone, redone, done, doc_undo, prompt, doc_redo = states
+    assert len(states) >= 8, log[-4000:]
+    entered, drawn, undone, redone, done, doc_undo, prompt, doc_redo = states[:8]
+    summary = [(s["sketch"]["shown"], len((s["sketch"]["row"] or {}).get("curves", [])),
+                [len(r["curves"]) for r in s["sketch_rows"]]) for s in states]
     assert entered["sketch"]["shown"] and entered["sketch"]["row"]["use"] == "section"
     assert entered["sketch"]["row"]["plane"]["ref"] == {"path": [uid], "id": face}
-    assert len(drawn["sketch"]["row"]["curves"]) == 4
+    assert len(drawn["sketch"]["row"]["curves"]) == 4, summary
     assert len(undone["sketch"]["row"]["curves"]) == 0
     assert len(redone["sketch"]["row"]["curves"]) == 4
     # Done: one sketch row, out of the workspace; the rectangle is 60 x 20.

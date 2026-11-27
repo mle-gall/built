@@ -231,7 +231,7 @@ jobs:
       - name: Rust library tests
         if: runner.os != 'Windows' && !inputs.tests
         run: |
-          crates=(built_core built_render python_bindings)
+          crates=(built_core built_render built_draft2d python_bindings)
           if [[ "$RUNNER_OS" == macOS ]]; then crates+=(built_rfa); fi
           # Their own directory: the tests build PyO3 without the extension
           # settings the wheels use, and sharing one would rebuild both.
