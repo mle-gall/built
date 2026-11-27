@@ -184,3 +184,7 @@ impl Edit {
         visit.call(&self.after)
     }
 }
+
+pub(crate) fn touched_meshes(py: Python<'_>) -> Vec<Py<PyAny>> {
+    LEVELS.with_borrow(|levels| levels.iter().flatten().map(|entry| entry.mesh.clone_ref(py)).collect())
+}

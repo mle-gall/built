@@ -48,7 +48,7 @@ fn answer<'py>(history: &Obj<'py>, before: &Obj<'py>, ok: bool) -> Reply<'py> {
 }
 
 #[pyfunction]
-fn execute<'py>(history: &Obj<'py>, command: &Obj<'py>) -> Reply<'py> {
+pub(crate) fn execute<'py>(history: &Obj<'py>, command: &Obj<'py>) -> Reply<'py> {
     let before = history.getattr("revision")?;
     if !command.is_none() {
         history.call_method1("execute", (command,))?;
@@ -222,6 +222,7 @@ pub(crate) fn register(root: &Bound<'_, PyModule>) -> PyResult<()> {
     transforms::register(&m)?;
     drawing::register(&m)?;
     keys::register(&m)?;
+    crate::live::register(&m)?;
     queries::register(&m)?;
     reference::register(&m)?;
     annotations::register(&m)?;

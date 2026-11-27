@@ -649,3 +649,8 @@ walls with a door) is the acceptance test for lanes 1–5 together.
 ## Owner decisions (2026-11-27)
 
 All six open questions accepted as recommended: recipes stay optional extension data with a content stamp (stale → Re-evaluate or Release); generated geometry keeps ids by role, including when a role returns; Repeat copies are adaptive automatically when the source is anchored, identical otherwise, with an inspector switch; cut members export as exact IFC4 solids (meshes only for Reference View, fallback reasons in the export report); existing hosted walls convert to Wall-preset sweeps on open and save in the new form; DWG enters the Sketch workspace through the LibreDWG bridge.
+
+## Notes from lane 0 (feat/live-core)
+
+- Evaluation runs in a hook immediately before the outer History transaction commits (`rust/built_core/src/doc/execute.rs`); the post-execute dispatch is too late to include generated writes in the same undo step. Generators must write there.
+- A missing placement stamp on a surviving recipe row marks that row stale. A document whose whole `built.live` table was stripped by another reader has only baked geometry: there is nothing to mark, and it opens as plain geometry.

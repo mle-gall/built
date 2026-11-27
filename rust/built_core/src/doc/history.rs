@@ -304,6 +304,9 @@ impl DocumentHistory {
                 cmd.call_method0(if undo { "undo" } else { "do" })?;
             } else {
                 replay_direct(py, host, &cmd, undo)?;
+                if let Some(live) = cmd.getattr_opt("_live_txn")? {
+                    live.call_method0(if undo { "undo" } else { "redo" })?;
+                }
             }
             Ok(())
         })();

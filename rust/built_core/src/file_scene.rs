@@ -352,6 +352,7 @@ pub fn igz_archive_scene_fields(scene: &Obj<'_>, out: &Dict<'_>, stream: &Obj<'_
     if let Some(ext) = scene.getattr_opt("doc_ext")?.filter(|v| v.is_instance_of::<PyDict>() && v.is_truthy().unwrap_or(false)) {
         out.set_item("_doc_ext", py.import("copy")?.call_method1("deepcopy", (ext,))?)?;
     }
+    if built { crate::live::save(scene,out)?; }
     archive_styles(scene, out)?;
     let views = attr(scene, "saved_views")?;
     if views.is_truthy()? {
@@ -542,6 +543,7 @@ fn strings<'py>(payload: &Dict<'py>, key: &str, require_value: bool) -> PyResult
 #[pyfunction]
 pub fn igz_reset_scene(scene: &Obj<'_>, payload: &Dict<'_>, survey: &Obj<'_>) -> PyResult<()> {
     let py = scene.py();
+    crate::live::clear(scene)?;
     for k in [
         "mesh",
         "selection",

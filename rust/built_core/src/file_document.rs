@@ -489,6 +489,7 @@ fn igz_load_into_inner<'p>(
         if foreign.contains(crate::file_ids::EXACT_NAMESPACE)? {
             foreign.del_item(crate::file_ids::EXACT_NAMESPACE)?;
         }
+        crate::live::load(scene,&foreign)?;
         scene.setattr("doc_ext", foreign)?;
     } else {
         scene.setattr("doc_ext", py.None())?;

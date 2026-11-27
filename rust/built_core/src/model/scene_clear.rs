@@ -104,6 +104,7 @@ pub fn scene_clear(scene: &Obj<'_>) -> PyResult<()> {
     // A new document: a new identity at its first save.
     scene.setattr("doc_id", py.None())?;
     scene.setattr("doc_ext", py.None())?;
+    crate::live::clear(scene)?;
     Ok(())
 }
 

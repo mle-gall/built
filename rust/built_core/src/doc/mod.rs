@@ -22,7 +22,7 @@
 
 mod assembly;
 mod definition;
-mod geometry;
+pub(crate) mod geometry;
 use definition::DefinitionRef;
 use std::sync::Arc;
 mod anchor;
