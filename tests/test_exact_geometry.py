@@ -88,3 +88,172 @@ def test_materialized_patch_is_one_history_step():
     assert len(scene.mesh.faces) == 0
     history.redo()
     assert list(scene.mesh._store.ids("face")) == ids
+
+
+def test_exact_plane_roundtrip_undo_and_critical_rows(tmp_path):
+    import zipfile
+    from built_core.history import History
+    from built_core.protocol import commands
+    from built_core.scene import Scene
+    from formats import igz
+
+    scene = Scene()
+    h = History(scene)
+    commands.run(h, "add_face", outer=[[0, 0, 0], [2, 0, 0], [0, 2, 0]])
+    key = scene.mesh.faces[0].key
+    assert commands.run(h, "bind_exact_plane", face=key, **frame())["ok"]
+    path = tmp_path / "plane.built"
+
+    def write(model):
+        igz.save_scene(model, path)
+        with zipfile.ZipFile(path) as z:
+            return json.loads(z.read("document.json"))
+
+    def check_bound(manifest):
+        assert manifest["requires"] == ["built.exact_geometry.v1"]
+        pool = manifest["ext"]["built.exact_geometry"]["surfaces"]
+        assert pool == [{"type": "plane", "frame": frame()}]
+        arrays = manifest["scene"]["geom"]["arrays"]
+        assert arrays["face_surface_id"][:2] == ["<u8", [1]]
+        assert arrays["face_surface_ref"][:2] == ["<u4", [1]]
+
+    check_bound(write(scene))
+    h.undo()
+    assert write(scene)["requires"] == []
+    h.redo()
+    check_bound(write(scene))
+    reopened = Scene()
+    igz.load_into(reopened, path)
+    check_bound(write(reopened))
+
+
+def test_damaged_surface_reference_is_rejected(tmp_path):
+    import struct
+    import zipfile
+    from built_core.history import History
+    from built_core.protocol import commands
+    from built_core.scene import Scene
+    from formats import igz
+
+    scene = Scene()
+    h = History(scene)
+    commands.run(h, "add_face", outer=[[0, 0, 0], [2, 0, 0], [0, 2, 0]])
+    commands.run(h, "bind_exact_plane", face=scene.mesh.faces[0].key, **frame())
+    path = tmp_path / "good.built"
+    igz.save_scene(scene, path)
+    bad = tmp_path / "bad.built"
+    with zipfile.ZipFile(path) as src, zipfile.ZipFile(bad, "w") as dst:
+        geom = json.loads(src.read("document.json"))["scene"]["geom"]
+        for info in src.infolist():
+            data = bytearray(src.read(info))
+            if info.filename == geom["member"]:
+                struct.pack_into("<I", data, geom["arrays"]["face_surface_ref"][2], 99)
+            dst.writestr(info, data)
+    with pytest.raises(ValueError, match="missing plane pool row"):
+        igz.load_into(Scene(), bad)
+
+
+def test_spherical_poles_have_single_model_vertices():
+    half = math.pi / 2
+    # The meridian runs from the south pole to the north through +X.
+    meridian = dict(type="circle", radius=1, frame=dict(
+        origin=[0, 0, 0], reference=[1, 0, 0], axis=[0, -1, 0]))
+    uv = [(0, -half), (math.tau, -half), (math.tau, half), (0, half)]
+    ring = [dict(**binding, uv=[uv[i], uv[(i+1) % 4]], tolerance=0.01)
+            for i, binding in enumerate([dict(pole=0), dict(edge=0),
+                                          dict(pole=1), dict(edge=0, reversed=True)])]
+    model = dict(curves=[meridian], surfaces=[dict(type="sphere", radius=1, frame=frame())],
+                 topology=dict(tolerance=0.04, vertices={0: [0, 0, -1], 1: [0, 0, 1]},
+                               edges=[dict(id=0, curve=0, vertices=[0, 1], interval=[-half, half])],
+                               faces=[dict(id=0, surface=0, reversed=False, loops=[ring])]))
+    mesh = json.loads(ExactGeometry(json.dumps(model)).tessellate())
+    uses = Counter(tuple(sorted(e)) for a, b, c in mesh["triangles"]
+                   for e in [(a, b), (b, c), (c, a)])
+    assert set(uses.values()) == {2}
+
+
+def test_plane_clipboard_archive_and_cross_document_paste():
+    from types import SimpleNamespace
+    from built_core import Vec3
+    from built_core.history import History
+    from built_core.scene import Scene
+    from formats import clip_payload
+    from tools.paste import PasteTool
+
+    rows = list(frame().values())
+    square = [Vec3(0, 0, 0), Vec3(2, 0, 0), Vec3(2, 2, 0), Vec3(0, 2, 0)]
+    payload = dict(faces=[(square, [], {})], edges=[], groups=[], ref=Vec3(),
+                   face_planes={"0": rows})
+    clip = clip_payload.decode(clip_payload.encode(payload))
+    assert clip["face_planes"]["0"] == rows
+    scene = Scene()
+    h = History(scene)
+    vp = SimpleNamespace(scene=scene, history=h, clipboard=clip, update=lambda: None)
+    assert PasteTool.in_place(vp)
+    assert scene.mesh._store.exact_plane(scene.mesh.faces[0].key) == rows
+    h.undo()
+    assert len(scene.mesh.faces) == 0
+    h.redo()
+    assert scene.mesh._store.exact_plane(scene.mesh.faces[0].key) == rows
+
+
+def test_closed_cylinder_caps_share_every_rim_segment():
+    rows = cylinder()
+    for i, z in enumerate((0, 2)):
+        rows["surfaces"].append(dict(type="plane", frame=frame(z)))
+        cap = dict(edge=10+i, projected=True, reversed=i == 0, uv=[[1, 0], [1, 0]],
+                   tolerance=0.005)
+        rows["topology"]["faces"].append(dict(id=21+i, surface=i+1, reversed=i == 0,
+                                              loops=[[cap]]))
+    mesh = json.loads(ExactGeometry(json.dumps(rows)).tessellate())
+    directed = Counter((i, j) for a, b, c in mesh["triangles"]
+                       for i, j in ((a, b), (b, c), (c, a)))
+    assert set(mesh["face_ids"]) == {20, 21, 22}
+    assert all(n == directed[b, a] == 1 for (a, b), n in directed.items())
+
+
+def test_boundary_returns_distinct_seam_branches():
+    g = ExactGeometry(json.dumps(cylinder()))
+    ring, = json.loads(g.face_boundary(20))
+    assert [u["edge"] for u in ring] == [10, 12, 11, 12]
+    assert ring[1]["reversed"] != ring[3]["reversed"]
+    assert ring[1]["uv"][0][0] == math.tau and ring[3]["uv"][0][0] == 0
+
+
+def test_failed_materialization_restores_existing_mesh():
+    from built_core.history import History
+    from built_core.protocol import commands
+    from built_core.scene import Scene
+
+    scene = Scene()
+    h = History(scene)
+    commands.run(h, "add_face", outer=[[10, 10, 0], [11, 10, 0], [10, 11, 0]])
+    before = scene.mesh.capture_state()
+    rows = cylinder()
+    scale = 1e-10
+    rows["surfaces"][0]["radius"] *= scale
+    for c in rows["curves"][:2]:
+        c["radius"] *= scale
+    rows["curves"][2]["origin"][0] *= scale
+    for v in rows["topology"]["vertices"].values():
+        v[0] *= scale
+    result = commands.run(h, "materialize_exact_geometry", geometry=rows)
+    assert not result["ok"] and "weld collapses" in str(result["error"])
+    assert scene.mesh.capture_state() == before
+
+
+def test_group_only_clipboard_serializes_exact_definition():
+    from built_core import Matrix4, Vec3
+    from built_core.group import Group
+    from built_core.mesh import Mesh
+    from formats import clip_payload
+
+    mesh = Mesh()
+    f = mesh.add_face([Vec3(0, 0, 0), Vec3(2, 0, 0), Vec3(0, 2, 0)])
+    rows = list(frame().values())
+    mesh._store.bind_exact_plane(f.key, rows)
+    placed = Group(mesh)
+    placed.xform = Matrix4()
+    clip = clip_payload.decode(clip_payload.encode(dict(groups=[placed], ref=Vec3())))
+    copy, = clip["groups"]
+    assert copy.mesh._store.exact_plane(copy.mesh.faces[0].key) == rows

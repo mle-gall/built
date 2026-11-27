@@ -19,7 +19,11 @@ fn seq<'p>(d: &Obj<'p>, k: &str) -> PyResult<Obj<'p>> {
         Ok(v)
     }
 }
-fn scene_file<'p, T>(py: Python<'p>, work: impl FnOnce(&Obj<'p>) -> PyResult<T>) -> PyResult<T> {
+fn scene_file<'p, T>(
+    py: Python<'p>,
+    member: &str,
+    work: impl FnOnce(&Obj<'p>) -> PyResult<T>,
+) -> PyResult<T> {
     let kw = PyDict::new(py);
     kw.set_item("prefix", "built-clip-")?;
     let temp = py
@@ -27,7 +31,7 @@ fn scene_file<'p, T>(py: Python<'p>, work: impl FnOnce(&Obj<'p>) -> PyResult<T>)
         .call_method("TemporaryDirectory", (), Some(&kw))?;
     let path = py
         .import("pathlib")?
-        .call_method1("Path", (temp.getattr("name")?, "scene.igz"))?;
+        .call_method1("Path", (temp.getattr("name")?, member))?;
     let r = work(&path);
     temp.call_method0("cleanup")?;
     r
@@ -51,7 +55,8 @@ fn include(registry: &Obj<'_>, mats: &Obj<'_>, attrs: &Obj<'_>) -> PyResult<()> 
 fn clip_encode<'p>(py: Python<'p>, clip: &Obj<'p>) -> PyResult<Obj<'p>> {
     let scene = py.import("built_core.scene")?.call_method0("Scene")?;
     let mesh = scene.getattr("mesh")?;
-    for row in seq(clip, "faces")?.try_iter()? {
+    let face_planes = val(clip, "face_planes")?;
+    for (i, row) in seq(clip, "faces")?.try_iter()?.enumerate() {
         let row = row?;
         let holes = row.get_item(1)?;
         let f = match mesh.call_method1(
@@ -61,6 +66,12 @@ fn clip_encode<'p>(py: Python<'p>, clip: &Obj<'p>) -> PyResult<Obj<'p>> {
             Err(e) if e.is_instance_of::<PyValueError>(py) => continue,
             other => other?,
         };
+        if let Ok(planes) = face_planes.cast::<PyDict>() {
+            if let Some(frame) = planes.get_item(i.to_string())? {
+                mesh.getattr("_store")?
+                    .call_method1("bind_exact_plane", (f.getattr("key")?, frame))?;
+            }
+        }
         if row.len()? > 2 {
             let attrs = row.get_item(2)?;
             if attrs.is_truthy()? {
@@ -95,10 +106,12 @@ fn clip_encode<'p>(py: Python<'p>, clip: &Obj<'p>) -> PyResult<Obj<'p>> {
             include(&registry, &mats, &f?.getattr("attrs")?)?;
         }
     }
-    crate::model::module(py, "built_core")?.getattr("tag_edits")?
+    crate::model::module(py, "built_core")?
+        .getattr("tag_edits")?
         .call_method1("add_missing", (&scene, val(clip, "layers")?))?;
     let header = PyDict::new(py);
     header.set_item("format", 1)?;
+
     header.set_item("ref", xyz(&clip.get_item("ref")?)?.to_array().to_vec())?;
     let edges = PyList::empty(py);
     for row in seq(clip, "edges")?.try_iter()? {
@@ -122,7 +135,33 @@ fn clip_encode<'p>(py: Python<'p>, clip: &Obj<'p>) -> PyResult<Obj<'p>> {
         py.get_type::<PyList>()
             .call1((seq(clip, "edge_layers")?,))?,
     )?;
-    let doc = scene_file(py, |p| {
+    let mut exact = face_planes.is_truthy()?;
+    if !exact {
+        let placements = py.import("built_core.group")?.getattr("iter_placements")?;
+        for root in groups.try_iter()? {
+            for pair in placements.call1((root?,))?.try_iter()? {
+                let m = pair?.get_item(0)?.getattr("mesh")?;
+                let md = m.getattr("__dict__")?;
+                if let Ok(st) = md.get_item("_store") {
+                    if st
+                        .getattr_opt("has_exact_bindings")?
+                        .is_some_and(|p| p.is_truthy().unwrap_or(false))
+                    {
+                        exact = true;
+                        break;
+                    }
+                }
+            }
+            if exact {
+                break;
+            }
+        }
+    }
+    let member = if exact { "scene.built" } else { "scene.igz" };
+    if exact {
+        header.set_item("format", 2)?;
+    }
+    let doc = scene_file(py, member, |p| {
         py.import("built_core.formats.igz")?
             .call_method1("save_scene", (&scene, p))?;
         p.call_method0("read_bytes")
@@ -139,7 +178,7 @@ fn clip_encode<'p>(py: Python<'p>, clip: &Obj<'p>) -> PyResult<Obj<'p>> {
                 py.import("json")?.call_method1("dumps", (header,))?,
             ),
         )?;
-        zip.call_method1("writestr", ("scene.igz", doc))?;
+        zip.call_method1("writestr", (member, doc))?;
         Ok(())
     })();
     zip.call_method0("close")?;
@@ -163,11 +202,15 @@ fn clip_decode<'p>(py: Python<'p>, data: &Obj<'p>) -> PyResult<Option<Obj<'p>>> 
         let zip = module.call_method1("ZipFile", (buf,))?;
         let result = (|| {
             crate::archive_limits::check_archive(&zip, "the clipboard")?;
-            Ok((
-                py.import("json")?
-                    .call_method1("loads", (zip.call_method1("read", ("clip.json",))?,))?,
-                zip.call_method1("read", ("scene.igz",))?,
-            ))
+            let header = py
+                .import("json")?
+                .call_method1("loads", (zip.call_method1("read", ("clip.json",))?,))?;
+            let member = if val(&header, "format")?.eq(2)? {
+                "scene.built"
+            } else {
+                "scene.igz"
+            };
+            Ok((header, zip.call_method1("read", (member,))?))
         })();
         zip.call_method0("close")?;
         result
@@ -182,17 +225,24 @@ fn clip_decode<'p>(py: Python<'p>, data: &Obj<'p>) -> PyResult<Option<Obj<'p>>> 
         }
         v => v?,
     };
-    if !val(&head, "format")?.eq(1)? {
+    let exact = val(&head, "format")?.eq(2)?;
+    if !exact && !val(&head, "format")?.eq(1)? {
         return Ok(None);
     }
     let scene = py.import("built_core.scene")?.call_method0("Scene")?;
-    scene_file(py, |path| {
-        path.call_method1("write_bytes", (doc,))?;
-        py.import("built_core.formats.igz")?
-            .call_method1("load_into", (&scene, path))
-    })?;
+    scene_file(
+        py,
+        if exact { "scene.built" } else { "scene.igz" },
+        |path| {
+            path.call_method1("write_bytes", (doc,))?;
+            py.import("built_core.formats.igz")?
+                .call_method1("load_into", (&scene, path))
+        },
+    )?;
     let faces = PyList::empty(py);
-    for f in scene.getattr("mesh")?.getattr("faces")?.try_iter()? {
+    let planes = PyDict::new(py);
+    let mesh = scene.getattr("mesh")?;
+    for f in mesh.getattr("faces")?.try_iter()? {
         let f = f?;
         let holes = PyList::empty(py);
         for h in f.getattr("holes")?.try_iter()? {
@@ -204,6 +254,14 @@ fn clip_decode<'p>(py: Python<'p>, data: &Obj<'p>) -> PyResult<Option<Obj<'p>>> 
         } else {
             PyDict::new(py).into_any()
         };
+        if exact {
+            let frame = mesh
+                .getattr("_store")?
+                .call_method1("exact_plane", (f.getattr("key")?,))?;
+            if !frame.is_none() {
+                planes.set_item(faces.len().to_string(), frame)?;
+            }
+        }
         faces.append((points(py, &f.getattr("vertices")?)?, holes, attrs))?;
     }
     let point = |p: &Obj<'p>| -> PyResult<_> { Py::new(py, Vec3::from(xyz(p)?)) };
@@ -227,6 +285,9 @@ fn clip_decode<'p>(py: Python<'p>, data: &Obj<'p>) -> PyResult<Option<Obj<'p>>> 
         }
     }
     let out = PyDict::new(py);
+    if !planes.is_empty() {
+        out.set_item("face_planes", planes)?;
+    }
     out.set_item("faces", faces)?;
     out.set_item("edges", edges)?;
     out.set_item("groups", py.get_type::<PyList>().call1((groups,))?)?;
@@ -237,7 +298,8 @@ fn clip_decode<'p>(py: Python<'p>, data: &Obj<'p>) -> PyResult<Option<Obj<'p>>> 
     )?;
     out.set_item(
         "layers",
-        crate::model::module(py, "built_core")?.getattr("tag_edits")?
+        crate::model::module(py, "built_core")?
+            .getattr("tag_edits")?
             .call_method1("template_of", (&scene,))?,
     )?;
     out.set_item(

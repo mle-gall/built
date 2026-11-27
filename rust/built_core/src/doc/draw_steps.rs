@@ -100,6 +100,10 @@ fn run_face(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResult<()> {
     let attrs = if attrs.is_none() { None } else { Some(attrs.cast::<PyDict>()?) };
     let added = command_add_face(&mesh, outer_pts, hole_pts, attrs, interior.is_truthy()?, auto.is_truthy()?)?
         .ok_or_else(|| pyo3::exceptions::PyValueError::new_err("face division would leave inconsistent incidence"))?;
+    if let Some(plane) = me.getattr_opt("_exact_plane")? {
+        mesh.getattr("_store")?
+            .call_method1("bind_exact_plane", (added.face, plane))?;
+    }
     me.setattr("face", view(py, "FaceView", &mesh, added.face)?)?;
     me.setattr("_hole_swaps", added.hole_swaps)?;
     let after = if s.journalled() { none(py) } else { mesh.call_method0("capture_state")? };

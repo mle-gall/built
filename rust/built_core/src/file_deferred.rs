@@ -62,6 +62,7 @@ fn igz_geometry_arrays<'p>(
             }
             let dtype = spec.get_item(0)?.extract::<String>()?;
             if !matches!(dtype.as_str(), "<f4" | "<i4" | "<i8" | "|u1")
+                && !(dtype == "<u4" && key == "face_surface_ref")
                 && !(dtype == "<u8" && key.ends_with("_id"))
                 && !(dtype == "<f8" && (checked || built_format && key == "pos"))
             {
@@ -78,7 +79,7 @@ fn igz_geometry_arrays<'p>(
                 .ok_or_else(|| bad(&key))?;
             let offset: usize = int.call1((spec.get_item(2)?,))?.extract()?;
             let width = match dtype.as_str() {
-                "<f4" | "<i4" => 4,
+                "<f4" | "<i4" | "<u4" => 4,
                 "<f8" | "<i8" | "<u8" => 8,
                 _ => 1,
             };
@@ -517,6 +518,17 @@ fn update_curves(module: &Bound<'_, PyModule>, curves: &Obj<'_>) -> PyResult<()>
 #[pyfunction]
 fn igz_load_geometry<'p>(mesh: &Obj<'p>, meta: &Obj<'p>, geom: &Obj<'p>) -> PyResult<()> {
     let py = mesh.py();
+    if let Some(cache) = geom.getattr_opt("_exact_meshes")? {
+        let prepared = cache.call_method1("pop", (meta.as_ptr() as usize, py.None()))?;
+        if !prepared.is_none() {
+            return crate::kernel::store_views::lifecycle::become_store(
+                mesh,
+                &prepared.getattr("_store")?,
+                &prepared.getattr("_attr_table")?,
+                Some(&prepared.getattr("_attr_own")?),
+            );
+        }
+    }
     let codec = api(py)?;
     let np = py.import("numpy")?;
     let module = py.import("built_core.mesh")?;
@@ -542,7 +554,42 @@ fn igz_load_geometry<'p>(mesh: &Obj<'p>, meta: &Obj<'p>, geom: &Obj<'p>) -> PyRe
         .filter(|m| !m.is_none())
         .map(|m| m.extract::<Vec<u32>>())
         .transpose()?;
-    s.set_item("ids", crate::file_ids::source_ids(meta, &a, id_map)?)?;
+    let plane_table = geom.getattr_opt("_exact_planes")?;
+    let mut bindings = if let Some(table) = &plane_table {
+        if a.contains("face_surface_id")? || a.contains("face_surface_ref")? {
+            Some(crate::exact::file::decode(
+                &a,
+                &table.cast::<crate::exact::file::PlaneTable>()?.get().0,
+                id_map.as_deref(),
+            )?)
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+    s.set_item(
+        "ids",
+        crate::file_ids::source_ids_checked(meta, &a, id_map, bindings.is_some())?,
+    )?;
+    if let Some(rows) = &mut bindings {
+        if let Ok(raw) = s.as_any().get_item("ids")?.get_item(2) {
+            if let Ok(ids) = raw.extract::<numpy::PyReadonlyArray1<u64>>() {
+                let mut seen = std::collections::HashSet::new();
+                let mut ambiguous = std::collections::HashSet::new();
+                for &id in ids.as_slice()? {
+                    if !seen.insert(id) {
+                        ambiguous.insert(id);
+                    }
+                }
+                let n = rows.len();
+                rows.retain(|(id, _)| !ambiguous.contains(id));
+                if n > rows.len() {
+                    repair(py, n - rows.len())?;
+                }
+            }
+        }
+    }
     let item = |k: &str| s.as_any().get_item(k);
     let pos = item("pos")?;
     let bad = np
@@ -550,6 +597,9 @@ fn igz_load_geometry<'p>(mesh: &Obj<'p>, meta: &Obj<'p>, geom: &Obj<'p>) -> PyRe
         .call_method1("all", (1,))?
         .call_method0("__invert__")?;
     if bad.call_method0("any")?.is_truthy()? {
+        if bindings.is_some() {
+            return Err(PyValueError::new_err("nonfinite exact block"));
+        }
         let edges = item("edges")?;
         let sizes = item("sizes")?;
         let counts = item("counts")?;
@@ -615,6 +665,9 @@ fn igz_load_geometry<'p>(mesh: &Obj<'p>, meta: &Obj<'p>, geom: &Obj<'p>) -> PyRe
         }
     }
     if pos.len()? == 0 || item("edges")?.len()? + item("counts")?.len()? == 0 {
+        if bindings.is_some() {
+            return Err(PyValueError::new_err("exact bindings on empty geometry"));
+        }
         return Ok(());
     }
     update_curves(&module, &item("curves")?)?;
@@ -632,7 +685,8 @@ fn igz_load_geometry<'p>(mesh: &Obj<'p>, meta: &Obj<'p>, geom: &Obj<'p>) -> PyRe
             json: false,
         },
     )?;
-    if !precise
+    if bindings.is_none()
+        && !precise
         && py
             .import("core._native")?
             .call_method0("wanted")?
@@ -645,6 +699,9 @@ fn igz_load_geometry<'p>(mesh: &Obj<'p>, meta: &Obj<'p>, geom: &Obj<'p>) -> PyRe
         return Ok(());
     }
     builder.call1(py, (mesh,))?;
+    if let Some(rows) = bindings {
+        crate::exact::file::bind(mesh, rows)?;
+    }
     Ok(())
 }
 #[pyfunction]

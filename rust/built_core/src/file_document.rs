@@ -239,24 +239,15 @@ fn igz_load_into_inner<'p>(
                     "Invalid or unsupported Built document format",
                 ));
             }
-            // Features a reader must implement (docs/built-format.md): this
-            // build knows none beyond format 2 itself.
-            let exact = data
-                .call_method1("get", ("ext",))?
-                .cast::<PyDict>()
-                .ok()
-                .map(|e| e.contains(crate::file_ids::EXACT_NAMESPACE))
-                .transpose()?
-                .unwrap_or(false);
-            if exact {
-                return Err(PyValueError::new_err(format!(
-                    "This document needs features this build of Built lacks: {}",
-                    crate::file_ids::EXACT_GEOMETRY
-                )));
-            }
             let needs = data.call_method1("get", ("requires",))?;
             if !needs.is_none() {
-                let needs: Vec<String> = needs.extract().map_err(|_| PyValueError::new_err("Invalid Built document requirements"))?;
+                let needs: Vec<String> = needs
+                    .extract()
+                    .map_err(|_| PyValueError::new_err("Invalid Built document requirements"))?;
+                let needs: Vec<_> = needs
+                    .into_iter()
+                    .filter(|n| n != crate::file_ids::EXACT_GEOMETRY)
+                    .collect();
                 if !needs.is_empty() {
                     return Err(PyValueError::new_err(format!(
                         "This document needs features this build of Built lacks: {}",
@@ -287,7 +278,12 @@ fn igz_load_into_inner<'p>(
         tick(progress, 0.2, "Unpacking textures…")?;
         codec.call_method1("_unpack_textures", (&payload, &archive))?;
         let mat = materials(&payload, link_meshes)?;
-        let skip = if let Some(links) = link_meshes {
+        let planes = if built {
+            crate::exact::file::read_header(&data)?
+        } else {
+            None
+        };
+        let skip = if let Some(links) = link_meshes.filter(|_| planes.is_none()) {
             links.call_method1("unchanged_members", (&archive, &payload))?
         } else {
             PyTuple::empty(py).into_any()
@@ -318,6 +314,42 @@ fn igz_load_into_inner<'p>(
         // Element ids index the file's origin table: map it to this process.
         let doc = data.call_method1("get", ("doc",))?;
         geom.setattr("id_map", crate::file_ids::file_origin_map(&doc)?)?;
+        if let Some(planes) = planes {
+            geom.setattr(
+                "_exact_planes",
+                Py::new(py, crate::exact::file::PlaneTable(planes))?,
+            )?;
+            let validated = PyDict::new(py);
+            for block in codec
+                .call_method1("_mesh_blocks", (&payload,))?
+                .try_iter()?
+            {
+                let block = block?;
+                let Ok(meta) = block.get_item("geom") else {
+                    continue;
+                };
+                let Ok(layout) = meta.get_item("arrays") else {
+                    continue;
+                };
+                if layout.cast::<PyDict>()?.keys().iter().any(|k| {
+                    k.extract::<String>().is_ok_and(|name| {
+                        crate::file_ids::RESERVED_ARRAY_PREFIXES
+                            .iter()
+                            .any(|p| name.starts_with(p))
+                    })
+                }) {
+                    let temp = codec.getattr("Mesh")?.call0()?;
+                    codec.call_method1("_load_geometry", (&temp, &meta, &geom))?;
+                    validated.set_item(meta.as_ptr() as usize, temp)?;
+                }
+            }
+            if validated.is_empty() {
+                return Err(PyValueError::new_err(
+                    "damaged exact geometry (unbound pool)",
+                ));
+            }
+            geom.setattr("_exact_meshes", validated)?;
+        }
         let survey = codec.call_method1("_unpack_photo_mesh", (&payload, &archive))?;
         Ok((mat, geom, survey))
     })();
@@ -429,7 +461,15 @@ fn igz_load_into_inner<'p>(
     // Forward compatibility: a newer writer's top-level `ext` comes back
     // out verbatim (docs/built-format.md, Stability).
     let ext = data.call_method1("get", ("ext",))?;
-    scene.setattr("doc_ext", if ext.is_instance_of::<PyDict>() { ext } else { py.None().into_bound(py) })?;
+    if let Ok(d) = ext.cast::<PyDict>() {
+        let foreign = d.copy()?;
+        if foreign.contains(crate::file_ids::EXACT_NAMESPACE)? {
+            foreign.del_item(crate::file_ids::EXACT_NAMESPACE)?;
+        }
+        scene.setattr("doc_ext", foreign)?;
+    } else {
+        scene.setattr("doc_ext", py.None())?;
+    }
     let total = repairs.get_item(0)?.add(new)?;
     repairs.set_item(0, &total)?;
     scene.setattr("load_repairs", total)?;

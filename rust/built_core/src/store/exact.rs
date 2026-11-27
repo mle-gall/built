@@ -48,6 +48,7 @@ impl Column {
 
 #[derive(Clone, Debug, Default)]
 pub struct ExactColumns {
+    pub(crate) planes: Option<Arc<Vec<crate::exact::Frame>>>,
     face_surface: Column,
     edge_exact_curve: Column,
 }
@@ -61,9 +62,36 @@ impl ExactColumns {
         }
     }
 
+    fn same_binding(&self, other: &Self, kind: Kind, slot: u32) -> bool {
+        let a = self.get(kind, slot);
+        let b = other.get(kind, slot);
+        if kind == Kind::Face && a != NONE && b != NONE {
+            let plane = |columns: &Self, index| {
+                columns
+                    .planes
+                    .as_deref()
+                    .and_then(|p| p.get(index as usize))
+                    .cloned()
+            };
+            match (plane(self, a), plane(other, b)) {
+                (Some(a), Some(b)) => return a == b,
+                (None, None) => (),
+                _ => return false,
+            }
+        }
+        a == b
+    }
+
     pub fn shared(&self, other: &Self, kind: Kind) -> bool {
-        self.column(kind)
-            .is_none_or(|c| c.shared(other.column(kind).unwrap()))
+        self.column(kind).is_none_or(|c| {
+            c.shared(other.column(kind).unwrap())
+                && (kind != Kind::Face
+                    || match (&self.planes, &other.planes) {
+                        (Some(a), Some(b)) => Arc::ptr_eq(a, b),
+                        (None, None) => true,
+                        _ => c.rows().is_empty(),
+                    })
+        })
     }
 
     pub fn changed_slots<'a>(
@@ -75,7 +103,7 @@ impl ExactColumns {
         let b = other.column(kind).unwrap();
         a.rows()
             .iter()
-            .filter(move |&&(s, r)| b.get(s) != r)
+            .filter(move |&&(s, _)| !self.same_binding(other, kind, s))
             .map(|r| r.0)
             .chain(
                 b.rows()
@@ -93,7 +121,11 @@ impl ExactColumns {
         let b = other.column(kind).unwrap().rows();
         a.iter()
             .filter(|r| live(r.0))
-            .eq(b.iter().filter(|r| live(r.0)))
+            .map(|r| r.0)
+            .eq(b.iter().filter(|r| live(r.0)).map(|r| r.0))
+            && a.iter()
+                .filter(|r| live(r.0))
+                .all(|r| self.same_binding(other, kind, r.0))
     }
 
     pub fn alloc(&mut self, kind: Kind, slot: u32) {
@@ -173,5 +205,111 @@ mod change_tests {
         assert_eq!(diff.modified[2], vec![store.key(Kind::Face, face)]);
         assert!(diff.modified[1].is_empty());
         assert!(!store.state.same_as(&before));
+    }
+}
+
+/// A plane-bound polygon can use the store's existing ordered rings as
+/// implicit linear pcurves. Keep the pool root with the sparse bindings.
+impl super::Store {
+    pub(crate) fn validate_plane(
+        &self,
+        face: u32,
+        plane: &crate::exact::Frame,
+    ) -> Result<(), &'static str> {
+        let rings = self.face_rings(face);
+        let mut projected = Vec::new();
+        for ring in rings {
+            let mut uv = Vec::new();
+            for slot in ring {
+                let p = glam::DVec3::from(
+                    self.state
+                        .frame
+                        .definition_point(*self.state.vpos.get(slot as usize)),
+                );
+                let d = p - plane.origin;
+                // This implicit binding is for an already planar polygon.
+                // Allow only roundoff at its definition-local coordinate scale.
+                let roundoff = 64.
+                    * f64::EPSILON
+                    * (1. + p.abs().max_element() + plane.origin.abs().max_element());
+                if d.dot(plane.axis).abs() > roundoff {
+                    return Err("face misses its exact plane");
+                }
+                uv.push(glam::DVec2::new(d.dot(plane.reference), d.dot(plane.y())));
+            }
+            projected.push(uv);
+        }
+        crate::exact::validate_polygon(&projected)
+    }
+    pub(crate) fn bind_plane(
+        &mut self,
+        slot: u32,
+        plane: crate::exact::Frame,
+    ) -> Result<(), &'static str> {
+        plane.validate()?;
+        self.validate_plane(slot, &plane)?;
+        self.state.exact.install_plane(slot, plane)?;
+        self.revision += 1;
+        Ok(())
+    }
+    pub(crate) fn bound_planes(&self) -> impl Iterator<Item = (u32, &crate::exact::Frame)> {
+        self.state
+            .exact
+            .face_surface
+            .rows()
+            .iter()
+            .filter_map(|&(slot, id)| {
+                let p = self.state.exact.planes.as_ref()?.get(id as usize)?;
+                (self.alive(Kind::Face, slot) && self.validate_plane(slot, p).is_ok())
+                    .then_some((slot, p))
+            })
+    }
+}
+
+impl ExactColumns {
+    pub(super) fn install_plane(
+        &mut self,
+        slot: u32,
+        plane: crate::exact::Frame,
+    ) -> Result<(), &'static str> {
+        let exact = self;
+        let planes = exact.planes.get_or_insert_with(Arc::default);
+        let index = match planes.iter().position(|p| *p == plane) {
+            Some(i) => i,
+            None => {
+                if planes.len() >= NONE as usize {
+                    return Err("exact plane pool is full");
+                }
+                let v = Arc::make_mut(planes);
+                v.push(plane);
+                v.len() - 1
+            }
+        };
+        exact.inherit(Kind::Face, slot, index as u32);
+        Ok(())
+    }
+}
+impl super::Store {
+    pub(super) fn discard_invalid_planes(&mut self) {
+        let Some(planes) = &self.state.exact.planes else {
+            return;
+        };
+        let invalid: Vec<_> = self
+            .state
+            .exact
+            .face_surface
+            .rows()
+            .iter()
+            .filter_map(|&(slot, r)| {
+                (self.alive(Kind::Face, slot)
+                    && planes
+                        .get(r as usize)
+                        .is_none_or(|p| self.validate_plane(slot, p).is_err()))
+                .then_some(slot)
+            })
+            .collect();
+        for f in invalid {
+            self.state.exact.inherit(Kind::Face, f, NONE);
+        }
     }
 }

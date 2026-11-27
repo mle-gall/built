@@ -636,6 +636,46 @@ impl PyMeshStore {
         Ok(ids.iter().map(|id| index.get(id).map(|&s| self.inner.key(k, s))).collect())
     }
 
+    #[getter]
+    fn has_exact_bindings(&self) -> bool {
+        !self.inner.state.exact.is_faceted()
+    }
+
+    fn exact_plane(&self, key: u128) -> PyResult<Option<[[f64; 3]; 3]>> {
+        let Some(planes) = &self.inner.state.exact.planes else {
+            return Ok(None);
+        };
+        let slot = live_of(&self.inner, Kind::Face, key)?;
+        let id = self.inner.state.exact.get(Kind::Face, slot);
+        let Some(p) = planes.get(id as usize) else {
+            return Ok(None);
+        };
+        if self.inner.validate_plane(slot, p).is_err() {
+            return Ok(None);
+        }
+        let current = &self.inner.state.frame;
+        let model = super::frame::Frame::default();
+        let convert = |v: glam::DVec3| glam::DVec3::from(model.convert(v.to_array(), current));
+        Ok(Some(
+            p.mapped(convert).map_err(PyValueError::new_err)?.array(),
+        ))
+    }
+
+    fn bind_exact_plane(&mut self, key: u128, frame: [[f64; 3]; 3]) -> PyResult<()> {
+        let f = live_of(&self.inner, Kind::Face, key)?;
+        let p = crate::exact::Frame::from_array(frame);
+        p.validate().map_err(PyValueError::new_err)?;
+        let model = if self.inner.state.frame.is_model() {
+            p
+        } else {
+            p.mapped(|v| glam::DVec3::from(self.inner.state.frame.definition_point(v.to_array())))
+                .map_err(PyValueError::new_err)?
+        };
+        self.inner
+            .bind_plane(f, model)
+            .map_err(PyValueError::new_err)
+    }
+
     /// Give a live element another id (succession, Explode's keep-if-free).
     fn set_id(&mut self, kind: &str, key: u128, id: u64) -> PyResult<()> {
         let k = kind_of(kind)?;
@@ -703,6 +743,13 @@ impl PyMeshStore {
             .map_err(|err| PyValueError::new_err(err.to_string()))?;
         // Persistent ids after the store (older archives end before them).
         bytes.extend(bincode::serialize(&self.inner.state.ids).map_err(|err| PyValueError::new_err(err.to_string()))?);
+        if self.inner.state.exact.planes.is_some() {
+            let planes: Vec<_> = self.inner.bound_planes().collect();
+            bytes.extend(
+                bincode::serialize(&planes)
+                    .map_err(|err| PyValueError::new_err(err.to_string()))?,
+            );
+        }
         Ok(pyo3::types::PyBytes::new(py, &bytes))
     }
 
@@ -718,7 +765,22 @@ impl PyMeshStore {
         if rest.is_empty() {
             store.number_legacy();
         } else {
-            store.state.ids = bincode::deserialize(rest).map_err(|err| PyValueError::new_err(err.to_string()))?;
+            store.state.ids = bincode::deserialize_from(&mut cursor)
+                .map_err(|err| PyValueError::new_err(err.to_string()))?;
+            if cursor.position() < bytes.len() as u64 {
+                let planes: Vec<(u32, crate::exact::Frame)> =
+                    bincode::deserialize_from(&mut cursor)
+                        .map_err(|err| PyValueError::new_err(err.to_string()))?;
+                for (slot, p) in planes {
+                    if !store.alive(Kind::Face, slot) {
+                        return Err(PyValueError::new_err("missing exact face in mesh archive"));
+                    }
+                    store.bind_plane(slot, p).map_err(PyValueError::new_err)?;
+                }
+                if cursor.position() != bytes.len() as u64 {
+                    return Err(PyValueError::new_err("extra exact mesh archive data"));
+                }
+            }
         }
         let fresh = Store::empty(namespace, store.weld);
         store.state.ns = namespace;
@@ -804,6 +866,7 @@ impl PyMeshStore {
         if !names.is_empty() {
             out.set_item("edge_layer", layers.into_pyarray(py))?;
         }
+        crate::exact::file::capture(&self.inner, &out)?;
         out.set_item("vertex_id", vids.into_pyarray(py))?;
         out.set_item("edge_id", eids.into_pyarray(py))?;
         out.set_item("face_id", fids.into_pyarray(py))?;

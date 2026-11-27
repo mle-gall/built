@@ -192,7 +192,8 @@ fn groups<'py>(
             for placement in api.call_method1("iter_placements", (&copy,))?.try_iter()? {
                 let g = placement?.get_item(0)?;
                 g.setattr("layer", remapped(names, &g.getattr("layer")?)?)?;
-                let mesh = crate::model::module(api.py(), "built_core")?.call_method1("group_transformed_mesh",
+                let mesh = crate::model::module(api.py(), "built_core")?.call_method1(
+                    "group_transformed_mesh",
                     (g.getattr("mesh")?, native.call_method0("Matrix4")?),
                 )?;
                 g.setattr("mesh", &mesh)?;
@@ -292,7 +293,8 @@ pub(super) fn stamp(history: &Obj<'_>, clip: &Obj<'_>, offset: DVec3) -> PyResul
     let mut face_steps = Vec::new();
     let mut loops = Vec::new();
     let translate = py.import("built_core")?.getattr("group_translated_attrs")?;
-    for (row, outer, holes) in planned {
+    let planes = clip.call_method1("get", ("face_planes",))?;
+    for (i, (row, outer, holes)) in planned.into_iter().enumerate() {
         let attrs = if row.len()? > 2 && row.get_item(2)?.is_truthy()? {
             translate.call1((row.get_item(2)?, &off))?
         } else {
@@ -317,6 +319,15 @@ pub(super) fn stamp(history: &Obj<'_>, clip: &Obj<'_>, offset: DVec3) -> PyResul
             kw.set_item("holes", hs)?;
         }
         let cmd = api.call_method("AddFaceCommand", (shifted(py, &outer, offset)?,), Some(&kw))?;
+        if let Ok(planes) = planes.cast::<PyDict>() {
+            if let Some(plane) = planes.get_item(i.to_string())? {
+                let mut p = crate::exact::Frame::from_array(plane.extract()?);
+                p.origin += offset;
+                p.validate()
+                    .map_err(pyo3::exceptions::PyValueError::new_err)?;
+                cmd.setattr("_exact_plane", p.array())?;
+            }
+        }
         steps.append(&cmd)?;
         face_steps.push(cmd);
         loops.push(outer.into_iter().map(|p| p + offset).collect());

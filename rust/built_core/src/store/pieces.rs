@@ -515,7 +515,18 @@ impl Store {
                 super::ids::IdSource::Array(&fids),
             ],
         };
-        Store::from_block(ns, &block, w)
+        let mut out = Store::from_block(ns, &block, w)?;
+        if let Some(planes) = &self.state.exact.planes {
+            for (i, &f) in faces.iter().enumerate() {
+                let r = self.state.exact.get(Kind::Face, f);
+                if let Some(p) = planes.get(r as usize) {
+                    if out.validate_plane(i as u32, p).is_ok() {
+                        out.bind_plane(i as u32, p.clone())?;
+                    }
+                }
+            }
+        }
+        Ok(out)
     }
 }
 

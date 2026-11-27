@@ -758,6 +758,9 @@ pub(crate) fn object_ids<'py>(
     if !store.hasattr("ids_of")? {
         return Ok(());
     }
+    if let Ok(st) = store.cast::<crate::store::py::PyMeshStore>() {
+        crate::exact::file::capture(&st.try_borrow()?.inner, arrays)?;
+    }
     for (k, keys) in ["vertex", "edge", "face"].iter().zip(keys) {
         let ids: Vec<u64> = match store.call_method1("ids_of", (*k, keys.to_vec())) {
             Ok(v) => v.extract()?,

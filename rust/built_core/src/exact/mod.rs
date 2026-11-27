@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! Definition-local f64 supports. Generator references point only into the
 //! curve table, making cycles unrepresentable.
+pub(crate) mod file;
 mod patch;
 mod spline;
 use glam::{DQuat, DVec3, DVec4};
@@ -18,13 +19,44 @@ fn check(value: bool, reason: &'static str) -> Result<()> {
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-struct Frame {
-    origin: DVec3,
-    axis: DVec3,
-    reference: DVec3,
+#[serde(deny_unknown_fields)]
+pub(crate) struct Frame {
+    pub(crate) origin: DVec3,
+    pub(crate) axis: DVec3,
+    pub(crate) reference: DVec3,
 }
 impl Frame {
-    fn validate(&self) -> Result<()> {
+    pub(crate) fn from_array([origin, axis, reference]: [[f64; 3]; 3]) -> Self {
+        Self {
+            origin: origin.into(),
+            axis: axis.into(),
+            reference: reference.into(),
+        }
+    }
+    pub(crate) fn array(&self) -> [[f64; 3]; 3] {
+        [
+            self.origin.to_array(),
+            self.axis.to_array(),
+            self.reference.to_array(),
+        ]
+    }
+    pub(crate) fn mapped(&self, point: impl Fn(DVec3) -> DVec3) -> Result<Self> {
+        let origin = point(self.origin);
+        let x = point(self.origin + self.reference) - origin;
+        let y = point(self.origin + self.y()) - origin;
+        let out = Self {
+            origin,
+            axis: x
+                .cross(y)
+                .try_normalize()
+                .ok_or("collapsed plane transform")?,
+            reference: x.try_normalize().ok_or("collapsed reference direction")?,
+        };
+        out.validate()?;
+        Ok(out)
+    }
+
+    pub(crate) fn validate(&self) -> Result<()> {
         check(
             self.origin.is_finite()
                 && (self.axis.length() - 1.).abs() < 1e-12
@@ -33,7 +65,7 @@ impl Frame {
             "invalid support frame",
         )
     }
-    fn y(&self) -> DVec3 {
+    pub(crate) fn y(&self) -> DVec3 {
         self.axis.cross(self.reference)
     }
     fn radial(&self, t: f64) -> DVec3 {
@@ -88,6 +120,7 @@ impl Curve {
             }
             Self::Spline { axis, controls } => {
                 axis.validate(controls.len())?;
+                axis.validate_periodic(controls.len(), |i| controls[i])?;
                 spline::controls(controls)
             }
         }
@@ -194,6 +227,16 @@ impl Surface {
                 )?;
                 u.validate(*rows)?;
                 v.validate(*cols)?;
+                if u.periodic {
+                    for j in 0..*cols {
+                        u.validate_periodic(*rows, |i| controls[i * cols + j])?;
+                    }
+                }
+                if v.periodic {
+                    for i in 0..*rows {
+                        v.validate_periodic(*cols, |j| controls[i * cols + j])?;
+                    }
+                }
                 spline::controls(controls)
             }
             Self::Extrusion { generator, vector } => check(
@@ -340,36 +383,27 @@ impl ExactGeometry {
     /// Insert the conforming fallback mesh into the active definition.
     /// The caller owns the enclosing SnapshotMutation.
     fn _materialize(&self, scene: &Bound<'_, PyAny>) -> PyResult<()> {
-        use numpy::{ndarray::Array2, IntoPyArray};
         let model = self.model_mesh()?;
-        let py = scene.py();
         let mesh = scene.getattr("mesh")?;
-        let points = Array2::from_shape_fn((model.points.len(), 3), |(i, j)| model.points[i][j])
-            .into_pyarray(py);
-        let welded = mesh.call_method1("bulk_weld", (points,))?;
-        let indices: Vec<usize> = welded.get_item(1)?.extract()?;
-        let mut corners = Vec::<i64>::with_capacity(3 * model.triangles.len());
-        for tri in &model.triangles {
-            let [a, b, c] = tri.map(|i| indices[i]);
-            if a == b || b == c || c == a {
-                return Err(PyValueError::new_err(
-                    "store weld collapses an exact display triangle",
-                ));
-            }
-            corners.extend([a as i64, b as i64, c as i64]);
+        let before = mesh.call_method0("capture_state")?;
+        if let Err(error) = model.append_facets(&mesh) {
+            mesh.call_method1("restore_state", (before,))?;
+            return Err(error);
         }
-        let n = model.triangles.len();
-        mesh.call_method1(
-            "add_faces_welded",
-            (
-                welded.get_item(0)?,
-                corners.into_pyarray(py),
-                vec![3i64; n].into_pyarray(py),
-                vec![1i64; n].into_pyarray(py),
-            ),
-        )?;
         Ok(())
     }
+
+    /// Ordered boundary uses. Seam branches, edge orientation and singular
+    /// vertex bounds remain distinct even when they have identical endpoints.
+    fn face_boundary(&self, face_id: u64) -> PyResult<String> {
+        self.rows
+            .topology
+            .as_ref()
+            .ok_or_else(|| PyValueError::new_err("missing exact topology"))?
+            .boundary(face_id)
+            .map_err(PyValueError::new_err)
+    }
+
     fn curve_point(&self, index: u32, t: f64) -> PyResult<[f64; 3]> {
         let c = self
             .rows
@@ -403,3 +437,36 @@ impl ExactGeometry {
             .map_err(|e| PyValueError::new_err(*e))
     }
 }
+
+impl patch::Mesh {
+    fn append_facets(&self, mesh: &Bound<'_, PyAny>) -> PyResult<()> {
+        use numpy::{ndarray::Array2, IntoPyArray};
+        let py = mesh.py();
+        let points = Array2::from_shape_fn((self.points.len(), 3), |(i, j)| self.points[i][j])
+            .into_pyarray(py);
+        let welded = mesh.call_method1("bulk_weld", (points,))?;
+        let indices: Vec<usize> = welded.get_item(1)?.extract()?;
+        let mut corners = Vec::<i64>::with_capacity(3 * self.triangles.len());
+        for tri in &self.triangles {
+            let [a, b, c] = tri.map(|i| indices[i]);
+            if a == b || b == c || c == a {
+                return Err(PyValueError::new_err(
+                    "store weld collapses an exact display triangle",
+                ));
+            }
+            corners.extend([a as i64, b as i64, c as i64]);
+        }
+        let n = self.triangles.len();
+        mesh.call_method1(
+            "add_faces_welded",
+            (
+                welded.get_item(0)?,
+                corners.into_pyarray(py),
+                vec![3i64; n].into_pyarray(py),
+                vec![1i64; n].into_pyarray(py),
+            ),
+        )?;
+        Ok(())
+    }
+}
+pub(crate) use patch::validate_polygon;

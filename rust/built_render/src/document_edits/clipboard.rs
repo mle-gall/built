@@ -51,6 +51,8 @@ fn copy_selection(v: &Obj, publish: bool) -> PyResult<bool> {
         lo = Some(lo.map_or(w, |cur: DVec3| cur.min(w)));
         vec3(py, w)
     };
+    let store = scene.getattr("mesh")?.getattr_opt("_store")?;
+    let planes = PyDict::new(py);
     for f in selected.faces {
         let ring = PyList::empty(py);
         for p in f.getattr("vertices")?.try_iter()? {
@@ -71,6 +73,14 @@ fn copy_selection(v: &Obj, publish: bool) -> PyResult<bool> {
             PyDict::new(py).into_any()
         };
         attrs.append(&a)?;
+        if let Some(st) = &store {
+            if st.hasattr("exact_plane")? {
+                let frame = st.call_method1("exact_plane", (f.getattr("key")?,))?;
+                if !frame.is_none() {
+                    planes.set_item(faces.len().to_string(), frame)?;
+                }
+            }
+        }
         faces.append((ring, holes, a))?;
     }
     let layers = py.import("built_core.layers")?;
@@ -127,13 +137,18 @@ fn copy_selection(v: &Obj, publish: bool) -> PyResult<bool> {
             }
         }
     }
+    if !planes.is_empty() {
+        data.set_item("face_planes", planes)?;
+    }
     data.set_item("faces", faces)?;
     data.set_item("edges", edges)?;
     data.set_item("registry", registry)?;
     data.set_item("edge_layers", edge_layers)?;
     data.set_item(
         "layers",
-        crate::host_context::core_module(layers.py())?.getattr("tag_edits")?.call_method1("template_for", (&scene, names))?,
+        crate::host_context::core_module(layers.py())?
+            .getattr("tag_edits")?
+            .call_method1("template_for", (&scene, names))?,
     )?;
     data.set_item("groups", groups)?;
     data.set_item("ref", vec3(py, lo)?)?;
@@ -217,9 +232,10 @@ fn drop_clip_protos(v: &Obj, clip: &Obj) -> PyResult<()> {
         return Ok(());
     }
     let cache = opt(v, "_group_chunks")?;
-    let all = py
-        .import("built_core")?
-        .call_method1("purge_iter_groups", (v.getattr("scene")?.getattr("groups")?,))?;
+    let all = py.import("built_core")?.call_method1(
+        "purge_iter_groups",
+        (v.getattr("scene")?.getattr("groups")?,),
+    )?;
     let mut live = std::collections::HashSet::new();
     for g in all.try_iter()? {
         live.insert(id(&g?.getattr("mesh")?));

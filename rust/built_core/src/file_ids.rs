@@ -87,14 +87,28 @@ fn remap(id: u64, map: Option<&[u32]>) -> PyResult<u64> {
 /// uint64 array in process space.
 #[pyfunction]
 #[pyo3(signature=(meta, arrays, id_map=None))]
-pub fn source_ids<'p>(meta: &Obj<'p>, arrays: &Obj<'p>, id_map: Option<Vec<u32>>) -> PyResult<Obj<'p>> {
+pub fn source_ids<'p>(
+    meta: &Obj<'p>,
+    arrays: &Obj<'p>,
+    id_map: Option<Vec<u32>>,
+) -> PyResult<Obj<'p>> {
+    source_ids_checked(meta, arrays, id_map, false)
+}
+
+pub(crate) fn source_ids_checked<'p>(
+    meta: &Obj<'p>,
+    arrays: &Obj<'p>,
+    id_map: Option<Vec<u32>>,
+    planes: bool,
+) -> PyResult<Obj<'p>> {
     let py = meta.py();
-    // Reserved for exact geometry (§11): this build reads faceted geometry
-    // only, so a block that carries exact shapes is refused, never dropped.
+    // Only accept paired plane columns after the critical header is validated.
     if let Ok(names) = meta.get_item("arrays").and_then(|a| a.call_method0("keys")) {
         for name in names.try_iter()? {
             let name: String = name?.extract()?;
-            if RESERVED_ARRAY_PREFIXES.iter().any(|p| name.starts_with(p)) {
+            if RESERVED_ARRAY_PREFIXES.iter().any(|p| name.starts_with(p))
+                && !(planes && matches!(name.as_str(), "face_surface_id" | "face_surface_ref"))
+            {
                 return Err(PyValueError::new_err(format!(
                     "This document needs features this build of Built lacks: {EXACT_GEOMETRY} ({name})"
                 )));
@@ -218,7 +232,7 @@ pub fn encode_block_ids<'p>(arrays: &Bound<'p, PyDict>, meta: &Bound<'p, PyDict>
         cols.push((k, name, col));
     }
     let Some(table) = sink.getattr_opt("id_origins")?.filter(|t| !t.is_none()) else {
-        return Ok(());
+        return crate::exact::file::encode(arrays, sink, None);
     };
     let table = table.cast_into::<PyList>()?;
     let mut index: Vec<u32> = table.extract()?;
@@ -251,6 +265,7 @@ pub fn encode_block_ids<'p>(arrays: &Bound<'p, PyDict>, meta: &Bound<'p, PyDict>
             arrays.set_item(name, delta(&ids).into_pyarray(py))?;
         }
     }
+    crate::exact::file::encode(arrays, sink, Some(&index))?;
     sink.setattr("id_origins", PyList::new(py, index)?)?;
     if !implicit.is_empty() {
         meta.set_item("ids", implicit)?;

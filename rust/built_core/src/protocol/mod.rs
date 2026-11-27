@@ -134,6 +134,28 @@ fn replay<'py>(history: &Obj<'py>, method: &str) -> Reply<'py> {
     answer(history, &before, true)
 }
 
+/// Attach a plane with implicit straight pcurves to an existing polygon.
+#[pyfunction]
+fn bind_exact_plane<'py>(
+    history: &Obj<'py>,
+    face: &Obj<'py>,
+    origin: [f64; 3],
+    axis: [f64; 3],
+    reference: [f64; 3],
+) -> Reply<'py> {
+    let py = history.py();
+    let bind = crate::exact::file::BindPlane {
+        face: keys::from_json_key(face)?.extract()?,
+        frame: crate::exact::Frame {
+            origin: origin.into(),
+            axis: axis.into(),
+            reference: reference.into(),
+        },
+    };
+    let cmd = history_command(py, "SnapshotMutation", (Bound::new(py, bind)?,))?;
+    execute(history, &cmd)
+}
+
 /// Insert a model-tolerance tessellation in a single undoable edit.
 #[pyfunction]
 fn materialize_exact_geometry<'py>(history:&Obj<'py>, geometry:&Obj<'py>)->Reply<'py> {
@@ -148,6 +170,7 @@ pub(crate) fn register(root: &Bound<'_, PyModule>) -> PyResult<()> {
     let py = root.py();
     let m = PyModule::new(py, "built_core.command_protocol")?;
     m.add_class::<crate::exact::ExactGeometry>()?;
+    m.add_function(wrap_pyfunction!(bind_exact_plane, &m)?)?;
     m.add_function(wrap_pyfunction!(materialize_exact_geometry, &m)?)?;
     m.add_function(wrap_pyfunction!(api::run, &m)?)?;
     m.add_function(wrap_pyfunction!(answer, &m)?)?;

@@ -323,6 +323,7 @@ impl Store {
         for (kind, s, shape) in shapes {
             self.state.exact.inherit(kind, s, shape);
         }
+        self.discard_invalid_planes();
         out
     }
 }

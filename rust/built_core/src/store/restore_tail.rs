@@ -91,7 +91,14 @@ impl Store {
             let g = cur.slots[f].gen(s as u32);
             next.slots[f].state.push(g << 1);
             next.ids[f].put(s as u32, s, cur.ids[f].get(s as u32));
-            next.exact.inherit(Kind::Face, s as u32, cur.exact.get(Kind::Face, s as u32));
+            let r = cur.exact.get(Kind::Face, s as u32);
+            if let Some(p) = cur.exact.planes.as_ref().and_then(|v| v.get(r as usize)) {
+                next.exact
+                    .install_plane(s as u32, p.clone())
+                    .expect("existing plane fits a store slot");
+            } else {
+                next.exact.inherit(Kind::Face, s as u32, r);
+            }
             let rings = self.face_rings(s as u32);
             let fr = FaceRings {
                 corner_start: next.corners.len() as u32,

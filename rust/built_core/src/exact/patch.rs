@@ -16,7 +16,11 @@ pub(super) struct Edge {
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(deny_unknown_fields)]
 struct Coedge {
-    edge: u64,
+    edge: Option<u64>,
+    pole: Option<u64>,
+    #[serde(default)]
+    projected: bool,
+    #[serde(default)]
     reversed: bool,
     uv: [DVec2; 2],
     tolerance: f64,
@@ -110,6 +114,9 @@ fn lerp(t: [f64; 2], s: f64) -> f64 {
         t[0] + s * (t[1] - t[0])
     }
 }
+fn uv_at(a: DVec2, b: DVec2, t: f64) -> DVec2 {
+    DVec2::new(lerp([a.x, b.x], t), lerp([a.y, b.y], t))
+}
 fn divisions(bound: f64, tol: f64) -> Result<usize> {
     let steps = (bound / tol).sqrt().ceil();
     check(
@@ -137,7 +144,7 @@ impl Topology {
         let allowance = c.tolerance - accel / (8. * (n as f64).powi(2));
         for i in 0..=n {
             let t = i as f64 / n as f64;
-            let uv = a.lerp(b, t);
+            let uv = uv_at(a, b, t);
             let p = surface.point(&rows.curves, uv.x, uv.y)?;
             let q = curve.point(lerp(e.interval, if c.reversed { 1. - t } else { t }))?;
             check(
@@ -146,6 +153,95 @@ impl Topology {
             )?;
         }
         Ok(())
+    }
+
+    /// A planar cap can use an orthogonal projection of a full circle or
+    /// ellipse, with one closed edge per loop. Its extrema along the plane
+    /// normal certify the complete pcurve. Conservative inscribed and
+    /// circumscribed radii certify separation without sampling intersections.
+    fn certify_conic_loops(
+        &self,
+        rows: &Rows,
+        face: &Face,
+        surface: &Surface,
+        edges: &HashMap<u64, &Edge>,
+    ) -> Result<()> {
+        let Surface::Plane { frame } = surface else {
+            return Err("projected conic needs a plane");
+        };
+        let mut loops: Vec<(DVec2, f64, f64)> = Vec::new();
+        for ring in &face.loops {
+            let [c] = ring.as_slice() else {
+                return Err("expected a single conic use per loop");
+            };
+            check(
+                c.projected
+                    && c.pole.is_none()
+                    && c.tolerance > 0.
+                    && c.tolerance <= self.tolerance,
+                "invalid projected use",
+            )?;
+            let e = edges
+                .get(&c.edge.ok_or("missing conic edge")?)
+                .ok_or("missing conic edge")?;
+            let span = e.interval[1] - e.interval[0];
+            check(
+                e.vertices[0] == e.vertices[1]
+                    && (span - std::f64::consts::TAU).abs() <= 8. * f64::EPSILON,
+                "conic cap needs a closed full turn",
+            )?;
+            let curve = &rows.curves[e.curve as usize];
+            let (base, major, minor) = match curve {
+                Curve::Circle { frame, radius } => (frame, *radius, *radius),
+                Curve::Ellipse {
+                    frame,
+                    major,
+                    minor,
+                } => (frame, *major, *minor),
+                _ => return Err("expected circle or ellipse for planar cap"),
+            };
+            let normal_deviation = (base.origin - frame.origin).dot(frame.axis).abs()
+                + (major * base.reference.dot(frame.axis)).hypot(minor * base.y().dot(frame.axis));
+            check(normal_deviation <= c.tolerance, "conic misses cap plane")?;
+            let project = |p: DVec3| {
+                let d = p - frame.origin;
+                DVec2::new(d.dot(frame.reference), d.dot(frame.y()))
+            };
+            let anchor = project(curve.point(e.interval[0])?);
+            check(
+                c.uv[0] == c.uv[1] && anchor.distance(c.uv[0]) <= c.tolerance,
+                "incorrect projected trim anchor",
+            )?;
+            let center = project(base.origin);
+            let inner = minor * base.axis.dot(frame.axis).abs();
+            check(
+                inner > 0. && center.is_finite(),
+                "collapsed projected conic",
+            )?;
+            if let Some(&(outer, radius, _)) = loops.first() {
+                check(
+                    outer.distance(center) + major < radius,
+                    "uncertified conic hole containment",
+                )?;
+                for &(other, _, r) in &loops[1..] {
+                    check(
+                        other.distance(center) > r + major,
+                        "uncertified conic hole separation",
+                    )?;
+                }
+            }
+            loops.push((center, inner, major));
+        }
+        Ok(())
+    }
+
+    pub(super) fn boundary(&self, id: u64) -> Result<String> {
+        let face = self
+            .faces
+            .iter()
+            .find(|f| f.id == id)
+            .ok_or("unknown logical face")?;
+        serde_json::to_string(&face.loops).map_err(|_| "invalid boundary")
     }
 
     fn edge_index(&self) -> HashMap<u64, &Edge> {
@@ -188,19 +284,61 @@ impl Topology {
                 .get(f.surface as usize)
                 .ok_or("missing face support")?;
             check(!f.loops.is_empty(), "missing outer loop")?;
+            if f.loops.iter().flatten().any(|c| c.projected) {
+                self.certify_conic_loops(rows, f, s, &index)?;
+                continue;
+            }
             for ring in &f.loops {
                 check(ring.len() >= 3, "insufficient UV corners")?;
                 for (i, c) in ring.iter().enumerate() {
                     let next = &ring[(i + 1) % ring.len()];
-                    let e = index.get(&c.edge).ok_or("missing coedge edge")?;
-                    let ne = index.get(&next.edge).ok_or("missing coedge edge")?;
+                    let endpoints = |u: &Coedge| -> Result<[u64; 2]> {
+                        match (u.edge, u.pole) {
+                            (Some(id), None) => {
+                                let e = index.get(&id).ok_or("missing coedge edge")?;
+                                let mut ends = e.vertices;
+                                if u.reversed {
+                                    ends.swap(0, 1);
+                                }
+                                Ok(ends)
+                            }
+                            (None, Some(id)) if self.vertices.contains_key(&id) => Ok([id, id]),
+                            _ => Err("invalid edge or singular vertex use"),
+                        }
+                    };
                     check(
-                        e.vertices[usize::from(!c.reversed)]
-                            == ne.vertices[usize::from(next.reversed)]
-                            && c.uv[1] == next.uv[0],
+                        endpoints(c)?[1] == endpoints(next)?[0] && c.uv[1] == next.uv[0],
                         "open trim loop",
                     )?;
-                    self.certify(rows, s, c, e)?;
+                    if let Some(id) = c.edge {
+                        self.certify(rows, s, c, index[&id])?;
+                    } else {
+                        let [a, b] = c.uv;
+                        check(
+                            a.is_finite()
+                                && b.is_finite()
+                                && a != b
+                                && a.y == b.y
+                                && c.tolerance > 0.
+                                && c.tolerance <= self.tolerance,
+                            "invalid pole use",
+                        )?;
+                        let radius = match s {
+                            Surface::Sphere { radius, .. } if a.y.abs() == FRAC_PI_2 => {
+                                radius * a.y.cos().abs()
+                            }
+                            Surface::Cone {
+                                radius, half_angle, ..
+                            } => (radius + a.y * half_angle.sin()).abs(),
+                            _ => return Err("singular use on regular support"),
+                        };
+                        let v = self.vertices[&c.pole.unwrap()];
+                        let p = s.point(&rows.curves, a.x, a.y)?;
+                        check(
+                            2. * radius + p.distance(v) <= c.tolerance,
+                            "pole vertex misses support",
+                        )?;
+                    }
                 }
             }
             check_loops(&f.loops)?;
@@ -228,15 +366,37 @@ fn crosses(a: DVec2, b: DVec2, c: DVec2, d: DVec2) -> bool {
         || on_segment(c, d, a)
         || on_segment(c, d, b)
 }
-fn contains(ring: &[Coedge], p: DVec2) -> bool {
-    ring.iter()
-        .filter(|c| {
-            let [a, b] = c.uv;
-            (a.y > p.y) != (b.y > p.y) && ((b.y > a.y) == (orient(a, b, p) > 0.))
-        })
+fn inside(segments: impl Iterator<Item = [DVec2; 2]>, p: DVec2) -> bool {
+    segments
+        .filter(|&[a, b]| (a.y > p.y) != (b.y > p.y) && ((b.y > a.y) == (orient(a, b, p) > 0.)))
         .count()
         % 2
         == 1
+}
+fn contains(ring: &[Coedge], p: DVec2) -> bool {
+    inside(ring.iter().map(|c| c.uv), p)
+}
+pub(crate) fn validate_polygon(rings: &[Vec<DVec2>]) -> Result<()> {
+    check(!rings.is_empty(), "missing outer boundary")?;
+    let mut loops = Vec::new();
+    for ring in rings {
+        check(ring.len() >= 3, "degenerate trim ring")?;
+        let mut uses = Vec::new();
+        for (i, &a) in ring.iter().enumerate() {
+            let b = ring[(i + 1) % ring.len()];
+            check(a.is_finite() && a != b, "invalid trim segment")?;
+            uses.push(Coedge {
+                edge: Some(0),
+                pole: None,
+                projected: false,
+                reversed: false,
+                uv: [a, b],
+                tolerance: 0.,
+            });
+        }
+        loops.push(uses);
+    }
+    check_loops(&loops)
 }
 fn check_loops(loops: &[Vec<Coedge>]) -> Result<()> {
     for (k, ring) in loops.iter().enumerate() {
@@ -287,12 +447,33 @@ impl Topology {
             mesh.points.push(p.to_array());
         }
         let mut edges = HashMap::new();
+        let mut face_bounds = HashMap::<u64, f64>::new();
+        for face in &self.faces {
+            let surface = &rows.surfaces[face.surface as usize];
+            for c in face.loops.iter().flatten() {
+                if let Some(id) = c.edge {
+                    let a = surface.acceleration(&rows.curves, c.uv[0], c.uv[1])?;
+                    let bound = face_bounds.entry(id).or_default();
+                    *bound = bound.max(a);
+                }
+            }
+        }
         for e in &self.edges {
             let c = &rows.curves[e.curve as usize];
             let n = divisions(
-                c.acceleration(e.interval[1] - e.interval[0])?,
+                c.acceleration(e.interval[1] - e.interval[0])?
+                    .max(face_bounds.get(&e.id).copied().unwrap_or(0.)),
                 self.tolerance / 4.,
             )?;
+            check(
+                mesh.points.len().saturating_add(n) <= 4_000_000,
+                "edge sample budget exceeded",
+            )?;
+            let n = if e.vertices[0] == e.vertices[1] {
+                n.max(8)
+            } else {
+                n
+            };
             let mut sample = vec![vertices[&e.vertices[0]]];
             for i in 1..n {
                 let p = c.point(lerp(e.interval, i as f64 / n as f64))?;
@@ -303,7 +484,7 @@ impl Topology {
             edges.insert(e.id, sample);
         }
         for f in &self.faces {
-            mesh.face(rows, f, &edges, self.tolerance)?;
+            mesh.face(rows, f, &edges, &vertices, self.tolerance)?;
         }
         Ok(mesh)
     }
@@ -313,6 +494,7 @@ impl Topology {
 struct Corner {
     vertex: usize,
     uv: DVec2,
+    residual: f64,
 }
 impl spade::HasPosition for Corner {
     type Scalar = f64;
@@ -327,25 +509,66 @@ impl Mesh {
         rows: &Rows,
         f: &Face,
         edges: &HashMap<u64, Vec<usize>>,
+        vertices: &HashMap<u64, usize>,
         tol: f64,
     ) -> Result<()> {
         use spade::{ConstrainedDelaunayTriangulation, Triangulation};
         let surface = &rows.surfaces[f.surface as usize];
         let mut corners = Vec::new();
         let mut constraints = Vec::new();
+        let mut sampled_loops = Vec::new();
         for ring in &f.loops {
             let first = corners.len();
             for c in ring {
-                let sample = &edges[&c.edge];
+                let Some(edge) = c.edge else {
+                    let vertex = vertices[&c.pole.unwrap()];
+                    // A pole covers an entire UV side. Repeated UV samples
+                    // share its single model vertex.
+                    let n = divisions(
+                        surface.acceleration(&rows.curves, c.uv[0], c.uv[1])?,
+                        tol / 4.,
+                    )?;
+                    for i in 0..n {
+                        let uv = uv_at(c.uv[0], c.uv[1], i as f64 / n as f64);
+                        let residual = surface
+                            .point(&rows.curves, uv.x, uv.y)?
+                            .distance(self.points[vertex].into());
+                        corners.push(Corner {
+                            vertex,
+                            uv,
+                            residual,
+                        });
+                    }
+                    continue;
+                };
+                let sample = &edges[&edge];
                 let n = sample.len() - 1;
                 for i in 0..n {
-                    let uv = c.uv[0].lerp(c.uv[1], i as f64 / n as f64);
                     let vertex = sample[if c.reversed { n - i } else { i }];
-                    corners.push(Corner { vertex, uv });
+                    let uv = if c.projected {
+                        let Surface::Plane { frame } = surface else {
+                            return Err("projected conic needs a plane");
+                        };
+                        let d = DVec3::from(self.points[vertex]) - frame.origin;
+                        DVec2::new(d.dot(frame.reference), d.dot(frame.y()))
+                    } else {
+                        uv_at(c.uv[0], c.uv[1], i as f64 / n as f64)
+                    };
+                    let residual = surface
+                        .point(&rows.curves, uv.x, uv.y)?
+                        .distance(self.points[vertex].into());
+                    corners.push(Corner {
+                        vertex,
+                        uv,
+                        residual,
+                    });
                 }
             }
             constraints.extend((first..corners.len() - 1).map(|i| [i, i + 1]));
             constraints.push([corners.len() - 1, first]);
+            if ring[0].projected {
+                sampled_loops.push(corners[first..].iter().map(|c| c.uv).collect::<Vec<_>>());
+            }
         }
         let count = corners.len();
         let mut conflict = false;
@@ -365,19 +588,44 @@ impl Mesh {
             for triangle in cdt.inner_faces() {
                 let c = triangle.vertices().map(|v| *v.data());
                 let uv = (c[0].uv + c[1].uv + c[2].uv) / 3.;
-                if !contains(&f.loops[0], uv) || f.loops[1..].iter().any(|r| contains(r, uv)) {
+                let in_loop = |k: usize| {
+                    if sampled_loops.is_empty() {
+                        return contains(&f.loops[k], uv);
+                    }
+                    let r = &sampled_loops[k];
+                    inside(
+                        r.iter()
+                            .zip(r.iter().cycle().skip(1))
+                            .map(|(&a, &b)| [a, b]),
+                        uv,
+                    )
+                };
+                if !in_loop(0) || (1..f.loops.len()).any(in_loop) {
                     continue;
                 }
-                let mut valid = true;
-                for edge in triangle.adjacent_edges() {
-                    let [a, b] = edge.vertices().map(|v| v.data().uv);
-                    if surface.acceleration(&rows.curves, a, b)? > tol {
-                        check(
-                            !cdt.is_constraint_edge(edge.as_undirected().fix()),
-                            "boundary sampling insufficient for support",
-                        )?;
-                        mids.insert(edge.as_undirected().index(), (a + b) * 0.5);
-                        valid = false;
+                let lo = c[0].uv.min(c[1].uv).min(c[2].uv);
+                let hi = c[0].uv.max(c[1].uv).max(c[2].uv);
+                let residual = c.iter().map(|c| c.residual).fold(0., f64::max);
+                check(residual <= tol, "boundary sample outside model tolerance")?;
+                // Taylor expand at an arbitrary UV point inside the triangle.
+                // Its barycentric linear terms cancel. The parameter box bounds
+                // every direction to a corner, also across a cone or revolution.
+                let valid = 0.5 * surface.acceleration(&rows.curves, lo, hi)? + residual <= tol;
+                if !valid {
+                    let mut best = None;
+                    for edge in triangle.adjacent_edges() {
+                        let [a, b] = edge.vertices().map(|v| v.data().uv);
+                        if !cdt.is_constraint_edge(edge.as_undirected().fix()) {
+                            let score = surface.acceleration(&rows.curves, a, b)?;
+                            if best.is_none_or(|(old, _, _)| score > old) {
+                                best = Some((score, edge.as_undirected().index(), (a + b) * 0.5));
+                            }
+                        }
+                    }
+                    if let Some((_, index, mid)) = best {
+                        mids.insert(index, mid);
+                    } else {
+                        return Err("boundary sampling insufficient for support");
                     }
                 }
                 if valid {
@@ -385,12 +633,24 @@ impl Mesh {
                     if f.reversed {
                         indices.swap(1, 2);
                     }
-                    check(
-                        indices[0] != indices[1]
-                            && indices[1] != indices[2]
-                            && indices[0] != indices[2],
-                        "degenerate display triangle",
-                    )?;
+                    if indices[0] == indices[1]
+                        || indices[1] == indices[2]
+                        || indices[0] == indices[2]
+                    {
+                        let duplicate = if indices[0] == indices[1] {
+                            indices[0]
+                        } else {
+                            indices[2]
+                        };
+                        check(
+                            f.loops
+                                .iter()
+                                .flatten()
+                                .any(|u| u.pole.is_some_and(|id| vertices[&id] == duplicate)),
+                            "degenerate display triangle",
+                        )?;
+                        continue;
+                    }
                     accepted.push(indices);
                 }
             }
@@ -407,11 +667,16 @@ impl Mesh {
             )?;
             for (_, uv) in mids {
                 let vertex = self.points.len();
+                let previous = cdt.num_vertices();
                 let h = cdt
-                    .insert(Corner { vertex, uv })
+                    .insert(Corner {
+                        vertex,
+                        uv,
+                        residual: 0.,
+                    })
                     .map_err(|_| "invalid refinement point")?;
                 check(
-                    h.index() + 1 == cdt.num_vertices() && cdt.vertex(h).data().vertex == vertex,
+                    previous + 1 == cdt.num_vertices() && cdt.vertex(h).data().vertex == vertex,
                     "tessellation precision exhausted",
                 )?;
                 self.points

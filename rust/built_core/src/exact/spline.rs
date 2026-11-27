@@ -60,6 +60,32 @@ impl Axis {
         )
     }
 
+    pub fn validate_periodic(&self, count: usize, pole: impl Fn(usize) -> DVec4) -> Result<()> {
+        if !self.periodic {
+            return Ok(());
+        }
+        let p = self.degree;
+        let period_count = count - p;
+        check(
+            (0..p).all(|i| pole(i) == pole(period_count + i)),
+            "periodic spline control rows do not wrap",
+        )?;
+        let expanded: Vec<_> = self
+            .knots
+            .iter()
+            .zip(&self.multiplicities)
+            .flat_map(|(&k, &m)| std::iter::repeat_n(k, m))
+            .collect();
+        let period = expanded[count] - expanded[p];
+        let slack = 32. * f64::EPSILON * (expanded.last().unwrap() - expanded[0]);
+        check(
+            expanded
+                .iter()
+                .zip(expanded.iter().skip(period_count))
+                .all(|(a, b)| (b - a - period).abs() <= slack),
+            "periodic spline knots do not wrap",
+        )
+    }
     pub fn basis(&self, t: f64) -> Result<Vec<f64>> {
         let start = self.knots[0];
         let span = self.knots.last().unwrap() - start;

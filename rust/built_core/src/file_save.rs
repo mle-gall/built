@@ -329,6 +329,7 @@ fn igz_write_prepared_inner<'p>(
             if let Some(ext) = &doc_ext {
                 data.set_item("ext", ext)?;
             }
+            crate::exact::file::write_header(&data, s)?;
             data.set_item("app_version", api.getattr("__version__")?)?;
             data.set_item("scene", &payload)?;
             container = true;

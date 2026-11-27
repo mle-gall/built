@@ -225,6 +225,7 @@ const VERBS: &[&str] = &[
     "add_edge",
     "add_edges",
     "materialize_exact_geometry",
+    "bind_exact_plane",
     "add_face",
     "add_guide",
     "change_guide",
