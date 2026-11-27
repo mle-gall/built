@@ -104,6 +104,9 @@ impl Store {
             }
         }
         sheet = sheet && !self.push_component_closed(face);
+        if sheet && !self.has_empty_outer(&self.live_slots(Kind::Face)) {
+            return Ok((refined, backed, true, false));
+        }
         let flat = self
             .faces_are_flat(1e-3, h)
             .ok_or(OpError::Fallback("empty face in push region"))?;

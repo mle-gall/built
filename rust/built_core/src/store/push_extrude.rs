@@ -63,12 +63,6 @@ impl Store {
                 .live_slots()
                 .all(|e| self.edge_faces(e).len() >= 2)
     }
-    fn face_keys_in_order(&self) -> Vec<u128> {
-        self.live_slots(Kind::Face)
-            .into_iter()
-            .map(|f| self.key(Kind::Face, f))
-            .collect()
-    }
     fn merge_push_sheet(
         &mut self,
         seeds: &[Point],
@@ -274,11 +268,7 @@ impl Store {
         // Preserve Python set iteration order for the solid rebuild. The
         // sheet dissolve only tests membership in its fresh-face set.
         let solid = backed && was_solid;
-        let rebuild_keys = solid.then(|| {
-            let old = before.order[2].live(&before.slots[2]).into_iter()
-                .map(|f| before.key_of(Kind::Face, f)).collect();
-            Fresh::Since { now: self.face_keys_in_order(), before: old }
-        });
+        let rebuild_keys = solid.then(|| Fresh::Delta(self.new_push_faces(&before).copy()));
         if keep && backed && distance < 0. {
             for &key in &fresh {
                 let f = self.slot(Kind::Face, key).unwrap();

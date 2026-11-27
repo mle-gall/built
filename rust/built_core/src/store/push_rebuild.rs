@@ -82,6 +82,7 @@ impl Paint {
 /// (`set(set_minus(now, set(before)))`).
 pub enum Fresh {
     Listed(Vec<u128>),
+    Delta(PySet),
     Since { now: Vec<u128>, before: Vec<u128> },
 }
 
@@ -856,6 +857,31 @@ impl Store {
         })
     }
 
+    /// CPython inserts the survivors of a difference in the current set's
+    /// table order. After its last resize every key occupies its home slot
+    /// if those slots are distinct. Store face keys differ in their low
+    /// slot bits: verify that neither the hash modulus nor the table mask
+    /// can alias two slots, then order only the newly created faces.
+    pub(super) fn new_push_faces(&self, before: &super::State) -> PySet {
+        let slots = &self.state.slots[Kind::Face as usize];
+        let old = &before.slots[Kind::Face as usize];
+        let size = crate::pyset::insertion_capacity(slots.live);
+        let first = super::keys::full_key(self.state.ns, super::keys::local_key(Kind::Face, 0, 0));
+        let last = first + (1u128 << super::keys::KIND_SHIFT) - 1;
+        const HASH_MODULUS: u128 = (1u128 << 61) - 1;
+        if slots.live >> 2 <= old.live && slots.len() <= size && size <= super::keys::MAX_SLOTS as usize
+            && first / HASH_MODULUS == last / HASH_MODULUS && before.ns == self.state.ns {
+            let [_, _, mut added] = self.state.changes_since(before).created;
+            added.sort_unstable_by_key(|&key| crate::pyset::hash(key) & (size - 1));
+            return PySet::from_keys(added);
+        }
+        let now = self.live_slots(Kind::Face).into_iter().map(|f| self.key(Kind::Face, f));
+        PySet::from_keys(now).difference(old.live, |key| {
+            let Some((ns, _, generation, slot)) = super::keys::split_key(key) else { return false };
+            ns == before.ns && old.alive(slot) && old.gen(slot) == generation
+        })
+    }
+
     /// The push's plane rebuild to a fixpoint, then the trailing stitch.
     #[allow(clippy::too_many_arguments)]
     pub(super) fn single_plane(&self, origin: [f64;3], normal: [f64;3], h: Hypot, compensated: bool)
@@ -891,6 +917,7 @@ impl Store {
     ) -> Result<Rebuilt, OpError> {
         let mut fresh: PySet = match fresh {
             Fresh::Listed(keys) => PySet::from_keys(keys),
+            Fresh::Delta(keys) => keys,
             Fresh::Since { now, before } => {
                 let before: HashSet<u128> = before.into_iter().collect();
                 PySet::from_keys(now).difference(before.len(), |k| before.contains(&k)).copy()
@@ -942,10 +969,9 @@ impl Store {
                 let before_state = self.state.clone();
                 let did = self.apply_cap_rebuild(origin, normal, &fresh, &mut op, &mut cache, &mut ctx, ch, &mut bumps)?;
                 if did {
-                    let now: Vec<u128> = self.live_slots(Kind::Face).into_iter().map(|f| self.key(Kind::Face, f)).collect();
+                    let new = self.new_push_faces(&before_state);
                     let mut before = Store::empty(self.state.ns, Default::default());
                     before.state = before_state;
-                    let new = PySet::from_keys(now).difference(before.state.slots[2].live, |k| before.live_face(k).is_some());
                     let mut add = Vec::new();
                     for k in new.iter() {
                         let Some(f) = self.slot(Kind::Face, k) else { continue };
@@ -1032,6 +1058,29 @@ fn surface(plus: bool, minus: bool, old: bool, skin: u8, fresh: u8, keep: bool, 
 #[cfg(test)]
 mod window_tests {
     use super::*;
+
+    #[test]
+    fn fresh_face_order_matches_full_python_difference() {
+        for ns in [2, (1 << 21) - 1, u64::MAX] {
+            let mut st = Store::empty(ns, Default::default());
+            let mut ch = Change::default();
+            for k in 0..178 {
+                let x = 2. * k as f64;
+                st.add_face(&[vec![[x,0.,0.],[x+1.,0.,0.],[x,1.,0.]]], &mut ch).unwrap();
+            }
+            let old = st.state.clone();
+            for f in (0..123).step_by(7) { st.remove_face(f, &mut ch); }
+            for k in 0..28 {
+                let x = 2. * k as f64;
+                st.add_face(&[vec![[x,0.,2.],[x+1.,0.,2.],[x,1.,2.]]], &mut ch).unwrap();
+            }
+            let keys = |s: &super::super::State| s.order[2].live(&s.slots[2]).into_iter()
+                .map(|f| s.key_of(Kind::Face, f)).collect::<Vec<_>>();
+            let before: HashSet<_> = keys(&old).into_iter().collect();
+            let reference = PySet::from_keys(keys(&st.state)).difference(before.len(), |k| before.contains(&k));
+            assert_eq!(st.new_push_faces(&old).iter().collect::<Vec<_>>(), reference.iter().collect::<Vec<_>>());
+        }
+    }
 
     #[test]
     fn pruned_and_full_parity_give_identical_cap_edits() {

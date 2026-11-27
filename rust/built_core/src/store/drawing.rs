@@ -111,6 +111,13 @@ impl Store {
         Some((vector(*self.state.vpos.get(first as usize)), self.ring_normal(&ring, h)))
     }
 
+    pub(super) fn has_empty_outer(&self, faces: &[u32]) -> bool {
+        faces.iter().any(|&f| {
+            let r = self.state.frings.get(f as usize);
+            r.n_rings == 0 || *self.state.ring_sizes.get(r.ring_start as usize) == 0
+        })
+    }
+
     /// The common-plane test used by Push/Pull and overlap healing. Walking
     /// the outer rings directly avoids triangulating a solid to test flatness.
     pub fn faces_are_flat(&self, tolerance: f64, h: Hypot) -> Option<bool> {
@@ -121,6 +128,17 @@ impl Store {
         let (origin, normal) = self.face_plane(faces[0], h)?;
         let unit = normalized(normal, h);
         let distance = normal.dot(origin, h);
+        // A new cap or wall is usually at the end of a large sheet. If
+        // every outer ring exists, a counterexample anywhere is sufficient.
+        if faces.len() >= 1024 && !self.has_empty_outer(&faces) {
+            for &face in faces.iter().rev().take(16) {
+                let (point, other) = self.face_plane(face, h)?;
+                if !(unit.dot(normalized(other, h), h).abs() > 0.999)
+                    || (normal.dot(point, h) - distance).abs() > tolerance {
+                    return Some(false);
+                }
+            }
+        }
         for &face in &faces[1..] {
             let (point, other) = self.face_plane(face, h)?;
             if !(unit.dot(normalized(other, h), h).abs() > 0.999)
