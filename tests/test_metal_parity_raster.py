@@ -980,7 +980,12 @@ def test_large_mesh_edits_match_a_fresh_pack_and_frame(native, monkeypatch, vari
     if variant == "matching":
         mesh._store.set_face_attr(added.key, 0)
         assert packed.materials[:16].view(np.uint32)[3] == 1
-    assert np.any(original != check())
+    if variant == "texture":
+        from built_core.coordinate_frame import mesh_frame
+        with mesh_frame(mesh, (512., 100., 1.)):
+            assert np.any(original != check())
+    else:
+        assert np.any(original != check())
     assert updates.face_ranges(mesh, [mesh.faces[0]]) == [(0, 0, 2)]
     if variant in {"painted", "back", "matching", "texture"}:
         mesh.faces[0].attrs["color"] = (.9, .2, .1)

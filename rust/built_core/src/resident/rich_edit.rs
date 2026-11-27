@@ -607,7 +607,6 @@ pub(super) fn apply(
     let p = s.getattr("packed")?;
     let py = s.py();
     if store.lineage != l.lineage
-        || st.frame != l.state.frame
         || p.getattr("prototype_origins")?
             .get_item(code)?
             .extract::<[f64; 3]>()?
@@ -616,8 +615,27 @@ pub(super) fn apply(
         return Ok(false);
     }
     let rows = rows(&mesh, st, &s.getattr("_hidden_tags")?)?;
-    let changes = st.changes_since(&l.state);
     let mut dirty = Set::default();
+    if st.frame != l.state.frame {
+        // Drawing can publish the edit from a temporary model frame. UV
+        // recipes read double coordinates relative to the draw anchor.
+        // Keep the existing rows only when conversion preserves those bits.
+        if l.state.frame.matrix().is_some() || st.frame.matrix().is_some() {
+            return Ok(false);
+        }
+        let before = l.state.in_frame(st.frame.clone(), None);
+        if (0..before.vpos.len() as u32).any(|v| {
+            point(&before, v, l.anchor).map(f64::to_bits)
+                != point(&l.state, v, l.anchor).map(f64::to_bits)
+        }) {
+            return Ok(false);
+        }
+        if let Some(curves) = &st.exact.curved {
+            dirty.extend(curves.faces.keys().filter(|&f| st.slots[2].alive(f)));
+        }
+        l.state = before;
+    }
+    let changes = st.changes_since(&l.state);
     let mut dirty_edges = Set::default();
     let mut affected = Set::default();
     for (state, keys) in [
