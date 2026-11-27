@@ -295,7 +295,27 @@ pub fn cycle_box_grips(tool: &Bound<'_, PyAny>, view: &Bound<'_, PyAny>) -> PyRe
         .unwrap_or(0);
     let next = (set + 1) % move_grips::GRIP_SETS.len();
     tool.setattr("_grip_set", next)?;
-    let points: Vec<Vec3> = move_grips::box_grips(&box_data(&b)?, next).into_iter().map(v3).collect();
+    let bounds = box_data(&b)?;
+    let points = move_grips::box_grips(&bounds, next);
+    // The handles step aside from the new set's grips, as on a hover.
+    if view.hasattr("_world_to_pixel")? {
+        let proj = Projection::from_view(view)?;
+        let box_px = points.iter().map(|&p| proj.pixel(p.into())).collect::<PyResult<Vec<_>>>()?;
+        let margin: f64 = tool.getattr_opt("GRIP_PX")?.and_then(|m| m.extract().ok()).unwrap_or(9.);
+        let eye = view.getattr("camera")?.call_method0("eye")?;
+        let on = tool.getattr_opt("_grip_rotation")?.is_some_and(|v| v.is_truthy().unwrap_or(false));
+        let all = if on { move_grips::rotation_grips(bounds.0, bounds.1, bounds.2, xyz(&eye)?.to_array()) } else { vec![] };
+        let px = all.iter().map(|g| proj.pixel(glam::DVec3::from(g.0))).collect::<PyResult<Vec<_>>>()?;
+        let keep = move_grips::yield_to_box_grips(&px, &box_px, 2. * margin);
+        let handles: Vec<(Vec3, Vec3, Vec3)> = all
+            .into_iter()
+            .zip(keep)
+            .filter(|(_, k)| *k)
+            .map(|((a, b, c), _)| (v3(a), v3(b), v3(c)))
+            .collect();
+        tool.setattr("_grips", PyList::new(py, handles)?)?;
+    }
+    let points: Vec<Vec3> = points.into_iter().map(v3).collect();
     tool.setattr("_box_grips", PyList::new(py, points)?)?;
     if let Some(update) = view.getattr_opt("update")?.filter(|u| u.is_callable()) {
         update.call0()?;
