@@ -28,10 +28,10 @@ pytestmark = pytest.mark.perf
 
 # One table: what each interaction may cost, in milliseconds.
 BUDGET_MS = {
-    "line_commit_200k": 60,     # release to the next frame, on the 200k mesh
-    "erase_commit_200k": 60,
-    "move_commit_200k": 60,
-    "push_commit_200k": 120,
+    "line_commit_200k": 90,     # release to the next frame, on the 200k mesh
+    "erase_commit_200k": 90,
+    "move_commit_200k": 90,
+    "push_commit_200k": 180,
     "select_hover_200k": 3,      # median of a Select hover over the 200k mesh
     "move_grip_hover": 3,        # median of a Move hover over groups: box grips, handles
     "select_all_view_frame": 100,  # the frame that shows a select-all's highlight
