@@ -297,3 +297,13 @@ def test_mesh_tool_preview_carries_the_box_except_while_moving_it(view):
     view.tools._moving_groups = (group,)        # Move/Rotate drag preview
     view.tools.mesh_feedback()
     assert len(_preview_edges(view)) == 0
+
+
+@pytest.mark.parametrize("axis,endpoint", [("x", (2, 0, 0)), ("y", (0, -3, 0)), ("z", (0, 0, 4))])
+def test_an_axis_aligned_band_uses_its_axis_without_a_point_snap(axis, endpoint):
+    from built_core.snap import AXIS_COLORS
+
+    tool = line_tool()
+    tool.rubber_band_lines = lambda: [(V(0, 0, 0), V(*endpoint))]
+    _, colour, _ = Viewport._rubber_band_style(gl_reference(tool))
+    assert tuple(colour) == (*AXIS_COLORS[axis], 1.)

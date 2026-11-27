@@ -250,7 +250,7 @@ impl Antialias {
         pass.set_index_buffer(scene.index.slice(..), wgpu::IndexFormat::Uint32);
         for &edge in geometry_stages(edge_only) {
             if edge { axes.encode(&mut pass, true); }
-            if (!edge && mode == 4) || (edge && !edges && mode != 4) {
+            if edge && !edges && mode != 4 {
                 continue;
             }
             let k = if edge && !profiles { 4 + usize::from(mode == 1) } else { usize::from(edge) * 2 + usize::from(mode == 1) };
@@ -265,6 +265,7 @@ impl Antialias {
                 else { for j in first..first + scene.p { pass.draw_indexed_indirect(&scene.commands, j as u64 * 20); } }
             } else {
                 for &(first, count, plain) in &scene.face_ranges {
+                    if mode == 4 && plain { continue; }
                     let face = if plain { 6 + usize::from(mode == 1) } else { k };
                     pass.set_pipeline(&self.pipelines[face]);
                     pass.set_bind_group(0, &self.groups[face].0, &[]);

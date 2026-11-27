@@ -2183,9 +2183,10 @@ impl Renderer {
             pass.set_bind_group(2, &self.texture_groups[usize::from(self.style == 1 || msaa)], &[]);
             pass.set_vertex_buffer(0, s.vertex.slice(..));
             pass.set_index_buffer(s.index.slice(..), wgpu::IndexFormat::Uint32);
-            if !edge_only && self.style != 4 {
+            if !edge_only && (self.style != 4 || !msaa) {
                 if self.style != 1 && !msaa {
                     for &(first, count, plain) in &s.face_ranges {
+                        if self.style == 4 && plain { continue; }
                         pass.set_pipeline(match (plain, draw_ids) {
                             (true, true) => &self.draw_plain, (false, true) => &self.draw,
                             (true, false) => &self.plain_noids, (false, false) => &self.draw_noids,

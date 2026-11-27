@@ -133,3 +133,19 @@ def test_typed_pill_names_the_parsed_value(win, tool, typed, shown):
     with chrome(win) as renderer:
         _cursor_value(win.view, win)
         assert renderer.ui_set_cursor_value.call_args.args[:2] == shown
+
+
+def test_rectangle_pill_sits_outside_the_projected_outline(win):
+    from tests.scene_controls import chrome
+    from views.wgpu_ui import _cursor_value
+
+    _, tool = _rectangle_preview(win)
+    win.view.tools.sync()
+    with chrome(win) as renderer:
+        _cursor_value(win.view, win)
+        _, _, _, _, anchor, *_ = renderer.ui_set_cursor_value.call_args.args
+    display = win.view.tools.view
+    dy = getattr(display, "chrome_offset", (0, 0))[1]
+    corners = [display._world_to_pixel(point)[1] + dy
+               for edge in tool.rubber_band_lines() for point in edge]
+    assert anchor < min(corners) or anchor > max(corners)

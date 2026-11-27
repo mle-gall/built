@@ -19,6 +19,7 @@ struct Out { @location(10) world: vec3f, @location(11) normal: vec3f, @location(
  let a=i.world[0].xyz; let b=i.world[1].xyz; let c=i.world[2].xyz;
  let n = normalize(mat3x3f(cross(b,c),cross(c,a),cross(a,b))*normal);
  var o: Out; o.position = camera.vp*i.world*vec4f(pos,1);
+ if camera.size.z == 4. && (i.info.z & 8u) == 0u { o.position = vec4f(2.,2.,2.,1.); }
  o.world = (i.world * vec4f(pos,1.)).xyz; o.normal = n;
  o.section_distance = dot(i.world * vec4f(pos,1.), style.section_plane);
  o.shade = select(0.62+0.38*abs(dot(n,normalize(vec3f(0.35,0.25,1.)))), 1., (i.info.z & 8u) != 0u);
@@ -108,16 +109,18 @@ fn face_pixel(i: Out, facing: bool) -> Pixel {
  let recipe_id = select(i.recipe.y,i.recipe.x,front);
  let base_factor = c/max(i.shade,0.001);
  let px = dpdx(i.world); let py = dpdy(i.world);
- if TEXTURED && tex != 0u && camera.size.z < 2 && ((i.decorated & 8u) == 0u || (i.decorated & 32u) != 0u) {
+ if TEXTURED && tex != 0u && (camera.size.z < 2 || (i.decorated & 32u) != 0u) && ((i.decorated & 8u) == 0u || (i.decorated & 32u) != 0u) {
   var sampled = textureSampleGrad(material_images,material_sampler,uv,i32(tex),uv_dx,uv_dy);
   if camera.size.w > 0.5 {
-   sampled = textureSampleLevel(material_images,material_sampler,vec2f(0.5),i32(tex),f32(textureNumLevels(material_images)-1u));
+   let mean = textureSampleLevel(material_images,material_sampler,vec2f(0.5),i32(tex),f32(textureNumLevels(material_images)-1u));
+   sampled = vec4f(mean.rgb, select(mean.a, sampled.a, (i.decorated & 32u) != 0u));
   }
   if (i.decorated & 32u) != 0u || style.raster.x == 0. {
    if sampled.a < 0.5 { discard; }
   } else { opacity *= sampled.a; }
   if opacity <= 0. { discard; }
-  if (i.decorated & 8u) == 0u { c = sampled.rgb * i.shade; }
+  if (i.decorated & 32u) != 0u && (camera.size.w > 0.5 || camera.size.z >= 2.) { c = style.edge.rgb; }
+  else if (i.decorated & 8u) == 0u { c = sampled.rgb * i.shade; }
  }
  if recipe_id != 0u && camera.size.z < 2. && (i.decorated & 40u) == 0u {
   var base = c/max(i.shade,0.001);
@@ -180,9 +183,9 @@ fn edge_pixel(i: EdgeOut) -> Pixel { if i.section_distance < 0. { discard; } var
  let tex = select(i.textures.y,i.textures.x,front);
  let uv = select(i.uv.zw,i.uv.xy,front);
  let dx = dpdx(uv); let dy = dpdy(uv);
- if TEXTURED && tex != 0u && camera.size.z < 2 && ((i.decorated & 8u) == 0u || (i.decorated & 32u) != 0u) {
+ if TEXTURED && tex != 0u && (camera.size.z < 2 || (i.decorated & 32u) != 0u) && ((i.decorated & 8u) == 0u || (i.decorated & 32u) != 0u) {
   var alpha = textureSampleGrad(material_images,material_sampler,uv,i32(tex),dx,dy).a;
-  if camera.size.w > 0.5 { alpha = textureSampleLevel(material_images,material_sampler,vec2f(0.5),i32(tex),f32(textureNumLevels(material_images)-1u)).a; }
+  if camera.size.w > 0.5 && (i.decorated & 32u) == 0u { alpha = textureSampleLevel(material_images,material_sampler,vec2f(0.5),i32(tex),f32(textureNumLevels(material_images)-1u)).a; }
   if alpha < select(0.5,0.001,style.raster.x > 0. && (i.decorated & 32u) == 0u) { discard; }
  }
  var p: Pixel; p.id = i.id; return p;

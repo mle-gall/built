@@ -149,6 +149,18 @@ fn rubber_band_style<'py>(v: &Obj<'py>) -> PyResult<Obj<'py>> {
         (c.get_item(0)?, c.get_item(1)?, c.get_item(2)?, alpha)
             .into_pyobject(py)?
             .into_any()
+    } else if segments.len()? == 1 && k != "close" {
+        let edge = segments.get_item(0)?;
+        let v = (xyz(&edge.get_item(1)?)? - xyz(&edge.get_item(0)?)?).abs();
+        let tolerance = 1e-7 * v.max_element();
+        let axis = if v.max_element() == 0. { None }
+            else if v.y.max(v.z) <= tolerance { Some("x") }
+            else if v.x.max(v.z) <= tolerance { Some("y") }
+            else if v.x.max(v.y) <= tolerance { Some("z") } else { None };
+        if let Some(axis) = axis {
+            let rgb = py.import("built_core.snap")?.getattr("AXIS_COLORS")?.get_item(axis)?;
+            (rgb.get_item(0)?, rgb.get_item(1)?, rgb.get_item(2)?, 1.).into_pyobject(py)?.into_any()
+        } else { (0.95, 0.45, 0.16, 0.85).into_pyobject(py)?.into_any() }
     } else {
         (if k == "close" {
             (0.2, 0.4, 0.78, 0.95)

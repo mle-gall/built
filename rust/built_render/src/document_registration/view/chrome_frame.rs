@@ -799,7 +799,26 @@ fn cursor_value<'py>(a: &Args<'py>) -> Reply<'py> {
         None => None,
     };
     let (x, y) = xy(&at)?;
-    renderer.call_method1("ui_set_cursor_value", (shown, &value, typing, x, y - 22.0, start, &revision))?;
+    let mut top = y;
+    let mut bottom = y;
+    if let Some(bands) = tool.getattr_opt("rubber_band_lines")? {
+        let segments = bands.call0()?;
+        if segments.len()? <= 64 {
+            for segment in segments.try_iter()? {
+                let segment = segment?;
+                for endpoint in segment.try_iter()? {
+                    let pixel = display.call_method1("_world_to_pixel", (endpoint?,))?;
+                    if !pixel.is_none() {
+                        let (_, py) = xy(&pixel)?;
+                        top = top.min(py);
+                        bottom = bottom.max(py);
+                    }
+                }
+            }
+        }
+    }
+    let beside = if top >= 68. { top - 24. } else { bottom + 24. };
+    renderer.call_method1("ui_set_cursor_value", (shown, &value, typing, x, beside, start, &revision))?;
     Ok(none(py))
 }
 
