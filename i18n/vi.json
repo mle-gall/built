@@ -1,6 +1,7 @@
 {
  "Show All Cutters": "Hiện tất cả đối tượng cắt",
- "Pick a target, Shift-click for more, then pick the cutter. Tab changes operation, L picks a preset, A anchors, D draws a section.": "Chọn đối tượng đích rồi chọn đối tượng cắt. Tab đổi phép toán, L chọn thiết lập sẵn, A đặt điểm neo, D vẽ mặt cắt. Giữ Shift và nhấp để thêm hoặc bỏ mục tiêu.",
+ "Pick targets (Shift-click for more), then a cutter. Tab cycles operations, L presets, A anchor, D draw section.": "Chọn đối tượng (Shift-nhấp để thêm), rồi chọn đối tượng cắt. Tab đổi phép, L mẫu, A neo, D vẽ mặt cắt.",
+ "Show or hide cutter outlines on every target.": "Hiện hoặc ẩn đường bao của đối tượng cắt trên mọi đối tượng đích.",
  "Pick a target, then its cutter. Tab changes operation, L picks a preset, A anchors, D draws a section.": "Chọn đối tượng đích rồi chọn đối tượng cắt. Tab đổi phép toán, L chọn thiết lập sẵn, A đặt điểm neo, D vẽ mặt cắt.",
  "Pick a start, or press Enter to sweep selected edges.": "Chọn điểm đầu hoặc nhấn Enter để dùng các cạnh đã chọn.",
  "Pick the end or enter a length. Alt keeps the end free.": "Chọn điểm cuối hoặc nhập chiều dài. Alt giữ đầu mút tự do.",

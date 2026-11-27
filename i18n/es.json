@@ -1,6 +1,7 @@
 {
  "Show All Cutters": "Mostrar todos los cortadores",
- "Pick a target, Shift-click for more, then pick the cutter. Tab changes operation, L picks a preset, A anchors, D draws a section.": "Elige la pieza y el cortador. Tab cambia la operación, L elige un ajuste, A ancla y D dibuja una sección. Mayús-clic añade o quita piezas.",
+ "Pick targets (Shift-click for more), then a cutter. Tab cycles operations, L presets, A anchor, D draw section.": "Elige piezas (Mayús-clic añade más) y el cortador. Tab cambia operación, L ajustes, A ancla, D dibuja sección.",
+ "Show or hide cutter outlines on every target.": "Muestra u oculta los contornos de los cortadores en todas las piezas.",
  "Pick a target, then its cutter. Tab changes operation, L picks a preset, A anchors, D draws a section.": "Elige la pieza y el cortador. Tab cambia la operación, L elige un ajuste, A ancla y D dibuja una sección.",
  "Pick a start, or press Enter to sweep selected edges.": "Elige el inicio o pulsa Intro para usar las aristas elegidas.",
  "Pick the end or enter a length. Alt keeps the end free.": "Elige el fin o escribe la longitud. Alt deja libre el extremo.",

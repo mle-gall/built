@@ -1,6 +1,7 @@
 {
  "Show All Cutters": "Показати всі різальні елементи",
- "Pick a target, Shift-click for more, then pick the cutter. Tab changes operation, L picks a preset, A anchors, D draws a section.": "Виберіть ціль, а потім різальний елемент. Tab змінює операцію, L вибирає набір налаштувань, A задає прив’язку, D креслить переріз. Клацніть із Shift, щоб додати або вилучити ціль.",
+ "Pick targets (Shift-click for more), then a cutter. Tab cycles operations, L presets, A anchor, D draw section.": "Виберіть цілі (Shift і клацання додає ще), потім різак. Tab — операція, L — набори, A — прив’язка, D — переріз.",
+ "Show or hide cutter outlines on every target.": "Показує або приховує контури різальних елементів на всіх цілях.",
  "Pick a target, then its cutter. Tab changes operation, L picks a preset, A anchors, D draws a section.": "Виберіть ціль, а потім різальний елемент. Tab змінює операцію, L вибирає набір налаштувань, A задає прив’язку, D креслить переріз.",
  "Pick a start, or press Enter to sweep selected edges.": "Укажіть початок або натисніть Enter, щоб використати вибрані ребра.",
  "Pick the end or enter a length. Alt keeps the end free.": "Укажіть кінець або введіть довжину. Alt залишає кінець вільним.",

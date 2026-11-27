@@ -1,6 +1,7 @@
 {
  "Show All Cutters": "Mostra tutti i solidi di taglio",
- "Pick a target, Shift-click for more, then pick the cutter. Tab changes operation, L picks a preset, A anchors, D draws a section.": "Scegli il bersaglio, poi il solido di taglio. Tab cambia operazione, L sceglie una preimpostazione, A imposta un ancoraggio, D disegna una sezione. Maiusc-clic aggiunge o rimuove un bersaglio.",
+ "Pick targets (Shift-click for more), then a cutter. Tab cycles operations, L presets, A anchor, D draw section.": "Scegli i bersagli (Maiusc-clic per aggiungerne), poi il solido di taglio. Tab operazione, L preset, A ancora, D sezione.",
+ "Show or hide cutter outlines on every target.": "Mostra o nasconde i contorni dei solidi di taglio su tutti i bersagli.",
  "Pick a target, then its cutter. Tab changes operation, L picks a preset, A anchors, D draws a section.": "Scegli il bersaglio, poi il solido di taglio. Tab cambia operazione, L sceglie una preimpostazione, A imposta un ancoraggio, D disegna una sezione.",
  "Pick a start, or press Enter to sweep selected edges.": "Scegli l’inizio o premi Invio per usare gli spigoli selezionati.",
  "Pick the end or enter a length. Alt keeps the end free.": "Scegli la fine o digita la lunghezza. Alt lascia libera la fine.",

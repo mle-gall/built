@@ -1,6 +1,7 @@
 {
  "Show All Cutters": "すべての切断要素を表示",
- "Pick a target, Shift-click for more, then pick the cutter. Tab changes operation, L picks a preset, A anchors, D draws a section.": "対象、切断要素の順に選択します。Tabで演算を切り替え、Lでプリセット、Aで固定先を選択し、Dで断面を描きます。 Shift＋クリックで対象を追加または解除します。",
+ "Pick targets (Shift-click for more), then a cutter. Tab cycles operations, L presets, A anchor, D draw section.": "対象を選び（Shift＋クリックで追加）、切断要素を選択。Tab で演算切替、L でプリセット、A でアンカー、D で断面作図。",
+ "Show or hide cutter outlines on every target.": "すべての対象で切断要素の輪郭を表示または非表示にします。",
  "Pick a target, then its cutter. Tab changes operation, L picks a preset, A anchors, D draws a section.": "対象、切断要素の順に選択します。Tabで演算を切り替え、Lでプリセット、Aで固定先を選択し、Dで断面を描きます。",
  "Pick a start, or press Enter to sweep selected edges.": "始点を指定するか、Enter で選択したエッジに沿ってスイープします。",
  "Pick the end or enter a length. Alt keeps the end free.": "終点を指定するか長さを入力。Alt で自由端になります。",

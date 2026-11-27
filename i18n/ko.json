@@ -1,6 +1,7 @@
 {
  "Show All Cutters": "모든 절단 요소 표시",
- "Pick a target, Shift-click for more, then pick the cutter. Tab changes operation, L picks a preset, A anchors, D draws a section.": "대상과 절단 요소를 차례로 선택하세요. Tab은 연산 전환, L은 프리셋 선택, A는 기준점 지정, D는 단면 그리기입니다. Shift를 누른 채 클릭하면 대상을 추가하거나 해제합니다.",
+ "Pick targets (Shift-click for more), then a cutter. Tab cycles operations, L presets, A anchor, D draw section.": "대상을 선택한 뒤(Shift+클릭으로 추가) 절단 요소를 선택합니다. Tab 연산 전환, L 프리셋, A 앵커, D 단면 그리기.",
+ "Show or hide cutter outlines on every target.": "모든 대상의 절단 요소 윤곽선을 표시하거나 숨깁니다.",
  "Pick a target, then its cutter. Tab changes operation, L picks a preset, A anchors, D draws a section.": "대상과 절단 요소를 차례로 선택하세요. Tab은 연산 전환, L은 프리셋 선택, A는 기준점 지정, D는 단면 그리기입니다.",
  "Pick a start, or press Enter to sweep selected edges.": "시작점을 선택하거나 Enter를 눌러 선택한 모서리를 사용하세요.",
  "Pick the end or enter a length. Alt keeps the end free.": "끝점을 선택하거나 길이를 입력하세요. Alt를 누르면 자유단이 됩니다.",

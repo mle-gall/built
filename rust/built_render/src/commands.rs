@@ -827,6 +827,7 @@ pub fn command_description(label: &str, key: &str) -> Option<&'static str> {
             "view:projection_two_point" => "Vertical lines stay vertical, the usual view for architectural presentations.",
             "view:section_cuts" => "Show or hide cuts made by active section planes.",
             "view:section_fill" => "Fill the cut faces of a section with a solid colour.",
+            "view:show_cutters" => "Show or hide cutter outlines on every target.",
             "view:section_planes" => "Show the section planes themselves; the cut they make stays either way.",
             "view:shadows" => "Cast the sun's shadows; the Shadows panel sets the date, the time and how dark they are.",
             "view:style_architectural" => "Faces with their materials on a plain white background, without the sky.",
