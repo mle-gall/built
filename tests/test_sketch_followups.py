@@ -68,6 +68,38 @@ def test_release_gives_each_member_a_frozen_copy_and_undo_restores_the_link():
     assert extent(b)[1] == pytest.approx(0.25)
 
 
+def test_release_freezes_a_section_cut_s_drawing_too():
+    """A notch drawn as a section keeps cutting its member after the sketch is
+    released: the cut gets its own frozen copy; undo restores the link."""
+    from built_core.solids import solid_volume
+
+    scene = Scene()
+    h = History(scene)
+    apply(h, "create_sweeps", sweeps=[member(dict(library="basic/timber"))])
+    (target,) = scene.groups
+    before = solid_volume(target)
+    notch = sketch(rect(100, 100), uid="5ce7c400000000b1", use="section")
+    for curve in notch["curves"]:
+        for point in ("a", "b"):
+            x, y = curve[point]
+            curve[point] = [x + 1000, y - 50]
+    apply(h, "sketch_commit", row=notch)
+    apply(h, "live_set", row=dict(kind="cut", owner=target.uid, uid="c070000000000101",
+                                  cutter={"section": notch["uid"]}, operation="subtract"))
+    cut_volume = solid_volume(target)
+    assert cut_volume < before
+    apply(h, "live_release", uid=notch["uid"])
+    (copy,) = rows_of(scene, "sketch")
+    assert copy["frozen"] is True and copy["use"] == "section"
+    (cut,) = rows_of(scene, "cut")
+    assert cut["cutter"] == {"section": copy["uid"]} and cut["state"] == "ok"
+    assert solid_volume(target) == pytest.approx(cut_volume)
+    apply(h, "undo")
+    (cut,) = rows_of(scene, "cut")
+    assert cut["cutter"] == {"section": notch["uid"]}
+    assert [r["uid"] for r in rows_of(scene, "sketch")] == [notch["uid"]]
+
+
 def test_frozen_copies_travel_through_save_and_open_and_are_not_project_profiles(tmp_path):
     from built_render.wgpu_library import ProfilesProvider
 

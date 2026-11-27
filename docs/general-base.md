@@ -804,9 +804,10 @@ boundary of a cylindrical member cut by an oblique plane.
   root fillet, circles for round tubes) and Done runs
   `sketch_commit(row, adopt=[sweep row uid])`: the new sketch row and the
   member re-pointed to it in one History step.
-- **Release of a sketch** gives each sweep that used it its own copy: a
-  document-local sketch row with `frozen: true` (and no plane), the sweep's
-  `profile.sketch` pointing to it, all in the release step. Users stay
+- **Release of a sketch** gives each sweep and section cut that used it its
+  own copy: a document-local sketch row with `frozen: true` (and no plane),
+  the sweep's `profile.sketch` or the cut's `cutter.section` pointing to it,
+  all in the release step. Users stay
   `ok`, never `profile_missing`; undo restores the shared row and the
   links. Frozen copies are not offered as project profiles (Library,
   Sweep picker); editing one keeps it frozen and moves only its member.
