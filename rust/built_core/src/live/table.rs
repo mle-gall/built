@@ -98,6 +98,14 @@ pub struct SketchFields {
         rename = "next_id"
     )]
     pub next_id: serde_json::Value,
+    /// A member's own copy of a released sketch (general-base §4.4): kept
+    /// in the document for that member, not offered as a project profile.
+    #[serde(
+        default,
+        skip_serializing_if = "serde_json::Value::is_null",
+        rename = "frozen"
+    )]
+    pub frozen: serde_json::Value,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
