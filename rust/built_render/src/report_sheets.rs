@@ -573,7 +573,10 @@ impl ExtensionsSheet {
         let t = tr(py)?;
         let model = slf.borrow().model.bind(py).clone();
         let win = ctx.getattr("win")?;
-        let action = if verb != "verb" {
+        let action = if verb == "toggle" {
+            model.call_method1("receive", ("focus", args))?;
+            "toggle".to_owned()
+        } else if verb != "verb" {
             model.call_method1("receive", (verb, args))?;
             return Ok(());
         } else {

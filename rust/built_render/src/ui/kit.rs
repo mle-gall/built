@@ -1794,6 +1794,11 @@ pub fn credits_roll(ui: &mut egui::Ui, id: &str, rows: &[CreditRow], height: f32
         roll.offset
     });
     let mut clicked = None;
+    if span > height {
+        let thumb = (height * height / span).max(8.);
+        let y = band.top() + offset / span * (height - thumb);
+        painter.line_segment([pos2(band.right() - 2., y), pos2(band.right() - 2., y + thumb)], Stroke::new(2_f32, DIM));
+    }
     let copies = if span > height { 2 } else { 1 };
     for copy in 0..copies {
         for (row, y, name, role) in &layouts {

@@ -156,6 +156,7 @@ pub struct Block {
 #[serde(default)]
 pub struct Item {
     pub component_source: String,
+    pub toggle: Option<bool>,
     pub id: String,
     pub label: String,
     pub sub: String,
@@ -899,7 +900,15 @@ impl Draw<'_> {
                 x += 18.0;
             }
             // Right: the dot and its words, then the right text.
-            let mut right_x = r.max.x - 8.0;
+            let mut right_x = r.max.x - SPACE_S;
+            if let Some(mut enabled) = it.toggle {
+                let track = Rect::from_center_size(pos2(right_x - 21., r.center().y), vec2(42., CONTROL_H));
+                let mut cell = ui.new_child(egui::UiBuilder::new().id_salt(("row toggle", &it.id)).max_rect(track));
+                if kit::toggle(&mut cell, &mut enabled, "").changed() {
+                    self.out.push(format!("toggle{SEP}{}", it.id));
+                }
+                right_x = track.left() - SPACE_XS;
+            }
             if !it.right.is_empty() {
                 let g = fit(ui, &it.right, meta(), FAINT, w * 0.3, 1);
                 right_x -= g.size().x;

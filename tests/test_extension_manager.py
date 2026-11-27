@@ -180,6 +180,11 @@ def test_installed_card_shows_restart_status(tmp_path, monkeypatch):
     browser = Browser(monkeypatch, tmp_path, [ext], window=SimpleNamespace(_extension_startup_state={}))
     assert "Restart required to apply changes" in browser.text
     assert browser.facts["Next launch"] == "Enabled" and "install" not in browser.buttons
+    rows = browser.spec["content"]["blocks"][0]
+    assert rows["kind"] == "rows" and rows["items"][0]["toggle"] is True
+    browser.act("toggle", ext.id)
+    assert browser.facts["Next launch"] == "Disabled"
+
 
 
 def test_browser_builds_in_the_extensions_sheet(tmp_path, monkeypatch):

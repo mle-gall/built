@@ -224,7 +224,11 @@ impl ExtensionBrowser {
         self.focus = selected.map_or_else(String::new, |p| p.id.clone());
         let mut items = Vec::new();
         for p in &rows {
-            items.push(json!({"id":p.id,"label":p.name,"sub":t(p.origin())?,"tip":p.summary}));
+            let state = if !p.installed() { "Not installed" } else if self.safe { "Safe mode" }
+                else if p.enabled { "Enabled" } else { "Disabled" };
+            items.push(json!({"id":p.id, "label":p.name, "sub":p.summary, "right":t(state)?,
+                "toggle":(p.installed() && !self.safe).then_some(p.enabled), "tip":p.summary}));
+
         }
         let detail = if let Some(p) = selected {
             let next = if !p.installed() {
@@ -285,7 +289,7 @@ impl ExtensionBrowser {
         };
         Ok(json!({"id":"extensions","title":t("Extension Manager")?,"width":1100,"search":{"placeholder":t("Search extensions")?},
             "focus":self.focus,"force_focus":true,"detail":detail,"verbs":[{"id":"local_file","label":t("Install local extension")?}],
-            "content":{"title":t("Local extensions")?,"sub":translated(tr, "{count} of {total} extensions", &[("count",&rows.len().to_string()),("total",&total.to_string())])?,"empty":t("No matching extensions")?,"blocks":if rows.is_empty(){vec![]}else{vec![json!({"kind":"tiles","tone":"catalog","size":176,"items":items})]}},
+            "content":{"title":t("Local extensions")?,"sub":translated(tr, "{count} of {total} extensions", &[("count",&rows.len().to_string()),("total",&total.to_string())])?,"empty":t("No matching extensions")?,"blocks":if rows.is_empty(){vec![]}else{vec![json!({"kind":"rows","id":"extensions","items":items})]}},
             "footer":{"links":[{"id":"safe","label":t(if self.safe{"Leave safe mode"}else{"Safe mode"})?},{"id":"reset","label":t("Reset overrides…")?}],"hint":self.notice}}).to_string())
     }
 
