@@ -140,10 +140,18 @@ fn outline(
             grips.push(("offset", centre));
         }
         Cutter::Body(uid) | Cutter::Opening(cut::Opening { fill: uid, .. }) => {
-            let Some(g) = group(scene.py(), t, uid) else {
+            let opening = if let Cutter::Opening(opening) = cutter {
+                Some(opening)
+            } else {
+                None
+            };
+            let mut frame = if let Some(opening) = opening {
+                opening.pose()
+            } else if let Some(&placement) = t.groups.get(uid) {
+                world.inverse() * reference::frame(placement)
+            } else {
                 return Ok(None);
             };
-            let mut frame = world.inverse() * reference::frame(t.groups[uid]);
             if let Some(a) = &row.anchor {
                 let Some(p) = reference::origin(scene, t, &a.reference, row)? else {
                     return Ok(None);
@@ -153,12 +161,33 @@ fn outline(
                 frame.w_axis = centre.extend(1.);
                 grips.push(("offset", centre));
             }
-            for edge in g.getattr("mesh")?.getattr("edges")?.try_iter()? {
-                let edge = edge?;
-                let point = |k| -> PyResult<DVec3> {
-                    Ok(frame.transform_point3(crate::math::xyz(&edge.getattr(k)?)?))
-                };
-                lines.push([point("a")?, point("b")?]);
+            if opening.is_some() {
+                for corner in 0..8 {
+                    let point = |index: usize| {
+                        let coords = std::array::from_fn(|axis| {
+                            if index & (1 << axis) == 0 {
+                                0.
+                            } else {
+                                row.size[axis]
+                            }
+                        });
+                        frame.transform_point3(DVec3::from_array(coords))
+                    };
+                    for axis in 0..3 {
+                        let bit = 1 << axis;
+                        if corner & bit == 0 {
+                            lines.push([point(corner), point(corner | bit)]);
+                        }
+                    }
+                }
+            } else if let Some(g) = group(scene.py(), t, uid) {
+                for edge in g.getattr("mesh")?.getattr("edges")?.try_iter()? {
+                    let edge = edge?;
+                    let point = |k| -> PyResult<DVec3> {
+                        Ok(frame.transform_point3(crate::math::xyz(&edge.getattr(k)?)?))
+                    };
+                    lines.push([point("a")?, point("b")?]);
+                }
             }
         }
     }

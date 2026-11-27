@@ -73,6 +73,13 @@ impl Grip {
             Reply::redraw()
         }
     }
+    fn project(&self, host: &mut dyn ToolHost, pointer: &Pointer) -> Option<P3> {
+        let point = host.call(
+            "cut_drag",
+            json!({"at":self.at, "axis":self.axis, "px":pointer.px}),
+        );
+        serde_json::from_value(point).ok().or(pointer.world)
+    }
     fn dragged(&self, point: P3) -> f64 {
         let distance =
             (glam::DVec3::from(point) - self.at).dot(self.axis) / self.axis.length_squared();
@@ -179,8 +186,9 @@ impl Tool for CutTool {
                 }
                 self.point = p.world;
                 if let Some(grip) = &mut self.grip {
+                    self.point = grip.project(host, p);
                     if matches!(e, ToolEvent::Click(_)) {
-                        if let Some(point) = p.world {
+                        if let Some(point) = self.point {
                             let v = grip.dragged(point);
                             let reply = grip.commit(host, v);
                             self.grip = None;
@@ -193,7 +201,8 @@ impl Tool for CutTool {
                 if matches!(e, ToolEvent::Click(_)) && !p.mods.shift && !self.picking_anchor {
                     through = host.call("cut_grip", json!(p.px));
                     self.grip = serde_json::from_value(through.clone()).ok();
-                    if self.grip.is_some() {
+                    if let Some(grip) = &self.grip {
+                        self.point = Some(grip.at.to_array());
                         self.ring.clear();
                         return Reply::redraw();
                     }

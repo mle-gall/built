@@ -285,6 +285,11 @@ def test_hosted_opening_on_a_pitched_wall_follows_its_placement(tmp_path):
           wall_host=dict(uid=wall.uid, outline=[[2, 0, 1], [3, 0, 1], [3, 0, 2], [2, 0, 2]],
                          normal=[0, -1, 0], initial_offset=0, offset=0, sill=1, flipped=False))
     assert solid_volume(wall) == pytest.approx(before - .25)
+    from built_core import command_protocol
+    scene.show_all_cutters = True
+    outline, = command_protocol.live_cut_display(scene)
+    assert len(outline["lines"]) == 12
+    assert outline["row"]["cutter"]["opening"]["fill"] == window.uid
     apply(h, "move_placements", placements=[wall.uid], delta=[1, 2, 0])
     assert window.xform.data()[12:15] == (3., 2., 1.)
     path = tmp_path / "pitched.built"
@@ -464,3 +469,29 @@ def test_tree_cut_eye_and_release_use_the_target_history():
     assert extent(target)[0] == pytest.approx(1)
     apply(h, "undo")
     assert rows_of(scene, "cut")[0]["uid"] == uid
+
+
+def test_grip_drag_tracks_its_axis_across_an_occluding_face():
+    import json
+    from built_core import ToolMachine
+
+    class Host:
+        def call(self, name, arg):
+            if name == "cut_grip":
+                return dict(kind="offset", at=[0, 0, 0], axis=[1, 0, 0], radius=.2,
+                            row={"cutter": {"section": "section"}})
+            if name == "cut_drag":
+                return [arg["px"][0] / 1000, 0, 0]
+
+        def run(self, name, payload):
+            self.offset = json.loads(payload)["row"]["offset"]
+            return True, 1, 0, None
+
+    machine = ToolMachine("cut")
+    host = Host()
+    pointer = dict(type="click", world=[0, 0, 0], px=(0, 0))
+    machine.event(pointer, host)
+    machine.event(dict(pointer, type="hover", px=(30, 0)), host)
+    assert machine.get("grip_value") == pytest.approx(30)
+    machine.event(dict(pointer, px=(45, 0)), host)
+    assert host.offset == pytest.approx(45)

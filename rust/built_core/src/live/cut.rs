@@ -22,6 +22,15 @@ pub struct Opening {
     pub rect: [f64; 4],
 }
 
+impl Opening {
+    pub(super) fn pose(&self) -> DMat4 {
+        let [left, bottom, right, top] = self.rect;
+        DMat4::from_cols_array(&self.frame)
+            * DMat4::from_translation(DVec3::new(left, 0., bottom))
+            * DMat4::from_scale(DVec3::new(right - left, 1., top - bottom))
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Plane {
     #[serde(default)]
@@ -443,15 +452,11 @@ fn operand<'p>(
             )
         }
         Some(Cutter::Opening(opening)) => {
-            let [l, b, r, t] = opening.rect;
             let m = py.import("built_core.mesh")?.call_method0("Mesh")?;
             let handle = m.getattr("_store")?.cast_into::<PyMeshStore>()?;
             geometry::generate(&mut handle.try_borrow_mut()?.inner, cut, [0.; 3])
                 .map_err(PyValueError::new_err)?;
-            let frame = DMat4::from_cols_array(&opening.frame)
-                * DMat4::from_translation(DVec3::new(l, 0., b))
-                * DMat4::from_scale(DVec3::new(r - l, 1., t - b));
-            (m, frame)
+            (m, opening.pose())
         }
         Some(Cutter::Section(uid)) => {
             let Some(section) = t.rows.get(uid) else {

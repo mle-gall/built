@@ -186,6 +186,15 @@ impl ViewportToolHost {
                 }
                 json!(ids)
             }
+            "cut_drag" => {
+                let at: DVec3 = args(&arg["at"])?;
+                let axis: DVec3 = args(&arg["axis"])?;
+                let [x,y]: [f64;2] = args(&arg["px"])?;
+                if let (Some(project), Some(direction)) = (view.getattr_opt("_project_to_lock_line")?, axis.try_normalize()) {
+                    let p = project.call1((Vec3::from(at), Vec3::from(direction), x, y))?;
+                    if !p.is_none() { json!(xyz(&p)?) } else { Value::Null }
+                } else { Value::Null }
+            }
             "cut_grip" => {
                 let items=crate::live::live_cut_display(&view.getattr("scene")?)?;
                 if items.len()?==0 {return Ok(Some(Value::Null));}
@@ -225,9 +234,12 @@ impl ViewportToolHost {
                             if grips.len()? > 0 {
                                 nearest=d;
                                 hit=json!({"kind":"offset","row":super::py::py_to_json(&row)?,"at":at,"axis":item.get_item("axis")?.extract::<P3>()?,"radius":item.get_item("radius")?.extract::<f64>()?});
-                            } else if let Ok(body)=row.get_item("cutter")?.get_item("body") {
-                                nearest=d;
-                                hit=json!({"placement":body.extract::<String>()?});
+                            } else {
+                                let cutter=row.get_item("cutter")?;
+                                if let Ok(body)=cutter.get_item("body").or_else(|_| cutter.get_item("opening")?.get_item("fill")) {
+                                    nearest=d;
+                                    hit=json!({"placement":body.extract::<String>()?});
+                                }
                             }
                         }
                     }
