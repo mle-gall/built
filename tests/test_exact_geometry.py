@@ -382,3 +382,36 @@ def test_faceted_sibling_member_survives_an_exact_document_rewrite(tmp_path):
             return ordinary["arrays"], z.read(ordinary["member"])
 
     assert faceted_member(first) == faceted_member(second)
+
+
+@pytest.mark.parametrize("operation", ["reverse_faces", "erase", "erase_stroke", "divide_edges",
+                                        "move_vertices", "rotate_selection", "scale_selection",
+                                        "push_pull"])
+def test_cylinder_facets_remain_valid_after_tool_and_undo(operation):
+    from built_core.history import History
+    from built_core.protocol import commands
+    from built_core.scene import Scene
+
+    scene = Scene()
+    h = History(scene)
+    assert commands.run(h, "materialize_exact_geometry", geometry=cylinder())["ok"]
+    mesh = scene.mesh
+    before = mesh.capture_state()
+    face, edge = mesh.faces[0].key, mesh.edges[0].key
+    vertices = [v.key for v in mesh.vertices]
+    args = {
+        "reverse_faces": dict(faces=[face]),
+        "erase": dict(faces=[face]),
+        "erase_stroke": dict(edges=[edge], hide=True),
+        "divide_edges": dict(edges=[edge], n=2),
+        "move_vertices": dict(vertices=vertices, delta=[1, 2, 3]),
+        "rotate_selection": dict(vertices=vertices, axis=[0, 0, 1], center=[0, 0, 0], angles=[40]),
+        "scale_selection": dict(vertices=vertices, anchor=[0, 0, 0], factors=[1, 2, 1]),
+        "push_pull": dict(face=face, distance=0.1),
+    }[operation]
+    result = commands.run(h, operation, **args)
+    assert result["ok"], result["error"]
+    mesh._store.check()
+    h.undo()
+    assert mesh.capture_state() == before
+    mesh._store.check()
