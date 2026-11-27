@@ -166,7 +166,13 @@ pub(super) fn divisions(bound: f64, tol: f64) -> Result<usize> {
 }
 
 impl Topology {
-    fn certify(&self, rows: &Rows, surface: &Surface, c: &Coedge, e: &Edge) -> Result<()> {
+    pub(super) fn certify(
+        &self,
+        rows: &Rows,
+        surface: &Surface,
+        c: &Coedge,
+        e: &Edge,
+    ) -> Result<()> {
         let curve = &rows.curves[e.curve as usize];
         check(
             c.tolerance > 0. && c.tolerance <= self.tolerance && c.uv.iter().all(|p| p.is_finite()),
@@ -342,7 +348,9 @@ impl Topology {
                 .ok_or("missing face support")?;
             check(!f.loops.is_empty(), "missing outer loop")?;
             if f.loops.iter().flatten().any(|c| c.projected) {
-                if f.loops.iter().all(|r| r.len() == 1) {
+                if matches!(s, Surface::Cylinder { .. }) {
+                    super::projected::cylinder(self, rows, f, s, &index)?;
+                } else if f.loops.iter().all(|r| r.len() == 1) {
                     self.certify_conic_loops(rows, f, s, &index)?;
                 } else {
                     super::projected::certify(self, rows, f, s, &index)?;
@@ -643,11 +651,19 @@ impl Mesh {
                 for i in 0..n {
                     let vertex = sample[if c.reversed { n - i } else { i }];
                     let uv = if c.projected {
-                        let Surface::Plane { frame } = surface else {
-                            return Err("projected conic needs a plane");
-                        };
-                        let d = DVec3::from(self.points[vertex]) - frame.origin;
-                        DVec2::new(d.dot(frame.reference), d.dot(frame.y()))
+                        let point = DVec3::from(self.points[vertex]);
+                        match surface {
+                            Surface::Plane { frame } => {
+                                let d = point - frame.origin;
+                                DVec2::new(d.dot(frame.reference), d.dot(frame.y()))
+                            }
+                            Surface::Cylinder { frame, .. } => super::projected::cylinder_uv(
+                                frame,
+                                point,
+                                uv_at(c.uv[0], c.uv[1], i as f64 / n as f64).x,
+                            ),
+                            _ => return Err("unsupported projected trim"),
+                        }
                     } else {
                         uv_at(c.uv[0], c.uv[1], i as f64 / n as f64)
                     };
@@ -663,7 +679,7 @@ impl Mesh {
             }
             constraints.extend((first..corners.len() - 1).map(|i| [i, i + 1]));
             constraints.push([corners.len() - 1, first]);
-            if ring[0].projected {
+            if f.loops.iter().flatten().any(|c| c.projected) {
                 sampled_loops.push(corners[first..].iter().map(|c| c.uv).collect::<Vec<_>>());
             }
         }

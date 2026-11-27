@@ -113,22 +113,12 @@ pub(super) fn certify(
                 a = b;
             }
         }
-        check(corners.len() >= 3, "degenerate projected ring")?;
-        for i in first..all.len() {
-            let a = all[i];
-            let b = all[first + (i - first + 1) % corners.len()];
-            let da = a.b - a.a;
-            let db = b.b - b.a;
-            let bisector = (da.normalize() + db.normalize())
-                .try_normalize()
-                .ok_or("reversing projected trim")?;
-            check(
-                da.dot(bisector) > a.accel * 0.5 && db.dot(bisector) > b.accel * 0.5,
-                "ambiguous projected join",
-            )?;
-        }
+        joins(&all[first..], corners.len())?;
         rings.push(corners);
     }
+    separated(all, &rings)
+}
+fn separated(mut all: Vec<Segment>, rings: &[Vec<DVec2>]) -> Result<()> {
     // Overlapping x ranges prune almost all pairs on finely sampled conics.
     all.sort_by(|a, b| (a.a.x.min(a.b.x) - a.error).total_cmp(&(b.a.x.min(b.b.x) - b.error)));
     for (i, &a) in all.iter().enumerate() {
@@ -186,4 +176,147 @@ pub(super) fn certify(
         }
     }
     Ok(())
+}
+
+fn joins(all: &[Segment], count: usize) -> Result<()> {
+    check(count >= 3, "degenerate projected ring")?;
+    for i in 0..all.len() {
+        let a = all[i];
+        let b = all[(i + 1) % count];
+        let da = a.b - a.a;
+        let db = b.b - b.a;
+        let bisector = (da.normalize() + db.normalize())
+            .try_normalize()
+            .ok_or("reversing projected trim")?;
+        check(
+            da.dot(bisector) > a.accel * 0.5 && db.dot(bisector) > b.accel * 0.5,
+            "ambiguous projected join",
+        )?;
+    }
+    Ok(())
+}
+/// Inverse radial projection on a regular unwrapped cylinder. The reference
+/// angle selects the same period as the directed coedge.
+pub(super) fn cylinder_uv(frame: &Frame, p: DVec3, reference: f64) -> DVec2 {
+    let d = p - frame.origin;
+    let u = d.dot(frame.y()).atan2(d.dot(frame.reference));
+    DVec2::new(
+        u + ((reference - u) / std::f64::consts::TAU).round() * std::f64::consts::TAU,
+        d.dot(frame.axis),
+    )
+}
+pub(super) fn cylinder(
+    t: &Topology,
+    rows: &Rows,
+    f: &Face,
+    s: &Surface,
+    edges: &HashMap<u64, &Edge>,
+) -> Result<()> {
+    let Surface::Cylinder { frame, radius } = s else {
+        return Err("expected a cylindrical trim");
+    };
+    let metric = |uv: DVec2| DVec2::new(uv.x * radius, uv.y);
+    let mut all = Vec::new();
+    let mut rings = Vec::new();
+    for (k, ring) in f.loops.iter().enumerate() {
+        let first = all.len();
+        let mut corners = Vec::new();
+        for (i, c) in ring.iter().enumerate() {
+            let next = &ring[(i + 1) % ring.len()];
+            let edge = edges
+                .get(&c.edge.ok_or("missing cylindrical edge")?)
+                .ok_or("missing cylindrical edge")?;
+            let after = edges
+                .get(&next.edge.ok_or("missing next edge")?)
+                .ok_or("missing next edge")?;
+            let start = usize::from(c.reversed);
+            check(
+                c.pole.is_none()
+                    && c.tolerance > 0.
+                    && c.tolerance <= t.tolerance
+                    && edge.vertices[1 - start] == after.vertices[usize::from(next.reversed)]
+                    && metric(c.uv[1] - next.uv[0]).length() <= c.tolerance,
+                "open cylindrical trim",
+            )?;
+            let curve = &rows.curves[edge.curve as usize];
+            if !c.projected {
+                t.certify(rows, s, c, edge)?;
+                let [a, b] = c.uv.map(metric);
+                all.push(Segment {
+                    a,
+                    b,
+                    error: 0.,
+                    accel: 0.,
+                    ring: k,
+                    index: corners.len(),
+                });
+                corners.push(a);
+                continue;
+            }
+            let dt = edge.interval[1 - start] - edge.interval[start];
+            let speed = match curve {
+                Curve::Line { .. } => dt.abs(),
+                Curve::Circle { radius, .. } => radius * dt.abs(),
+                Curve::Ellipse { major, .. } => major * dt.abs(),
+                Curve::Spline { axis, controls } => spline::bounds(controls, &[(axis, dt)])?.speed,
+            };
+            let acc = curve.acceleration(dt)?;
+            // Under rho >= R/2 the signed radial residual has second
+            // derivative at most A+2V²/R. R*atan2 has bound 2A+8V²/R.
+            let radial = acc + 2. * speed.powi(2) / radius;
+            let chart = 3. * acc + 8. * speed.powi(2) / radius;
+            let n = super::patch::divisions(chart, c.tolerance)?
+                .max((speed * 4. / radius).ceil() as usize)
+                .max(1);
+            check(
+                n <= 65536 && all.len().saturating_add(n) <= 4_000_000,
+                "cylindrical trim budget exceeded",
+            )?;
+            let sq = (n as f64).powi(2);
+            let mut prev = None;
+            for j in 0..=n {
+                let frac = j as f64 / n as f64;
+                let p = curve.point(edge.interval[start] + dt * frac)?;
+                let d = p - frame.origin;
+                let rho = d.cross(frame.axis).length();
+                check(
+                    rho - speed / (2. * n as f64) >= radius / 2.
+                        && (rho - radius).abs() + radial / (8. * sq) <= c.tolerance,
+                    "edge leaves cylindrical support",
+                )?;
+                let reference = c.uv[0].x + (c.uv[1].x - c.uv[0].x) * frac;
+                let q = cylinder_uv(frame, p, reference);
+                // Keep the reference away from a branch change throughout
+                // the interval, including when theta is not monotone.
+                check(
+                    (q.x - reference).abs()
+                        + (2. * speed / radius + (c.uv[1].x - c.uv[0].x).abs()) / (2. * n as f64)
+                        < std::f64::consts::PI,
+                    "ambiguous cylindrical period",
+                )?;
+                if j == 0 || j == n {
+                    check(
+                        metric(q - c.uv[usize::from(j == n)]).length() <= c.tolerance,
+                        "wrong cylindrical anchor",
+                    )?;
+                }
+                let b = metric(q);
+                if let Some(a) = prev {
+                    all.push(Segment {
+                        a,
+                        b,
+                        error: chart / (8. * sq),
+                        accel: chart / sq,
+                        ring: k,
+                        index: corners.len(),
+                    });
+                    corners.push(a);
+                }
+                prev = Some(b);
+            }
+        }
+        joins(&all[first..], corners.len())?;
+        rings.push(corners);
+    }
+    separated(all, &rings)
 }

@@ -428,7 +428,10 @@ pub(super) fn shell_rows(
                 )?;
                 let curve = &rows.curves[e.curve as usize];
                 let projected = matches!(support, Surface::Plane { .. })
-                    && !matches!(curve, Curve::Line { .. });
+                    && !matches!(curve, Curve::Line { .. })
+                    || matches!(support, Surface::Cylinder { .. })
+                        && matches!(curve, Curve::Spline { .. } | Curve::Ellipse { .. })
+                        && edge.curve().curve_3d().is_none();
                 if let Surface::Cylinder { frame, .. } | Surface::Cone { frame, .. } = support {
                     if let Some(last) = ring.last() {
                         a.x += ((last.uv[1].x - a.x) / TAU).round() * TAU
@@ -512,7 +515,7 @@ pub(super) fn shell_rows(
             .or_else(|| (loops.len() == 1).then_some(0))
             .ok_or("ambiguous outer bound")?;
         loops.swap(0, first);
-        if loops.iter().flatten().any(|c| c.projected) {
+        if matches!(support, Surface::Plane { .. }) && loops.iter().flatten().any(|c| c.projected) {
             for c in loops.iter_mut().flatten() {
                 c.projected = true;
             }
