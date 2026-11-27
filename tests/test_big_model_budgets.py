@@ -9,10 +9,10 @@ machine already busy (the full suite on every core) a miss is reported and
 skipped, with the figures, rather than failed: the quiet single-worker pass
 (``-m perf -p no:xdist``) is the one that holds them.
 
-An edit of a 200k-face mesh still rebakes and uploads its whole prototype,
-rebuilds its snap index and rescans the mesh in the command (~200-300 ms on
-an M-series Mac): the commit budgets are expected failures until that path
-is incremental (the figures are printed either way).
+An edit of a 200k-face mesh rebakes its prototype, but the steps after it
+carry what they derived from the last bake over (the renderer's edge
+expansion, the snap trees) and the command's face searches use a box tree
+patched from the store's diff, so a commit stays within its budget.
 """
 import math
 import os
@@ -34,9 +34,6 @@ BUDGET_MS = {
     "select_all_view_frame": 100,  # the frame that shows a select-all's highlight
     "select_all_panel_frame": 50,  # worst frame while the panels catch up
 }
-# Over budget still, by design of the edit path (see the module notes):
-# reported as an expected failure with the figures until they are not.
-KNOWN_OVER = {"line_commit_200k", "erase_commit_200k"}
 GRID = 450                       # 450 x 450 quads: 202,500 faces
 
 
@@ -237,9 +234,6 @@ def test_big_model_interaction_budgets(tmp_path):
     table = "\n".join(f"  {k:<24} {ms[k]:8.1f} ms  (budget {v} ms)" for k, v in BUDGET_MS.items())
     print("\nbig model budgets:\n" + table)
     over = {k: round(ms[k], 1) for k, v in BUDGET_MS.items() if ms[k] >= v}
-    unexpected = {k: v for k, v in over.items() if k not in KNOWN_OVER}
-    if unexpected and _busy():
-        pytest.skip(f"machine busy (load {os.getloadavg()[0]:.0f}); over budget: {unexpected}\n{table}")
-    assert not unexpected, f"over budget: {unexpected}\n{table}"
-    if over:
-        pytest.xfail(f"known over budget: {over}\n{table}")
+    if over and _busy():
+        pytest.skip(f"machine busy (load {os.getloadavg()[0]:.0f}); over budget: {over}\n{table}")
+    assert not over, f"over budget: {over}\n{table}"
