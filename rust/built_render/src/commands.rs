@@ -482,7 +482,7 @@ pub fn rail_layout() -> Vec<Vec<(&'static str, &'static str)>> {
         vec![("select", ""), ("eraser", ""), ("paint", ""), ("eyedropper", "_act_eyedropper"), ("components", "_act_library_components")],
         vec![("line", ""), ("line_on_surface", ""), ("freehand", ""), ("rectangle", ""), ("rotated_rect", ""), ("circle", ""), ("polygon", ""), ("arc", ""), ("arc3", ""), ("center_arc", ""), ("pie", "")],
         vec![("pushpull", ""), ("move", ""), ("rotate", ""), ("scale", ""), ("flip", ""), ("followme", ""), ("offset", ""), ("fillet", ""), ("chamfer", ""), ("bridge", "_act_bridge"), ("make_faces", "_act_make_faces")],
-        vec![("tape", ""), ("protractor", ""), ("north", ""), ("dimension", ""), ("text", ""), ("text3d", "_act_3dtext"), ("geopath", ""), ("section", "")],
+        vec![("tape", ""), ("protractor", ""), ("change_axes", ""), ("north", ""), ("dimension", ""), ("text", ""), ("text3d", "_act_3dtext"), ("geopath", ""), ("section", "")],
         vec![("outer_shell", ""), ("solid_union", ""), ("solid_subtract", ""), ("solid_trim", ""), ("solid_intersect", ""), ("solid_split", "")],
     ]
 }
@@ -738,6 +738,11 @@ pub fn command_description(label: &str, key: &str) -> Option<&'static str> {
             "menu:hide_similar" => "Hide the other copies of the component being edited.",
             "menu:extensions" => "Install, enable and update extensions.",
             "menu:get_models" => "Free websites with models and textures that open in Built.",
+            "menu:axes_place" => "Enter the origin coordinates and rotations of the drawing axes.",
+            "menu:axes_move" => "Pick the origin, then the red and green directions.",
+            "menu:axes_reset" => "Restore the drawing axes to the model origin and orientation.",
+            "menu:axes_align_view" => "Look along the blue axis with the green axis pointing up.",
+            "menu:axes_face" => "Set red along the longest face edge and blue perpendicular to the face.",
             "menu:look_at_face" => "Look straight at the face under the cursor, from the side you see it, in parallel projection until the next orbit.",
             "menu:show_keystrokes" => "Show the keys you press, the values you type and the tool a key picks at the bottom of the model, for screen recordings.",
             "menu:weld_edges" => "Join connected edges into one curve, or into one straight edge when they line up; with nothing selected, join the model's collinear pieces.",

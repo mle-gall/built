@@ -335,6 +335,14 @@ pub fn sheet_menu(doc: &crate::sheet_page::Snapshot, keys: &[u64], clip: Option<
 pub fn menu_rows(f: &Facts, kind: &str) -> Vec<Row> {
     let read_only = READ_ONLY.contains(&kind);
     let mut r = Rows(Vec::new());
+    if kind == "drawing_axes" {
+        r.one(vec![e("axes_place", "Place…")]);
+        r.one(vec![e("axes_move", "Move…")]);
+        r.one(vec![e("axes_reset", "Reset")]);
+        r.one(vec![e("axes_align_view", "Align View")]);
+        r.one(vec![e("axes_face", "Align to Face")]);
+        return r.0;
+    }
     // Repeat, with the value the last command runs with.
     let key = crate::shortcut_text::shortcut_text(f.repeat_key.as_deref().unwrap_or("Shift+R"))
         .map(|sequence| sequence.1).unwrap_or_default();
@@ -703,6 +711,11 @@ pub fn dispatch(kind: &str, id: &str) -> (&'static str, String, String) {
         "heal" => slot("_on_heal_overlaps", ""),
         "rebuild" => slot("_on_rebuild_planar", ""),
         "simplify" => slot("_on_simplify_mesh", ""),
+        "axes_place" => slot("_axes_place", ""),
+        "axes_move" => slot("_axes_move", ""),
+        "axes_reset" => slot("_axes_reset", ""),
+        "axes_align_view" => slot("_axes_align_view", ""),
+        "axes_face" => slot("_axes_face", ""),
         "alignview" => slot("_on_align_view_to_face", "face0"),
         "texpos" => slot("_on_texture_position", ""),
         "texreset" => slot("_on_texture_reset", ""),

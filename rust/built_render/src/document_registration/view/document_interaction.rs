@@ -7,7 +7,7 @@ fn document_interaction_sync_axes<'py>(a: &Args<'py>) -> Reply<'py> {
     let _axes = py.import("built_core.axes")?.into_any();
     _axes.call_method1(
         "sync",
-        (optional(&view.getattr("scene")?, "drawing_frame")?,),
+        (optional(&view.getattr("scene")?, "tool_drawing_frame")?,),
     )?;
     Ok(none(py))
 }

@@ -255,6 +255,11 @@ fn build_entries() -> Vec<MenuEntry> {
         add(id, path, label, "", Tool(tool));
     }
     for (id, path, label, method) in [
+        ("axes_place", "Tools ▸ Drawing Axes", "Place…", "_axes_place"),
+        ("axes_move", "Tools ▸ Drawing Axes", "Move…", "_axes_move"),
+        ("axes_reset", "Tools ▸ Drawing Axes", "Reset", "_axes_reset"),
+        ("axes_align_view", "Tools ▸ Drawing Axes", "Align View", "_axes_align_view"),
+        ("axes_face", "Tools ▸ Drawing Axes", "Align to Face", "_axes_face"),
         ("bridge", "Tools", "Bridge", "_on_bridge"),
         ("make_faces", "Tools", "Make Faces", "_on_make_faces"),
         ("text3d", "Tools", "3D Text…", "_on_insert_3d_text"),
@@ -265,6 +270,7 @@ fn build_entries() -> Vec<MenuEntry> {
     ] {
         add(id, path, label, "", Window(method));
     }
+    add("tool:change_axes", "Tools", "Axes", "Shift+X", Tool("change_axes"));
     add("plugins_folder", "Extensions", "Open Extensions Folder", "", Handler::PluginsFolder);
     add("develop_plugin", "Extensions", "Develop an Extension…", "",
         Handler::Web("https://github.com/mle-gall/built/blob/main/docs/plugins.md"));

@@ -33,6 +33,7 @@ mod document_registration;
 mod document_camera;
 mod section_display;
 mod inspection_edits;
+mod axes_commands;
 mod context_edits;
 pub use context_edits::can_weld;
 pub use edge_commands::weld_available;

@@ -3874,5 +3874,8 @@
  "A pill at the bottom of the model shows the keys you press, the value you type and the tool a key picks, for screen recordings.": "Một viên nhãn ở dưới mô hình hiện các phím bạn bấm, giá trị bạn gõ và công cụ một phím chọn, cho việc quay màn hình.",
  "Recording": "Quay màn hình",
  "Animate camera moves": "Tạo chuyển động cho camera",
- "Standard views, Look at Face, Zoom Extents, Zoom Selection and scene changes glide into place in a quarter second; off, they jump.": "Các góc nhìn chuẩn, Nhìn thẳng vào mặt, Thu phóng toàn bộ, Thu phóng vùng chọn và chuyển cảnh trượt vào chỗ trong một phần tư giây; khi tắt, chúng nhảy ngay."
+ "Standard views, Look at Face, Zoom Extents, Zoom Selection and scene changes glide into place in a quarter second; off, they jump.": "Các góc nhìn chuẩn, Nhìn thẳng vào mặt, Thu phóng toàn bộ, Thu phóng vùng chọn và chuyển cảnh trượt vào chỗ trong một phần tư giây; khi tắt, chúng nhảy ngay.",
+ "Click the new origin or type X;Y;Z.": "Nhấp vào gốc tọa độ mới hoặc nhập X;Y;Z.",
+ "Click along red or type its angle in the drawing plane.": "Nhấp theo hướng trục đỏ hoặc nhập góc của trục này trong mặt phẳng vẽ.",
+ "Click toward green or type its tilt about red.": "Nhấp theo hướng trục xanh lá hoặc nhập góc nghiêng của trục này quanh trục đỏ."
 }

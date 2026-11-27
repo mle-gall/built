@@ -46,7 +46,7 @@ registry. Regenerate it from that function after adding a tool.
 | walk | WalkTool | native | Rust state machine |
 | look_around | LookAroundTool | native | Rust state machine |
 | first_person | FirstPersonTool | native | Rust state machine |
-| change_axes | ChangeAxesTool | native | Rust state machine |
+| change_axes | ChangeAxesTool | native | Rust state machine, pick_face_placement |
 | scale_manager | ScaleManagerTool | native | Rust state machine |
 | paste | PasteTool | native | Rust state machine |
 | place_group | PlaceGroupTool | native | Rust state machine |

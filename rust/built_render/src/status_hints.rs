@@ -13,9 +13,9 @@ const TOOLS: &[(&str, Phases)] = &[
         ("idle", "Shift = add/remove, Ctrl = add. Double-click a group to edit it. F3 = search commands."),
     ]),
     ("change_axes", &[
-        ("idle", "Click the new origin."),
-        ("started", "Click along the new red axis"),
-        ("green", "Click to set the green direction"),
+        ("idle", "Click the new origin or type X;Y;Z."),
+        ("started", "Click along red or type its angle in the drawing plane."),
+        ("green", "Click toward green or type its tilt about red."),
     ]),
     ("scale_manager", &[
         ("idle", "Type the X, Y, Z scale in the window; Enter or leaving the field applies it."),

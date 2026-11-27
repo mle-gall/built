@@ -377,6 +377,10 @@ impl ShellWindow {
         }
         let vp = slf.getattr("viewport")?;
         vp.call_method1("set_active_tool", (&tool,))?;
+        if key == "change_axes" {
+            tool.setattr("target", slf.py().None())?;
+            tool.setattr("align_face", false)?;
+        }
         let display = vp.getattr("keys_stand_in")?;
         display.getattr("tools")?.call_method0("sync")?;
         display.call_method1("set_scene", (vp.getattr("scene")?,))?;

@@ -66,7 +66,7 @@ impl ToolDisc {
         if let Some(plane) = &self.work_plane {
             return Ok(xyz(&plane.bind(py).get_item(1)?)?.normalize_or_zero());
         }
-        Ok(DVec3::Z)
+        Ok(axes.z)
     }
     fn basis(&self, py: Python<'_>) -> PyResult<[P3; 2]> {
         let axes = drawing_axes(py)?;

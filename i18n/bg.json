@@ -3849,5 +3849,8 @@
  "A pill at the bottom of the model shows the keys you press, the value you type and the tool a key picks, for screen recordings.": "Етикет долу в модела показва натиснатите клавиши, въведената стойност и инструмента, избран с клавиш, за записи на екрана.",
  "Recording": "Запис",
  "Animate camera moves": "Анимирани движения на камерата",
- "Standard views, Look at Face, Zoom Extents, Zoom Selection and scene changes glide into place in a quarter second; off, they jump.": "Стандартните изгледи, Поглед към стената, Мащаб до всичко, Мащаб до избраното и смяната на сцени се плъзгат на място за четвърт секунда; изключено, прескачат."
+ "Standard views, Look at Face, Zoom Extents, Zoom Selection and scene changes glide into place in a quarter second; off, they jump.": "Стандартните изгледи, Поглед към стената, Мащаб до всичко, Мащаб до избраното и смяната на сцени се плъзгат на място за четвърт секунда; изключено, прескачат.",
+ "Click the new origin or type X;Y;Z.": "Щракнете върху новото начало или въведете X;Y;Z.",
+ "Click along red or type its angle in the drawing plane.": "Щракнете по посока на червената ос или въведете ъгъла ѝ в равнината на чертане.",
+ "Click toward green or type its tilt about red.": "Щракнете по посока на зелената ос или въведете наклона ѝ около червената ос."
 }

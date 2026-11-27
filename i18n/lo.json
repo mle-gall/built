@@ -3851,5 +3851,8 @@
  "A pill at the bottom of the model shows the keys you press, the value you type and the tool a key picks, for screen recordings.": "ປ້າຍຢູ່ລຸ່ມແບບຈຳລອງສະແດງປຸ່ມທີ່ທ່ານກົດ, ຄ່າທີ່ທ່ານພິມ ແລະ ເຄື່ອງມືທີ່ປຸ່ມເລືອກ, ສຳລັບການບັນທຶກໜ້າຈໍ.",
  "Recording": "ການບັນທຶກ",
  "Animate camera moves": "ເຄື່ອນກ້ອງແບບນຸ່ມນວນ",
- "Standard views, Look at Face, Zoom Extents, Zoom Selection and scene changes glide into place in a quarter second; off, they jump.": "ມຸມມອງມາດຕະຖານ, ເບິ່ງໜ້າຊື່ໆ, ຂະຫຍາຍທັງໝົດ, ຂະຫຍາຍສ່ວນທີ່ເລືອກ ແລະ ການປ່ຽນສາກ ຈະເລື່ອນເຂົ້າບ່ອນພາຍໃນໜຶ່ງສ່ວນສີ່ວິນາທີ; ຖ້າປິດ, ຈະກະໂດດທັນທີ."
+ "Standard views, Look at Face, Zoom Extents, Zoom Selection and scene changes glide into place in a quarter second; off, they jump.": "ມຸມມອງມາດຕະຖານ, ເບິ່ງໜ້າຊື່ໆ, ຂະຫຍາຍທັງໝົດ, ຂະຫຍາຍສ່ວນທີ່ເລືອກ ແລະ ການປ່ຽນສາກ ຈະເລື່ອນເຂົ້າບ່ອນພາຍໃນໜຶ່ງສ່ວນສີ່ວິນາທີ; ຖ້າປິດ, ຈະກະໂດດທັນທີ.",
+ "Click the new origin or type X;Y;Z.": "ຄລິກຈຸດກຳເນີດໃໝ່ ຫຼື ປ້ອນ X;Y;Z.",
+ "Click along red or type its angle in the drawing plane.": "ຄລິກຕາມທິດຂອງແກນສີແດງ ຫຼື ປ້ອນມຸມຂອງມັນໃນລະນາບແຕ້ມ.",
+ "Click toward green or type its tilt about red.": "ຄລິກໄປທາງແກນສີຂຽວ ຫຼື ປ້ອນມຸມອຽງຂອງມັນຮອບແກນສີແດງ."
 }

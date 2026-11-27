@@ -2893,6 +2893,21 @@ impl PyMeshStore {
         Ok(Some((dirty, copies)))
     }
 
+    fn _change_definition_axes(&mut self, matrix: [f64; 16]) -> PyResult<()> {
+        let m = glam::DMat4::from_cols_array(&matrix);
+        let mut exact = self.inner.state.exact.clone();
+        exact.change_axes(m).map_err(PyValueError::new_err)?;
+        let mut change = Change::default();
+        for slot in self.inner.live_slots(Kind::Vertex) {
+            let p = *self.inner.state.vpos.get(slot as usize);
+            let q = m.transform_point3(p.into()).to_array();
+            change.moved.extend(self.inner.place_vertex(slot, q).moved);
+        }
+        self.inner.state.exact = exact;
+        self.inner.finish(change);
+        Ok(())
+    }
+
     fn transform_vertices(&mut self, source: Vec<[f64; 3]>, matrix: [f64; 16], collect: bool)
         -> (usize, Vec<u128>) {
         self.inner.transform_vertices(&source, matrix, collect)

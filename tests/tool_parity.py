@@ -1004,7 +1004,7 @@ CHANGE_AXES_SCENARIOS = {
     "tilted_frame": [("click", 1, 2, 3), ("hover", 2, 2, 4), ("click", 2, 2, 4),
                      ("hover", 1, 3, 4), ("click", 1, 3, 4), ("undo",)],
     "degenerate_and_cancel": [("click", 1, 0, 0), ("click", 1, 0, 0), ("click", 3, 0, 0),
-                              ("click", 2, 0, 0), ("value", 4), ("cancel",)],
+                              ("click", 2, 0, 0), ("value", (4, 5)), ("cancel",)],
 }
 
 

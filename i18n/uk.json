@@ -3855,5 +3855,8 @@
  "A pill at the bottom of the model shows the keys you press, the value you type and the tool a key picks, for screen recordings.": "Плашка внизу моделі показує натиснуті клавіші, введене значення та інструмент, вибраний клавішею, для запису екрана.",
  "Recording": "Запис",
  "Animate camera moves": "Анімувати рухи камери",
- "Standard views, Look at Face, Zoom Extents, Zoom Selection and scene changes glide into place in a quarter second; off, they jump.": "Стандартні види, Дивитися на грань, Показати все, Показати виділене та зміна сцен плавно переходять за чверть секунди; якщо вимкнено, перемикаються одразу."
+ "Standard views, Look at Face, Zoom Extents, Zoom Selection and scene changes glide into place in a quarter second; off, they jump.": "Стандартні види, Дивитися на грань, Показати все, Показати виділене та зміна сцен плавно переходять за чверть секунди; якщо вимкнено, перемикаються одразу.",
+ "Click the new origin or type X;Y;Z.": "Клацніть у точці нового початку координат або введіть X;Y;Z.",
+ "Click along red or type its angle in the drawing plane.": "Клацніть у напрямку червоної осі або введіть її кут у площині креслення.",
+ "Click toward green or type its tilt about red.": "Клацніть у напрямку зеленої осі або введіть кут її нахилу навколо червоної осі."
 }

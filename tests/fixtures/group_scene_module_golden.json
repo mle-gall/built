@@ -1158,6 +1158,15 @@
    true,
    true,
    true
+  ],
+  [
+   "world_drawing_frame",
+   "None",
+   null,
+   null,
+   true,
+   true,
+   true
   ]
  ],
  "scene_initvars": [

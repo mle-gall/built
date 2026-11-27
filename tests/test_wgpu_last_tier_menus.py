@@ -62,3 +62,29 @@ def test_shared_menus_and_dock_selection(native_question_host, monkeypatch):
     win._on_explode_group()
     assert not scene.groups and scene.mesh.faces
     assert vp.history.undo() and group in scene.groups
+
+
+def test_drawing_axes_drawer_reset_and_view(native_question_host):
+    from built_core.group import frame_axes
+
+    win = native_question_host.window
+    vp = win.viewport
+    win._axes_place()
+    form = chrome_forms.current(win)
+    form.receive("x", "4")
+    form.receive("ry", "30")
+    form.receive("rz", "25")
+    form.press("ok")
+    o, x, y, z = frame_axes(vp.scene.drawing_frame)
+    assert (o - Vec3(4, 0, 0)).length() < 1e-6
+    assert abs(x.z()) > 0.1
+    win._axes_align_view()
+    camera = win._active_view().camera
+    assert (camera.target - o).length() < 1e-5
+    assert (camera.forward() + z).length() < 1e-5
+    right = Vec3.crossProduct(camera.forward(), camera.up_vector()).normalized()
+    assert (right - x).length() < 1e-5
+    win._axes_reset()
+    assert vp.scene.drawing_frame is None
+    assert vp.history.undo()
+    assert (frame_axes(vp.scene.drawing_frame)[1] - x).length() < 1e-6

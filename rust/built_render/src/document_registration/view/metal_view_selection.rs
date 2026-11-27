@@ -42,12 +42,12 @@ fn hover_frame<'py>(view: &Obj<'py>, x: &Obj<'py>, y: &Obj<'py>, modifiers: &Obj
     let py = view.py();
     let start = Instant::now();
     let tools = view.getattr("tools")?;
-    tools.call_method0("sync")?;
+    let mode = tools.call_method0("sync")?;
     // Select's priority walk already queries the row for its group pick.
     view.setattr("_cue_cursor", (x, y))?;
     view.setattr("hovered_row", py.None())?;
     let source = view.getattr("source_viewport")?;
-    let selecting = tools.getattr("mode")?.eq("select")? && !attr(&source, "nav_mode")?.is_truthy()?;
+    let selecting = mode.eq("select")? && !attr(&source, "nav_mode")?.is_truthy()?;
     if !selecting || source.is_none() {
         view.setattr("hovered_row", view.call_method1("pick_row", (x, y))?)?;
     }
@@ -65,7 +65,7 @@ fn hover_frame<'py>(view: &Obj<'py>, x: &Obj<'py>, y: &Obj<'py>, modifiers: &Obj
         return Ok(none(py));
     }
     let mut work_point = none(py);
-    let mesh_mode = tools.call_method0("sync")?.eq("mesh")?;
+    let mesh_mode = mode.eq("mesh")?;
     if mesh_mode {
         work_point = tools.call_method("work_point", (x, y), Some(&fields!(py; "picked_row" => view.getattr("hovered_row")?)))?;
     }

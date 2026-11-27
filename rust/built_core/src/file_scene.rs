@@ -303,6 +303,10 @@ fn archive_settings(scene: &Obj<'_>, out: &Dict<'_>, stream: &Obj<'_>) -> PyResu
         }
     }
     put(out, "hidden_view", &vis)?;
+    let axes = attr(scene, "world_drawing_frame")?;
+    if !axes.is_none() {
+        out.set_item("drawing_axes", axes.call_method0("copyDataTo")?)?;
+    }
     if !flag(scene, "show_axes", true)? {
         out.set_item("axes_hidden", true)?;
     }
@@ -860,6 +864,10 @@ pub fn igz_finish_scene(scene: &Obj<'_>, payload: &Dict<'_>) -> PyResult<usize> 
             scene.setattr(to, data(r, key)?.is_truthy()? ^ inverted)?;
         }
     }
+    let frame = data(payload, "drawing_axes")?;
+    scene.setattr("world_drawing_frame", if frame.is_none() { py.None().into_bound(py) } else {
+        py.get_type::<crate::math::Matrix4>().call1((frame,))?
+    })?;
     scene.setattr("show_axes", !data(payload, "axes_hidden")?.is_truthy()?)?;
     let north = py
         .get_type::<pyo3::types::PyFloat>()

@@ -224,10 +224,14 @@ fn run<'py>(py: Python<'py>, name: &str, win: &Bound<'py, PyAny>, a: &Args<'_, '
             done!(py.import("built_render.chrome_forms")?.getattr("ask_text")?.call((win, tr(py, "New layer")?, tr(py, "Layer name:")?), Some(&kw)))
         }
         // Right-click ▸ Change Axes: three clicks give the group or component new local axes.
+        name @ ("_axes_place" | "_axes_move" | "_axes_reset" | "_axes_align_view" | "_axes_face") => {
+            crate::axes_commands::action(win, name)?;
+            nothing()
+        }
         "_on_change_axes" => {
             let tool = win.getattr("_tools")?.get_item("change_axes")?;
-            tool.setattr("target", a.req(0, "group")?)?;
-            done!(win.call_method1("_activate_tool", ("change_axes",)))
+            win.call_method1("_activate_tool", ("change_axes",))?;
+            done!(tool.setattr("target", a.req(0, "group")?))
         }
         // Right-click ▸ Flip Along ▸ Red / Green / Blue.
         "_on_flip_along" => done!(py.import("tools.flip")?.getattr("FlipTool")?.call0()?.call_method1("flip", (viewport(win)?, a.req(0, "axis")?))),
@@ -626,6 +630,11 @@ const VERBS: &[(&str, Option<(&str, usize)>)] = &[
     ("_selected_text3d", None),
     ("_on_edit_3d_text", None),
     ("_assign_new_layer", None),
+    ("_axes_place", None),
+    ("_axes_move", None),
+    ("_axes_reset", None),
+    ("_axes_align_view", None),
+    ("_axes_face", None),
     ("_on_change_axes", None),
     ("_on_flip_along", None),
     ("_unlinked", None),

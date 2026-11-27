@@ -422,3 +422,132 @@ def test_a_pasted_rotated_group_keeps_its_axes():
     red = group_frame(pasted).column(0).toVector3D()
     assert abs(red.x() - 0.866025) < 1e-4 and abs(red.y() - 0.5) < 1e-4
     assert group_frame(pasted).column(3).toVector3D() == V(5, 0, 0)
+
+
+def test_document_drawing_axes_history_and_file(tmp_path):
+    from built_core.command_protocol import run
+    from built_core import axes
+
+    scene = Scene()
+    hist = History(scene)
+    g = _slab()
+    scene.groups.append(g)
+    points = _world_pts(g)
+    result = run(hist, "set_group_axes", placement=None, origin=[2, 3, 4],
+                 red=[2, 4, 4], green=[1, 3, 4])
+    assert result["ok"], result
+    turned = scene.drawing_frame
+    assert _close(frame_axes(turned)[0], V(2, 3, 4))
+    axes.sync(turned)
+    try:
+        assert _close(axes.to_world(V(3, 0)), V(0, 3))
+    finally:
+        axes.sync(None)
+    assert _world_pts(g) == points
+    path = tmp_path / "axes.igz"
+    igz.save_scene(scene, path)
+    back = Scene()
+    igz.load_into(back, path)
+    assert back.drawing_frame == turned
+    assert run(hist, "set_group_axes", placement=None, origin=[0, 0, 0],
+               red=[1, 0, 0], green=[0, 1, 0])["ok"]
+    assert scene.drawing_frame is None
+    hist.undo()
+    assert scene.drawing_frame == turned
+    hist.undo()
+    assert scene.drawing_frame is None
+    hist.redo()
+    assert scene.drawing_frame == turned
+
+
+def test_change_open_component_axes_preserves_world_and_keys():
+    from built_core.command_protocol import run
+
+    scene = Scene()
+    hist = History(scene)
+    mesh = _slab().mesh
+    a, b = Group(mesh, name="a"), Group(mesh, name="b")
+    a.xform = _frame_at(V(2, 3), 30)
+    b.xform = _frame_at(V(-3, 2), -40)
+    scene.groups += [a, b]
+    keys = list(mesh._store.keys("vertex"))
+    before = [_world_pts(g) for g in (a, b)]
+    scene.begin_group_edit(a)
+    assert run(hist, "set_group_axes", placement=None, origin=[2, 1, 0],
+               red=[2, 2, 0], green=[1, 1, 0])["ok"]
+    assert scene.edit_group is a
+    assert _close(frame_axes(scene.drawing_frame)[0], V(2, 1))
+    assert _close(frame_axes(scene.drawing_frame)[1], V(0, 1))
+    assert keys == list(mesh._store.keys("vertex"))
+    assert before == [_world_pts(g) for g in (a, b)]
+    scene.end_group_edit()
+    hist.undo()
+    assert keys == list(mesh._store.keys("vertex"))
+    assert before == [_world_pts(g) for g in (a, b)]
+
+
+def test_axes_in_nested_occurrence_use_parent_coordinates():
+    from built_core.command_protocol import run
+
+    scene = Scene()
+    hist = History(scene)
+    parent = Group(Mesh(), name="container")
+    child = _slab()
+    parent.xform = _frame_at(V(6, 2), 45)
+    child.xform = _frame_at(V(2, 1), 30)
+    parent.children = [child]
+    scene.groups.append(parent)
+    before = _world_pts(parent)
+    scene.begin_group_edit(parent)
+    scene.begin_group_edit(child)
+    assert run(hist, "set_group_axes", placement=None, origin=[7, 4, 0],
+               red=[7, 5, 0], green=[6, 4, 0])["ok"]
+    o, x, *_ = frame_axes(scene.drawing_frame)
+    assert _close(o, V(7, 4)) and _close(x, V(0, 1))
+    scene.end_group_edit()
+    assert before == _world_pts(parent)
+
+
+def test_world_axes_leave_ifc_and_step_coordinates_unchanged(tmp_path):
+    from built_core.protocol import commands
+    from formats.ifc import save_ifc
+    from formats.step import save_step
+    from tests.test_ifc_export import _tagged_wall_scene
+
+    scene = _tagged_wall_scene()
+    def coordinates():
+        rows = []
+        for ext, writer in (("ifc", save_ifc), ("step", save_step)):
+            path = tmp_path / f"wall.{ext}"
+            writer(scene, path)
+            points = [row for row in path.read_text().splitlines()
+                      if "CARTESIAN_POINT(" in row or "IFCCARTESIANPOINT(" in row]
+            assert points
+            rows.append(points)
+        return rows
+
+    before = coordinates()
+    assert commands.run(History(scene), "set_group_axes", placement=None,
+                        origin=[125, -22, 4], red=[126, -21, 4], green=[124, -21, 4])["ok"]
+    assert coordinates() == before
+
+
+def test_open_occurrence_axes_use_model_coordinates_in_a_precision_frame():
+    from built_core.command_protocol import run
+    from built_core.coordinate_frame import mesh_frame
+
+    scene = Scene()
+    history = History(scene)
+    g = _slab()
+    shift = V(650000, 4200000)
+    g.xform = _frame_at(shift, 25)
+    scene.groups.append(g)
+    before = _world_pts(g)
+    scene.begin_group_edit(g)
+    origin = shift + V(2, 1)
+    with mesh_frame(scene.mesh, shift.toTuple()):
+        assert (frame_axes(scene.tool_drawing_frame)[0] - V(0, 0)).length() < 1e-6
+        assert run(history, "set_group_axes", placement=None, origin=origin.toTuple(),
+                   red=(origin + V(0, 1)).toTuple(), green=(origin - V(1, 0)).toTuple())["ok"]
+    assert _close(frame_axes(scene.drawing_frame)[0], origin)
+    assert before == _world_pts(g)

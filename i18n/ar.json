@@ -3882,5 +3882,8 @@
  "A pill at the bottom of the model shows the keys you press, the value you type and the tool a key picks, for screen recordings.": "شارة أسفل النموذج تعرض المفاتيح التي تضغطها والقيمة التي تكتبها والأداة التي يختارها مفتاح، لتسجيلات الشاشة.",
  "Recording": "التسجيل",
  "Animate camera moves": "تحريك حركات الكاميرا",
- "Standard views, Look at Face, Zoom Extents, Zoom Selection and scene changes glide into place in a quarter second; off, they jump.": "تنزلق المناظر القياسية والنظر إلى الوجه وتكبير الكل وتكبير التحديد وتغييرات المشاهد إلى مكانها في ربع ثانية؛ عند الإيقاف، تقفز."
+ "Standard views, Look at Face, Zoom Extents, Zoom Selection and scene changes glide into place in a quarter second; off, they jump.": "تنزلق المناظر القياسية والنظر إلى الوجه وتكبير الكل وتكبير التحديد وتغييرات المشاهد إلى مكانها في ربع ثانية؛ عند الإيقاف، تقفز.",
+ "Click the new origin or type X;Y;Z.": "انقر على نقطة الأصل الجديدة أو أدخل X;Y;Z.",
+ "Click along red or type its angle in the drawing plane.": "انقر في اتجاه المحور الأحمر أو أدخل زاويته في مستوى الرسم.",
+ "Click toward green or type its tilt about red.": "انقر في اتجاه المحور الأخضر أو أدخل زاوية ميله حول المحور الأحمر."
 }

@@ -1659,6 +1659,11 @@ impl NativeTools {
         let s = slf.as_any();
         let view = s.getattr("view")?;
         let source = view.getattr("source_viewport")?;
+        // Native inference, work planes and typed dimensions share the
+        // active document's drawing frame with the controller tools.
+        if let Some(scene) = some(&source, "scene")? {
+            py.import("built_core.axes")?.call_method1("sync", (attr(&scene, "tool_drawing_frame")?,))?;
+        }
         let tool = attr(&source, "active_tool")?;
         let current = s.getattr("tool")?;
         if tool.is(&current) {
