@@ -411,43 +411,67 @@ fn patch_store<'p>(
         .get_item(slice(py, start, count))?
         .extract()?;
     let positions = position.as_array();
-    let (mut a, mut b, mut c) = (
-        Vec::with_capacity(count / 3),
-        Vec::with_capacity(count / 3),
-        Vec::with_capacity(count / 3),
-    );
-    for t in 0..count / 3 {
-        let point: [f64; 3] = std::array::from_fn(|j| positions[[3 * t, j]] as f64);
-        a.push(point);
-        b.push(std::array::from_fn(|j| {
-            positions[[3 * t + 1, j]] as f64 - point[j]
-        }));
-        c.push(std::array::from_fn(|j| {
-            positions[[3 * t + 2, j]] as f64 - point[j]
-        }));
-    }
-    let mut edges = Vec::with_capacity(st.slots[1].live);
-    for e in borrowed.inner.live_slots(Kind::Edge) {
-        if st.eflags.get(e as usize) & mask != 0 {
-            continue;
-        }
-        if *st.ecurve.get(e as usize) >= 0 {
-            return Ok(None);
-        }
-        edges.push(st.ends.get(e as usize).map(|i| {
+    let triangle = |t: usize| {
+        let a = std::array::from_fn(|j| positions[[3 * t, j]] as f64);
+        let b = std::array::from_fn(|j| positions[[3 * t + 1, j]] as f64 - a[j]);
+        let c = std::array::from_fn(|j| positions[[3 * t + 2, j]] as f64 - a[j]);
+        [a, b, c]
+    };
+    let slots = borrowed.inner.live_slots(Kind::Edge);
+    let segment = |e: u32| {
+        st.ends.get(e as usize).map(|i| {
             let p = *st.vpos.get(i as usize);
             if st.frame.origin == origin {
                 p
             } else {
-                std::array::from_fn(|k| p[k] + (st.frame.origin[k] - origin[k]))
+                std::array::from_fn(|j| p[j] + (st.frame.origin[j] - origin[j]))
             }
-        }));
-    }
+        })
+    };
+    let patch = packed
+        .getattr_opt("_snap_edit")?
+        .and_then(|v| v.cast_into::<crate::resident::plain_edit::SnapPatch>().ok());
+    let patch = patch.as_ref().map(|p| p.get()).filter(|p| {
+        p.code == code
+            && p.revision == borrowed.inner.revision
+            && p.lineage == borrowed.inner.lineage
+            && p.anchor == origin
+            && p.faces == count / 3
+            && p.edges == slots.len()
+            && st.ecurve.iter().all(|&v| v < 0)
+    });
+    let source = patch.map(|p| p.after);
+    let inner = if let Some(p) = patch.filter(|p| old.source.is_some() && old.source == p.before) {
+        old.inner.patch_spans(p, triangle, |i| segment(slots[i]))
+    } else {
+        let (mut a, mut b, mut c) = (
+            Vec::with_capacity(count / 3),
+            Vec::with_capacity(count / 3),
+            Vec::with_capacity(count / 3),
+        );
+        let mut edges = Vec::with_capacity(slots.len());
+        for e in slots {
+            if st.eflags.get(e as usize) & mask != 0 {
+                continue;
+            }
+            if *st.ecurve.get(e as usize) >= 0 {
+                return Ok(None);
+            }
+            edges.push(segment(e));
+        }
+        for t in 0..count / 3 {
+            let [x, y, z] = triangle(t);
+            a.push(x);
+            b.push(y);
+            c.push(z);
+        }
+        py.detach(|| old.inner.patched(a, b, c, edges))
+    };
     super::exact::forget(packed, code)?;
-    let inner = py.detach(|| old.inner.patched(a, b, c, edges));
     let proto = Bound::new(
         py,
         crate::InstanceProto {
+            source,
             inner: std::sync::Arc::new(inner),
             curves: Vec::new(),
         },

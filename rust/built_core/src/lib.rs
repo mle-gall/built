@@ -1323,6 +1323,7 @@ fn mesh_tuple<'py>(py: Python<'py>, b: jsondoc::Block) -> PyResult<Bound<'py, py
 /// its hard edges (``edges``: (E,6) local endpoints).
 #[pyclass(frozen)]
 struct InstanceProto {
+    source: Option<u64>,
     inner: std::sync::Arc<instances::Proto>,
     curves: Vec<Vec<[f64; 6]>>,
 }
@@ -1348,7 +1349,7 @@ impl InstanceProto {
         let es: Vec<[[f64; 3]; 2]> = (0..ev.shape()[0]).map(|i| [
             [ev[[i, 0]], ev[[i, 1]], ev[[i, 2]]], [ev[[i, 3]], ev[[i, 4]], ev[[i, 5]]]]).collect();
         let inner = py.detach(|| instances::Proto::new(a, b, c, es));
-        Ok(Self { inner: std::sync::Arc::new(inner), curves: Vec::new() })
+        Ok(Self { source: None, inner: std::sync::Arc::new(inner), curves: Vec::new() })
     }
 
     fn curve_segments<'py>(&self, py: Python<'py>) -> Vec<Bound<'py, PyArray2<f64>>> {

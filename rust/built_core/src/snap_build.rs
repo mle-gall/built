@@ -59,6 +59,7 @@ pub fn build_snap_index(
         let protos: Vec<InstanceProto> = data
             .into_par_iter()
             .map(|d| prepared(d).map(|(a, b, c, segments, curves)| InstanceProto {
+                source: None,
                 inner: std::sync::Arc::new(instances::Proto::new(a, b, c, segments)),
                 curves,
             }))
@@ -154,6 +155,6 @@ pub fn patch_snap_proto(py: Python<'_>, old: PyRef<'_, InstanceProto>, input: In
     py.detach(|| {
         let (a, b, c, segments, curves) = prepared(data)?;
         let inner = previous.patched(a, b, c, segments);
-        Ok(InstanceProto { inner: std::sync::Arc::new(inner), curves })
+        Ok(InstanceProto { source: None, inner: std::sync::Arc::new(inner), curves })
     })
 }

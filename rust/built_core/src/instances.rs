@@ -387,12 +387,19 @@ impl Proto {
     fn carry(&self, v0: &[[f64; 3]], e1: &[[f64; 3]], e2: &[[f64; 3]], edges: &[[[f64; 3]; 2]])
         -> Option<(Vec<u32>, Vec<Node>, Vec<u32>, Vec<Node>, usize, usize)> {
         const WINDOW: usize = 512;
-        let (n, ne) = (v0.len(), edges.len());
-        let past = |n: usize| 4096 + n / 16;
-        let tri_runs = crate::align::runs_by(self.v0.len(), n, |i, j| {
+        let tri_runs = crate::align::runs_by(self.v0.len(), v0.len(), |i, j| {
             self.v0[i] == v0[j] && self.e1[i] == e1[j] && self.e2[i] == e2[j]
         }, WINDOW, 4)?;
         let edge_runs = crate::align::runs(&self.edges, edges, WINDOW, 4)?;
+        self.carry_runs(v0,e1,e2,edges,&tri_runs,&edge_runs)
+    }
+
+    #[allow(clippy::type_complexity)]
+    fn carry_runs(&self, v0:&[[f64;3]],e1:&[[f64;3]],e2:&[[f64;3]],edges:&[[[f64;3];2]],
+                  tri_runs:&[(usize,usize,usize)],edge_runs:&[(usize,usize,usize)])
+        -> Option<(Vec<u32>,Vec<Node>,Vec<u32>,Vec<Node>,usize,usize)> {
+        let (n, ne) = (v0.len(), edges.len());
+        let past = |n: usize| 4096 + n / 16;
         let new_tris = crate::align::unpaired(&tri_runs, n);
         let new_edges = crate::align::unpaired(&edge_runs, ne);
         if self.grafted + new_tris > past(n) || self.egrafted + new_edges > past(ne) || self.nodes.is_empty() {
@@ -420,6 +427,63 @@ impl Proto {
             (o, nd, self.egrafted + new_edges)
         };
         Some((order, nodes, eorder, enodes, self.grafted + new_tris, egrafted))
+    }
+
+    /// Copy paired runs in bulk; only the unpaired triangles need their
+    /// coordinates widened, or edges their native slot endpoints read.
+    pub(crate) fn patch_spans(
+        &self,
+        patch: &crate::resident::plain_edit::SnapPatch,
+        triangle: impl Fn(usize) -> [[f64; 3]; 3],
+        edge: impl Fn(usize) -> [[f64; 3]; 2],
+    ) -> Self {
+        let (mut v0, mut e1, mut e2) = (
+            Vec::with_capacity(patch.faces),
+            Vec::with_capacity(patch.faces),
+            Vec::with_capacity(patch.faces),
+        );
+        let mut edges = Vec::with_capacity(patch.edges);
+        let mut t = 0;
+        for &(src, dst, len) in &patch.triangles {
+            for i in t..dst {
+                let [a, b, c] = triangle(i);
+                v0.push(a);
+                e1.push(b);
+                e2.push(c);
+            }
+            v0.extend_from_slice(&self.v0[src..src + len]);
+            e1.extend_from_slice(&self.e1[src..src + len]);
+            e2.extend_from_slice(&self.e2[src..src + len]);
+            t = dst + len;
+        }
+        for i in t..patch.faces {
+            let [a, b, c] = triangle(i);
+            v0.push(a);
+            e1.push(b);
+            e2.push(c);
+        }
+        let mut end = 0;
+        for &(src, dst, len) in &patch.segments {
+            edges.extend((end..dst).map(&edge));
+            edges.extend_from_slice(&self.edges[src..src + len]);
+            end = dst + len;
+        }
+        edges.extend((end..patch.edges).map(edge));
+        match self.carry_runs(&v0, &e1, &e2, &edges, &patch.triangles, &patch.segments) {
+            Some((order, nodes, eorder, enodes, grafted, egrafted)) => Self {
+                v0,
+                e1,
+                e2,
+                edges,
+                order,
+                nodes,
+                eorder,
+                enodes,
+                grafted,
+                egrafted,
+            },
+            None => Self::new(v0, e1, e2, edges),
+        }
     }
 
     #[inline]
@@ -1365,6 +1429,49 @@ mod carried_tests {
         // A wholesale change builds afresh.
         let (a, b, c, e) = grid(60, &[], &[]);
         assert_eq!(old.patched(a, b, c, e).grafted, 0);
+    }
+
+    #[test]
+    fn paired_snap_spans_only_read_new_geometry() {
+        let (a, b, c, e) = grid(32, &[], &[]);
+        let old = Proto::new(a, b, c, e);
+        let (a, b, c, e) = grid(32, &[4, 49], &[3, 51]);
+        let patch = crate::resident::plain_edit::SnapPatch {
+            code: 0,
+            before: Some(1),
+            after: 2,
+            revision: 2,
+            lineage: 1,
+            anchor: [0.; 3],
+            faces: a.len(),
+            edges: e.len(),
+            triangles: crate::align::runs_by(
+                old.n_tris(),
+                a.len(),
+                |i, j| old.v0[i] == a[j] && old.e1[i] == b[j] && old.e2[i] == c[j],
+                512,
+                4,
+            )
+            .unwrap(),
+            segments: crate::align::runs(&old.edges, &e, 512, 4).unwrap(),
+        };
+        let reads = std::cell::Cell::new(0);
+        let result = old.patch_spans(
+            &patch,
+            |i| {
+                reads.set(reads.get() + 1);
+                [a[i], b[i], c[i]]
+            },
+            |i| {
+                reads.set(reads.get() + 1);
+                e[i]
+            },
+        );
+        assert!(reads.get() < 32);
+        assert_eq!(
+            (result.v0, result.e1, result.e2, result.edges),
+            (a, b, c, e)
+        );
     }
 
     fn covers(p: &Proto, r: usize, x: f64, y: f64) -> bool {

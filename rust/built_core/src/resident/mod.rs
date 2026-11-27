@@ -13,7 +13,7 @@ mod inference;
 pub mod assemble;
 mod chunk;
 pub mod pack;
-mod plain_edit;
+pub(crate) mod plain_edit;
 pub mod packed_scene;
 pub mod sources;
 pub mod updates;

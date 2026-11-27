@@ -14,9 +14,32 @@ use rayon::prelude::*;
 
 type Obj<'p> = Bound<'p, PyAny>;
 
+static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+fn token() -> u64 {
+    NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+}
+
+/// The snap index can carry forward an unchanged native triangle or
+/// segment only when it consumed the exact preceding resident draw.
+#[pyclass(frozen)]
+pub(crate) struct SnapPatch {
+    pub code: usize,
+    pub before: Option<u64>,
+    pub after: u64,
+    pub lineage: u64,
+    pub revision: u64,
+    pub anchor: [f64; 3],
+    pub faces: usize,
+    pub edges: usize,
+    pub triangles: Vec<(usize, usize, usize)>,
+    pub segments: Vec<(usize, usize, usize)>,
+}
+
 pub(super) struct Layout {
+    token: u64,
     code: usize,
     lineage: u64,
+    revision: u64,
     state: State,
     spans: Vec<(u32, u32)>,
     anchor: [f64; 3],
@@ -407,13 +430,59 @@ pub(super) fn prime(tracker: &Bound<'_, super::updates::InstanceUpdates>) -> PyR
         .extract()?;
     tracker.borrow_mut().plain = Some(Layout {
         code,
+        token: token(),
         lineage: store.inner.lineage,
+        revision: store.inner.revision,
         state: state.clone(),
         spans,
         edges,
         anchor,
     });
     Ok(())
+}
+
+/// Push/Pull suppresses the original face during its preview. These are
+/// the triangle ordinals already drawn by the GPU for the requested keys.
+pub(super) fn face_ranges<'p>(
+    tracker: &Bound<'p, super::updates::InstanceUpdates>,
+    mesh: &Obj<'p>,
+    faces: &Obj<'p>,
+) -> PyResult<Option<Vec<(usize, u32, u32)>>> {
+    let t = tracker.borrow();
+    let Some(l) = &t.plain else { return Ok(None) };
+    let Some(store) = mesh
+        .getattr("__dict__")?
+        .cast::<PyDict>()?
+        .get_item("_store")?
+    else {
+        return Ok(None);
+    };
+    let Ok(store) = store.cast::<PyMeshStore>() else {
+        return Ok(None);
+    };
+    let store = store.borrow();
+    if store.inner.lineage != l.lineage || store.inner.revision != l.revision {
+        return Ok(None);
+    }
+    let variants = tracker
+        .as_any()
+        .getattr("variants")?
+        .cast_into::<PyDict>()?;
+    let Some(codes) = variants.get_item(mesh.as_ptr() as usize)? else {
+        return Ok(None);
+    };
+    if codes.len()? != 1 || !codes.contains(l.code)? {
+        return Ok(None);
+    }
+    let mut ranges = Vec::new();
+    for face in faces.try_iter()? {
+        let key = face?.getattr("key")?.extract()?;
+        if let Some(f) = store.inner.slot(Kind::Face, key) {
+            let (a, b) = l.spans[f as usize];
+            ranges.push((l.code, a / 84, (b - a) / 84));
+        }
+    }
+    Ok(Some(ranges))
 }
 
 pub(super) fn apply<'p>(
@@ -464,7 +533,9 @@ pub(super) fn apply<'p>(
     };
     let layout = Layout {
         code,
+        token: token(),
         lineage: native.lineage,
+        revision: native.revision,
         state: st.clone(),
         spans: result.spans,
         edges: result.edges,
@@ -474,6 +545,49 @@ pub(super) fn apply<'p>(
     let edit = result.edit;
     let total = edit.len / 28;
     let faces = result.faces;
+    let mut snap = SnapPatch {
+        code,
+        before: None,
+        after: layout.token,
+        lineage: layout.lineage,
+        revision: layout.revision,
+        anchor,
+        faces: faces / 3,
+        edges: (total - faces) / 2,
+        triangles: Vec::new(),
+        segments: Vec::new(),
+    };
+    let old_edges: usize = packed
+        .getattr("edge_commands")?
+        .get_item(code)?
+        .get_item("count")?
+        .extract()?;
+    if let Some(old) = previous.filter(|p| {
+        p.lineage == layout.lineage
+            && p.anchor == anchor
+            && p.state.frame == layout.state.frame
+            && p.state.slots[1].live * 2 == old_edges
+    }) {
+        if snap.edges == layout.state.slots[1].live {
+            snap.before = Some(old.token);
+            let old_end = count as usize * 28;
+            let new_end = faces * 28;
+            for &(s, d, n) in &edit.copies {
+                // A run may join the last untouched triangle and first edge.
+                let tri = n.min(new_end.saturating_sub(d));
+                if tri != 0 {
+                    snap.triangles.push((s / 84, d / 84, tri / 84));
+                }
+                if tri < n {
+                    snap.segments.push((
+                        (s + tri - old_end) / 56,
+                        (d + tri - new_end) / 56,
+                        (n - tri) / 56,
+                    ));
+                }
+            }
+        }
+    }
     let bounds = PyArray1::from_slice(py, &result.bounds).call_method1("reshape", (2, 4))?;
     let empty = PyArray1::<u8>::from_vec(py, Vec::new());
     let upload = |vertices: &Obj<'p>, indices: &Obj<'p>| -> PyResult<()> {
@@ -559,6 +673,29 @@ pub(super) fn apply<'p>(
         mesh.as_ptr() as usize,
         (&mesh, mesh.getattr("_mut_serial")?, code),
     )?;
+    packed.setattr("_snap_edit", Bound::new(py, snap)?)?;
     *cache = Some(layout);
     Ok(true)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Edit;
+
+    #[test]
+    fn shifted_spans_and_overwrites_can_be_rolled_back() {
+        let original = b"0123456789";
+        let mut edit = Edit::default();
+        edit.write(b"ab");
+        edit.keep(0, 2);
+        edit.keep(5, 3);
+        edit.write(b"!");
+        edit.keep(9, 1);
+        let undo = edit.reverse(original);
+        let mut out = *original;
+        edit.in_place(&mut out);
+        assert_eq!(&out[..edit.len], b"ab01567!9");
+        undo.in_place(&mut out);
+        assert_eq!(out, *original);
+    }
 }

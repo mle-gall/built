@@ -551,6 +551,10 @@ impl InstanceUpdates {
         slf.as_any().getattr("resident")
     }
 
+    fn face_ranges<'py>(slf: &Bound<'py,Self>, mesh: &Obj<'py>, faces: &Obj<'py>) -> PyResult<Option<Vec<(usize,u32,u32)>>> {
+        super::plain_edit::face_ranges(slf,mesh,faces)
+    }
+
     /// Use History's existing journal callbacks to avoid scanning known edits.
     fn observe<'py>(slf: &Bound<'py, Self>, history: &Obj<'py>) -> PyResult<()> {
         let py = slf.py();
@@ -1325,6 +1329,7 @@ impl InstanceUpdates {
             applied
         } else { false };
         if any_changed && !patched {
+            packed.getattr("__dict__")?.call_method1("pop", ("_snap_edit",py.None()))?;
             // A single bake for the changed set, including shared meshes.
             let group_type = py.import("built_core.group")?.getattr("Group")?;
             let variants = dict(s, "variants")?;
