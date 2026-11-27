@@ -548,7 +548,7 @@ fn tile(t: &str, e: &Item, current: Option<&str>, thumbs: &mut Vec<String>, labe
 pub(crate) fn detail(inp: &Input, e: &Item, thumbs: &mut Vec<String>) -> Vec<Value> {
     let mut out = vec![block("picture", json!({"icon": icon(e, thumbs), "hex": e.hex.clone().unwrap_or_default(),
                                                "size": 180.0}))];
-    if e.key.starts_with("lib:") {
+    if e.key.starts_with("saved:") {
         return saved_detail(inp, e, out);
     }
     let where_ = match e.source.as_str() {
@@ -844,6 +844,38 @@ mod tests {
     fn it(key: &str, name: &str, source: &str, category: &str, uses: i64) -> Item {
         Item { key: key.into(), name: name.into(), source: source.into(), category: category.into(), uses,
                base: Some("colour".into()), ..Default::default() }
+    }
+
+    #[test]
+    fn saved_items_list_under_their_destination() {
+        let mut team = it("saved:styles:a:shared:Team", "Clay", "shared:Team", "Warm", 0);
+        team.source_label = "Team".into();
+        let items = vec![it("m:a", "Alpha", "model", "", 1), it("saved:styles:b:project", "Site", "project", "", 0), team,
+                         it("saved:styles:c:mine", "Mine", "mine", "", 0), it("style:Default", "Default", "bundled", "", 0)];
+        let ids: Vec<String> = scopes(&items).into_iter().map(|s| s.0).collect();
+        assert_eq!(ids, ["model", "recent", "project", "mine", "shared:Team", "bundled"]);
+        let st = Browse::default();
+        let side = side_rows(&items, &st);
+        assert!(side.iter().any(|r| r.0 == "s:shared:Team" && r.1 == "Team" && r.2 == 1));
+        assert!(side.iter().any(|r| r.0 == "c:shared:Team:Warm" && r.2 == 1));
+        assert_eq!(in_scope(&items, "c:shared:Team:Warm", &[]).len(), 1);
+        assert_eq!(scope_title("s:shared:Team"), "Team");
+        assert_eq!(scope_title("s:project"), "This project");
+        assert_eq!(items[2].place(), "Team");
+        assert_eq!(items[4].place(), "Built");
+        // Without project or shared items those rows are not offered.
+        let ids: Vec<String> = scopes(&items[..1]).into_iter().map(|s| s.0).collect();
+        assert_eq!(ids, ["model", "recent", "mine", "bundled"]);
+        // A saved item's details name where it is and what can be done there.
+        let mut saved = items[3].clone();
+        saved.verbs = vec!["apply".into(), "copyto".into(), "moveto".into(), "reveal".into(), "libdelete".into()];
+        let inp = Input { kind: "styles".into(), ..Default::default() };
+        let blocks = detail(&inp, &saved, &mut Vec::new());
+        assert_eq!(blocks[1]["right"], "My library");
+        let ids: Vec<&str> = blocks.last().unwrap()["buttons"].as_array().unwrap().iter().map(|b| b["id"].as_str().unwrap()).collect();
+        assert_eq!(ids, ["copyto", "moveto", "reveal", "libdelete"]);
+        saved.verbs = vec!["apply".into(), "copyto".into()];
+        assert_eq!(detail(&inp, &saved, &mut Vec::new())[1]["right"], "My library · read-only");
     }
 
     #[test]

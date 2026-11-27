@@ -1627,7 +1627,7 @@ impl ProfilesProvider {
             // Drawn profiles open in the Sketch workspace (sketch_workspace.rs).
             let key:String=item.get_item("key")?.extract()?;
             let win=ctx.getattr("win")?;
-            if key.starts_with("lib:") {
+            if key.starts_with("saved:") {
                 let (Some((dest,kind,id)),scene)=(destinations::parse_key(&key),ctx.getattr("scene")?) else {return Ok(())};
                 if let Some(l)=destinations::entries(ctx.py(),Some(&scene),&[kind.as_str()])?.into_iter().find(|l|l.dest.key==dest && l.entry.id==id) {
                     let arg=serde_json::json!({"id":l.entry.id,"rev":l.entry.rev,"data":l.entry.data}).to_string();
@@ -2560,7 +2560,7 @@ impl LibrarySheet {
                 }
                 if ok {
                     st.set_item("type", &arg)?;
-                    st.set_item("scope", if arg == "presets" || arg=="profiles" {"s:bundled"} else if arg == "families" { "s:all" } else { "s:model" })?;
+                    st.set_item("scope", if matches!(arg.as_str(), "presets" | "profiles" | "styles") {"s:bundled"} else if arg == "families" { "s:all" } else { "s:model" })?;
                     st.set_item("cursor", py.None())?;
                     _save_state(&st)?;
                 }

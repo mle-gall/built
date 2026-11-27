@@ -101,7 +101,7 @@ def test_sections_in_two_groups(win):
     labels = [(r.get("kind", ""), r["label"]) for r in side]
     assert labels == [("caption", "Built · this Mac"), ("", "General"), ("", "Navigation"),
                       ("", "Display"), ("", "3D mouse"), ("", "Keyboard"), ("", "AI"), ("", "Blender"),
-                      ("", "Modelling"), ("caption", "This model"), ("", "Units"),
+                      ("", "Modelling"), ("", "Library"), ("caption", "This model"), ("", "Units"),
                       ("", "Project registry"), ("", "Appearance"), ("", "Dimension style"), ("", "Location & north")]
     assert [r["id"] for r in side if r.get("on")] == ["general"]
     assert "theme" not in fields(sheet) and "autosave" in fields(sheet)
@@ -133,7 +133,7 @@ def test_every_section_builds_with_unique_field_ids(win):
         assert sheet["content"]["title"], sid
         ids = [r[0] for b in sheet["content"]["blocks"] if b["kind"] == "fields" for r in b["fields"]]
         assert len(ids) == len(set(ids)), sid
-        if sid != "keyboard" and (sid != "ndof" or sys.platform in {"linux", "win32"}):
+        if sid not in ("keyboard", "library") and (sid != "ndof" or sys.platform in {"linux", "win32"}):
             assert ids, sid
 
 

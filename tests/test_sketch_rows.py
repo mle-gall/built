@@ -206,9 +206,10 @@ def test_a_drawn_profile_sweeps_exactly_like_the_library_one(tmp_path, monkeypat
     # drawing, and the model's own sketch; never a cutter section.
     from types import SimpleNamespace
     choices = ProfilesProvider().items(SimpleNamespace(scene=scene))
-    local, = [i for i in choices if i["source"] == "local"]
+    # The saved drawing: from the older folder, or My library once migrated.
+    local, = [i for i in choices if i["source"] in ("local", "mine")]
     assert local["name"] == "Timber 45 x 145"
-    project, = [i for i in choices if i["source"] == "project"]
+    project, = [i for i in choices if i["source"] == "model"]
     assert project["key"] == "sketch:" + drawn["uid"]
     assert not [i for i in choices if i["name"] == "Notch"]
     apply(h, "create_sweeps", sweeps=[member(dict(drawing=local["sketch"]), path)])

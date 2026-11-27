@@ -304,7 +304,8 @@ def test_library_lists_saved_profiles_and_filters_cutter_sections(tmp_path, monk
             "format": "built.profile", "v": 1, "name": name, "use": usage, "sketch": drawing,
         }))
     items = provider.items(None)
-    local, = [entry for entry in items if entry["source"] == "local"]
+    # From the older folder, or My library once migrated; never the section.
+    local, = [entry for entry in items if entry["source"] in ("local", "mine")]
     assert local["name"] == "Round section"
     s = Scene()
     apply(History(s), "create_sweeps", sweeps=[dict(spec(""), profile={"drawing": local["sketch"]})])

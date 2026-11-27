@@ -187,7 +187,7 @@ pub(crate) fn ensure_migrated(py: Python<'_>) -> PyResult<Option<usize>> {
     });
     match result {
         Ok(n) => {
-            if n.is_some() {
+            if n.is_some_and(|n| n > 0) {
                 changed();
             }
             Ok(n)
@@ -246,15 +246,15 @@ fn find(py: Python<'_>, scene: Option<&Bound<'_, PyAny>>, dest_key: &str, kind: 
     Ok(entries(py, scene, &[kind])?.into_iter().find(|l| l.dest.key == dest_key && l.entry.id == id))
 }
 
-/// A saved item's browser key: `lib:<kind>:<id>:<destination>` (kinds and
+/// A saved item's browser key: `saved:<kind>:<id>:<destination>` (kinds and
 /// ids have no colon; a shared library's name may).
 pub(crate) fn item_key(dest: &str, kind: &str, id: &str) -> String {
-    format!("lib:{kind}:{id}:{dest}")
+    format!("saved:{kind}:{id}:{dest}")
 }
 
 /// (destination, kind, id) of a saved item's browser key.
 pub(crate) fn parse_key(key: &str) -> Option<(String, String, String)> {
-    let (kind, rest) = key.strip_prefix("lib:")?.split_once(':')?;
+    let (kind, rest) = key.strip_prefix("saved:")?.split_once(':')?;
     let (id, dest) = rest.split_once(':')?;
     Some((dest.to_owned(), kind.to_owned(), id.to_owned()))
 }
@@ -377,9 +377,14 @@ pub(crate) fn items(py: Python<'_>, scene: Option<&Bound<'_, PyAny>>, kinds: &[&
                 p["name"] = json!(e.name);
                 row["preset"] = p;
                 row["category"] = json!(e.data["pack"].as_str().unwrap_or(""));
-                if !matches!(e.data["primitive"].as_str(), Some("sweep" | "cut")) {
-                    row["verbs"] = json!(verbs.iter().filter(|v| **v != "apply").collect::<Vec<_>>());
+                let mut v = verbs.clone();
+                if !matches!(e.data["primitive"].as_str(), Some("sweep" | "cut" | "repeat")) {
+                    v.retain(|x| *x != "apply");
                 }
+                if writable {
+                    v.insert(v.iter().position(|x| *x == "libedit").unwrap_or(v.len()), "edit");
+                }
+                row["verbs"] = json!(v);
             }
             "styles" => {
                 row["hex"] = json!(hex_of(&e.data["face_color"]));
@@ -596,6 +601,19 @@ fn save_item(win: &Bound<'_, PyAny>, kind: &str, destination: &str, name: &str, 
     e.tags = tags.unwrap_or_default();
     save(py, win, destination, e.clone(), None, files.unwrap_or_default())?;
     Ok(id)
+}
+
+/// Save a changed payload over a saved item where it is (a new revision,
+/// its description and tags kept).
+pub(crate) fn resave(win: &Bound<'_, PyAny>, key: &str, name: &str, data: Value) -> PyResult<String> {
+    let py = win.py();
+    let (dest, kind, id) = parse_key(key).ok_or_else(|| err("Not a saved Library item"))?;
+    let scene = win.getattr("viewport")?.getattr("scene")?;
+    let old = find(py, Some(&scene), &dest, &kind, &id)?.ok_or_else(|| err("The item is no longer there"))?;
+    let mut e = old.entry.clone();
+    e.name = name.to_owned();
+    e.data = data;
+    save(py, win, &dest, e, None, Vec::new())
 }
 
 /// A component's "This model": its definition, kept when unused.
@@ -826,6 +844,11 @@ fn listed_of(py: Python<'_>, ctx: &Bound<'_, PyAny>, item: &Bound<'_, PyAny>) ->
 pub(crate) fn run(ctx: &Bound<'_, PyAny>, verb: &str, item: &Bound<'_, PyAny>) -> PyResult<bool> {
     let py = ctx.py();
     if !item.contains("lib")? || !matches!(verb, "apply" | "copyto" | "moveto" | "update" | "reveal" | "libdelete" | "libedit") {
+        return Ok(false);
+    }
+    // A preset is used as the Presets tab uses any preset (a Repeat applies
+    // to the selected Repeat).
+    if verb == "apply" && item.contains("preset")? {
         return Ok(false);
     }
     let Some(l) = listed_of(py, ctx, item)? else {
