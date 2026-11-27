@@ -645,3 +645,7 @@ walls with a door) is the acceptance test for lanes 1–5 together.
 | Q4 | Default IFC body for cut members: exact CSG (`IfcBooleanClippingResult`, profile defs) or tessellated? | **Exact by default** in the IFC4 profile, tessellated in Reference View profiles, with the fallback reason in the export report. |
 | Q5 | Walls drawn before: convert hosted-opening walls to Wall-preset sweeps on open? | **Yes, in memory on open**, written in the new form at the next save (files are never rewritten on open). Walls the converter cannot read as a rectangle sweep stay as today with their openings. |
 | Q6 | DWG import into the Sketch workspace? | **Yes, through the existing LibreDWG bridge** (`dwg_bridge.rs`: DWG to DXF, then the DXF path), with the same cleaning list; no new reader. |
+
+## Owner decisions (2026-11-27)
+
+All six open questions accepted as recommended: recipes stay optional extension data with a content stamp (stale → Re-evaluate or Release); generated geometry keeps ids by role, including when a role returns; Repeat copies are adaptive automatically when the source is anchored, identical otherwise, with an inspector switch; cut members export as exact IFC4 solids (meshes only for Reference View, fallback reasons in the export report); existing hosted walls convert to Wall-preset sweeps on open and save in the new form; DWG enters the Sketch workspace through the LibreDWG bridge.
