@@ -11,7 +11,6 @@ pub fn expand(
     for (prototype, row) in cmd.chunks_exact_mut(20).skip(prototypes).enumerate() {
         let face: crate::Command =
             bytemuck::pod_read_unaligned(&commands[prototype * 20..prototype * 20 + 20]);
-        let mut sides = adjacency(vertices, indices, face);
         let mut c: crate::Command = bytemuck::pod_read_unaligned(row);
         if c.count % 2 != 0 {
             return Err("edge command must contain endpoint pairs");
@@ -23,32 +22,53 @@ pub fn expand(
             vertices[start..start + 12].try_into().unwrap()
         };
         let span = &indices[c.first as usize * 4..(c.first + c.count) as usize * 4];
-        let mut pairs: Vec<([u8; 12], [u8; 12], bool)> = Vec::with_capacity(span.len() / 8);
-        for pair in span.chunks_exact(8) {
-            let (a, b) = (endpoint(pair, 0), endpoint(pair, 4));
-            sides.mark_hard(&key(&a, &b));
-            pairs.push((a, b, false));
-        }
-        let hard_count = pairs.len();
+        let hard: Vec<([u8; 12], [u8; 12])> =
+            span.chunks_exact(8).map(|pair| (endpoint(pair, 0), endpoint(pair, 4))).collect();
+        // The hard edges are marked, and their entries found, on the shard
+        // threads: one lookup each instead of two on this one.
+        let (sides, at) = adjacency(vertices, indices, face, &hard);
+        let hard_count = hard.len();
         // Soft and profile candidates in the order the triangles met them.
+        let mut soft: Vec<(&[u8; 24], [[f32; 3]; 2])> = Vec::new();
         for (k, n, hard) in sides.entries() {
             if n[0] != [0.; 3] && !hard
                 && (n[1] == [0.; 3] || glam::Vec3::from(n[0]).dot(glam::Vec3::from(n[1])) < 0.99999)
             {
-                pairs.push((k[..12].try_into().unwrap(), k[12..].try_into().unwrap(), true));
+                soft.push((k, *n));
             }
         }
-        let count = pairs.len();
-        v.reserve(count * 48);
-        for (a, b, soft) in pairs {
-            v.extend_from_slice(&a);
-            v.extend_from_slice(&b);
-            let normals = sides.normals(&key(&a, &b));
-            // A power-of-two normal scale encodes the profile-only flag without
-            // quantization. Decoding by 0.5 restores the original float bits.
+        let count = hard_count + soft.len();
+        let start = v.len();
+        v.resize(start + count * 48, 0);
+        // A power-of-two normal scale encodes the profile-only flag without
+        // quantization. Decoding by 0.5 restores the original float bits.
+        let record = |out: &mut [u8], a: &[u8], b: &[u8], normals: [[f32; 3]; 2], soft: bool| {
+            out[..12].copy_from_slice(a);
+            out[12..24].copy_from_slice(b);
             let n0 = normals[0].map(|x| if soft { x * 2. } else { x });
-            v.extend_from_slice(bytemuck::cast_slice(&n0));
-            v.extend_from_slice(bytemuck::cast_slice(&normals[1]));
+            out[24..36].copy_from_slice(bytemuck::cast_slice(&n0));
+            out[36..48].copy_from_slice(bytemuck::cast_slice(&normals[1]));
+        };
+        let (hard_out, soft_out) = v[start..].split_at_mut(hard_count * 48);
+        let write_hard = |out: &mut [u8], from: usize| {
+            for (j, rec) in out.chunks_exact_mut(48).enumerate() {
+                let (a, b) = &hard[from + j];
+                record(rec, a, b, sides.at(at[from + j]), false);
+            }
+        };
+        if hard_count >= 1 << 16 {
+            let per = hard_count.div_ceil(8);
+            std::thread::scope(|scope| {
+                for (k, out) in hard_out.chunks_mut(per * 48).enumerate() {
+                    let write_hard = &write_hard;
+                    scope.spawn(move || write_hard(out, k * per));
+                }
+            });
+        } else {
+            write_hard(hard_out, 0);
+        }
+        for (rec, (k, n)) in soft_out.chunks_exact_mut(48).zip(&soft) {
+            record(rec, &k[..12], &k[12..], *n, true);
         }
         c.first = u32::try_from(first * 6).map_err(|_| "edge buffer too large")?;
         c.count = u32::try_from(count * 6).map_err(|_| "edge buffer too large")?;
@@ -135,7 +155,7 @@ pub(crate) fn key(a: &[u8], b: &[u8]) -> [u8; 24] {
 /// A position key as three words: hashed and compared without a length
 /// prefix or a byte loop.
 #[derive(Clone, Copy, PartialEq, Eq)]
-struct Words([u64; 3]);
+pub(crate) struct Words(pub(crate) [u64; 3]);
 impl std::hash::Hash for Words {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         for word in self.0 {
@@ -143,7 +163,7 @@ impl std::hash::Hash for Words {
         }
     }
 }
-fn words(k: &[u8; 24]) -> Words {
+pub(crate) fn words(k: &[u8; 24]) -> Words {
     Words(std::array::from_fn(|i| u64::from_le_bytes(k[i * 8..i * 8 + 8].try_into().unwrap())))
 }
 
@@ -159,41 +179,40 @@ struct Shard {
     lookup: FastMap<Words, u32>,
     entries: Vec<([u8; 24], [[f32; 3]; 2], bool)>,
 }
-fn shard_of(k: &Words, shards: usize) -> usize {
+pub(crate) fn shard_of(k: &Words, shards: usize) -> usize {
     if shards == 1 {
         return 0;
     }
     let mixed = (k.0[0] ^ k.0[1].rotate_left(17) ^ k.0[2].rotate_left(31)).wrapping_mul(0x9e37_79b9_7f4a_7c15);
     ((mixed >> 40) as usize) % shards
 }
+/// No entry: an edge no triangle has.
+const NO_ENTRY: u64 = u64::MAX;
 impl Sides {
-    fn find(&self, k: &[u8; 24]) -> Option<(usize, usize)> {
-        let w = words(k);
-        let shard = shard_of(&w, self.shards.len());
-        self.shards[shard].lookup.get(&w).map(|&at| (shard, at as usize))
-    }
-    fn mark_hard(&mut self, k: &[u8; 24]) {
-        if let Some((shard, at)) = self.find(k) {
-            self.shards[shard].entries[at].2 = true;
+    /// The normals of the entry `at` (from `adjacency`'s hard list).
+    fn at(&self, at: u64) -> [[f32; 3]; 2] {
+        if at == NO_ENTRY {
+            return [[0.; 3]; 2];
         }
-    }
-    fn normals(&self, k: &[u8; 24]) -> [[f32; 3]; 2] {
-        self.find(k).map_or([[0.; 3]; 2], |(shard, at)| self.shards[shard].entries[at].1)
+        self.shards[(at >> 32) as usize].entries[at as u32 as usize].1
     }
     fn entries(&self) -> impl Iterator<Item = &([u8; 24], [[f32; 3]; 2], bool)> {
         self.shards.iter().flat_map(|shard| shard.entries.iter())
     }
 }
-fn adjacency(vertices: &[u8], indices: &[u8], c: crate::Command) -> Sides {
+/// The sides of the face triangles, with each of `hard`'s edges marked
+/// and its entry (`Sides::at`) in order.
+fn adjacency(vertices: &[u8], indices: &[u8], c: crate::Command, hard: &[([u8; 12], [u8; 12])]) -> (Sides, Vec<u64>) {
     let triangles = (c.count / 3) as usize;
-    let shards = if triangles >= 1 << 16 {
+    let shards = if triangles + hard.len() / 2 >= 1 << 16 {
         std::thread::available_parallelism().map_or(1, |n| n.get()).clamp(1, 8)
     } else {
         1
     };
-    adjacency_in(vertices, indices, c, shards)
+    adjacency_in(vertices, indices, c, hard, shards)
 }
-fn adjacency_in(vertices: &[u8], indices: &[u8], c: crate::Command, shards: usize) -> Sides {
+fn adjacency_in(vertices: &[u8], indices: &[u8], c: crate::Command, hard: &[([u8; 12], [u8; 12])],
+                shards: usize) -> (Sides, Vec<u64>) {
     let span = &indices[c.first as usize * 4..(c.first + c.count) as usize * 4];
     let triangles = span.len() / 12;
     let corner = |tri: &[u8], i: usize| -> [u8; 12] {
@@ -201,7 +220,7 @@ fn adjacency_in(vertices: &[u8], indices: &[u8], c: crate::Command, shards: usiz
         let offset = (i64::from(index) + i64::from(c.base)) as usize * 28;
         vertices[offset..offset + 12].try_into().unwrap()
     };
-    let build = |shard: usize| -> Shard {
+    let build = |shard: usize| -> (Shard, Vec<(u32, u32)>) {
         let mut own = Shard {
             lookup: FastMap::with_capacity_and_hasher(triangles * 2 / shards + 16, Default::default()),
             entries: Vec::with_capacity(triangles * 2 / shards + 16),
@@ -231,16 +250,36 @@ fn adjacency_in(vertices: &[u8], indices: &[u8], c: crate::Command, shards: usiz
                 }
             }
         }
-        own
+        let mut found = Vec::new();
+        for (i, (a, b)) in hard.iter().enumerate() {
+            let w = words(&key(a, b));
+            if shard_of(&w, shards) != shard {
+                continue;
+            }
+            if let Some(&at) = own.lookup.get(&w) {
+                own.entries[at as usize].2 = true;
+                found.push((i as u32, at));
+            }
+        }
+        (own, found)
     };
-    if shards == 1 {
-        return Sides { shards: vec![build(0)] };
+    let built: Vec<(Shard, Vec<(u32, u32)>)> = if shards == 1 {
+        vec![build(0)]
+    } else {
+        std::thread::scope(|scope| {
+            let handles: Vec<_> = (0..shards).map(|shard| scope.spawn(move || build(shard))).collect();
+            handles.into_iter().map(|h| h.join().expect("an edge shard")).collect()
+        })
+    };
+    let mut at = vec![NO_ENTRY; hard.len()];
+    let mut out = Vec::with_capacity(built.len());
+    for (shard, (own, found)) in built.into_iter().enumerate() {
+        for (i, entry) in found {
+            at[i as usize] = (shard as u64) << 32 | u64::from(entry);
+        }
+        out.push(own);
     }
-    let built = std::thread::scope(|scope| {
-        let handles: Vec<_> = (0..shards).map(|shard| scope.spawn(move || build(shard))).collect();
-        handles.into_iter().map(|h| h.join().expect("an edge shard")).collect()
-    });
-    Sides { shards: built }
+    (Sides { shards: out }, at)
 }
 #[cfg(test)]
 fn silhouette(a: f32, b: f32, boundary: bool) -> bool {
@@ -431,16 +470,26 @@ mod shard_tests {
         }
         let indices: Vec<u8> = bytemuck::cast_slice(&indices).to_vec();
         let c = crate::Command { count: (indices.len() / 4) as u32, instances: 0, first: 0, base: 0, start: 0 };
-        let one = super::adjacency_in(&vertices, &indices, c, 1);
-        let many = super::adjacency_in(&vertices, &indices, c, 5);
-        let mut a: Vec<_> = one.entries().map(|e| (e.0, e.1.map(|n| n.map(f32::to_bits)))).collect();
-        let mut b: Vec<_> = many.entries().map(|e| (e.0, e.1.map(|n| n.map(f32::to_bits)))).collect();
+        // Every quad's first side as a hard edge, and one edge on no triangle.
+        let point = |v: usize| -> [u8; 12] { vertices[v * 28..v * 28 + 12].try_into().unwrap() };
+        let mut hard: Vec<_> = (0..vertices.len() / 28).step_by(4).map(|v| (point(v), point(v + 1))).collect();
+        hard.push(([1; 12], [2; 12]));
+        let (one, one_at) = super::adjacency_in(&vertices, &indices, c, &hard, 1);
+        let (many, many_at) = super::adjacency_in(&vertices, &indices, c, &hard, 5);
+        let mut a: Vec<_> = one.entries().map(|e| (e.0, e.1.map(|n| n.map(f32::to_bits)), e.2)).collect();
+        let mut b: Vec<_> = many.entries().map(|e| (e.0, e.1.map(|n| n.map(f32::to_bits)), e.2)).collect();
         assert!(a.len() > 100_000);
+        assert_eq!(a.iter().filter(|e| e.2).count(), hard.len() - 1);
         a.sort();
         b.sort();
         assert_eq!(a, b);
-        for entry in one.entries().take(1000) {
-            assert_eq!(many.normals(&entry.0), entry.1);
+        assert_eq!(*many_at.last().unwrap(), super::NO_ENTRY);
+        for (i, (x, y)) in hard.iter().enumerate() {
+            assert_eq!(one.at(one_at[i]), many.at(many_at[i]));
+            if i + 1 < hard.len() {
+                let k = super::key(x, y);
+                assert_eq!(one.entries().find(|e| e.0 == k).unwrap().1, many.at(many_at[i]));
+            }
         }
     }
 }
