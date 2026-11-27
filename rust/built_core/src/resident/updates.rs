@@ -1358,6 +1358,9 @@ impl InstanceUpdates {
             kw.set_item("hidden_tags", s.getattr("_hidden_tags")?)?;
             // Each prototype in the frame it is drawn in (its rows say so).
             kw.set_item("previous_pack", &packed)?;
+            // This staging pack supplies material rows and texture keys. The
+            // resident atlas is decoded below only when the key list grows.
+            kw.set_item("texture_images", false)?;
             let baked = core(py)?.getattr("pack_scene")?.call((stage,), Some(&kw))?;
             if let (Some(used), Some(added)) = (packed.getattr_opt("_element_tags")?, baked.getattr_opt("_element_tags")?) {
                 used.call_method1("update", (added,))?;

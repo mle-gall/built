@@ -576,7 +576,8 @@ pub(super) fn painted_face_ranges<'p>(
         let r = st.frings.get(f as usize);
         if r.n_rings != 1 { return Ok(None); }
         let size = *st.ring_sizes.get(r.ring_start as usize);
-        let Some(count) = size.checked_sub(2) else { return Ok(None) };
+        if !(3..=4).contains(&size) { return Ok(None); }
+        let count = size - 2;
         if wanted.contains(&f) { spans.push((first, count)); }
         let Some(end) = first.checked_add(count) else { return Ok(None) };
         first = end;
@@ -584,6 +585,8 @@ pub(super) fn painted_face_ranges<'p>(
     let mut result = Vec::new();
     for code in codes.try_iter()? {
         let code: usize = code?.extract()?;
+        let variant = codes.get_item(code)?;
+        if variant.get_item(0)?.is_truthy()? || variant.get_item(1)?.is_truthy()? { return Ok(None); }
         if commands.get_item(code)?.get_item("count")?.extract::<usize>()? != first as usize * 3 { return Ok(None); }
         result.extend(spans.iter().map(|&(a,n)| (code,a,n)));
     }

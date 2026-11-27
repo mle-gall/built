@@ -1844,43 +1844,46 @@ impl Renderer {
                 return Err(PyValueError::new_err("profile exclusions need a valid prototype and finite endpoint pairs"));
             }
         }
-        let mut touched = Vec::new();
+        let mut commands_changed = false;
         for (prototype, endpoints) in pairs {
-            let keys: std::collections::HashSet<_> = endpoints.chunks_exact(6).map(|p| edges::key(bytemuck::cast_slice(&p[..3]), bytemuck::cast_slice(&p[3..]))).collect();
-            let offset = (s.p as usize+prototype)*20;
-            let command: [u32;5] = bytemuck::pod_read_unaligned(&s.template_data[offset..offset+20]);
-            let range = (command[2]/6) as usize*48..((command[2]+command[0])/6) as usize*48;
-            let mut hard = Vec::new(); let mut soft = Vec::new();
-            for record in s.edge_data[range.clone()].chunks_exact(48) {
-                let mut edge = record.to_vec();
-                let n = glam::Vec3::from_array(bytemuck::pod_read_unaligned::<[f32;3]>(&edge[24..36]));
-                let candidate = n.length_squared()>2. || keys.contains(&edges::key(&edge[..12],&edge[12..24]));
-                if candidate {
-                    if n.length_squared()<=2. { edge[24..36].copy_from_slice(bytemuck::cast_slice(&(n*2.).to_array())); }
-                    soft.extend(edge);
-                } else { hard.extend(edge); }
+            let keys: std::collections::HashSet<_> = endpoints.chunks_exact(6)
+                .map(|p| edges::key(bytemuck::cast_slice(&p[..3]), bytemuck::cast_slice(&p[3..])))
+                .collect();
+            let offset = (s.p as usize + prototype) * 20;
+            let command: [u32; 5] = bytemuck::pod_read_unaligned(&s.template_data[offset..offset + 20]);
+            let range = (command[2] / 6) as usize * 48..((command[2] + command[0]) / 6) as usize * 48;
+            let records = &s.edge_data[range.clone()];
+            let mut sorted = Vec::with_capacity(records.len());
+            let mut soft = Vec::new();
+            for record in records.chunks_exact(48) {
+                let n = glam::Vec3::from_array(bytemuck::pod_read_unaligned::<[f32; 3]>(&record[24..36]));
+                if n.length_squared() > 2. {
+                    soft.extend_from_slice(record);
+                } else if keys.contains(&edges::key(&record[..12], &record[12..24])) {
+                    soft.extend_from_slice(&record[..24]);
+                    soft.extend_from_slice(bytemuck::cast_slice(&(n * 2.).to_array()));
+                    soft.extend_from_slice(&record[36..]);
+                } else {
+                    sorted.extend_from_slice(record);
+                }
             }
-            let count = (hard.len()/48*6) as u32;
-            hard.extend(soft);
-            if s.edge_data[range.clone()] != hard {
-                // Exclusion sorting changes the physical record order.
-                // The next replacement must restore the entire edge range.
+            let count = (sorted.len() / 48 * 6) as u32;
+            sorted.extend_from_slice(&soft);
+            if records != sorted {
+                // The edge memo addresses records in their original order.
                 s.edge_memos.retain(|m| m.0 != prototype);
-                s.edge_data[range.clone()].copy_from_slice(&hard);
+                self.queue.write_buffer(&s.edge_records, range.start as u64, &sorted);
+                s.edge_data[range].copy_from_slice(&sorted);
             }
-            s.template_data[offset+16..offset+20].copy_from_slice(&count.to_le_bytes());
-            touched.push(range);
-        }
-        let bytes: usize = touched.iter().map(|r| r.len()).sum();
-        if bytes*2 > s.edge_data.len() {
-            self.queue.write_buffer(&s.edge_records, 0, &s.edge_data);
-        } else {
-            for range in touched.into_iter().filter(|r| !r.is_empty()) {
-                self.queue.write_buffer(&s.edge_records, range.start as u64, &s.edge_data[range]);
+            if count != command[4] {
+                commands_changed = true;
+                s.template_data[offset + 16..offset + 20].copy_from_slice(&count.to_le_bytes());
             }
         }
-        self.queue.write_buffer(&s.template, 0, &gpu_commands(&s.template_data, s.p as usize, false));
-        self.queue.write_buffer(&s.hard_template, 0, &gpu_commands(&s.template_data, s.p as usize, true));
+        if commands_changed {
+            self.queue.write_buffer(&s.template, 0, &gpu_commands(&s.template_data, s.p as usize, false));
+            self.queue.write_buffer(&s.hard_template, 0, &gpu_commands(&s.template_data, s.p as usize, true));
+        }
         Ok(())
     }
     /// Per-prototype hidden COMMAND rows and original vertex/index streams.

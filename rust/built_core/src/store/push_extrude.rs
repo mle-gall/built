@@ -325,11 +325,12 @@ impl Store {
         if !preview {
             let orient = !sheet
                 || self.push_closed()
-                || self
-                    .live_slots(Kind::Face)
-                    .into_iter()
-                    .find(|&f| self.touched_face(f, &seed_set))
-                    .is_some_and(|f| self.push_component_closed(f));
+                || {
+                    let vertices = self.push_seed_vertices(&seed_set);
+                    self.live_slots(Kind::Face).into_iter()
+                        .find(|&f| self.touches_push_vertex(f, &vertices))
+                        .is_some_and(|f| self.push_component_closed(f))
+                };
             if orient {
                 result.flipped = self.orient_push(&seed_set, h, compensated);
             }
