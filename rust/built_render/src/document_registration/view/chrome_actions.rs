@@ -748,7 +748,14 @@ fn command_action<'py>(a: &Args<'py>) -> Reply<'py> {
                     if verb == "cmdrun" {
                         let tool=win.getattr("_tools")?.get_item(if cut {"cut"} else {"sweep"})?;
                         let machine=tool.getattr("_machine")?;
-                        if let Ok(preset)=action.get_item("preset"){
+                        if let Ok(source)=action.get_item("source_command"){
+                            // Other sources: draw or import a profile, or pick a face.
+                            match source.extract::<String>()?.as_str(){
+                                "draw"=>{crate::sketch_workspace::enter(&win,"sweep","")?;}
+                                "import"=>{render(py)?.getattr("shell_files")?.call_method1("command",(&win,"import:sweep_sketch"))?;}
+                                _=>{win.call_method1("notify",("info",crate::settings_rows::tr(py,"Alt-click a face in the model: its outline becomes the profile")?))?;}
+                            }
+                        }else if let Ok(preset)=action.get_item("preset"){
                             machine.call_method1("set",("preset",preset))?;
                             py.import("built_render.wgpu_library")?.call_method1("_remember",(&view,action.get_item("key")?))?;
                         }else if let Ok(sketch)=action.get_item("sketch"){
@@ -818,6 +825,11 @@ pub(super) fn command_query<'py>(a: &Args<'py>) -> Reply<'py> {
                 results.append((name,family,class,true))?;
                 actions.append(profile)?;
             }
+        }
+        // The bottom rows: where else a profile comes from (pass-5 picker).
+        for (id,label,key) in [("face","Pick a face in the model","Alt-click"),("draw","Draw a profile…","D"),("import","Import DXF, DWG, SVG…","")]{
+            results.append((label,"Other sources",key,true))?;
+            actions.append(fields!(py;"source_command"=>id))?;
         }
         }
         view.setattr("_ui_cmd_hits",actions)?;

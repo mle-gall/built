@@ -258,6 +258,7 @@ Generated from the fixture (`(system …)` rows are AppKit's own).
 | File ▸ Import | Survey Points (UTM CSV)… | `import:survey_points` |  |
 | File ▸ Import | Orthomosaic (GeoTIFF)… | `import:orthomosaic` |  |
 | File ▸ Import | Image (PNG / JPG)… | `import:image` |  |
+| File ▸ Import | Drawing into a Sketch (.dxf, .svg, .dwg)… | `import:sketch` |  |
 | File | Link a Document… | `link` |  |
 | File | Reload Linked Files | `reload_links` |  |
 | File | Export ▸ |  |  |
@@ -395,6 +396,8 @@ Generated from the fixture (`(system …)` rows are AppKit's own).
 | Draw ▸ Arcs | 3-Point Arc | `tool:arc3` |  |
 | Draw ▸ Arcs | Center Arc | `tool:center_arc` |  |
 | Draw ▸ Arcs | Pie | `tool:pie` |  |
+| Draw | New Profile… | `sketch:new` |  |
+| Draw | New Section… | `sketch:new:section` |  |
 | Tools | Select | `tool:select` |  |
 | Tools | Eraser | `tool:eraser` |  |
 | Tools | Paint | `tool:paint` |  |

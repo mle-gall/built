@@ -347,7 +347,13 @@ def test_saved_sections_stay_out_of_the_sweep_pickers(win):
     frame(win)
     act(win, "side", "s:mine")
     labels = {t["label"] for t in tiles(frame(win))}
-    assert {"Notch", "Cutter"} <= labels
+    assert "Notch" in labels and "Cutter" not in labels
+    # Saved sections have their own tab (Library › Sections).
+    L.open_library(win, "sections")
+    frame(win)
+    act(win, "side", "s:mine")
+    labels = {t["label"] for t in tiles(frame(win))}
+    assert "Cutter" in labels and "Notch" not in labels
 
 
 def test_settings_library_pane_sets_folders_and_shared_libraries(win, tmp_path, monkeypatch):

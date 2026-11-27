@@ -105,6 +105,8 @@ fn build_entries() -> Vec<MenuEntry> {
     add("import:obj", "File ▸ Import", "Wavefront OBJ (.obj)…", "", Window("_on_import_obj"));
     add("import:step", "File ▸ Import", "STEP (.step, .stp)…", "", Window("_on_import_step"));
     add("import:stl", "File ▸ Import", "STL (.stl)…", "", Window("_on_import_stl"));
+    // A drawing into a new sketch (Sketch workspace, clean-up list).
+    add("import:sketch", "File ▸ Import", "Drawing into a Sketch (.dxf, .svg, .dwg)…", "", Shell);
     for (id, label, method) in [
         ("import:photomesh", "Photogrammetric Mesh (WebODM)…", "_on_import_photomesh"),
         ("import:alignment", "Georeference (KML / GeoJSON)…", "_on_import_georef"),
@@ -273,6 +275,9 @@ fn build_entries() -> Vec<MenuEntry> {
         add(id, path, label, "", Window(method));
     }
     add("tool:change_axes", "Tools", "Axes", "Shift+X", Tool("change_axes"));
+    // The Sketch workspace on a blank profile or cutter section.
+    add("sketch:new", "Draw", "New Profile…", "", Shell);
+    add("sketch:new:section", "Draw", "New Section…", "", Shell);
     add("plugins_folder", "Extensions", "Open Extensions Folder", "", Handler::PluginsFolder);
     add("develop_plugin", "Extensions", "Develop an Extension…", "",
         Handler::Web("https://github.com/mle-gall/built/blob/main/docs/plugins.md"));

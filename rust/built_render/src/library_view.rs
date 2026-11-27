@@ -158,13 +158,14 @@ pub const REVEAL: &str = "Show in folder";
 
 
 /// What differs per resource type: (id, apply label, empty text).
-const TYPES: [(&str, &str, &str); 6] = [
+const TYPES: [(&str, &str, &str); 7] = [
     ("styles", "Use this style", "Save a style from the Display panel: Save style…"),
     ("presets","Use in Sweep","No presets in this collection."),
     ("materials", "Paint with it", "No materials yet."),
     ("components", "Place a copy", "No components yet."),
     ("families", "Place type", "Import a collection folder to browse its family types."),
     ("profiles", "Use in Sweep", "No profiles in this collection."),
+    ("sections", "Edit drawing", "No sections yet: New section… draws one."),
 ];
 
 fn kind(t: &str) -> (&'static str, &'static str, &'static str) {
@@ -175,7 +176,7 @@ fn kind(t: &str) -> (&'static str, &'static str, &'static str) {
 pub fn verbs_of(t: &str) -> Vec<(String, String)> {
     let apply = kind(t).1;
     let mut out: Vec<(String, String)> = VERBS.iter().filter(|v| v.0 != "-")
-        .map(|(k, v)| (k.to_string(), if *k == "apply" { apply } else { v }.to_string())).collect();
+        .map(|(k, v)| (k.to_string(), if *k == "apply" { apply } else if *k == "edit" && matches!(t, "profiles" | "sections") { "Edit drawing" } else { v }.to_string())).collect();
     if t == "materials" {
         out.push(("name".into(), "Name these colours".into()));
     }
@@ -569,6 +570,14 @@ pub(crate) fn detail(inp: &Input, e: &Item, thumbs: &mut Vec<String>) -> Vec<Val
     if inp.kind=="profiles" {
         out.push(block("buttons",json!({"buttons":[verb("apply","Use in Sweep","↩",PRIMARY)],"align":"fill"})));
         out.push(block("kv",json!({"rows":e.defaults})));
+        if e.verbs.iter().any(|v|v=="edit") {
+            out.push(block("buttons",json!({"buttons":[verb("edit","Edit drawing","",0)]})));
+        }
+        return out;
+    }
+    if inp.kind=="sections" {
+        out.push(block("buttons",json!({"buttons":[verb("apply","Edit drawing","↩",PRIMARY)],"align":"fill"})));
+        out.push(block("kv",json!({"rows":e.defaults})));
         return out;
     }
     if inp.kind == "families" {
@@ -738,7 +747,7 @@ pub(crate) fn sheet_rows(inp: &Input, mut native: Option<&mut RowGroups>) -> Val
         let n = in_scope(&inp.items, &scope, &st.recent).len();
         let where_ = if scope.starts_with("c:bundled") { "Bundled" } else { "" };
         let sub = [where_.to_owned(), n.to_string()].into_iter().filter(|x| !x.is_empty()).collect::<Vec<_>>().join(" · ");
-        json!({"title": scope_title(&scope), "sub": sub, "empty": if t == "families" { kind(t).2.into() } else { empty_text(t, &scope) }})
+        json!({"title": scope_title(&scope), "sub": sub, "empty": if matches!(t, "families" | "sections") { kind(t).2.into() } else { empty_text(t, &scope) }})
     };
     let current = inp.current.as_deref();
     let labels = verbs_of(t).into_iter().collect();

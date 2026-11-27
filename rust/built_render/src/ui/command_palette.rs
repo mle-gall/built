@@ -49,6 +49,7 @@ impl Ui {
     }
 
     /// ⌘K / F3: every command of the window by name, at the top of the model.
+    /// (The Sweep picker's own rows below the list carry `OTHER_SOURCES`.)
     pub(super) fn command_palette(&mut self, ctx: &egui::Context, screen: Rect) {
         if !self.cmd_open {
             return;
@@ -103,7 +104,14 @@ impl Ui {
                         }
                         ui.add_space(SPACE_S);
                         ui.spacing_mut().item_spacing = vec2(0.0, 1.0);
-                        let rows_height = ((CONTROL_H + 1.) * 9.).min((bounds.height() - 85.).max(CONTROL_H));
+                        // The Sweep picker's Other sources stay under the list (pass-5 board).
+                        let pinned: Vec<usize> = if self.cmd_scope == "Sweep presets" {
+                            self.cmd_results.iter().enumerate().filter(|(_, r)| r.1 == OTHER_SOURCES).map(|(i, _)| i).collect()
+                        } else {
+                            Vec::new()
+                        };
+                        let pinned_h = if pinned.is_empty() { 0. } else { (CONTROL_H + 1.) * pinned.len() as f32 + 24. };
+                        let rows_height = ((CONTROL_H + 1.) * 9. - pinned_h).min((bounds.height() - 85. - pinned_h).max(CONTROL_H));
                         egui::ScrollArea::vertical()
                             .auto_shrink([false, false])
                             .min_scrolled_height(rows_height)
@@ -127,6 +135,7 @@ impl Ui {
                                         label.clone()
                                     };
                                     let preset=self.cmd_scope=="Sweep presets";
+                                    if preset && path==OTHER_SOURCES {continue;}
                                     if preset && (i==0 || self.cmd_results[i-1].1!=*path){kit::caption(ui,path);}
                                     let draw=|ui:&mut egui::Ui|command_row(
                                         ui,
@@ -188,6 +197,20 @@ impl Ui {
                                 }
                             });
                         self.cmd_scroll = false;
+                        if !pinned.is_empty() {
+                            ui.add_space(SPACE_S);
+                            kit::caption(ui, OTHER_SOURCES);
+                            for i in pinned {
+                                let (label, _, key, enabled) = &self.cmd_results[i];
+                                let row = command_row(ui, label, "", key, *enabled, self.cmd_at == i);
+                                if *enabled && row.clicked() {
+                                    run = Some(i);
+                                }
+                                if *enabled && row.hovered() && ui.input(|i| i.pointer.delta() != Vec2::ZERO) {
+                                    self.cmd_at = i;
+                                }
+                            }
+                        }
                     });
             });
         if changed {
@@ -203,6 +226,9 @@ impl Ui {
         }
     }
 }
+
+/// The group of the Sweep picker's pinned rows: draw, import, pick a face.
+pub const OTHER_SOURCES: &str = "Other sources";
 
 #[cfg(test)]
 mod tests {
