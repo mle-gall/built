@@ -80,9 +80,11 @@ impl Sources {
                     if n.shape() != [corners_here, 3] {
                         return Err(PyValueError::new_err("invalid prototype corner normals"));
                     }
+                    if !all.exact { all.corner_normals.resize(3 * all.corners.len(), f32::NAN); }
                     all.exact = true;
                     all.corner_normals.extend(n.as_array().iter().copied());
                 }
+                None if !all.exact => (),
                 None => all.corner_normals.extend(std::iter::repeat(f32::NAN).take(3 * corners_here)),
             }
             if pos.shape()[1] != 3 || edges.shape()[1] != 2 || palette.shape()[1] != 4 || paints.shape()[1] != 3 {
@@ -212,6 +214,7 @@ pub(super) fn assemble<'py>(
         rows_of(py, sources.paints, 3)?.readonly(),
         true,
         if sources.exact { Some(rows_of(py, sources.corner_normals, 3)?.readonly()) } else { None },
+        true,
     )?;
 
     // The prototypes' frame anchors and boxes.

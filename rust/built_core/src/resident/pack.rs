@@ -563,6 +563,7 @@ pub fn pack_scene<'py>(
     // The paint each paint group resolves to, once per paint group: the
     // native walk shares one between every placement of a tag and paint.
     let resolved = PyDict::new(py);
+    let edit_sources = PyDict::new(py);
     let builtins = py.import("builtins")?;
     let id = |object: &Obj<'py>| object.as_ptr() as usize;
     for (index, record) in records.iter().enumerate() {
@@ -631,6 +632,16 @@ pub fn pack_scene<'py>(
                 key = apart(&variant)?;
             }
             if arrays.get_item(0)?.len()? != 0 {
+                if face_overrides.is_none() && arrays.get_item(3)?.len()? >= 32768 {
+                    // A deferred stream may weld close coordinates on first
+                    // touch. Only seed spans from the same materialized store.
+                    if let Some(store) = mesh.getattr("__dict__")?.cast_into::<PyDict>()?.get_item("_store")? {
+                        if store.is_exact_instance_of::<crate::store::py::PyMeshStore>() {
+                            let st = store.cast::<crate::store::py::PyMeshStore>()?.borrow();
+                            edit_sources.set_item(meshes.len(), (st.inner.lineage, st.inner.revision))?;
+                        }
+                    }
+                }
                 lookup.set_item(&key, meshes.len())?;
                 prototype_paints.set_item(meshes.len(), &baked)?;
                 meshes.append(arrays)?;
@@ -728,6 +739,7 @@ pub fn pack_scene<'py>(
         )?,
     )?;
     packed.setattr("_element_tags", element_tags)?;
+    if !edit_sources.is_empty() { packed.setattr("_edit_sources", edit_sources)?; }
     Ok(packed)
 }
 

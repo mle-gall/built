@@ -443,17 +443,18 @@ fn mesh_centre(py: Python<'_>, mesh: &Obj<'_>) -> PyResult<Option<[f64; 3]>> {
 }
 
 #[pyclass(module = "built_core", dict, weakref)]
-pub struct InstanceUpdates;
+pub struct InstanceUpdates { pub(super) plain: Option<super::plain_edit::Layout> }
 
 #[pymethods]
 impl InstanceUpdates {
     #[new]
     #[pyo3(signature = (*_args, **_kwargs))]
     fn new(_args: &Bound<'_, PyTuple>, _kwargs: Option<&Bound<'_, PyDict>>) -> Self {
-        Self
+        Self { plain: None }
     }
 
     fn __init__<'py>(slf: &Bound<'py, Self>, scene: &Obj<'py>, packed: &Obj<'py>) -> PyResult<()> {
+        slf.borrow_mut().plain = None;
         let py = slf.py();
         let s = slf.as_any();
         let np = py.import("numpy")?;
@@ -539,6 +540,7 @@ impl InstanceUpdates {
         s.setattr("mesh_changes", PyDict::new(py))?;
         s.setattr("changed_records", PyDict::new(py))?;
         s.setattr("roots", py.get_type::<PySet>().call1((scene.getattr("groups")?,))?)?;
+        super::plain_edit::prime(slf)?;
         let _ = np;
         Ok(())
     }
@@ -1316,7 +1318,13 @@ impl InstanceUpdates {
         let mut anchors_moved: Vec<(usize, [f64; 3], [f64; 3])> = Vec::new();
         let uint8 = np.getattr("uint8")?;
         let flat = |array: &Obj<'py>| -> Reply<'py> { array.call_method1("view", (&uint8,))?.call_method1("reshape", (-1,)) };
-        if any_changed {
+        let patched = if any_changed {
+            let mut cache = slf.borrow_mut().plain.take();
+            let applied = super::plain_edit::apply(s, &changed, renderer.as_ref(), &mut cache)?;
+            slf.borrow_mut().plain = cache;
+            applied
+        } else { false };
+        if any_changed && !patched {
             // A single bake for the changed set, including shared meshes.
             let group_type = py.import("built_core.group")?.getattr("Group")?;
             let variants = dict(s, "variants")?;

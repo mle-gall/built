@@ -119,40 +119,42 @@ fn prepare_with(
             triangles.extend(tris.into_iter().map(|t| (t, f, colors[f])));
         }
     }
-    let mut starts = vec![0i64; edge_list.len() + 1];
-    for &(edge, _) in &sides {
-        starts[edge as usize + 1] += 1;
-    }
-    for e in 0..edge_list.len() {
-        starts[e + 1] += starts[e];
-    }
-    let mut adjacent = vec![0i64; sides.len()];
-    let mut fill_at: Vec<i64> = starts[..edge_list.len()].to_vec();
-    for &(edge, face) in &sides {
-        adjacent[fill_at[edge as usize] as usize] = i64::from(face);
-        fill_at[edge as usize] += 1;
-    }
-    let smooth_edges: Vec<_> = edge_list
-        .iter()
-        .map(|e| [e[0] as i64, e[1] as i64])
-        .collect();
-    // Soft edges shade smooth, unless flat (soft only: «Smooth normals» off).
-    let soft: Vec<_> = edge_flags.iter().map(|f| f & 1 != 0 && f & 4 == 0).collect();
-    let corners: Vec<_> = c.iter().map(|&v| v as i64).collect();
-    let model_vectors = |vs: &[V3]| vs.iter().map(|v|
-        crate::store::geometry::V3(v.0 as f64, v.1 as f64, v.2 as f64)).collect::<Vec<_>>();
-    let fans = crate::smooth::corners(
-        &model_vectors(p),
-        &model_vectors(&normals),
-        &corners,
-        sizes,
-        counts,
-        &smooth_edges,
-        &soft,
-        &starts,
-        &adjacent,
-        h,
-    );
+    let fans = if edge_flags.iter().any(|f| f & 1 != 0 && f & 4 == 0) {
+        let mut starts = vec![0i64; edge_list.len() + 1];
+        for &(edge, _) in &sides {
+            starts[edge as usize + 1] += 1;
+        }
+        for e in 0..edge_list.len() {
+            starts[e + 1] += starts[e];
+        }
+        let mut adjacent = vec![0i64; sides.len()];
+        let mut fill_at: Vec<i64> = starts[..edge_list.len()].to_vec();
+        for &(edge, face) in &sides {
+            adjacent[fill_at[edge as usize] as usize] = i64::from(face);
+            fill_at[edge as usize] += 1;
+        }
+        let smooth_edges: Vec<_> = edge_list
+            .iter()
+            .map(|e| [e[0] as i64, e[1] as i64])
+            .collect();
+        // Soft edges shade smooth, unless flat (soft only: «Smooth normals» off).
+        let soft: Vec<_> = edge_flags.iter().map(|f| f & 1 != 0 && f & 4 == 0).collect();
+        let corners: Vec<_> = c.iter().map(|&v| v as i64).collect();
+        let model_vectors = |vs: &[V3]| vs.iter().map(|v|
+            crate::store::geometry::V3(v.0 as f64, v.1 as f64, v.2 as f64)).collect::<Vec<_>>();
+        crate::smooth::corners(
+            &model_vectors(p),
+            &model_vectors(&normals),
+            &corners,
+            sizes,
+            counts,
+            &smooth_edges,
+            &soft,
+            &starts,
+            &adjacent,
+            h,
+        )
+    } else { Default::default() };
     if retain_hidden && hidden.iter().any(|v| *v) {
         triangles.sort_by_key(|t| hidden[t.1]);
     }
@@ -340,7 +342,7 @@ fn fill(p: &[V3], prepared: &Prepared, bytes: &mut [u8], indices: &mut [u32]) {
 }
 
 #[pyfunction]
-#[pyo3(signature = (pos, corners, sizes, counts, colors, hidden, edges, flags, offsets, attributes, hypot, material_maps, material_paints, retain_hidden=false, corner_normals=None))]
+#[pyo3(signature = (pos, corners, sizes, counts, colors, hidden, edges, flags, offsets, attributes, hypot, material_maps, material_paints, retain_hidden=false, corner_normals=None, edit_room=false))]
 pub fn bake_scene<'py>(
     py: Python<'py>,
     pos: PyReadonlyArray2<'_, f32>,
@@ -358,6 +360,7 @@ pub fn bake_scene<'py>(
     material_paints: PyReadonlyArray2<'_, u32>,
     retain_hidden: bool,
     corner_normals: Option<PyReadonlyArray2<'_, f32>>,
+    edit_room: bool,
 ) -> PyResult<(
     Bound<'py, PyArray1<u8>>,
     Bound<'py, PyArray1<u32>>,
@@ -498,9 +501,12 @@ pub fn bake_scene<'py>(
                 result
             })
             .collect() };
+        let span = |n: usize| if edit_room && n >= 196608 {
+            n + (n / 64).min(16384)
+        } else { n };
         let total: usize = prepared
             .iter()
-            .map(|p| p.triangles.len() * 3 + p.edges.len() * 2)
+            .map(|p| span(p.triangles.len() * 3 + p.edges.len() * 2))
             .sum();
         let mut bytes = vec![0u8; total * 28];
         let mut indices = vec![0u32; total];
@@ -526,12 +532,12 @@ pub fn bake_scene<'py>(
                     ((p.edges.len() - p.visible_edges) * 2) as u32,
                 ]);
             }
-            let (dst, rest) = byte_tail.split_at_mut(n * 28);
+            let (dst, rest) = byte_tail.split_at_mut(span(n) * 28);
             byte_tail = rest;
-            let (idx, rest) = index_tail.split_at_mut(n);
+            let (idx, rest) = index_tail.split_at_mut(span(n));
             index_tail = rest;
             jobs.push((i, p, dst, idx));
-            first += n;
+            first += span(n);
         }
         if one {
             for (i, p, dst, idx) in jobs {

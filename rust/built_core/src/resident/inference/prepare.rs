@@ -343,6 +343,118 @@ fn resident_rebase<'p>(index: &Obj<'p>, packed: &Obj<'p>) -> PyResult<Obj<'p>> {
 /// over from its previous ones (`patch_snap_proto`) rather than rebuilt.
 const CARRY_PAST: usize = 20_000;
 
+/// For an edited store, take the triangle stream and hard segments straight
+/// from their owners. Intermediate dense vertex, edge-index, curve and mask
+/// arrays would all be discarded as soon as the replacement BVH is ready.
+fn patch_store<'p>(
+    packed: &Obj<'p>,
+    code: usize,
+    scene: &Obj<'p>,
+    row: isize,
+    old: &crate::InstanceProto,
+) -> PyResult<Option<Obj<'p>>> {
+    use crate::store::{keys::Kind, py::PyMeshStore};
+    let py = packed.py();
+    if packed.hasattr("_snap_sources")? || row < 0 {
+        return Ok(None);
+    }
+    let Some(groups) = optional(packed.getattr_opt("groups")?) else {
+        return Ok(None);
+    };
+    let group = groups.get_item(row)?;
+    let mesh = if group.is_none() {
+        scene.getattr_opt("loose_mesh")?
+    } else {
+        group.getattr_opt("mesh")?
+    };
+    let Some(mesh) = mesh else { return Ok(None) };
+    let own = mesh.getattr("__dict__")?;
+    if !own.call_method1("get", ("_deferred_source",))?.is_none() {
+        return Ok(None);
+    }
+    let store = own.call_method1("get", ("_store",))?;
+    if !store.is_exact_instance_of::<PyMeshStore>() {
+        return Ok(None);
+    }
+    let borrowed = store.cast::<PyMeshStore>()?.borrow();
+    let st = &borrowed.inner.state;
+    if st.exact.native.is_some() || !st.layers.is_empty() {
+        return Ok(None);
+    }
+    let reveal = scene
+        .getattr_opt("show_hidden_geometry")?
+        .map(|v| v.is_truthy())
+        .transpose()?
+        .unwrap_or(false);
+    let mask = if reveal {
+        0
+    } else if group.is_none() {
+        2
+    } else {
+        3
+    };
+    let origins = packed.getattr("prototype_origins")?;
+    let origin = if code < origins.len()? {
+        origins.get_item(code)?.extract::<[f64; 3]>()?
+    } else {
+        [0.; 3]
+    };
+    let cmd = packed.getattr("commands")?.get_item(code)?;
+    let start = cmd.get_item("base")?.extract()?;
+    let count: usize = cmd.get_item("count")?.extract()?;
+    if count % 3 != 0 {
+        return Ok(None);
+    }
+    let position: PyReadonlyArray2<f32> = packed
+        .getattr("vertices")?
+        .get_item("pos")?
+        .get_item(slice(py, start, count))?
+        .extract()?;
+    let positions = position.as_array();
+    let (mut a, mut b, mut c) = (
+        Vec::with_capacity(count / 3),
+        Vec::with_capacity(count / 3),
+        Vec::with_capacity(count / 3),
+    );
+    for t in 0..count / 3 {
+        let point: [f64; 3] = std::array::from_fn(|j| positions[[3 * t, j]] as f64);
+        a.push(point);
+        b.push(std::array::from_fn(|j| {
+            positions[[3 * t + 1, j]] as f64 - point[j]
+        }));
+        c.push(std::array::from_fn(|j| {
+            positions[[3 * t + 2, j]] as f64 - point[j]
+        }));
+    }
+    let mut edges = Vec::with_capacity(st.slots[1].live);
+    for e in borrowed.inner.live_slots(Kind::Edge) {
+        if st.eflags.get(e as usize) & mask != 0 {
+            continue;
+        }
+        if *st.ecurve.get(e as usize) >= 0 {
+            return Ok(None);
+        }
+        edges.push(st.ends.get(e as usize).map(|i| {
+            let p = *st.vpos.get(i as usize);
+            if st.frame.origin == origin {
+                p
+            } else {
+                std::array::from_fn(|k| p[k] + (st.frame.origin[k] - origin[k]))
+            }
+        }));
+    }
+    super::exact::forget(packed, code)?;
+    let inner = py.detach(|| old.inner.patched(a, b, c, edges));
+    let proto = Bound::new(
+        py,
+        crate::InstanceProto {
+            inner: std::sync::Arc::new(inner),
+            curves: Vec::new(),
+        },
+    )?;
+    Ok(Some((&proto, &proto).into_pyobject(py)?.into_any()))
+}
+
 #[pyfunction]
 #[pyo3(signature = (packed, code, scene, first_row, previous=None))]
 pub(super) fn resident_prototype<'p>(
@@ -353,6 +465,12 @@ pub(super) fn resident_prototype<'p>(
     previous: Option<&Obj<'p>>,
 ) -> PyResult<Obj<'p>> {
     let py = packed.py();
+    if let Some(old) = previous.and_then(|p| p.cast::<crate::InstanceProto>().ok()) {
+        let old = old.borrow();
+        if old.inner.n_tris() >= CARRY_PAST {
+            if let Some(patched) = patch_store(packed, code, scene, first_row, &old)? { return Ok(patched); }
+        }
+    }
     let np = py.import("numpy")?;
     let array = prototype_arrays(
         packed,
