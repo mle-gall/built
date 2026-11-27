@@ -1284,8 +1284,13 @@ impl Renderer {
             let held = s.edge_memos.iter().position(|m| m.0 == id).map(|at| s.edge_memos.remove(at).1);
             let mut memo = match held {
                 Some(mut memo) => match memo.update(v, faces as usize) {
-                    Some(changes) => {
-                        patch = Some(changes);
+                    Some((faces, mut records)) => {
+                        if memo.profiles_reordered {
+                            records.moves.clear();
+                            records.upload = vec![0..memo.records.len()];
+                            memo.profiles_reordered = false;
+                        }
+                        patch = Some((faces, records));
                         memo
                     }
                     None => edge_memo::Memo::build(v, faces as usize),
@@ -1870,8 +1875,11 @@ impl Renderer {
             let count = (sorted.len() / 48 * 6) as u32;
             sorted.extend_from_slice(&soft);
             if records != sorted {
-                // The edge memo addresses records in their original order.
-                s.edge_memos.retain(|m| m.0 != prototype);
+                // Keep the adjacency and triangle memo for the next edit.
+                // Only the physical edge records need restoring first.
+                if let Some((_, memo)) = s.edge_memos.iter_mut().find(|m| m.0 == prototype) {
+                    memo.profiles_reordered = true;
+                }
                 self.queue.write_buffer(&s.edge_records, range.start as u64, &sorted);
                 s.edge_data[range].copy_from_slice(&sorted);
             }

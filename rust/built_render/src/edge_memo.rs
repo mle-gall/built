@@ -110,6 +110,9 @@ pub(crate) struct Memo {
     /// The edge records: one per hard edge in input order, then the
     /// profile candidates (`soft`, by key).
     pub(crate) records: Vec<u8>,
+    /// The GPU records were partitioned by explicit profile exclusions.
+    /// The adjacency and face data still describe the canonical input.
+    pub(crate) profiles_reordered: bool,
     pub(crate) hard: usize,
     soft: Vec<[u8; 24]>,
     soft_at: FastMap<Words, u32>,
@@ -260,6 +263,7 @@ impl Memo {
         let mut face_vertices = Vec::with_capacity((faces + crate::edit_slack(faces)) * 28);
         face_vertices.extend_from_slice(&v[..faces*28]);
         let mut memo = Memo {
+            profiles_reordered: false,
             face_vertices,
             shards,
             records: Vec::new(),
