@@ -348,15 +348,24 @@ pub(super) fn sweep_path(
         }
     }
     if let Some(ends) = &path.ends {
-        for (i, end) in ends.iter().enumerate() {
-            if let sweep::End::Point(p) = end {
-                let Some(p) = origin(scene, t, &Reference::Point(*p), row)? else {
+        if points.is_empty() {
+            for end in ends {
+                let r = match end {
+                    sweep::End::Point(p) => Reference::Point(*p),
+                    sweep::End::Anchored { to, .. } => to.clone(),
+                };
+                let Some(p) = origin(scene, t, &r, row)? else {
                     return Ok(None);
                 };
-                if i < points.len() {
-                    points[i] = p
-                } else {
-                    points.push(p)
+                points.push(p);
+            }
+        } else if points.len() == 2 {
+            for (i, end) in ends.iter().enumerate() {
+                if let sweep::End::Point(p) = end {
+                    let Some(p) = origin(scene, t, &Reference::Point(*p), row)? else {
+                        return Ok(None);
+                    };
+                    points[i] = p;
                 }
             }
         }
@@ -369,20 +378,25 @@ pub(super) fn sweep_path(
         let original = [points[0], points[1]];
         for (i, end) in ends.iter().enumerate() {
             if let sweep::End::Anchored { to, offset, extend } = end {
-                let Some(face) = element_points(scene, t, row, to, Kind::Face)? else {
-                    return Ok(None);
+                let reach = if let Some(face) = element_points(scene, t, row, to, Kind::Face)? {
+                    let Some((_, normal)) =
+                        crate::snap_planes::face_plane(face.iter().map(|v| v.to_array()).collect())
+                    else {
+                        return Ok(None);
+                    };
+                    let normal = DVec3::from(normal);
+                    let dot = normal.dot(dir);
+                    if dot.abs() < 1e-10 {
+                        return Ok(None);
+                    }
+                    normal.dot(face[0] - original[i]) / dot
+                } else {
+                    let Some(anchor) = origin(scene, t, to, row)? else {
+                        return Ok(None);
+                    };
+                    (anchor - original[i]).dot(dir)
                 };
-                let Some(n) =
-                    crate::snap_planes::face_plane(face.iter().map(|v| v.to_array()).collect())
-                        .map(|(_, n)| DVec3::from(n))
-                else {
-                    return Ok(None);
-                };
-                let dot = n.dot(dir);
-                if dot.abs() < 1e-10 {
-                    return Ok(None);
-                }
-                let dist = n.dot(face[0] - original[i]) / dot
+                let dist = reach
                     + if i == 0 {
                         offset / 1000.
                     } else {

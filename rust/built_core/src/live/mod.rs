@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! The root's journalled attribute holds a frozen, structurally shared table.
 //! Definition replacements and placement markers are ordinary document ops.
+mod drawn_profile;
 mod file;
 mod geometry;
 pub(crate) mod profile;
@@ -101,10 +102,19 @@ fn metadata<'p>(g: &Obj<'p>) -> PyResult<Bound<'p, PyDict>> {
 }
 fn evaluate(scene: &Obj<'_>, t: &LiveTable, row: &Row) -> PyResult<&'static str> {
     let py = scene.py();
+    if row.kind == "sketch" {
+        return Ok(
+            if drawn_profile::outline(&serde_json::json!({"curves":row.curves}), 24).is_ok() {
+                "ok"
+            } else {
+                "invalid_profile"
+            },
+        );
+    }
     let Some(g) = group(py, t, &row.owner) else {
         return Ok("ref_lost");
     };
-    if !matches!(row.kind.as_str(), "test_box" | "sweep") || row.v != 1 {
+    if !matches!(row.kind.as_str(), "test_box" | "sweep" | "sketch") || row.v != 1 {
         return Ok("unsupported");
     }
     let mut origin = DVec3::ZERO;
@@ -126,7 +136,18 @@ fn evaluate(scene: &Obj<'_>, t: &LiveTable, row: &Row) -> PyResult<&'static str>
             let Some(points) = reference::sweep_path(scene, t, row, &spec.path)? else {
                 return Ok("end_unresolved");
             };
-            let result = sweep::generate(&mut s.inner, spec, &points);
+            let mut spec = (**spec).clone();
+            if let Some(uid) = &spec.profile.sketch {
+                let Some(source) = t
+                    .rows
+                    .get(uid)
+                    .filter(|r| r.kind == "sketch" && r.state == "ok")
+                else {
+                    return Ok("profile_missing");
+                };
+                spec.profile.drawing = Some(serde_json::json!(source));
+            }
+            let result = sweep::generate(&mut s.inner, &spec, &points);
             resolved_path = Some(points);
             result
         } else {
@@ -398,8 +419,7 @@ impl Mutation {
             Edit::Create(sweeps) => {
                 for spec in sweeps {
                     let key = &spec.profile.library;
-                    let name = profile::label(key)
-                        .ok_or_else(|| PyValueError::new_err("profile_missing"))?;
+                    let name = profile::label(key).unwrap_or("Drawn profile");
                     let g = py.import("built_core.group")?.getattr("Group")?.call0()?;
                     g.setattr("name", name)?;
                     g.setattr("xform", py.import("built_core")?.call_method0("Matrix4")?)?;
@@ -416,6 +436,18 @@ impl Mutation {
                     g.setattr("ifc", record)?;
                     let parent = scene.getattr("edit_group")?;
                     let mut spec = spec.clone();
+                    if let Some(mut drawing) = spec.profile.drawing.take() {
+                        if spec.profile.sketch.is_none() {
+                            let uid = eid::new_uid();
+                            drawing["uid"] = serde_json::json!(uid);
+                            drawing["kind"] = serde_json::json!("sketch");
+                            let source = serde_json::from_value(drawing)
+                                .map_err(|e| PyValueError::new_err(e.to_string()))?;
+                            t.insert(source).map_err(PyValueError::new_err)?;
+                            t.pending.insert(uid.clone());
+                            spec.profile.sketch = Some(uid);
+                        }
+                    }
                     if parent.is_none() {
                         scene.getattr("groups")?.call_method1("append", (&g,))?;
                     } else {
@@ -423,6 +455,11 @@ impl Mutation {
                             reference::frame(parent.getattr("_doc_key")?.extract()?).inverse();
                         for point in &mut spec.path.points {
                             *point = inverse.transform_point3((*point).into()).to_array();
+                        }
+                        for end in spec.path.ends.iter_mut().flatten() {
+                            if let sweep::End::Point(p) = end {
+                                *p = inverse.transform_point3((*p).into()).to_array();
+                            }
                         }
                         parent.getattr("children")?.call_method1("append", (&g,))?;
                     }
@@ -441,6 +478,8 @@ impl Mutation {
                         slots: Default::default(),
                         open_top: false,
                         state: String::new(),
+                        curves: None,
+                        sketch_fields: Default::default(),
                         sweep: Some(Box::new(spec)),
                     })
                     .map_err(PyValueError::new_err)?;
@@ -448,7 +487,7 @@ impl Mutation {
                 }
             }
             Edit::Set(row) => {
-                if group(py, &t, &row.owner).is_none() {
+                if row.kind != "sketch" && group(py, &t, &row.owner).is_none() {
                     return Err(PyValueError::new_err("unknown recipe owner"));
                 }
                 if t.rows.get(&row.uid).is_some_and(|r| r.state == "stale") {
@@ -530,9 +569,69 @@ fn live_sweep<'p>(scene: &Obj<'p>, owner: &str) -> PyResult<Obj<'p>> {
             .to_cols_array(),
     )?;
     if let Some(spec) = &row.sweep {
-        value.set_item("profile_name", profile::label(&spec.profile.library))?;
+        let name = spec
+            .profile
+            .sketch
+            .as_ref()
+            .and_then(|uid| t.rows.get(uid))
+            .and_then(|r| r.sketch_fields.name.as_str())
+            .or_else(|| profile::label(&spec.profile.library))
+            .unwrap_or("Drawn profile");
+        value.set_item("profile_name", name)?;
+        if let Some(g) = group(scene.py(), &t, owner) {
+            if let Ok(path) = g.getattr("ext")?.get_item(EXT)?.get_item("path") {
+                value.set_item("resolved_points", path)?;
+                value.set_item("owner_frame", reference::frame(k).to_cols_array())?;
+            }
+        }
     }
     Ok(value)
+}
+#[pyfunction]
+fn sweep_thumbnail<'p>(
+    py: Python<'p>,
+    key: String,
+    pixels: u32,
+) -> PyResult<Bound<'p, pyo3::types::PyBytes>> {
+    if !(1..=512).contains(&pixels) {
+        return Err(PyValueError::new_err("invalid thumbnail size"));
+    }
+    let profile = profile::Profile {
+        sketch: None,
+        drawing: None,
+        library: key,
+        params: Default::default(),
+    };
+    let outline = profile.outline(48).map_err(PyValueError::new_err)?;
+    let scale = pixels as f64 * 0.8 / outline.height.max(outline.width);
+    let mut paths = tiny_skia::PathBuilder::new();
+    for ring in outline.rings {
+        for (i, n) in ring.iter().enumerate() {
+            let x = (pixels as f64 / 2. + (n.p.x - outline.width / 2.) * scale) as f32;
+            let y = (pixels as f64 / 2. - (n.p.y - outline.height / 2.) * scale) as f32;
+            if i == 0 {
+                paths.move_to(x, y)
+            } else {
+                paths.line_to(x, y)
+            }
+        }
+        paths.close();
+    }
+    let path = paths
+        .finish()
+        .ok_or_else(|| PyValueError::new_err("invalid profile"))?;
+    let mut pix = tiny_skia::Pixmap::new(pixels, pixels).unwrap();
+    let mut paint = tiny_skia::Paint::default();
+    paint.set_color_rgba8(196, 200, 203, 255);
+    paint.anti_alias = true;
+    pix.fill_path(
+        &path,
+        &paint,
+        tiny_skia::FillRule::EvenOdd,
+        tiny_skia::Transform::identity(),
+        None,
+    );
+    Ok(pyo3::types::PyBytes::new(py, pix.data()))
 }
 #[pyfunction]
 fn sweep_profile<'p>(row: &Obj<'p>) -> PyResult<Obj<'p>> {
@@ -552,7 +651,7 @@ fn sweep_profile<'p>(row: &Obj<'p>) -> PyResult<Obj<'p>> {
         .collect();
     to_py(
         row.py(),
-        &serde_json::json!({"family":outline.family,"web":outline.web,"flange":outline.flange,"radius":outline.radius,"width":outline.width,"height":outline.height,"rings":rings,"name":profile::label(&spec.profile.library)}),
+        &serde_json::json!({"family":outline.family,"web":outline.web,"flange":outline.flange,"radius":outline.radius,"width":outline.width,"height":outline.height,"rings":rings,"offset":outline.attachment(&spec.attachment).map_err(PyValueError::new_err)?,"name":profile::label(&spec.profile.library)}),
     )
 }
 #[pyfunction]
@@ -562,9 +661,11 @@ fn create_sweeps<'p>(history: &Obj<'p>, sweeps: &Obj<'p>) -> PyResult<Bound<'p, 
         return Err(PyValueError::new_err("expected a sweep"));
     }
     for spec in &specs {
-        spec.profile
-            .outline(spec.segments)
-            .map_err(PyValueError::new_err)?;
+        if spec.profile.sketch.is_none() {
+            spec.profile
+                .outline(spec.segments)
+                .map_err(PyValueError::new_err)?;
+        }
         if (spec.path.chain.is_empty() && spec.path.ends.is_none() && spec.path.points.len() < 2)
             || spec
                 .path
@@ -580,12 +681,14 @@ fn create_sweeps<'p>(history: &Obj<'p>, sweeps: &Obj<'p>) -> PyResult<Bound<'p, 
 #[pyfunction]
 fn live_set<'p>(history: &Obj<'p>, row: &Obj<'p>) -> PyResult<Bound<'p, PyDict>> {
     let row: Row = json(row)?;
-    for uid in [&row.uid, &row.owner] {
+    for uid in std::iter::once(&row.uid)
+        .chain((row.kind != "sketch" || !row.owner.is_empty()).then_some(&row.owner))
+    {
         if uid.len() != 16 || !uid.bytes().all(|c| c.is_ascii_hexdigit()) {
             return Err(PyValueError::new_err("expected 16-hex uid"));
         }
     }
-    if !matches!(row.kind.as_str(), "test_box" | "sweep") || row.v != 1 {
+    if !matches!(row.kind.as_str(), "test_box" | "sweep" | "sketch") || row.v != 1 {
         return Err(PyValueError::new_err("unsupported recipe"));
     }
     edit(history, Edit::Set(row))
@@ -604,6 +707,7 @@ fn live_rows<'p>(scene: &Obj<'p>) -> PyResult<Obj<'p>> {
     to_py(scene.py(), &t.by_creation())
 }
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(sweep_thumbnail, m)?)?;
     m.add_function(wrap_pyfunction!(live_sweep, m)?)?;
     m.add_function(wrap_pyfunction!(sweep_profile, m)?)?;
     m.add_function(wrap_pyfunction!(create_sweeps, m)?)?;

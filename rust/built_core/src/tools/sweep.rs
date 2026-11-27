@@ -38,13 +38,20 @@ impl PathEdit {
     fn from_row(row: Json) -> Option<Self> {
         let m: [f64; 16] = serde_json::from_value(row["parent_frame"].clone()).ok()?;
         let frame = glam::DMat4::from_cols_array(&m);
-        let local: Vec<P3> = serde_json::from_value(row["path"]["points"].clone()).ok()?;
+        let resolved = row.get("resolved_points");
+        let local: Vec<P3> =
+            serde_json::from_value(resolved.unwrap_or(&row["path"]["points"]).clone()).ok()?;
+        let display_frame = if resolved.is_some() {
+            glam::DMat4::from_cols_array(&serde_json::from_value(row["owner_frame"].clone()).ok()?)
+        } else {
+            frame
+        };
         Some(Self {
             row,
             frame,
             points: local
                 .iter()
-                .map(|p| frame.transform_point3((*p).into()).to_array())
+                .map(|p| display_frame.transform_point3((*p).into()).to_array())
                 .collect(),
             grip: None,
         })
@@ -55,7 +62,22 @@ impl PathEdit {
                 return Reply::ignored();
             };
             let mut row = self.row.clone();
-            row["path"]["points"][i] = json!(self.frame.inverse().transform_point3(end.into()));
+            let pos = self.frame.inverse().transform_point3(end.into());
+            if row["path"]["ends"].is_array() && row["path"]["ends"][i].is_object() {
+                let Some(dir) =
+                    (DVec3::from(self.points[1 - i]) - DVec3::from(self.points[i])).try_normalize()
+                else {
+                    return Reply::ignored();
+                };
+                let distance = (DVec3::from(end) - DVec3::from(self.points[i])).dot(dir) * 1000.;
+                let anchor = &mut row["path"]["ends"][i];
+                anchor["offset"] = json!(anchor["offset"].as_f64().unwrap_or(0.) + distance);
+            } else {
+                row["path"]["points"][i] = json!(pos);
+                if row["path"]["ends"].is_array() {
+                    row["path"]["ends"][i] = json!(pos);
+                }
+            }
             if host
                 .run(&Command {
                     name: "live_set",
@@ -103,6 +125,8 @@ impl Default for SweepTool {
             start: None,
             hover: None,
             profile: Profile {
+                sketch: None,
+                drawing: None,
                 library: "en/ipe240".into(),
                 params: Default::default(),
             },
@@ -113,12 +137,48 @@ impl Default for SweepTool {
     }
 }
 impl SweepTool {
+    fn attachment_name(&self) -> &str {
+        ATTACH
+            .get(self.attachment)
+            .map(|a| a.0)
+            .or_else(|| {
+                self.extra_attachments()
+                    .nth(self.attachment.saturating_sub(9))
+            })
+            .unwrap_or("centre")
+    }
+    fn extra_attachments(&self) -> impl Iterator<Item = &str> {
+        self.profile.drawing.iter().flat_map(|d| {
+            std::iter::once("origin").chain(
+                d["points"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|p| p["name"].as_str()),
+            )
+        })
+    }
     fn preset(&self) -> &'static str {
         match self.profile.library.as_str() {
+            "" => "Drawn member",
             "basic/wall" => "Wall",
             "basic/timber" => "Timber member",
             _ => "Steel member",
         }
+    }
+    fn run_paths(&self, paths: Vec<Json>, host: &mut dyn ToolHost) -> bool {
+        if paths.is_empty() {
+            return false;
+        }
+        let specs:Vec<_>=paths.into_iter().map(|path|json!({
+            "preset":self.preset(),"profile":self.profile,"path":path,
+            "rotation":self.rotation,"mirror":self.mirror,"attachment":self.attachment_name()
+        })).collect();
+        host.run(&Command {
+            name: "create_sweeps",
+            args: json!({"sweeps":specs}),
+        })
+        .ok
     }
     fn commit(
         &self,
@@ -129,25 +189,32 @@ impl SweepTool {
         if paths.is_empty() {
             return false;
         }
-        let specs=paths.iter().map(|points|{
-            let mut path=json!({"points":points});
-            if let Some(ends)=&anchors{
-                if points.len()==2 && ends.iter().any(Option::is_some){
-                    path["ends"]=json!(std::array::from_fn::<_,2,_>(|i|match &ends[i]{
-                        Some(to)=>json!({"to":to,"extend":true}),None=>json!(points[i])
-                    }));
+        let paths = paths
+            .iter()
+            .map(|points| {
+                let mut path = json!({"points":points});
+                if let Some(ends) = &anchors {
+                    if points.len() == 2 {
+                        let dir = DVec3::from(points[1]) - DVec3::from(points[0]);
+                        let ends = std::array::from_fn::<_, 2, _>(|i| {
+                            if let Some(hit) = &ends[i] {
+                                if json_p3(&hit["normal"])
+                                    .is_some_and(|n| DVec3::from(n).dot(dir).abs() > 1e-9)
+                                {
+                                    return json!({"to":hit["to"],"extend":true});
+                                }
+                            }
+                            json!(points[i])
+                        });
+                        if ends.iter().any(Json::is_object) {
+                            path["ends"] = json!(ends);
+                        }
+                    }
                 }
-            }
-            json!({
-                "preset":self.preset(),"profile":self.profile,"path":path,
-                "rotation":self.rotation,"mirror":self.mirror,"attachment":ATTACH[self.attachment].0
+                path
             })
-        }).collect::<Vec<_>>();
-        host.run(&Command {
-            name: "create_sweeps",
-            args: json!({"sweeps":specs}),
-        })
-        .ok
+            .collect();
+        self.run_paths(paths, host)
     }
 }
 impl Tool for SweepTool {
@@ -158,7 +225,7 @@ impl Tool for SweepTool {
         self.start.is_some() || self.edit.is_some()
     }
     fn state(&self) -> Json {
-        json!({"start_point":self.start,"hover_point":self.hover,"profile":self.profile.library,"chip":format!("{} · {} · {} · {}°{}",self.preset(),label(&self.profile.library).unwrap_or("Sweep"),ATTACH[self.attachment].0,self.rotation,if self.mirror{" · ↔"}else{""}),"attachment":ATTACH[self.attachment].0,"rotation":self.rotation,"mirror":self.mirror})
+        json!({"length":self.start.zip(self.hover).map(|(a,b)|DVec3::from(a).distance(b.into())),"start_point":self.start,"hover_point":self.hover,"profile":self.profile.library,"chip":format!("{} · {} · {} · {}°{}",self.preset(),label(&self.profile.library).unwrap_or("Sweep"),self.attachment_name(),self.rotation,if self.mirror{" · ↔"}else{""}),"attachment":self.attachment_name(),"rotation":self.rotation,"mirror":self.mirror})
     }
     fn set(&mut self, key: &str, value: &Json) -> bool {
         match key {
@@ -166,12 +233,31 @@ impl Tool for SweepTool {
                 self.edit = PathEdit::from_row(value.clone());
                 return self.edit.is_some();
             }
+            "sketch" => {
+                let profile = Profile {
+                    library: String::new(),
+                    sketch: value["uid"].as_str().map(str::to_owned),
+                    drawing: Some(value.clone()),
+                    params: Default::default(),
+                };
+                if profile.outline(24).is_err() {
+                    return false;
+                }
+                self.edit = None;
+                self.attachment = 0;
+                self.profile = profile;
+            }
             "profile" => {
                 self.edit = None;
                 let Some(k) = value.as_str().filter(|k| label(k).is_some()) else {
                     return false;
                 };
-                self.profile.library = k.into();
+                self.profile = Profile {
+                    library: k.into(),
+                    sketch: None,
+                    drawing: None,
+                    params: Default::default(),
+                };
                 self.attachment = if k == "basic/wall" { 2 } else { 0 };
             }
             "hover_point" => self.hover = json_p3(value),
@@ -188,20 +274,27 @@ impl Tool for SweepTool {
                 self.hover = None;
                 self.edit = None;
             }
+            ToolEvent::DoubleClick(_) => {
+                self.start = None;
+                self.start_anchor = None;
+            }
             ToolEvent::Hover(p) => self.hover = p.world,
             ToolEvent::Click(p) => {
                 if let Some(edit) = self.edit.as_mut() {
                     return edit.click(p, host);
                 }
+                if p.mods.alt && self.start.is_none() {
+                    let sketch = host.call("sweep_face_profile", json!(p.px));
+                    if self.set("sketch", &sketch) {
+                        return Reply::redraw();
+                    }
+                }
                 if let Some(end) = p.world {
-                    let anchor = if p.mods.ctrl {
-                        let hit = host.call("sweep_face_ref", json!(p.px));
-                        if hit.is_null() {
-                            return Reply::ignored();
-                        }
-                        Some(hit)
-                    } else {
+                    let anchor = if p.mods.alt {
                         None
+                    } else {
+                        let hit = host.call("sweep_face_ref", json!({"px":p.px,"at":end}));
+                        (!hit.is_null()).then_some(hit)
                     };
                     if let Some(a) = self.start {
                         if a != end
@@ -240,7 +333,9 @@ impl Tool for SweepTool {
                 }
             }
             ToolEvent::Key { key, .. } => match key.to_lowercase().as_str() {
-                "tab" => self.attachment = (self.attachment + 1) % 9,
+                "tab" => {
+                    self.attachment = (self.attachment + 1) % (9 + self.extra_attachments().count())
+                }
                 "r" => self.rotation = (self.rotation + 90) % 360,
                 "f" => self.mirror = !self.mirror,
                 "l" => {
@@ -249,7 +344,7 @@ impl Tool for SweepTool {
                 "enter" | "return" => {
                     if let Ok(paths) = serde_json::from_value(host.call("sweep_edges", Json::Null))
                     {
-                        if self.commit(paths, None, host) {
+                        if self.run_paths(paths, host) {
                             return Reply::committed();
                         }
                     }
@@ -293,8 +388,9 @@ impl Tool for SweepTool {
             .unwrap_or(DVec3::X);
         let x = DVec3::Z.cross(dir).try_normalize().unwrap_or(DVec3::X);
         if let Ok(outline) = self.profile.outline(24) {
-            let origin =
-                DVec2::from(ATTACH[self.attachment].1) * DVec2::new(outline.width, outline.height);
+            let origin = outline
+                .attachment(self.attachment_name())
+                .unwrap_or_default();
             for ring in outline.rings {
                 let pts: Vec<_> = ring
                     .iter()

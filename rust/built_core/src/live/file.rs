@@ -71,7 +71,7 @@ pub(crate) fn load(scene: &Obj<'_>, ext: &Bound<'_, PyDict>) -> PyResult<()> {
     for mut row in rows {
         let id = row.uid.clone();
         if row.v != 1
-            || !matches!(row.kind.as_str(), "test_box" | "sweep")
+            || !matches!(row.kind.as_str(), "test_box" | "sweep" | "sketch")
             || t.rows.contains_key(&id)
         {
             return Ok(());
@@ -93,7 +93,7 @@ pub(crate) fn load(scene: &Obj<'_>, ext: &Bound<'_, PyDict>) -> PyResult<()> {
             } else if row.state == "ok" {
                 row.state = "stale".into();
             }
-        } else {
+        } else if row.kind != "sketch" {
             row.state = "ref_lost".into();
         }
         let has_inputs = row.references().next().is_some();

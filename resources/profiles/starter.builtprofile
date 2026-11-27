@@ -1,193 +1,197 @@
 {
+  "format": "built.profile",
   "v": 1,
+  "name": "Starter profiles",
   "use": "profile",
-  "units": "mm",
-  "sizes": [
-    {
-      "key": "en/ipe200",
-      "label": "IPE 200",
-      "family": "i",
-      "params": {
-        "height": 200,
-        "width": 100,
-        "web": 5.6,
-        "flange": 8.5,
-        "radius": 12
+  "table": {
+    "units": "mm",
+    "sizes": [
+      {
+        "key": "en/ipe200",
+        "label": "IPE 200",
+        "family": "i",
+        "params": {
+          "height": 200,
+          "width": 100,
+          "web": 5.6,
+          "flange": 8.5,
+          "radius": 12
+        },
+        "standard": "EN 10365",
+        "source": "https://orangebook.arcelormittal.com/node/6"
       },
-      "standard": "EN 10365",
-      "source": "https://orangebook.arcelormittal.com/node/6"
-    },
-    {
-      "key": "en/ipe240",
-      "label": "IPE 240",
-      "family": "i",
-      "params": {
-        "height": 240,
-        "width": 120,
-        "web": 6.2,
-        "flange": 9.8,
-        "radius": 15
+      {
+        "key": "en/ipe240",
+        "label": "IPE 240",
+        "family": "i",
+        "params": {
+          "height": 240,
+          "width": 120,
+          "web": 6.2,
+          "flange": 9.8,
+          "radius": 15
+        },
+        "standard": "EN 10365",
+        "source": "https://orangebook.arcelormittal.com/node/6"
       },
-      "standard": "EN 10365",
-      "source": "https://orangebook.arcelormittal.com/node/6"
-    },
-    {
-      "key": "en/he200a",
-      "label": "HE 200 A",
-      "family": "i",
-      "params": {
-        "height": 190,
-        "width": 200,
-        "web": 6.5,
-        "flange": 10,
-        "radius": 18
+      {
+        "key": "en/he200a",
+        "label": "HE 200 A",
+        "family": "i",
+        "params": {
+          "height": 190,
+          "width": 200,
+          "web": 6.5,
+          "flange": 10,
+          "radius": 18
+        },
+        "standard": "EN 10365",
+        "source": "https://orangebook.arcelormittal.com/node/16"
       },
-      "standard": "EN 10365",
-      "source": "https://orangebook.arcelormittal.com/node/16"
-    },
-    {
-      "key": "en/upe200",
-      "label": "UPE 200",
-      "family": "channel",
-      "params": {
-        "height": 200,
-        "width": 80,
-        "web": 6,
-        "flange": 11,
-        "radius": 13
+      {
+        "key": "en/upe200",
+        "label": "UPE 200",
+        "family": "channel",
+        "params": {
+          "height": 200,
+          "width": 80,
+          "web": 6,
+          "flange": 11,
+          "radius": 13
+        },
+        "standard": "EN 10365",
+        "source": "https://orangebook.arcelormittal.com/node/253"
       },
-      "standard": "EN 10365",
-      "source": "https://orangebook.arcelormittal.com/node/253"
-    },
-    {
-      "key": "en/l50x5",
-      "label": "L 50 × 50 × 5",
-      "family": "angle",
-      "params": {
-        "width": 50,
-        "height": 50,
-        "web": 5,
-        "radius": 7
+      {
+        "key": "en/l50x5",
+        "label": "L 50 × 50 × 5",
+        "family": "angle",
+        "params": {
+          "width": 50,
+          "height": 50,
+          "web": 5,
+          "radius": 7
+        },
+        "standard": "EN 10056",
+        "source": "https://steel.ie/wp-content/uploads/2016/01/Angles-Data-Sheet-Equal-Angles.pdf"
       },
-      "standard": "EN 10056",
-      "source": "https://steel.ie/wp-content/uploads/2016/01/Angles-Data-Sheet-Equal-Angles.pdf"
-    },
-    {
-      "key": "en/rhs100x5",
-      "label": "RHS 100 × 50 × 5",
-      "family": "rhs",
-      "params": {
-        "width": 50,
-        "height": 100,
-        "web": 5,
-        "radius": 7.5
+      {
+        "key": "en/rhs100x5",
+        "label": "RHS 100 × 50 × 5",
+        "family": "rhs",
+        "params": {
+          "width": 50,
+          "height": 100,
+          "web": 5,
+          "radius": 7.5
+        },
+        "standard": "EN 10210",
+        "source": "https://www.tatasteeluk.com/sites/default/files/tata-steel-celsius-s420nh-technical-guide-en.pdf"
       },
-      "standard": "EN 10210",
-      "source": "https://www.tatasteeluk.com/sites/default/files/tata-steel-celsius-s420nh-technical-guide-en.pdf"
-    },
-    {
-      "key": "en/rhs100x4",
-      "label": "RHS 100 × 50 × 4",
-      "family": "rhs",
-      "params": {
-        "width": 50,
-        "height": 100,
-        "web": 4,
-        "radius": 8
+      {
+        "key": "en/rhs100x4",
+        "label": "RHS 100 × 50 × 4",
+        "family": "rhs",
+        "params": {
+          "width": 50,
+          "height": 100,
+          "web": 4,
+          "radius": 8
+        },
+        "standard": "EN 10219",
+        "source": "https://www.tatasteeluk.com/sites/default/files/pimcore_doc/tata-steel-uk-hybox-technical-guide-en.pdf"
       },
-      "standard": "EN 10219",
-      "source": "https://www.tatasteeluk.com/sites/default/files/pimcore_doc/tata-steel-uk-hybox-technical-guide-en.pdf"
-    },
-    {
-      "key": "en/chs114.3x5",
-      "label": "CHS 114.3 × 5",
-      "family": "chs",
-      "params": {
-        "width": 114.3,
-        "height": 114.3,
-        "web": 5,
-        "radius": 0
+      {
+        "key": "en/chs114.3x5",
+        "label": "CHS 114.3 × 5",
+        "family": "chs",
+        "params": {
+          "width": 114.3,
+          "height": 114.3,
+          "web": 5,
+          "radius": 0
+        },
+        "standard": "EN 10219",
+        "source": "https://www.tatasteeluk.com/sites/default/files/pimcore_doc/tata-steel-uk-hybox-technical-guide-en.pdf"
       },
-      "standard": "EN 10219",
-      "source": "https://www.tatasteeluk.com/sites/default/files/pimcore_doc/tata-steel-uk-hybox-technical-guide-en.pdf"
-    },
-    {
-      "key": "en/shs80x4",
-      "label": "SHS 80 × 80 × 4",
-      "family": "rhs",
-      "params": {
-        "width": 80,
-        "height": 80,
-        "web": 4,
-        "radius": 8
+      {
+        "key": "en/shs80x4",
+        "label": "SHS 80 × 80 × 4",
+        "family": "rhs",
+        "params": {
+          "width": 80,
+          "height": 80,
+          "web": 4,
+          "radius": 8
+        },
+        "standard": "EN 10219",
+        "source": "https://www.tatasteeluk.com/sites/default/files/pimcore_doc/tata-steel-uk-hybox-technical-guide-en.pdf"
       },
-      "standard": "EN 10219",
-      "source": "https://www.tatasteeluk.com/sites/default/files/pimcore_doc/tata-steel-uk-hybox-technical-guide-en.pdf"
-    },
-    {
-      "key": "basic/tee",
-      "label": "T 80 × 80 × 8",
-      "family": "tee",
-      "params": {
-        "width": 80,
-        "height": 80,
-        "web": 8,
-        "flange": 8
+      {
+        "key": "basic/tee",
+        "label": "T 80 × 80 × 8",
+        "family": "tee",
+        "params": {
+          "width": 80,
+          "height": 80,
+          "web": 8,
+          "flange": 8
+        },
+        "standard": "",
+        "source": "Built parametric dimensions"
       },
-      "standard": "",
-      "source": "Built parametric dimensions"
-    },
-    {
-      "key": "basic/zed",
-      "label": "Z 150 × 60 × 4",
-      "family": "zed",
-      "params": {
-        "width": 60,
-        "height": 150,
-        "web": 4,
-        "flange": 4
+      {
+        "key": "basic/zed",
+        "label": "Z 150 × 60 × 4",
+        "family": "zed",
+        "params": {
+          "width": 60,
+          "height": 150,
+          "web": 4,
+          "flange": 4
+        },
+        "standard": "",
+        "source": "Built parametric dimensions"
       },
-      "standard": "",
-      "source": "Built parametric dimensions"
-    },
-    {
-      "key": "basic/flat",
-      "label": "Flat 50 × 8",
-      "family": "rectangle",
-      "params": {
-        "width": 50,
-        "height": 8,
-        "web": 0,
-        "flange": 0
+      {
+        "key": "basic/flat",
+        "label": "Flat 50 × 8",
+        "family": "rectangle",
+        "params": {
+          "width": 50,
+          "height": 8,
+          "web": 0,
+          "flange": 0
+        },
+        "standard": "",
+        "source": "Built parametric dimensions"
       },
-      "standard": "",
-      "source": "Built parametric dimensions"
-    },
-    {
-      "key": "basic/timber",
-      "label": "Timber 45 × 145",
-      "family": "rectangle",
-      "params": {
-        "width": 45,
-        "height": 145,
-        "web": 0,
-        "flange": 0
+      {
+        "key": "basic/timber",
+        "label": "Timber 45 × 145",
+        "family": "rectangle",
+        "params": {
+          "width": 45,
+          "height": 145,
+          "web": 0,
+          "flange": 0
+        },
+        "standard": "",
+        "source": "Built parametric dimensions"
       },
-      "standard": "",
-      "source": "Built parametric dimensions"
-    },
-    {
-      "key": "basic/wall",
-      "label": "Wall 200 × 2700",
-      "family": "rectangle",
-      "params": {
-        "width": 200,
-        "height": 2700,
-        "web": 0,
-        "flange": 0
-      },
-      "standard": "",
-      "source": "Built parametric dimensions"
-    }
-  ]
+      {
+        "key": "basic/wall",
+        "label": "Wall 200 × 2700",
+        "family": "rectangle",
+        "params": {
+          "width": 200,
+          "height": 2700,
+          "web": 0,
+          "flange": 0
+        },
+        "standard": "",
+        "source": "Built parametric dimensions"
+      }
+    ]
+  }
 }

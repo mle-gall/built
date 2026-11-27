@@ -17,7 +17,7 @@ def spec(key):
     return dict(profile=dict(library=key), path=dict(points=[[0, 0, 0], [2, 0, 0]]))
 
 
-@pytest.mark.parametrize("size", CATALOGUE["sizes"], ids=lambda s: s["label"])
+@pytest.mark.parametrize("size", CATALOGUE["table"]["sizes"], ids=lambda s: s["label"])
 def test_profile_roundtrip_and_role_ids(tmp_path, size):
     scene = Scene()
     h = History(scene)
@@ -130,3 +130,69 @@ def test_member_edit_budget():
         samples.append((time.perf_counter() - start) * 1000)
     assert queries.live_rows(scene)[0]["state"] == "ok"
     assert statistics.median(samples) < 16, samples
+
+
+def test_step_reopens_the_tube_as_an_exact_solid(tmp_path):
+    from formats import step
+    scene = Scene()
+    apply(History(scene), "create_sweeps", sweeps=[spec("en/chs114.3x5")])
+    path = tmp_path / "tube.step"
+    step.save_step(scene, path)
+    reopened = step.prepare_step(path)
+    assert reopened["exact"] == 1 and not reopened["problems"]
+    assert "CYLINDRICAL_SURFACE(" in path.read_text()
+
+
+def test_drawn_profile_is_shared_editable_and_roundtrips(tmp_path):
+    """Library drawings, document sketches and face captures share curve IDs."""
+    from formats.ifc.export import save_ifc
+    import ifcopenshell
+
+    s = Scene()
+    h = History(s)
+    drawing = dict(name="Offset tube", use="profile", curves=[
+        dict(id=2, kind="circle", c=[30, 50], r=20., segments=24),
+        dict(id=7, kind="circle", c=[30, 50], r=15., segments=24)],
+        points=[dict(name="pin", at=[30, 50])], dims=[], next_id=8)
+    sweep = dict(spec(""), profile=dict(drawing=drawing), attachment="pin")
+    apply(h, "create_sweeps", sweeps=[sweep])
+    sketch, member = queries.live_rows(s)
+    assert sketch["name"] == drawing["name"] and sketch["points"] == drawing["points"]
+    assert member["state"] == "ok" and member["profile"]["sketch"] == sketch["uid"]
+    apply(h, "create_sweeps", sweeps=[dict(sweep, profile=dict(sketch=sketch["uid"]))])
+    meshes = [g.mesh for g in s.groups]
+    ids = [all_ids(mesh) for mesh in meshes]
+    sketch["curves"][0]["r"] = 22.5
+    apply(h, "live_set", row=sketch)
+    assert all(g.mesh is not old for g, old in zip(s.groups, meshes))
+    assert [all_ids(g.mesh) for g in s.groups] == ids
+    assert all(row['state'] == 'ok' for row in queries.live_rows(s))
+    apply(h, "undo")
+    assert [g.mesh for g in s.groups] == meshes
+    apply(h, "redo")
+    path = tmp_path / "sketch.built"
+    igz.save_scene(s, path)
+    reopened = Scene()
+    igz.load_into(reopened, path)
+    assert queries.live_rows(reopened) == queries.live_rows(s)
+    out = tmp_path / "drawn.ifc"
+    save_ifc(reopened, out)
+    assert len(ifcopenshell.open(out).by_type("IfcArbitraryProfileDefWithVoids")) == 2
+
+
+def test_ifc_mitre_body_volume(tmp_path):
+    import ifcopenshell
+    import ifcopenshell.geom
+    from ifcopenshell.util.shape import get_volume
+    from formats.ifc.export import save_ifc
+
+    scene = Scene()
+    member = spec("basic/timber")
+    member["path"]["points"].append([2, 3, 0])
+    apply(History(scene), "create_sweeps", sweeps=[member])
+    out = tmp_path / "corner.ifc"
+    save_ifc(scene, out)
+    model = ifcopenshell.open(out)
+    assert len(model.by_type("IfcBooleanClippingResult")) == 2
+    shape = ifcopenshell.geom.create_shape(ifcopenshell.geom.settings(), model.by_type("IfcBeam")[0])
+    assert get_volume(shape.geometry) == pytest.approx(.045 * .145 * 5, rel=1e-7)

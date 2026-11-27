@@ -742,7 +742,18 @@ fn command_action<'py>(a: &Args<'py>) -> Reply<'py> {
             let index: i64 = py.get_type::<pyo3::types::PyInt>().call1((arg,))?.extract()?;
             if 0 <= index && (index as usize) < hits.len()? {
                 let action = hits.get_item(index)?;
-                if verb == "cmdrun" {
+                if attr(&view, "_ui_command_scope")?.eq("Sweep profiles")? {
+                    if verb == "cmdrun" {
+                        let tool=win.getattr("_tools")?.get_item("sweep")?;
+                        let machine=tool.getattr("_machine")?;
+                        if let Ok(sketch)=action.get_item("sketch"){
+                            machine.call_method1("set",("sketch",sketch))?;
+                        }else{
+                            machine.call_method1("set",("profile",action.get_item("key")?))?;
+                        }
+                        view.call_method0("update")?;
+                    }
+                } else if verb == "cmdrun" {
                     render(py)?.getattr("command_metadata")?.call_method1("run", (action,))?;
                 } else if action.call_method0("isVisible")?.is_truthy()? {
                     let owner = if win.hasattr("open_preferences")? { win } else { win.call_method0("parentWidget")? };
@@ -760,6 +771,25 @@ fn command_action<'py>(a: &Args<'py>) -> Reply<'py> {
 pub(super) fn command_query<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let (view, win, query) = (a.get_item(0)?, a.get_item(1)?, a.get_item(2)?);
+    if attr(&view,"_ui_command_scope")?.eq("Sweep profiles")? {
+        let provider=py.import("built_render.wgpu_library")?.getattr("ProfilesProvider")?.call0()?;
+        let ctx=py.import("types")?.getattr("SimpleNamespace")?.call((),Some(&fields!(py;"scene"=>win.getattr("viewport")?.getattr("scene")?)))?;
+        let needle=query.extract::<String>()?.to_lowercase();
+        let (actions, results)=(empty(py), empty(py));
+        for profile in provider.call_method1("items",(ctx,))?.try_iter()?{
+            let profile=profile?;
+            let name:String=profile.get_item("name")?.extract()?;
+            let family:String=profile.get_item("category")?.extract()?;
+            let class=if profile.get_item("key")?.eq("basic/wall")? {"IfcWall"} else {"IfcBeam"};
+            if format!("{name} {family} {class}").to_lowercase().contains(&needle){
+                results.append((name,family,class,true))?;
+                actions.append(profile)?;
+            }
+        }
+        view.setattr("_ui_cmd_hits",actions)?;
+        view.getattr("renderer")?.call_method1("ui_set_command_results",(results,))?;
+        return Ok(none(py));
+    }
     let metadata = render(py)?.getattr("command_metadata")?;
     let workspace = py.import("built_render.sheet_workspace")?.call_method1("workspace_of", (&view,))?;
     let owner = if workspace.is_none() { win } else { render(py)?.call_method1("sheet_command_scope", (&win,))? };

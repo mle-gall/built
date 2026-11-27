@@ -14,12 +14,21 @@ pub struct Size {
 }
 #[derive(Deserialize)]
 struct Catalogue {
+    table: Sizes,
+}
+#[derive(Deserialize)]
+struct Sizes {
     sizes: Vec<Size>,
 }
 static SIZES: LazyLock<Catalogue> =
     LazyLock::new(|| serde_json::from_str(CATALOGUE).expect("starter profiles"));
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Profile {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sketch: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub drawing: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub library: String,
     #[serde(default)]
     pub params: BTreeMap<String, f64>,
@@ -31,6 +40,7 @@ pub struct Node {
     pub role: String,
 }
 pub struct Outline {
+    pub named: BTreeMap<String, DVec2>,
     pub family: String,
     pub rings: Vec<Vec<Node>>,
     pub width: f64,
@@ -39,9 +49,30 @@ pub struct Outline {
     pub flange: f64,
     pub radius: f64,
 }
+impl Outline {
+    pub fn attachment(&self, name: &str) -> Result<DVec2, &'static str> {
+        let uv = match name {
+            "centre" => [0.5, 0.5],
+            "bottom" | "bottom_centre" => [0.5, 0.],
+            "top" | "top_centre" => [0.5, 1.],
+            "left" | "middle_left" => [0., 0.5],
+            "right" | "middle_right" => [1., 0.5],
+            "bottom_left" => [0., 0.],
+            "bottom_right" => [1., 0.],
+            "top_left" => [0., 1.],
+            "top_right" => [1., 1.],
+            _ => return self.named.get(name).copied().ok_or("attachment_missing"),
+        };
+        Ok(DVec2::from(uv) * DVec2::new(self.width, self.height))
+    }
+}
 impl Profile {
     pub fn outline(&self, segments: usize) -> Result<Outline, &'static str> {
+        if let Some(drawing) = &self.drawing {
+            return super::drawn_profile::outline(drawing, segments);
+        }
         let size = SIZES
+            .table
             .sizes
             .iter()
             .find(|p| p.key == self.library)
@@ -195,6 +226,7 @@ impl Profile {
             _ => return Err("invalid_profile"),
         };
         Ok(Outline {
+            named: Default::default(),
             family: size.family.clone(),
             rings,
             width: w,
@@ -208,6 +240,7 @@ impl Profile {
 
 pub fn label(key: &str) -> Option<&'static str> {
     SIZES
+        .table
         .sizes
         .iter()
         .find(|s| s.key == key)

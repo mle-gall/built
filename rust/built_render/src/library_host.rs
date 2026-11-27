@@ -12,6 +12,7 @@
 //! Paint strip and the material inspector. Model edits go through
 //! `built_core.protocol.commands`.
 mod bulk;
+use std::path::PathBuf;
 use crate::library_collections as collections;
 use crate::settings_rows::{func, none, obj, opt, s, Res};
 use pyo3::{
@@ -1455,7 +1456,7 @@ impl FamiliesProvider {
     }
 }
 
-/// Coming: section outlines (steel shapes, extrusion and sweep profiles) to
+/// Section outlines (steel shapes, extrusion and sweep profiles) to
 /// draw, extrude and run along a path.
 #[pyclass(module = "built_render.wgpu_library", extends = LibraryProvider, dict)]
 pub struct ProfilesProvider;
@@ -1477,12 +1478,47 @@ impl ProfilesProvider {
         "Profiles"
     }
 
-    fn items<'p>(&self,py:Python<'p>,_ctx:&Bound<'p,PyAny>)->PyResult<Bound<'p,PyAny>> {
+    /// Shared with the sketch workspace's Save to Library action.
+    #[staticmethod]
+    fn saved_directory()->PyResult<PathBuf>{
+        let profile=std::env::var_os("BUILT_SETTINGS_DIR").map(PathBuf::from);
+        crate::platform_paths::local_data_directory(profile).map(|d|d.join("Built").join("profiles"))
+            .ok_or_else(||pyo3::exceptions::PyRuntimeError::new_err("Library directory unavailable"))
+    }
+
+    fn items<'p>(&self,py:Python<'p>,ctx:&Bound<'p,PyAny>)->PyResult<Bound<'p,PyAny>> {
         let catalogue:serde_json::Value=serde_json::from_str(include_str!("../../../resources/profiles/starter.builtprofile")).expect("bundled profiles");
-        let items:Vec<_>=catalogue["sizes"].as_array().unwrap().iter().map(|s|serde_json::json!({
-            "key":s["key"],"name":s["label"],"short":s["standard"],"category":s["family"],
-            "source":"bundled","verbs":["apply"]
-        })).collect();
+        let mut items:Vec<_>=catalogue["table"]["sizes"].as_array().unwrap().iter().map(|size|{
+            let mut details=vec![("Family".to_owned(),size["family"].as_str().unwrap().to_owned(),"")];
+            for (key,v) in size["params"].as_object().unwrap(){
+                if v.as_f64()!=Some(0.){details.push((key.to_owned(),format!("{v} mm"),""));}
+            }
+            for (key,title) in [("standard","Standard"),("source","Source")]{
+                if let Some(v)=size[key].as_str().filter(|s|!s.is_empty()){details.push((title.into(),v.into(),""));}
+            }
+            serde_json::json!({"key":size["key"],"name":size["label"],"category":size["family"],
+                "thumb":format!("profile:{}",size["key"].as_str().unwrap()),"defaults":details,
+                "source":"bundled","verbs":["apply"]})
+        }).collect();
+        if let Ok(files)=std::fs::read_dir(Self::saved_directory()?){
+            let mut files:Vec<_>=files.flatten().map(|e|e.path()).filter(|p|p.extension().is_some_and(|s|s=="builtprofile")).collect();
+            files.sort();
+            for file in files{
+                let Some(data)=std::fs::read_to_string(&file).ok().and_then(|text|serde_json::from_str::<serde_json::Value>(&text).ok()) else{continue};
+                if data["format"]!="built.profile" || data["v"]!=1 || data["use"]!="profile" || !data["sketch"]["curves"].is_array(){continue;}
+                let name=data["name"].as_str().unwrap_or("Drawn profile");
+                let mut sketch=data["sketch"].clone();
+                sketch["name"]=serde_json::json!(name);
+                items.push(serde_json::json!({"key":format!("local:{}",file.file_name().unwrap_or_default().to_string_lossy()),"name":name,"category":"My profiles","source":"local","sketch":sketch,"verbs":["apply"]}));
+            }
+        }
+        if let Some(scene)=ctx.getattr_opt("scene")?.filter(|s|!s.is_none() && s.hasattr("_root").unwrap_or(false)){
+            let rows=py.import("built_core.command_protocol")?.call_method1("live_rows",(scene,))?;
+            let rows:Vec<serde_json::Value>=serde_json::from_str(&json(py)?.call_method1("dumps",(rows,))?.extract::<String>()?).unwrap_or_default();
+            for row in rows.iter().filter(|r|r["kind"]=="sketch" && r["use"]!="section" && r["state"]=="ok"){
+                items.push(serde_json::json!({"key":format!("sketch:{}",row["uid"].as_str().unwrap_or_default()),"name":row["name"].as_str().unwrap_or("Drawn profile"),"category":"This project","source":"project","sketch":row,"verbs":["apply"]}));
+            }
+        }
         json(py)?.call_method1("loads",(serde_json::to_string(&items).unwrap(),))
     }
     #[pyo3(signature=(ctx,verb,item,_arg=""))]
@@ -1490,7 +1526,9 @@ impl ProfilesProvider {
         if verb=="apply" {
             let win=ctx.getattr("win")?;
             win.call_method1("_activate_tool",("sweep",))?;
-            win.getattr("_tools")?.get_item("sweep")?.getattr("_machine")?.call_method1("set",("profile",item.get_item("key")?))?;
+            let machine=win.getattr("_tools")?.get_item("sweep")?.getattr("_machine")?;
+            if item.contains("sketch")? {machine.call_method1("set",("sketch",item.get_item("sketch")?))?;}
+            else {machine.call_method1("set",("profile",item.get_item("key")?))?;}
         }
         Ok(())
     }
@@ -1693,7 +1731,10 @@ fn thumb(view: &Bound<'_, PyAny>, path: &Bound<'_, PyAny>) -> PyResult<String> {
     if !sent.contains(&key)? {
         sent.call_method1("add", (&key,))?;
         let px = THUMB_PX * 2;
-        let rgba = render(py)?.call_method1("swatch_pixels", (path, px, true))?;
+        let name=path.str()?;
+        let rgba=if let Some(profile)=name.to_str()?.strip_prefix("profile:"){
+            py.import("built_core.command_protocol")?.call_method1("sweep_thumbnail",(profile,px))?
+        }else{render(py)?.call_method1("swatch_pixels", (path, px, true))?};
         if !rgba.is_none() {
             view.getattr("renderer")?.call_method1("ui_set_icons", (vec![(&key, px, px, rgba)],))?;
         }
@@ -2610,6 +2651,7 @@ fn open_library(py: Python<'_>, win: &Bound<'_, PyAny>, type_id: Option<String>,
     let st = _state(&view)?;
     _land(&view, win)?;
     if let Some(t) = type_id.filter(|t| !t.is_empty()) {
+        if t=="profiles" && !st.get_item("type")?.eq("profiles")?{st.set_item("scope","s:bundled")?;}
         if t == "families" && !st.get_item("type")?.eq("families")? { st.set_item("scope", "s:all")?; }
         st.set_item("type", t)?;
     }

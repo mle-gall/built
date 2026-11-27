@@ -654,3 +654,9 @@ All six open questions accepted as recommended: recipes stay optional extension 
 
 - Evaluation runs in a hook immediately before the outer History transaction commits (`rust/built_core/src/doc/execute.rs`); the post-execute dispatch is too late to include generated writes in the same undo step. Generators must write there.
 - A missing placement stamp on a surviving recipe row marks that row stale. A document whose whole `built.live` table was stripped by another reader has only baked geometry: there is nothing to mark, and it opens as plain geometry.
+
+## Sweep and Sketch interchange (lanes 1 and 2)
+
+The Library reads the version 1 `.builtprofile` envelope with `format: "built.profile"`, a name and a use. The bundled starter catalogue puts its sizes and millimetre dimensions in `table`. A drawn entry puts its sketch in `sketch`. Both enter the Sweep tool through its profile picker. The workspace can obtain the local profile folder from `ProfilesProvider.saved_directory()`. With an isolated settings directory this is `data/Built/profiles` below it. A captured drawing becomes a document sketch on the same undo step as its first member. Further members can reference that row by UID. Editing its curves through `live_set` updates those members together.
+
+Sketch curves use the lane 2 IDs and shape fields. Coordinates and radii are millimetres. Arc angles are radians. Named points use `{name, at: [x, y]}` in the sketch frame. A sweep stores its attachment by name. Sweep rows retain the input path in the parent placement frame. Their placement marker stores the evaluated axis in definition coordinates for grips and IFC export.

@@ -779,7 +779,14 @@ fn cursor_value<'py>(a: &Args<'py>) -> Reply<'py> {
     } else {
         (caption, value)
     };
-    let shown = if sweep && !typing{tool.call_method1("_state",("chip",))?}else{tr.call1((&caption,))?};
+    let (shown,value) = if sweep && !typing {
+        let chip=tool.call_method1("_state",("chip",))?;
+        let dist:Option<f64>=tool.call_method1("_state",("length",))?.extract()?;
+        match dist {
+            Some(n)=>(chip,py.import("built_core.units")?.call_method1("fmt_len",(n,))?.extract::<String>()?),
+            None=>(tr.call1(("Sweep",))?,chip.extract::<String>()?),
+        }
+    } else {(tr.call1((&caption,))?,value)};
     // The tool's refusal reads in the error colour (Fillet: a size that
     // does not fit the selection).
     let error = match tool.getattr_opt("value_error")? {

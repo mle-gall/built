@@ -122,6 +122,7 @@ pub fn tool_cursor_art<'py>(
 /// 45 % fills as the atlas (the Sheets tools that had none, P10).
 const RAIL_SVG: &[(&str, &str)] = &[
     ("change_axes", include_str!("../assets/axes.svg")),
+    ("sweep", include_str!("../assets/sweep.svg")),
     ("line_on_surface", include_str!("../assets/line_on_surface.svg")),
     ("comp_vista", include_str!("../assets/sheet_icons/comp_vista.svg")),
     ("comp_etiqueta", include_str!("../assets/sheet_icons/comp_etiqueta.svg")),

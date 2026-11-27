@@ -91,29 +91,62 @@ impl ViewportToolHost {
             | "tape_source" => self.paint_service(py, verb, arg)?,
             "edge_under" | "corner_edges" | "rounded_corners" | "two_edge_corners"
             | "vertex_degree" | "tangent_at" => self.arc_service(py, verb, arg)?,
-            "sweep_face_ref"=>{
+            "sweep_face_profile"=>{
                 let px:(f64,f64)=args(arg)?;
                 let Some(pair)=hit(view,"pick_face_placement",px)? else{return Ok(Some(Value::Null))};
+                let face=pair.get_item(0)?;
+                if face.is_none(){return Ok(Some(Value::Null));}
+                let placement=pair.get_item(1)?;
+                let matrix=placement.getattr_opt("xform")?.filter(|m|!m.is_none()).map(|m|m.call_method0("data")?.extract::<[f64;16]>()).transpose()?.map(|a|DMat4::from_cols_array(&a)).unwrap_or(DMat4::IDENTITY);
+                let mut curves=Vec::new();
+                let mut basis=None;
+                for ring in std::iter::once(Ok(face.getattr("loop")?)).chain(face.getattr("holes")?.try_iter()?){
+                    let vertices=ring?.try_iter()?.map(|v|Ok(matrix.transform_point3(DVec3::from(v?.call_method0("position_tuple")?.extract::<P3>()?)))).collect::<PyResult<Vec<_>>>()?;
+                    if vertices.len()<3{return Ok(Some(Value::Null));}
+                    if basis.is_none(){
+                        let Some((_,n))=crate::snap_planes::face_plane(vertices.iter().map(|p|p.to_array()).collect()) else{return Ok(Some(Value::Null));};
+                        let x=(vertices[1]-vertices[0]).normalize();
+                        basis=Some((vertices[0],x,DVec3::from(n).cross(x)));
+                    }
+                    let (o,x,y)=basis.unwrap();
+                    let xy=|v:DVec3|[(v-o).dot(x)*1000.,(v-o).dot(y)*1000.];
+                    for (a,b) in vertices.iter().zip(vertices.iter().cycle().skip(1)){
+                        curves.push(json!({"id":curves.len()+1,"kind":"line","a":xy(*a),"b":xy(*b)}));
+                    }
+                }
+                json!({"name":"Face profile","use":"profile","curves":curves,"next_id":curves.len()+1})
+            }
+            "sweep_face_ref"=>{
+                let px:(f64,f64)=args(&arg["px"])?;
+                let Some(pair)=hit(view,"pick_face_inference",px)? else{return Ok(Some(Value::Null))};
                 let face=pair.get_item(0)?;let placement=pair.get_item(1)?;
                 if face.is_none(){return Ok(Some(Value::Null))}
+                let (centre,normal)=local_plane(&face,placement.getattr_opt("xform")?.as_ref())?;
+                let at:DVec3=args(&arg["at"])?;
+                if (at-centre).dot(normal).abs()>1e-6{return Ok(Some(Value::Null))}
                 let scene=view.getattr("scene")?;
                 let (mesh,path)=if placement.is_none(){(scene.getattr("mesh")?,Vec::new())}else{
                     let owner=placement.getattr_opt("source_occurrence")?.unwrap_or(placement);
                     (owner.getattr("mesh")?,scene.call_method1("occurrence_path",(&owner,))?.extract::<Vec<String>>()?)
                 };
                 let id=mesh.getattr("_store")?.call_method1("id_of",("face",face.getattr("key")?))?.extract()?;
-                json!({"path":path,"id":crate::element_ids::to_text('f',id)})
+                json!({"to":{"path":path,"id":crate::element_ids::to_text('f',id)},"normal":normal})
             }
             "sweep_picker" => {
-                py.import("built_render.wgpu_library")?.call_method1("open_library",(view.call_method0("window")?,"profiles",py.None(),"s:bundled"))?;
+                view.getattr("renderer")?.call_method1("ui_open_commands",("", "Sweep profiles"))?;
                 Value::Null
             }
             "sweep_edges" => {
+                let scene=view.getattr("scene")?;
+                let owner=scene.getattr("edit_group")?;
+                let path=if owner.is_none(){Vec::new()}else{scene.call_method1("occurrence_path",(&owner,))?.extract::<Vec<String>>()?};
+                let store=scene.getattr("mesh")?.getattr("_store")?;
                 let mut paths=Vec::new();
-                for e in view.getattr("scene")?.getattr("selection")?.try_iter()? {
-                    let e=e?;
-                    if let (Some(a),Some(b))=(e.getattr_opt("v0")?,e.getattr_opt("v1")?){
-                        paths.push([a.call_method0("position_tuple")?.extract::<P3>()?,b.call_method0("position_tuple")?.extract::<P3>()?]);
+                for edge in scene.getattr("selection")?.try_iter()?{
+                    let edge=edge?;
+                    if edge.hasattr("v0")? && edge.hasattr("v1")? {
+                        let id=store.call_method1("id_of",("edge",edge.getattr("key")?))?.extract()?;
+                        paths.push(json!({"chain":[{"path":path,"id":crate::element_ids::to_text('e',id)}]}));
                     }
                 }
                 json!(paths)

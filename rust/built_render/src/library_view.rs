@@ -482,6 +482,11 @@ pub(crate) fn detail(inp: &Input, e: &Item, thumbs: &mut Vec<String>) -> Vec<Val
         _ => String::new(),
     };
     out.push(block("heading", json!({"text": e.shown(), "right": where_})));
+    if inp.kind=="profiles" {
+        out.push(block("buttons",json!({"buttons":[verb("apply","Use in Sweep","↩",PRIMARY)],"align":"fill"})));
+        out.push(block("kv",json!({"rows":e.defaults})));
+        return out;
+    }
     if inp.kind == "families" {
         let category = e.defaults.iter().find(|r| r.0 == "Category").map(|r| r.1.to_ascii_lowercase());
         let action = match category.as_deref() { Some("door"|"doors") => "Place door", Some("window"|"windows") => "Place window", _ => "Place type" };

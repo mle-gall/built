@@ -133,7 +133,13 @@ def _save_ifc(scene, path, project_name, profile, stream, placements):
     organization = project_data.get('organization', '')
     stamp = datetime.datetime.now().isoformat(timespec='seconds')
     from built_core.protocol.queries import live_rows
-    sweeps = {r['owner']: r for r in live_rows(scene) if r['kind'] == 'sweep'}
+    rows = live_rows(scene)
+    sketches = {r['uid']: r for r in rows if r['kind'] == 'sketch'}
+    sweeps = {r['owner']: r for r in rows if r['kind'] == 'sweep'}
+    for row in sweeps.values():
+        source = sketches.get(row.get('profile', {}).get('sketch'))
+        if source:
+            row['profile']['drawing'] = source
     view = config.get('view', 'DesignTransferView' if sweeps else 'ReferenceView')
     if view == 'ReferenceView' and schema == 'IFC4':
         view = 'ReferenceView_V1.2'

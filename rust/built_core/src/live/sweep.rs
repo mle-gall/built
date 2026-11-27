@@ -78,19 +78,7 @@ pub fn generate(store: &mut Store, sweep: &Sweep, path: &[[f64; 3]]) -> Result<(
         .ok_or("invalid_path")?;
     let across = DVec3::Z.cross(dir).try_normalize().unwrap_or(DVec3::X);
     let up = dir.cross(across);
-    let attach = match sweep.attachment.as_str() {
-        "centre" => [0.5, 0.5],
-        "bottom" => [0.5, 0.],
-        "top" => [0.5, 1.],
-        "left" => [0., 0.5],
-        "right" => [1., 0.5],
-        "bottom_left" => [0., 0.],
-        "bottom_right" => [1., 0.],
-        "top_left" => [0., 1.],
-        "top_right" => [1., 1.],
-        _ => return Err("attachment_missing"),
-    };
-    let offset = DVec2::new(attach[0] * outline.width, attach[1] * outline.height);
+    let offset = outline.attachment(&sweep.attachment)?;
     let local = |pt: DVec2| {
         let mut p = (pt - offset) / 1000.;
         if sweep.mirror {
@@ -164,6 +152,19 @@ pub fn generate(store: &mut Store, sweep: &Sweep, path: &[[f64; 3]]) -> Result<(
                         .add_face(&[quad], &mut change)
                         .map_err(|_| "invalid_profile")?;
                     roles.push((format!("side/{role}"), Kind::Face, face));
+                    let prev = (j + nodes.len() - 1) % nodes.len();
+                    if nodes[j].arc.is_some() || nodes[prev].arc.is_some() {
+                        let far = store
+                            .vertex(next[j], &mut change)
+                            .map_err(|_| "invalid_profile")?;
+                        let seam = store.find_edge(slot, far).ok_or("invalid_profile")?;
+                        let flags = if nodes[j].arc == nodes[prev].arc {
+                            crate::store::SOFT
+                        } else {
+                            crate::store::SOFT | crate::store::FLAT
+                        };
+                        store.set_edge_flags(seam, flags);
+                    }
                     if let Some(c) = nodes[j].arc {
                         let radius = (nodes[j].p - c).length() / 1000.;
                         let source = Curve::Circle {

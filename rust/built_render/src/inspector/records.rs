@@ -97,7 +97,7 @@ impl Records {
                 kit::prop_row(ui,"Rotation",&format!("{}°",self.sweep["rotation"]));
                 kit::prop_row(ui,"Mirror",if self.sweep["mirror"]==true{"On"}else{"Off"});
                 ui.add_enabled_ui(self.sweep_editable,|ui|ui.horizontal(|ui|{
-                    if self.sweep["path"]["points"].is_array() && self.sweep["path"]["ends"].is_null() && kit::quiet(ui,"Edit path").clicked(){
+                    if self.sweep["path"]["points"].is_array() && kit::quiet(ui,"Edit path").clicked(){
                         send(out,"sweep.path",self.sweep["owner"].clone());
                     }
                     if kit::quiet(ui,"Release").clicked(){send(out,"sweep.release",self.sweep["owner"].clone());}
