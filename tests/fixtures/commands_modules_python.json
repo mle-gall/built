@@ -5,6 +5,8 @@
     "junction_apply",
     "junction_set",
     "junction_release",
+    "junction_skip",
+    "junction_follow",
     "create_sweeps",
     "live_set",
     "live_release",

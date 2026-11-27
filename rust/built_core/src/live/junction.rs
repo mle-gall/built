@@ -426,7 +426,7 @@ fn face_plane(
     Ok(normal.try_normalize().map(|n| (origin, n)))
 }
 
-fn geometry(scene: &Obj<'_>, t: &LiveTable, j: &Row) -> PyResult<Option<(Frames, expr::Values)>> {
+pub(super) fn geometry(scene: &Obj<'_>, t: &LiveTable, j: &Row) -> PyResult<Option<(Frames, expr::Values)>> {
     if j.joint.meeting.as_deref() == Some("hosted") && j.joint.roles["hosted"]["attached"] == true {
         return Ok(hosting::geometry(t, j));
     }

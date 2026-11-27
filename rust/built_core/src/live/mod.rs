@@ -13,6 +13,7 @@ mod hole;
 mod joints;
 pub(crate) mod junction;
 pub(crate) use junction::hosting::{opening_conflict,wall_faces_changed};
+mod meetings;
 mod presets;
 pub(crate) mod profile;
 mod reference;
@@ -57,7 +58,7 @@ fn current(py: Python<'_>, root: doc::Key) -> Option<LiveTable> {
 }
 fn put(scene: &Obj<'_>, table: LiveTable) -> PyResult<()> {
     let py = scene.py();
-    let value = if table.rows.is_empty() && table.presets.is_empty() {
+    let value = if table.rows.is_empty() && table.presets.is_empty() && table.prefs.is_empty() {
         py.None()
     } else {
         Py::new(py, table)?.into_any()
@@ -767,6 +768,10 @@ enum Edit {
     Release(String),
     ReleaseTree(String),
     Reevaluate(String),
+    /// Skip (or un-skip) meetings for a detail.
+    Skip(String, Vec<String>, bool),
+    /// Follow a detail: new matching meetings are listed, never applied.
+    Follow(String, bool),
 }
 #[pyclass(frozen, dict, name = "LiveCommand")]
 struct Mutation(Edit);
@@ -1130,6 +1135,33 @@ impl Mutation {
                     t.pending.extend(frozen);
                 }
                 t.pending.extend(users);
+            }
+            Edit::Skip(detail, keys, skip) => {
+                if presets::lookup(&t, detail).is_none_or(|p| p.primitive != "junction") {
+                    return Err(PyValueError::new_err("Unknown junction detail"));
+                }
+                if keys.iter().any(|k| k.len() != 16 || !k.bytes().all(|c| c.is_ascii_hexdigit())) {
+                    return Err(PyValueError::new_err("expected 16-hex meeting keys"));
+                }
+                let before = t.prefs.clone();
+                Arc::make_mut(&mut t.prefs).skip(detail, keys, *skip);
+                if t.prefs == before {
+                    return Err(PyValueError::new_err("Nothing to change"));
+                }
+            }
+            Edit::Follow(detail, on) => {
+                if presets::lookup(&t, detail).is_none_or(|p| p.primitive != "junction") {
+                    return Err(PyValueError::new_err("Unknown junction detail"));
+                }
+                let prefs = Arc::make_mut(&mut t.prefs);
+                let changed = if *on {
+                    prefs.follow.insert(detail.clone())
+                } else {
+                    prefs.follow.remove(detail)
+                };
+                if !changed {
+                    return Err(PyValueError::new_err("Nothing to change"));
+                }
             }
             Edit::Reevaluate(id) => {
                 if !t.rows.contains_key(id) {
@@ -1725,6 +1757,9 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     presets::register(m)?;
     m.add_function(wrap_pyfunction!(junction::junction_markers, m)?)?;
     m.add_function(wrap_pyfunction!(junction_apply, m)?)?;
+    m.add_function(wrap_pyfunction!(junction_skip, m)?)?;
+    m.add_function(wrap_pyfunction!(junction_follow, m)?)?;
+    meetings::register(m)?;
     m.add_function(wrap_pyfunction!(junction_set, m)?)?;
     m.add_function(wrap_pyfunction!(junction_frames, m)?)?;
     m.add_function(wrap_pyfunction!(junction_release, m)?)?;
@@ -1870,15 +1905,49 @@ fn junction_apply<'p>(
     detail: String,
     bindings: &Obj<'p>,
 ) -> PyResult<Bound<'p, PyDict>> {
-    let uid = eid::new_uid();
     let roles: serde_json::Value = json(bindings)?;
-    let row = to_py(
-        history.py(),
-        &serde_json::json!({"kind":"junction","uid":uid,"detail":{"uid":detail},"roles":roles}),
-    )?;
+    // One use, or several applied in one History step (a review's Enter).
+    let many = roles.is_array();
+    let uses: Vec<serde_json::Value> = match roles {
+        serde_json::Value::Array(list) => list,
+        one => vec![one],
+    };
+    if uses.is_empty() {
+        return Err(PyValueError::new_err("Expected junction bindings"));
+    }
+    let uids: Vec<String> = uses.iter().map(|_| eid::new_uid()).collect();
+    let rows: Vec<_> = uses
+        .into_iter()
+        .zip(&uids)
+        .map(|(roles, uid)| serde_json::json!({"kind":"junction","uid":uid,"detail":{"uid":detail},"roles":roles}))
+        .collect();
+    let row = to_py(history.py(), &rows)?;
     let reply = live_set(history, &row)?;
-    reply.set_item("uid", uid)?;
+    if many {
+        reply.set_item("uids", uids)?;
+    } else {
+        reply.set_item("uid", &uids[0])?;
+    }
     Ok(reply)
+}
+/// Skip a meeting for a detail (remembered, undoable), or un-skip it.
+#[pyfunction]
+#[pyo3(signature=(history, detail, meeting, skip=true))]
+fn junction_skip<'p>(history: &Obj<'p>, detail: String, meeting: &Obj<'p>, skip: bool) -> PyResult<Bound<'p, PyDict>> {
+    let keys: Vec<String> = match meeting.extract::<String>() {
+        Ok(one) => vec![one],
+        Err(_) => meeting.extract()?,
+    };
+    if keys.is_empty() {
+        return Err(PyValueError::new_err("Expected meeting keys"));
+    }
+    edit(history, Edit::Skip(detail, keys, skip))
+}
+/// Follow a detail: matching meetings that appear are listed on it.
+#[pyfunction]
+#[pyo3(signature=(history, detail, on=true))]
+fn junction_follow<'p>(history: &Obj<'p>, detail: String, on: bool) -> PyResult<Bound<'p, PyDict>> {
+    edit(history, Edit::Follow(detail, on))
 }
 #[pyfunction]
 fn junction_set<'p>(history: &Obj<'p>, row: &Obj<'p>) -> PyResult<Bound<'p, PyDict>> {
