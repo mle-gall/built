@@ -113,6 +113,7 @@ def painted_model(path, x0=0., n=GRID):
     from pathlib import Path
     from built_core.group import Group
     from built_core.layers import Layer
+    from built_core.materials import Material
     from built_core.scene import Scene
     from formats import igz
     from tests.test_exact_edit import cylinder
@@ -125,10 +126,13 @@ def painted_model(path, x0=0., n=GRID):
     rows = []
     for i in range(24):
         rgb = (0.2 + i / 40, 0.65 - i / 60, 0.4)
-        row = dict(color=rgb, back=dict(color=rgb[::-1]), layer="Panels")
+        material = Material(f"Panel finish {i:02}", color=rgb)
         if i % 3 == 0:
-            row["texture"] = dict(path=str(texture), sw=2., sh=2.,
-                                  uvw=[.5, 0., 0., -x0 * .5, 0., .5, 0., .25])
+            material.texture = dict(path=str(texture), sw=2., sh=2.)
+        scene.materials[material.name] = material
+        row = dict(material.face_attrs(), back=dict(color=rgb[::-1]), layer="Panels")
+        if material.texture:
+            row["texture"] = dict(material.texture, uvw=[.5, 0., 0., -x0 * .5, 0., .5, 0., .25])
         rows.append(row)
     rows.extend([dict(hidden=True), dict(layer="Concealed")])
     mesh._attr_table.extend(rows)
@@ -164,7 +168,10 @@ def test_painted_fixture_keeps_shared_curves_after_reopen(tmp_path):
     from formats import igz
 
     scene = Scene()
-    igz.load_into(scene, painted_model(tmp_path / "painted.built", n=6))
+    igz.load_into(scene, painted_model(tmp_path / "painted.built", n=16))
+    assert len(scene.materials) == 24
+    assert {face.attrs.get("mat") for face in scene.mesh.faces} - {None} == set(scene.materials)
+    assert sum(bool(m.texture) for m in scene.materials.values()) == 8
     sections = scene.groups[0].children
     assert [len(group.children) for group in sections] == [2, 2]
     meshes = [child.mesh for group in sections for child in group.children]
