@@ -153,3 +153,88 @@ def mapped_body(w, group, base, excluded, context_id, geometry, cache, axis):
     w.last_shape_item = items
     return w.add('IFCSHAPEREPRESENTATION', f'#{context_id}', "'Body'",
                  "'MappedRepresentation'", '(' + ','.join(f'#{i}' for i in items) + ')')
+
+
+def sweep_body(w, group, base, row, context_id):
+    """Write a straight member's section, including exact circular trims."""
+    import numpy as np
+    from built_core import group_np_affine
+    from built_core.command_protocol import sweep_profile
+    from core.bim import _compose
+    from .step import _s
+
+    points = group.ext['built.live'].get('path', [])
+    if len(points) != 2 or group.children or row['state'] != 'ok':
+        return None
+    matrix = _compose(base, group.xform)
+    rot, trans = group_np_affine(matrix) if matrix is not None else (np.eye(3), np.zeros(3))
+    scale = np.linalg.norm(rot[:, 0])
+    if scale < 1e-12 or np.linalg.det(rot) <= 0 or not np.allclose(
+            rot.T @ rot, np.eye(3) * scale**2, rtol=1e-10, atol=1e-14):
+        return None
+    profile = sweep_profile(row)
+    a, b = np.asarray(points)
+    depth = np.linalg.norm(b - a)
+    axis = (b - a) / depth
+    x = np.cross([0., 0., 1.], axis)
+    x = x / np.linalg.norm(x) if np.linalg.norm(x) > 0. else np.array([1., 0., 0.])
+    angle = np.deg2rad(row['rotation'])
+    x = np.cos(angle) * x + np.sin(angle) * np.cross(axis, x)
+    def coords(v):
+        return '(' + ','.join(format(float(n), '.16E') for n in v) + ')'
+    def add(entity, *args):
+        return '#' + str(w.add(entity, *args))
+    origin = add('IFCCARTESIANPOINT', coords(rot @ a + trans))
+    position = add('IFCAXIS2PLACEMENT3D', origin, add('IFCDIRECTION', coords(rot @ axis / scale)),
+                   add('IFCDIRECTION', coords(rot @ x / scale)))
+    attachment = {'centre': (.5, .5), 'bottom': (.5, 0), 'top': (.5, 1),
+                  'left': (0, .5), 'right': (1, .5), 'top_left': (0, 1),
+                  'top_right': (1, 1), 'bottom_left': (0, 0), 'bottom_right': (1, 0)}
+    offset = np.array(attachment[row['attachment']]) * [profile['width'], profile['height']]
+    factor = np.array([-1 if row['mirror'] else 1, 1]) * scale / 1000
+    size = np.array([profile['width'], profile['height']])
+    middle = (size / 2 - offset) * factor
+    centre = add('IFCAXIS2PLACEMENT2D', add('IFCCARTESIANPOINT', coords(middle)), '$')
+    w0, h0, t, f, r = [_f(profile[k] * scale / 1000) for k in ('width', 'height', 'web', 'flange', 'radius')]
+    args = ('.AREA.', _s(profile['name']), centre)
+    family = profile['family']
+    section = None
+    if family == 'rectangle':
+        section = add('IFCRECTANGLEPROFILEDEF', *args, w0, h0)
+    elif family == 'chs':
+        section = add('IFCCIRCLEHOLLOWPROFILEDEF', *args, _f(float(w0) / 2), t)
+    elif family == 'rhs':
+        section = add('IFCRECTANGLEHOLLOWPROFILEDEF', *args, w0, h0, t,
+                      _f(max(0., float(r) - float(t))), r)
+    elif family == 'i':
+        section = add('IFCISHAPEPROFILEDEF', *args, w0, h0, t, f, r, '$', '$')
+    curves = []
+    for ring in ([] if section else profile['rings']):
+        pts, segments = [], []
+        for i, (vertex, centre) in enumerate(ring):
+            p = np.asarray(vertex)
+            pts.append(coords((p - offset) * factor))
+            start = len(pts)
+            if centre is None:
+                kind, indices = 'IFCLINEINDEX', [start]
+            else:
+                c = np.asarray(centre)
+                q = np.asarray(ring[(i + 1) % len(ring)][0])
+                bisector = (p + q) / 2 - c
+                mid = c + bisector * np.linalg.norm(p - c) / np.linalg.norm(bisector)
+                pts.append(coords((mid - offset) * factor))
+                kind, indices = 'IFCARCINDEX', [start, len(pts)]
+            indices.append(1 if i + 1 == len(ring) else len(pts) + 1)
+            segments.append(kind + '((' + ','.join(map(str, indices)) + '))')
+        plist = add('IFCCARTESIANPOINTLIST2D', '(' + ','.join(pts) + ')')
+        curves.append(add('IFCINDEXEDPOLYCURVE', plist, '(' + ','.join(segments) + ')', '.F.'))
+    section = section or (add('IFCARBITRARYCLOSEDPROFILEDEF', '.AREA.', _s(profile['name']), curves[0])
+               if len(curves) == 1 else add('IFCARBITRARYPROFILEDEFWITHVOIDS', '.AREA.',
+                    _s(profile['name']), curves[0], '(' + ','.join(curves[1:]) + ')'))
+    solid = w.add('IFCEXTRUDEDAREASOLID', section, position,
+                  add('IFCDIRECTION', '(0.,0.,1.)'), _f(depth * scale))
+    w.last_shape_item = solid
+    rep = w.add('IFCSHAPEREPRESENTATION', f'#{context_id}', "'Body'", "'SweptSolid'", f'(#{solid})')
+    end = add('IFCCARTESIANPOINT', coords(rot @ b + trans))
+    line = add('IFCPOLYLINE', f'({origin},{end})')
+    return rep, line

@@ -3,7 +3,9 @@
 //! Definition replacements and placement markers are ordinary document ops.
 mod file;
 mod geometry;
+pub(crate) mod profile;
 mod reference;
+mod sweep;
 pub(crate) use file::{load, save};
 mod table;
 use crate::{
@@ -102,7 +104,7 @@ fn evaluate(scene: &Obj<'_>, t: &LiveTable, row: &Row) -> PyResult<&'static str>
     let Some(g) = group(py, t, &row.owner) else {
         return Ok("ref_lost");
     };
-    if row.kind != "test_box" || row.v != 1 {
+    if !matches!(row.kind.as_str(), "test_box" | "sweep") || row.v != 1 {
         return Ok("unsupported");
     }
     let mut origin = DVec3::ZERO;
@@ -114,15 +116,32 @@ fn evaluate(scene: &Obj<'_>, t: &LiveTable, row: &Row) -> PyResult<&'static str>
     }
     let mesh = py.import("built_core.mesh")?.call_method0("Mesh")?;
     let store = mesh.getattr("_store")?.cast_into::<PyMeshStore>()?;
+    let mut resolved_path = None;
     let stamp = {
         let mut s = store.try_borrow_mut()?;
-        if let Err(state) = geometry::generate(&mut s.inner, row, origin.to_array()) {
+        let result = if row.kind == "sweep" {
+            let Some(spec) = &row.sweep else {
+                return Ok("invalid_profile");
+            };
+            let Some(points) = reference::sweep_path(scene, t, row, &spec.path)? else {
+                return Ok("end_unresolved");
+            };
+            let result = sweep::generate(&mut s.inner, spec, &points);
+            resolved_path = Some(points);
+            result
+        } else {
+            geometry::generate(&mut s.inner, row, origin.to_array())
+        };
+        if let Err(state) = result {
             return Ok(state);
         }
         geometry::stamp(&s.inner)
     };
     let marker = PyDict::new(py);
     marker.set_item("row", &row.uid)?;
+    if let Some(points) = resolved_path {
+        marker.set_item("path", points)?;
+    }
     marker.set_item("key", &stamp)?;
     marker.set_item("stamp", &stamp)?;
     let ext = metadata(&g)?;
@@ -322,6 +341,7 @@ pub(crate) fn finish(
 
 #[derive(Clone)]
 enum Edit {
+    Create(Vec<sweep::Sweep>),
     Set(Row),
     Release(String),
     Reevaluate(String),
@@ -375,6 +395,58 @@ impl Mutation {
             ..Default::default()
         });
         match &self.0 {
+            Edit::Create(sweeps) => {
+                for spec in sweeps {
+                    let key = &spec.profile.library;
+                    let name = profile::label(key)
+                        .ok_or_else(|| PyValueError::new_err("profile_missing"))?;
+                    let g = py.import("built_core.group")?.getattr("Group")?.call0()?;
+                    g.setattr("name", name)?;
+                    g.setattr("xform", py.import("built_core")?.call_method0("Matrix4")?)?;
+                    let record = PyDict::new(py);
+                    record.set_item(
+                        "class",
+                        if key == "basic/wall" {
+                            "IfcWall"
+                        } else {
+                            "IfcBeam"
+                        },
+                    )?;
+                    record.set_item("name", name)?;
+                    g.setattr("ifc", record)?;
+                    let parent = scene.getattr("edit_group")?;
+                    let mut spec = spec.clone();
+                    if parent.is_none() {
+                        scene.getattr("groups")?.call_method1("append", (&g,))?;
+                    } else {
+                        let inverse =
+                            reference::frame(parent.getattr("_doc_key")?.extract()?).inverse();
+                        for point in &mut spec.path.points {
+                            *point = inverse.transform_point3((*point).into()).to_array();
+                        }
+                        parent.getattr("children")?.call_method1("append", (&g,))?;
+                    }
+                    crate::structure::file_created_placement(scene, &g)?;
+                    let owner: String = g.getattr("uid")?.extract()?;
+                    let uid = eid::new_uid();
+                    Arc::make_mut(&mut t.groups)
+                        .insert(owner.clone(), g.getattr("_doc_key")?.extract()?);
+                    t.insert(Row {
+                        kind: "sweep".into(),
+                        uid: uid.clone(),
+                        owner,
+                        v: 1,
+                        size: [1.; 3],
+                        inputs: vec![],
+                        slots: Default::default(),
+                        open_top: false,
+                        state: String::new(),
+                        sweep: Some(Box::new(spec)),
+                    })
+                    .map_err(PyValueError::new_err)?;
+                    t.pending.insert(uid);
+                }
+            }
             Edit::Set(row) => {
                 if group(py, &t, &row.owner).is_none() {
                     return Err(PyValueError::new_err("unknown recipe owner"));
@@ -435,6 +507,77 @@ fn to_py<'p>(py: Python<'p>, v: &impl serde::Serialize) -> PyResult<Obj<'p>> {
     py.import("json")?.call_method1("loads", (raw,))
 }
 #[pyfunction]
+fn live_sweep<'p>(scene: &Obj<'p>, owner: &str) -> PyResult<Obj<'p>> {
+    let Some(t) = current(scene.py(), root(scene)?) else {
+        return Ok(scene.py().None().into_bound(scene.py()));
+    };
+    let Some(row) = t
+        .owners
+        .get(owner)
+        .and_then(|uid| t.rows.get(uid))
+        .filter(|r| r.kind == "sweep")
+    else {
+        return Ok(scene.py().None().into_bound(scene.py()));
+    };
+    let value = to_py(scene.py(), row)?;
+    let k = t.groups[owner];
+    let parent = doc::lock().node(k).and_then(|n| n.owners.first().copied());
+    value.set_item(
+        "parent_frame",
+        parent
+            .map(reference::frame)
+            .unwrap_or(DMat4::IDENTITY)
+            .to_cols_array(),
+    )?;
+    if let Some(spec) = &row.sweep {
+        value.set_item("profile_name", profile::label(&spec.profile.library))?;
+    }
+    Ok(value)
+}
+#[pyfunction]
+fn sweep_profile<'p>(row: &Obj<'p>) -> PyResult<Obj<'p>> {
+    let spec: sweep::Sweep = json(row)?;
+    let outline = spec
+        .profile
+        .outline(spec.segments)
+        .map_err(PyValueError::new_err)?;
+    let rings: Vec<Vec<_>> = outline
+        .rings
+        .iter()
+        .map(|ring| {
+            ring.iter()
+                .map(|n| serde_json::json!([n.p, n.arc]))
+                .collect()
+        })
+        .collect();
+    to_py(
+        row.py(),
+        &serde_json::json!({"family":outline.family,"web":outline.web,"flange":outline.flange,"radius":outline.radius,"width":outline.width,"height":outline.height,"rings":rings,"name":profile::label(&spec.profile.library)}),
+    )
+}
+#[pyfunction]
+fn create_sweeps<'p>(history: &Obj<'p>, sweeps: &Obj<'p>) -> PyResult<Bound<'p, PyDict>> {
+    let specs: Vec<sweep::Sweep> = json(sweeps)?;
+    if specs.is_empty() {
+        return Err(PyValueError::new_err("expected a sweep"));
+    }
+    for spec in &specs {
+        spec.profile
+            .outline(spec.segments)
+            .map_err(PyValueError::new_err)?;
+        if (spec.path.chain.is_empty() && spec.path.ends.is_none() && spec.path.points.len() < 2)
+            || spec
+                .path
+                .points
+                .windows(2)
+                .any(|ab| DVec3::from(ab[0]).distance(DVec3::from(ab[1])) < 1e-9)
+        {
+            return Err(PyValueError::new_err("invalid_path"));
+        }
+    }
+    edit(history, Edit::Create(specs))
+}
+#[pyfunction]
 fn live_set<'p>(history: &Obj<'p>, row: &Obj<'p>) -> PyResult<Bound<'p, PyDict>> {
     let row: Row = json(row)?;
     for uid in [&row.uid, &row.owner] {
@@ -442,7 +585,7 @@ fn live_set<'p>(history: &Obj<'p>, row: &Obj<'p>) -> PyResult<Bound<'p, PyDict>>
             return Err(PyValueError::new_err("expected 16-hex uid"));
         }
     }
-    if row.kind != "test_box" || row.v != 1 {
+    if !matches!(row.kind.as_str(), "test_box" | "sweep") || row.v != 1 {
         return Err(PyValueError::new_err("unsupported recipe"));
     }
     edit(history, Edit::Set(row))
@@ -461,6 +604,9 @@ fn live_rows<'p>(scene: &Obj<'p>) -> PyResult<Obj<'p>> {
     to_py(scene.py(), &t.by_creation())
 }
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(live_sweep, m)?)?;
+    m.add_function(wrap_pyfunction!(sweep_profile, m)?)?;
+    m.add_function(wrap_pyfunction!(create_sweeps, m)?)?;
     m.add_function(wrap_pyfunction!(live_set, m)?)?;
     m.add_function(wrap_pyfunction!(live_release, m)?)?;
     m.add_function(wrap_pyfunction!(live_reevaluate, m)?)?;

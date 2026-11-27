@@ -55,6 +55,8 @@ pub struct Row {
     pub slots: std::collections::BTreeMap<String, Reference>,
     #[serde(default)]
     pub state: String,
+    #[serde(flatten)]
+    pub sweep: Option<Box<super::sweep::Sweep>>,
 }
 fn one() -> u32 {
     1
@@ -69,9 +71,15 @@ pub enum Key {
     Row(String),
 }
 impl Row {
+    pub fn references(&self) -> impl Iterator<Item = &Reference> {
+        self.inputs
+            .iter()
+            .chain(self.slots.values())
+            .chain(self.sweep.iter().flat_map(|s| s.path.references()))
+    }
     fn keys(&self) -> HashSet<Key> {
         let mut keys = HashSet::new();
-        for r in self.inputs.iter().chain(self.slots.values()) {
+        for r in self.references() {
             match r {
                 Reference::Point(_) | Reference::Slot { .. } => (),
                 Reference::Axis { sweep, .. } => {
@@ -260,6 +268,7 @@ mod tests {
             kind: "test_box".into(),
             v: 1,
             size: unit(),
+            sweep: None,
             open_top: false,
             inputs,
             slots: Default::default(),

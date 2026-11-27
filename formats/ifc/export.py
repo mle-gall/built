@@ -16,7 +16,7 @@ from built_core.version import __version__
 from .entities import Builder
 from core.ifc_tables_data import SCHEMA_DATA
 from .relationships import Appearance
-from .geometry import array_body, mapped_body
+from .geometry import array_body, mapped_body, sweep_body
 from built_core.geometry_arrays import (world_arrays, merged, faces_arrays,
                                   quantities as array_quantities, measurements,
                                   face_attributes, recorded_arrays)
@@ -132,7 +132,9 @@ def _save_ifc(scene, path, project_name, profile, stream, placements):
     author = project_data.get('author', '')
     organization = project_data.get('organization', '')
     stamp = datetime.datetime.now().isoformat(timespec='seconds')
-    view = config.get('view', 'ReferenceView')
+    from built_core.protocol.queries import live_rows
+    sweeps = {r['owner']: r for r in live_rows(scene) if r['kind'] == 'sweep'}
+    view = config.get('view', 'DesignTransferView' if sweeps else 'ReferenceView')
     if view == 'ReferenceView' and schema == 'IFC4':
         view = 'ReferenceView_V1.2'
     header = ("ISO-10303-21;\nHEADER;\n"
@@ -225,6 +227,7 @@ def _save_ifc(scene, path, project_name, profile, stream, placements):
         return result
 
     maps = {}
+    axis_context = None
     for obj in objects:
         group = obj.get('group')
         raw = record.normalize(group.ifc) if group is not None else {'class': obj['class'], 'name': obj['name']}
@@ -283,14 +286,30 @@ def _save_ifc(scene, path, project_name, profile, stream, placements):
                      Description=_s(r.get('description', '')), ObjectType=_s(r.get('object_type', '')),
                      ObjectPlacement=ref(placement))
         rep, item = None, None
+        axis_rep = None
         if len(arrays.ring_counts):
-            if config.get('instancing', False) and group is not None:
+            sweep = sweeps.get(group.uid) if group is not None else None
+            reference_view = view.startswith('ReferenceView')
+            if sweep and not reference_view:
+                rep = sweep_body(w, group, bases[id(group)], sweep, body) if group.ext.get('built.live') else None
+                if rep is not None:
+                    rep, line = rep
+                    if axis_context is None:
+                        axis_context = w.add('IFCGEOMETRICREPRESENTATIONSUBCONTEXT', "'Axis'", "'Model'",
+                                             '*', '*', '*', '*', ref(context), '$', '.GRAPH_VIEW.', '$')
+                    axis_rep = w.add('IFCSHAPEREPRESENTATION', ref(axis_context), "'Axis'", "'Curve3D'", f'({line})')
+                else:
+                    problems.append({'uid': group.uid, 'name': group.name,
+                                     'messages': ['Sweep exported from its evaluated faces']})
+            if sweep and reference_view:
+                rep = array_body(w, arrays, body, 'polygonal')
+            elif rep is None and config.get('instancing', False) and group is not None:
                 rep = mapped_body(w, group, bases[id(group)], excluded,
                                   body, geometry, maps, axis)
-            else:
+            elif rep is None:
                 rep = array_body(w, arrays, body, geometry)
             item = w.last_shape_item
-            attrs['Representation'] = ref(w.add('IFCPRODUCTDEFINITIONSHAPE', '$', '$', refs([rep])))
+            attrs['Representation'] = ref(w.add('IFCPRODUCTDEFINITIONSHAPE', '$', '$', refs([axis_rep, rep] if axis_rep else [rep])))
         available = w.attributes(cls)
         if 'Tag' in available:
             attrs['Tag'] = _s(r.get('tag', ''))
