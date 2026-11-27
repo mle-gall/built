@@ -477,27 +477,46 @@ fn recover_selection(win:&Bound<'_,PyAny>,faceted:bool)->PyResult<()>{
         if !result.get_item("ok")?.is_truthy()?{
             vp.call_method1("flash_status",(result.get_item("error")?.str()?,6000))?;
         }
-    }else{
-        let dialogs=py.import("built_render.chrome_dialogs")?;
-        let title=translated(py,"Recover exact geometry",None)?;
-        let report=match api.call_method1("recover_exact_geometry",(&history,&keys)){
-            Ok(p)=>p,Err(e)=>{dialogs.call_method1("information",(win,title,e.value(py).str()?))?;return Ok(())}
-        };
+    } else {
+        let title = translated(py, "Recover exact geometry", None)?;
+        let done = py.import("functools")?.call_method1("partial",
+            (wrap_pyfunction!(preview_recovery, py)?, win, &history, scene.getattr("mesh")?, keys))?;
+        py.import("built_render.chrome_forms")?.call_method1("ask_number",
+            (win, title, translated(py,"Fit tolerance (mm)",None)?, 0.1, 0.000001, 1e9, 6, done))?;
+    }
+    vp.call_method0("update")?;
+    Ok(())
+}
+
+#[pyfunction]
+fn preview_recovery(win:&Bound<'_,PyAny>,history:&Bound<'_,PyAny>,mesh:&Bound<'_,PyAny>,keys:&Bound<'_,PyAny>,millimetres:Option<f64>)->PyResult<()> {
+    let Some(mm)=millimetres else{return Ok(())};
+    let py=win.py();
+    let vp=win.getattr("viewport")?;
+    if !vp.getattr("scene")?.getattr("mesh")?.is(mesh) {return Ok(())}
+    let api=py.import("built_core.command_protocol")?;
+    let dialogs=py.import("built_render.chrome_dialogs")?;
+    let title=translated(py,"Recover exact geometry",None)?;
+    let report=match api.call_method1("recover_exact_geometry",(history,keys,mm/1000.)) {
+        Ok(r)=>r, Err(e)=>{dialogs.call_method1("information",(win,title,e.value(py).str()?))?;return Ok(())}
+    };
+    let mut detail=Vec::new();
+    for row in report.get_item("parts")?.try_iter()? {
+        let row=row?;
         let vars=PyDict::new(py);
-        for k in ["method","faces","max_residual_m","input_volume_m3","output_volume_m3"]{
-            let v=report.get_item(k)?;
+        for k in ["first_face","method","faces","planar_faces","curved_supports","max_residual_m","input_volume_m3","output_volume_m3"] {
+            let v=row.get_item(k)?;
             vars.set_item(k,if v.is_none(){translated(py,"Open selection",None)?}else{v})?;
         }
-        let mut detail=message(py,"{method} · {faces} faces\nMaximum residual: {max_residual_m} m\nInput volume (m³): {input_volume_m3}\nOutput volume (m³): {output_volume_m3}",&vars)?;
-        for reason in report.get_item("untouched")?.extract::<Vec<String>>()?{detail.push('\n');detail.push_str(&reason);}
-        let buttons=PyList::new(py,[("cancel",translated(py,"Cancel",None)?),("apply",translated(py,"Apply",None)?)])?;
-        let kw=PyDict::new(py);kw.set_item("cancel","cancel")?;kw.set_item("default","cancel")?;
-        if dialogs.call_method("ask",(win,title,detail,buttons),Some(&kw))?.eq("apply")?{
-            let result=api.call_method1("recover_exact_geometry",(&history,&keys,0.0001,false))?;
-            if !result.get_item("ok")?.is_truthy()?{
-                vp.call_method1("flash_status",(result.get_item("error")?.str()?,6000))?;
-            }
-        }
+        detail.push(message(py,"Face {first_face} · {method} · {faces} faces\nPlanar faces: {planar_faces} · Curved supports: {curved_supports}\nMaximum residual: {max_residual_m} m\nInput volume (m³): {input_volume_m3}\nOutput volume (m³): {output_volume_m3}",&vars)?);
+        detail.extend(row.get_item("untouched")?.extract::<Vec<String>>()?);
     }
-    vp.call_method0("update")?;Ok(())
+    let buttons=PyList::new(py,[("cancel",translated(py,"Cancel",None)?),("apply",translated(py,"Apply",None)?)])?;
+    let kw=PyDict::new(py);kw.set_item("cancel","cancel")?;kw.set_item("default","cancel")?;
+    if dialogs.call_method("ask",(win,title,detail.join("\n\n"),buttons),Some(&kw))?.eq("apply")? {
+        let result=api.call_method1("recover_exact_geometry",(history,keys,mm/1000.,false))?;
+        if !result.get_item("ok")?.is_truthy()? {vp.call_method1("flash_status",(result.get_item("error")?.str()?,6000))?;}
+    }
+    vp.call_method0("update")?;
+    Ok(())
 }

@@ -84,7 +84,7 @@ pub fn record(values: &Value, svg: &Value) -> Value {
     if fmt == "package" {
         let mut outputs = Vec::new();
         for (format, _, _) in PACKAGE_OUTPUTS {
-            if values[format!("include_{format}")].as_bool() == Some(false) {
+            if !values[format!("include_{format}")].as_bool().unwrap_or(format != "step") {
                 continue;
             }
             let custom = text(values, &format!("source_{format}"));

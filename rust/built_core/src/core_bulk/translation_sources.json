@@ -799,6 +799,7 @@
  "Fit page",
  "Fit the page in the window",
  "Fit to window",
+ "Fit tolerance (mm)",
  "Fixes deep in the modelling core: windows cut at a box's corner, lines over other edges, Follow Me's undo and splitting edges.",
  "Fixes for macOS (text layout, frame colours) and faces kept the right way round when erasing a dividing line.",
  "Fixes for reopened dimensions, New's materials, the extension manager, face areas, textures on rotated groups, unnamed groups and .skp scale, and a faster viewer.",

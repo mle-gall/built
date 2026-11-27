@@ -694,7 +694,7 @@ pub fn export_form<'py>(win: &Bound<'py, PyAny>, key: Option<String>, one_off: b
     ];
     let hidden = || false.into_pyobject(py).unwrap().to_owned().into_any();
     for (id, _, _) in package_outputs(py)? {
-        let enabled = stored["format"] != "package" || output(&id).is_some();
+        let enabled = (stored["format"] != "package" && id != "step") || output(&id).is_some();
         fields.push(field(
             &format!("include_{id}"),
             "check",
@@ -753,7 +753,7 @@ pub fn export_form<'py>(win: &Bound<'py, PyAny>, key: Option<String>, one_off: b
             ],
         )?);
     }
-    for format in ["ifc", "dxf", "csv"] {
+    for format in ["ifc", "step", "dxf", "csv"] {
         let fid = format!("source_{format}");
         let source = output(format)
             .and_then(|o| o["scope"].as_str())

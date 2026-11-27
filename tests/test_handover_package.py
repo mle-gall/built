@@ -149,3 +149,15 @@ def test_setup_sheet_run_and_review_share_delivery(native_host, tmp_path, monkey
     assert view._delivery_review == result
     built_render.delivery_action(win, view, "back")
     assert view._delivery_review is None
+
+
+def test_step_output_can_be_added_to_existing_package(tmp_path):
+    from formats import step
+
+    scene = _tagged_wall_scene()
+    plan = preset(tmp_path, include_step=True)
+    steps = deliveries.write_steps(scene, plan)
+    list(steps)
+    folder = Path(steps.summary["folder"])
+    assert {"format": "step", "result": "Delivered"} in steps.summary["outputs"]
+    assert step.prepare_step(folder / "model.step")["exact"] > 0

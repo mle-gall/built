@@ -17,6 +17,8 @@
     "add_exact_geometry",
     "materialize_exact_geometry",
     "bind_exact_plane",
+    "recover_exact_geometry",
+    "make_faceted",
     "add_face",
     "add_guide",
     "change_guide",

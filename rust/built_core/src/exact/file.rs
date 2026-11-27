@@ -383,7 +383,7 @@ pub(crate) fn decode_supports<T:Clone>(arrays:&Obj<'_>,pool:&[T],map:Option<&[u3
                 id,
                 pool
                     .get(r as usize)
-                    .ok_or_else(|| bad("missing support pool row"))?
+                    .ok_or_else(|| bad(if ref_name == "face_surface_ref" { "missing plane pool row" } else { "missing arc pool row" }))?
                     .clone(),
             ))
         })
