@@ -236,7 +236,10 @@ impl ViewportToolHost {
                                 hit=json!({"kind":"offset","row":super::py::py_to_json(&row)?,"at":at,"axis":item.get_item("axis")?.extract::<P3>()?,"radius":item.get_item("radius")?.extract::<f64>()?});
                             } else {
                                 let cutter=row.get_item("cutter")?;
-                                if let Ok(body)=cutter.get_item("body").or_else(|_| cutter.get_item("opening")?.get_item("fill")) {
+                                if let Ok(repeat)=cutter.get_item("repeat") {
+                                    nearest=d;
+                                    hit=json!({"placement":item.get_item("repeat_source")?.extract::<String>()?, "repeat":repeat.extract::<String>()?});
+                                } else if let Ok(body)=cutter.get_item("body").or_else(|_| cutter.get_item("opening")?.get_item("fill")) {
                                     nearest=d;
                                     hit=json!({"placement":body.extract::<String>()?});
                                 }

@@ -70,6 +70,11 @@ def test_repeated_cutter_applies_source_and_each_station():
     apply(history, "live_set", row=dict(kind="cut", uid="0000000000000003", owner=beam.uid,
                                         cutter={"repeat": row["uid"]}, operation="subtract"))
     assert solid_volume(beam) == pytest.approx(original - 3 * .045 ** 2 * .145)
+    from built_core import command_protocol
+    scene.show_all_cutters = True
+    outline, = command_protocol.live_cut_display(scene)
+    assert outline["repeat_source"] == tool.uid
+    assert len(outline["lines"]) == 3 * len(tool.mesh.edges)
     apply(history, "undo")
     assert solid_volume(beam) == pytest.approx(original)
 

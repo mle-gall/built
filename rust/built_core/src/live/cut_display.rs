@@ -52,6 +52,17 @@ pub(crate) fn live_cut_display<'p>(scene: &Obj<'p>) -> PyResult<Obj<'p>> {
     Ok(items)
 }
 
+fn mesh_outline(group: &Obj<'_>, frame: DMat4, lines: &mut Vec<[DVec3; 2]>) -> PyResult<()> {
+    for edge in group.getattr("mesh")?.getattr("edges")?.try_iter()? {
+        let edge = edge?;
+        let point = |key| -> PyResult<DVec3> {
+            Ok(frame.transform_point3(crate::math::xyz(&edge.getattr(key)?)?))
+        };
+        lines.push([point("a")?, point("b")?]);
+    }
+    Ok(())
+}
+
 fn outline(
     scene: &Obj<'_>,
     t: &LiveTable,
@@ -61,6 +72,7 @@ fn outline(
 ) -> PyResult<Option<Value>> {
     let mut lines = Vec::<[DVec3; 2]>::new();
     let mut grips = Vec::new();
+    let mut repeat_source = None;
     let (mut centre, mut normal) = (DVec3::ZERO, DVec3::Z);
     let mut radius = 0.14;
     let Some(cutter) = row.cutter.as_ref() else {
@@ -139,6 +151,29 @@ fn outline(
             }
             grips.push(("offset", centre));
         }
+        Cutter::Repeat(uid) => {
+            let Some(repeat) = t.rows.get(uid) else {
+                return Ok(None);
+            };
+            let Some(owner) = group(scene.py(), t, &repeat.owner) else {
+                return Ok(None);
+            };
+            let Some(source) = repeat
+                .source
+                .as_ref()
+                .and_then(|id| group(scene.py(), t, id))
+            else {
+                return Ok(None);
+            };
+            repeat_source = repeat.source.as_ref();
+            let inverse = world.inverse();
+            for station in std::iter::once(Ok(source)).chain(owner.getattr("children")?.try_iter()?)
+            {
+                let station = station?;
+                let frame = inverse * reference::frame(station.getattr("_doc_key")?.extract()?);
+                mesh_outline(&station, frame, &mut lines)?;
+            }
+        }
         Cutter::Body(uid) | Cutter::Opening(cut::Opening { fill: uid, .. }) => {
             let opening = if let Cutter::Opening(opening) = cutter {
                 Some(opening)
@@ -181,13 +216,7 @@ fn outline(
                     }
                 }
             } else if let Some(g) = group(scene.py(), t, uid) {
-                for edge in g.getattr("mesh")?.getattr("edges")?.try_iter()? {
-                    let edge = edge?;
-                    let point = |k| -> PyResult<DVec3> {
-                        Ok(frame.transform_point3(crate::math::xyz(&edge.getattr(k)?)?))
-                    };
-                    lines.push([point("a")?, point("b")?]);
-                }
+                mesh_outline(&g, frame, &mut lines)?;
             }
         }
     }
@@ -200,6 +229,6 @@ fn outline(
         .map(|(kind, p)| json!({"kind":kind,"at":world.transform_point3(p)}))
         .collect();
     Ok(Some(
-        json!({"row":row,"centre":world.transform_point3(centre),"axis":world.transform_vector3(normal),"radius":radius,"grips":grips,"lines":lines}),
+        json!({"row":row,"repeat_source":repeat_source,"centre":world.transform_point3(centre),"axis":world.transform_vector3(normal),"radius":radius,"grips":grips,"lines":lines}),
     ))
 }
