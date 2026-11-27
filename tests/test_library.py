@@ -160,7 +160,7 @@ def test_an_entry_without_a_size_still_loads(tmp_path):
 
 
 def test_a_download_says_who_it_is(monkeypatch, tmp_path):
-    # Cloudflare — which is what serves ingetrazo.com — answers 403 to
+    # Cloudflare — which served the old component catalogue — answers 403 to
     # Python's default "Python-urllib/3.x". A request that does not identify
     # itself comes back Forbidden, and the whole online library is dead
     # while curl on the same machine works fine. It cost a live deploy to
