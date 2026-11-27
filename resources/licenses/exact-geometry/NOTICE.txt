@@ -1,0 +1,6 @@
+Built uses truck-geometry 0.5.0, truck-base 0.5.0, truck-geotrait 0.4.0
+and truck-derivers 0.1.0 from the Truck project, distributed under the
+Apache License, Version 2.0. https://github.com/ricosjp/truck
+
+Built uses Spade 2.15.1 under its Apache License, Version 2.0 option.
+https://github.com/Stoeoef/spade

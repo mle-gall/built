@@ -13,6 +13,7 @@ use numpy::IntoPyArray;
 use pyo3::types::PyBytes;
 
 mod math;
+mod exact;
 mod screen;
 mod texture_position;
 mod navigation;
