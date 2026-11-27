@@ -37,6 +37,8 @@ pub(super) struct Face {
 #[serde(deny_unknown_fields)]
 pub(super) struct Topology {
     pub tolerance: f64,
+    #[serde(default)]
+    normal_tolerance: Option<f64>,
     vertices: BTreeMap<u64, DVec3>,
     edges: Vec<Edge>,
     faces: Vec<Face>,
@@ -55,6 +57,32 @@ impl Curve {
     }
 }
 impl Surface {
+    /// Bound variation of the regular elementary surface normal in radians,
+    /// across a rectangle in unwrapped parameters. At a cone or sphere pole
+    /// this also bounds the one-sided limiting normals on the triangle.
+    fn normal_span(&self, a: DVec2, b: DVec2) -> Option<f64> {
+        let d = (b - a).abs();
+        match self {
+            Self::Plane { .. } => Some(0.),
+            Self::Cylinder { .. } | Self::Cone { .. } => Some(d.x),
+            Self::Sphere { .. } | Self::Torus { .. } => Some(d.x + d.y),
+            _ => None,
+        }
+    }
+
+    fn angular_steps(&self, a: DVec2, b: DVec2, tolerance: Option<f64>) -> Result<usize> {
+        let Some(limit) = tolerance else { return Ok(1) };
+        let span = self
+            .normal_span(a, b)
+            .ok_or("normal bound unavailable for this support")?;
+        let n = (2. * span / limit).ceil();
+        check(
+            n.is_finite() && n <= 65536.,
+            "angular sampling budget exceeded",
+        )?;
+        Ok((n as usize).max(1))
+    }
+
     /// Upper bound on the norm of the second derivative along a UV segment,
     /// parameterized from 0 to 1. The cone's radial term varies linearly.
     fn acceleration(&self, curves: &[Curve], a: DVec2, b: DVec2) -> Result<f64> {
@@ -253,6 +281,12 @@ impl Topology {
             self.tolerance.is_finite() && self.tolerance > 0.,
             "invalid model tolerance",
         )?;
+        if let Some(angle) = self.normal_tolerance {
+            check(
+                angle.is_finite() && angle > 0. && angle <= std::f64::consts::PI,
+                "invalid normal tolerance",
+            )?;
+        }
         check(
             self.vertices.values().all(|p| p.is_finite()),
             "nonfinite exact vertex",
@@ -434,6 +468,9 @@ pub(super) struct Mesh {
     pub(super) points: Vec<[f64; 3]>,
     pub(super) triangles: Vec<[usize; 3]>,
     face_ids: Vec<u64>,
+    /// Each ordered polyline names one logical edge. Shared uses index the
+    /// very same positions as the adjacent triangles.
+    edge_samples: BTreeMap<u64, Vec<usize>>,
 }
 
 impl Topology {
@@ -446,25 +483,32 @@ impl Topology {
             vertices.insert(id, mesh.points.len());
             mesh.points.push(p.to_array());
         }
-        let mut edges = HashMap::new();
-        let mut face_bounds = HashMap::<u64, f64>::new();
+        let mut edges = BTreeMap::new();
+        let mut face_bounds = HashMap::<u64, (f64, usize)>::new();
         for face in &self.faces {
             let surface = &rows.surfaces[face.surface as usize];
             for c in face.loops.iter().flatten() {
                 if let Some(id) = c.edge {
                     let a = surface.acceleration(&rows.curves, c.uv[0], c.uv[1])?;
                     let bound = face_bounds.entry(id).or_default();
-                    *bound = bound.max(a);
+                    bound.0 = bound.0.max(a);
+                    bound.1 = bound.1.max(surface.angular_steps(
+                        c.uv[0],
+                        c.uv[1],
+                        self.normal_tolerance,
+                    )?);
                 }
             }
         }
         for e in &self.edges {
             let c = &rows.curves[e.curve as usize];
+            let (acceleration, angular_steps) = face_bounds.get(&e.id).copied().unwrap_or_default();
             let n = divisions(
                 c.acceleration(e.interval[1] - e.interval[0])?
-                    .max(face_bounds.get(&e.id).copied().unwrap_or(0.)),
+                    .max(acceleration),
                 self.tolerance / 4.,
-            )?;
+            )?
+            .max(angular_steps);
             check(
                 mesh.points.len().saturating_add(n) <= 4_000_000,
                 "edge sample budget exceeded",
@@ -484,8 +528,16 @@ impl Topology {
             edges.insert(e.id, sample);
         }
         for f in &self.faces {
-            mesh.face(rows, f, &edges, &vertices, self.tolerance)?;
+            mesh.face(
+                rows,
+                f,
+                &edges,
+                &vertices,
+                self.tolerance,
+                self.normal_tolerance,
+            )?;
         }
+        mesh.edge_samples = edges;
         Ok(mesh)
     }
 }
@@ -508,9 +560,10 @@ impl Mesh {
         &mut self,
         rows: &Rows,
         f: &Face,
-        edges: &HashMap<u64, Vec<usize>>,
+        edges: &BTreeMap<u64, Vec<usize>>,
         vertices: &HashMap<u64, usize>,
         tol: f64,
+        angle: Option<f64>,
     ) -> Result<()> {
         use spade::{ConstrainedDelaunayTriangulation, Triangulation};
         let surface = &rows.surfaces[f.surface as usize];
@@ -527,7 +580,8 @@ impl Mesh {
                     let n = divisions(
                         surface.acceleration(&rows.curves, c.uv[0], c.uv[1])?,
                         tol / 4.,
-                    )?;
+                    )?
+                    .max(surface.angular_steps(c.uv[0], c.uv[1], angle)?);
                     for i in 0..n {
                         let uv = uv_at(c.uv[0], c.uv[1], i as f64 / n as f64);
                         let residual = surface
@@ -610,13 +664,27 @@ impl Mesh {
                 // Taylor expand at an arbitrary UV point inside the triangle.
                 // Its barycentric linear terms cancel. The parameter box bounds
                 // every direction to a corner, also across a cone or revolution.
-                let valid = 0.5 * surface.acceleration(&rows.curves, lo, hi)? + residual <= tol;
+                let chord_error = 0.5 * surface.acceleration(&rows.curves, lo, hi)? + residual;
+                let angular_error = match angle {
+                    Some(limit) => {
+                        surface
+                            .normal_span(lo, hi)
+                            .ok_or("normal bound unavailable for this support")?
+                            / limit
+                    }
+                    None => 0.,
+                };
+                let valid = chord_error <= tol && angular_error <= 1.;
                 if !valid {
                     let mut best = None;
                     for edge in triangle.adjacent_edges() {
                         let [a, b] = edge.vertices().map(|v| v.data().uv);
                         if !cdt.is_constraint_edge(edge.as_undirected().fix()) {
-                            let score = surface.acceleration(&rows.curves, a, b)?;
+                            let score = (surface.acceleration(&rows.curves, a, b)? / tol).max(
+                                angle.map_or(0., |limit| {
+                                    surface.normal_span(a, b).unwrap_or(0.) / limit
+                                }),
+                            );
                             if best.is_none_or(|(old, _, _)| score > old) {
                                 best = Some((score, edge.as_undirected().index(), (a + b) * 0.5));
                             }

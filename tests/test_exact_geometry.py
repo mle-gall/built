@@ -318,3 +318,16 @@ def test_exact_plane_lost_on_partial_nonplanar_edit_and_restored_by_undo():
     assert all(scene.mesh._store.exact_plane(f.key) is None for f in scene.mesh.faces)
     h.undo()
     assert scene.mesh._store.exact_plane(key) == list(frame().values())
+
+
+def test_angular_tolerance_refines_shared_logical_edge_samples():
+    rows = cylinder()
+    rows["topology"]["tolerance"] = 0.5
+    rough = json.loads(ExactGeometry(json.dumps(rows)).tessellate())
+    rows["topology"]["normal_tolerance"] = 0.07
+    fine = json.loads(ExactGeometry(json.dumps(rows)).tessellate())
+    assert len(fine["edge_samples"]["10"]) > len(rough["edge_samples"]["10"])
+    edge = fine["edge_samples"]["10"]
+    assert edge[0] == edge[-1]
+    triangles = {tuple(sorted(e)) for a, b, c in fine["triangles"] for e in ((a, b), (b, c), (c, a))}
+    assert all(tuple(sorted(e)) in triangles for e in zip(edge, edge[1:]))
