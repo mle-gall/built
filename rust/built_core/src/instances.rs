@@ -249,33 +249,26 @@ fn carried(order: &[u32], nodes: &[Node], n_old: usize, n: usize, runs: &[(usize
     let (extra_order, mut extra) = build_bvh(&lo, &hi, &cen);
     let base = order.len() as u32;
     order.extend(extra_order.into_iter().map(|i| fresh[i as usize]));
-    let (nl, root) = (nodes.len() as u32, (nodes[0], extra[0]));
-    // [root, old root, new root, the rest of the old, the rest of the new],
-    // as `bvh_range` joins two halves.
-    for v in nodes.iter_mut().filter(|v| !v.leaf) {
-        v.left += 2;
+    // Keep every old child index. Only the old root moves to sit beside
+    // the new subtree's root, as the two children of node zero.
+    let left = nodes.len() as u32;
+    let old = nodes[0];
+    for node in &mut extra {
+        if !node.leaf { node.left += left + 1; }
+        node.start += base;
+        node.end += base;
     }
-    for v in extra.iter_mut() {
-        if !v.leaf {
-            v.left += nl + 1;
-        }
-        v.start += base;
-        v.end += base;
-    }
-    let mut out = Vec::with_capacity(1 + nodes.len() + extra.len());
-    out.push(Node {
-        lo: std::array::from_fn(|k| root.0.lo[k].min(root.1.lo[k])),
-        hi: std::array::from_fn(|k| root.0.hi[k].max(root.1.hi[k])),
+    nodes[0] = Node {
+        lo: std::array::from_fn(|k| old.lo[k].min(extra[0].lo[k])),
+        hi: std::array::from_fn(|k| old.hi[k].max(extra[0].hi[k])),
         start: 0,
         end: order.len() as u32,
-        left: 1,
+        left,
         leaf: false,
-    });
-    out.push(nodes[0]);
-    out.push(extra[0]);
-    out.extend_from_slice(&nodes[1..]);
-    out.extend_from_slice(&extra[1..]);
-    (order, out)
+    };
+    nodes.push(old);
+    nodes.extend(extra);
+    (order, nodes)
 }
 
 /// Whether the box ``lo``/``hi``, placed by ``m`` and seen through ``mvp``,

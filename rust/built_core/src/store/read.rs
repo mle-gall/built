@@ -43,7 +43,8 @@ impl Store {
     /// edges alone skips most of the remap.
     pub fn dense_parts(&self, incidence: bool, faces: bool) -> Dense {
         let st = &self.state;
-        let [dv, _de, df] = self.dense_maps();
+        let dv = st.order[0].dense_of_slot(&st.slots[0]);
+        let df = if incidence { st.order[2].dense_of_slot(&st.slots[2]) } else { Vec::new() };
         let mut d = Dense::default();
         for v in st.order[Kind::Vertex as usize].live(&st.slots[Kind::Vertex as usize]) {
             d.pos.push(*st.vpos.get(v as usize));

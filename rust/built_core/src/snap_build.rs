@@ -108,7 +108,7 @@ fn prepared((tri, pos, edges, keep, curve_ids): (&[f32], &[f64], &[i64], &[bool]
         b.push(std::array::from_fn(|i| t[3 + i] as f64 - v[i]));
         c.push(std::array::from_fn(|i| t[6 + i] as f64 - v[i]));
     }
-    let mut segments = Vec::new();
+    let mut segments = Vec::with_capacity(keep.iter().filter(|&&k| k).count());
     let mut curves: Vec<Vec<[f64; 6]>> = Vec::new();
     let mut named = HashMap::new();
     for (i, e) in edges.chunks_exact(2).enumerate() {
