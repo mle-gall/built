@@ -128,9 +128,9 @@ pub(crate) fn project_sidebar(
         // Tagged placements are represented by their tag. Keep the original
         // unfiled branch only in documents with an authored filing structure.
         if let Some(index) = rows.iter().position(|(t, _)| t[0] == "n:") {
-            if query.is_empty() && !expanded.contains("n:") {
+            if query.is_empty() && !expanded.contains("n:") && crate::live::cut_labels(scene)?.is_empty() {
                 rows.truncate(index);
-            } else if !expanded.contains("n:") {
+            } else if !query.is_empty() && !expanded.contains("n:") {
                 rows.remove(index);
                 for (_, flags) in &mut rows[index..] {
                     flags[0] = (flags[0] - 1).max(0);

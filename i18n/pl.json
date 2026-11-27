@@ -1,4 +1,7 @@
 {
+ "Show All Cutters": "Pokaż wszystkie obiekty tnące",
+ "Pick targets (Shift-click for more), then a cutter. Tab cycles operations, L presets, A anchor, D draw section.": "Wybierz cele (Shift i kliknięcie dodaje kolejne), potem obiekt tnący. Tab operacja, L ustawienia, A kotwica, D przekrój.",
+ "Show or hide cutter outlines on every target.": "Pokazuje lub ukrywa obrysy obiektów tnących na wszystkich celach.",
  "Pick a target, then its cutter. Tab changes operation, L picks a preset, A anchors, D draws a section.": "Wybierz obiekt docelowy, a następnie tnący. Tab zmienia operację, L wybiera ustawienie, A wskazuje zakotwiczenie, D rysuje przekrój.",
  "Pick a start, or press Enter to sweep selected edges.": "Wskaż początek lub naciśnij Enter, aby użyć wybranych krawędzi.",
  "Pick the end or enter a length. Alt keeps the end free.": "Wskaż koniec lub podaj długość. Alt pozostawia wolny koniec.",

@@ -123,6 +123,10 @@ pub struct Row {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub end: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub span: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub offset: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub on: Option<bool>,
     #[serde(default = "one")]
     pub v: u32,
@@ -400,6 +404,8 @@ mod tests {
             anchor: None,
             operation: None,
             end: None,
+            span: None,
+            offset: None,
             on: None,
             open_top: false,
             inputs,

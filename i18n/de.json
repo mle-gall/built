@@ -1,4 +1,7 @@
 {
+ "Show All Cutters": "Alle Schneidkörper anzeigen",
+ "Pick targets (Shift-click for more), then a cutter. Tab cycles operations, L presets, A anchor, D draw section.": "Ziele wählen (Umschalt-Klick für weitere), dann den Schneidkörper. Tab Operation, L Vorgaben, A Anker, D Profil.",
+ "Show or hide cutter outlines on every target.": "Umrisse der Schneidkörper an allen Zielen ein- oder ausblenden.",
  "Pick a target, then its cutter. Tab changes operation, L picks a preset, A anchors, D draws a section.": "Ziel und Schneidkörper wählen. Tab wechselt die Operation, L wählt eine Vorgabe, A setzt den Anker, D zeichnet einen Querschnitt.",
  "Pick a start, or press Enter to sweep selected edges.": "Start wählen oder Enter für ausgewählte Kanten drücken.",
  "Pick the end or enter a length. Alt keeps the end free.": "Ende wählen oder Länge eingeben. Alt hält das Ende frei.",

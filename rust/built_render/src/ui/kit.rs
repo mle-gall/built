@@ -245,6 +245,13 @@ pub mod atoms {
             painter.add(if closed { egui::Shape::closed_line(points, line) } else { egui::Shape::line(points, line) });
         };
         match kind {
+            "cut" => {
+                let stroke = Stroke::new(1.3_f32, WARN);
+                for side in [-1., 1.] {
+                    painter.circle_stroke(at(-3., side*2.7), 1.7, stroke);
+                    painter.line_segment([at(-1.7, side*1.8), at(4.5, -side*3.5)], stroke);
+                }
+            }
             "tag" => {
                 path(&[(-5.0, -3.5), (1.5, -3.5), (5.0, 0.0), (1.5, 3.5), (-5.0, 3.5)], true);
                 painter.circle_filled(at(1.6, 0.0), 1.0, ink);

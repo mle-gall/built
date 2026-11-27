@@ -235,6 +235,8 @@ fn sweep_on_key<'p>(a:&Args<'p>)->Reply<'p>{
 fn cut_key(code:i32)->Option<&'static str>{
     match code {0x1000001=>Some("Tab"),65=>Some("A"),76=>Some("L"),68=>Some("D"),_=>None}
 }
+fn cut_unitless<'p>(a:&Args<'p>)->Reply<'p>{a.get_item(0)?.call_method1("_state",("angle_grip",))}
+fn cut_caption<'p>(a:&Args<'p>)->Reply<'p>{(if cut_unitless(a)?.is_truthy()? {"Angle"}else{"Offset"}).into_bound_py_any(a.py())}
 fn cut_claims<'p>(a:&Args<'p>)->Reply<'p>{
     (a.get_item(2)?.extract::<i32>()?==0 && cut_key(a.get_item(1)?.extract()?).is_some()).into_bound_py_any(a.py())
 }
@@ -278,6 +280,8 @@ pub(super) fn install(module: &Bound<PyModule>) -> PyResult<()> {
         attrs.set_item("kind","cut")?;
         let cut=define(module,"CutTool",&[cls.clone()],&attrs)?;
         install_methods(module,&cut,&[
+            ("value_is_unitless",Mode::Method,cut_unitless,&["self"],"bool",""),
+            ("vcb_caption",Mode::Method,cut_caption,&["self"],"str",""),
             ("claims_key",Mode::Method,cut_claims,&["self","key","modifiers"],"bool",""),
             ("on_key",Mode::Method,cut_on_key,&["self","viewport","key","modifiers"],"bool",""),
         ])?;

@@ -219,41 +219,75 @@ pub fn generate(
         (stations, trims) =
             super::joints::butt_stations(&stations, &directions, path, sweep.path.closed)?;
     }
+    let closed = sweep.path.closed;
+    let count = directions.len();
+    let separate = butt
+        || planes.iter().any(|p| {
+            closed
+                || if p.end {
+                    p.span + 1 < count
+                } else {
+                    p.span > 0
+                }
+        });
+    if separate && !butt {
+        stations = (0..count)
+            .flat_map(|i| [stations[i].clone(), stations[(i + 1) % path.len()].clone()])
+            .collect();
+    }
+    let station_index =
+        |span: usize, end: bool| (if separate { 2 * span } else { span }) + usize::from(end);
     if !planes.is_empty() {
-        if sweep.path.closed || directions.len() != 1 {
-            return Err("unsupported_cut_path");
-        }
         if trims.is_empty() {
-            trims.push([[path[0], directions[0]], [path[1], directions[0]]]);
+            let normal = |i: usize| {
+                if !closed && (i == 0 || i == count) {
+                    directions[i.min(count - 1)]
+                } else {
+                    (DVec3::from(directions[(i + count - 1) % count])
+                        + DVec3::from(directions[i % count]))
+                    .normalize()
+                    .to_array()
+                }
+            };
+            trims = (0..count)
+                .map(|i| {
+                    [
+                        [path[i], normal(i)],
+                        [path[(i + 1) % path.len()], normal(i + 1)],
+                    ]
+                })
+                .collect();
         }
         for plane in planes {
             let end = usize::from(plane.end);
-            let axis = DVec3::from(directions[0]);
+            let axis = DVec3::from(directions[plane.span]);
             let denom = axis.dot(plane.normal);
             if denom.abs() < 1e-9 {
                 return Err("end_unresolved");
             }
             project_end(
-                &mut stations[end],
-                path[end].into(),
+                &mut stations[station_index(plane.span, plane.end)],
+                path[(plane.span + end) % path.len()].into(),
                 axis,
                 plane.origin,
                 plane.normal,
             );
-            trims[0][end] = [
+            trims[plane.span][end] = [
                 plane.origin.to_array(),
                 (plane.normal * denom.signum()).to_array(),
             ];
         }
-        if stations[0][0]
-            .iter()
-            .zip(&stations[1][0])
-            .any(|(a, b)| (DVec3::from(*b) - DVec3::from(*a)).dot(directions[0].into()) <= 1e-9)
-        {
-            return Err("empty_cut");
+        for (i, axis) in directions.iter().enumerate() {
+            if stations[station_index(i, false)][0]
+                .iter()
+                .zip(&stations[station_index(i, true)][0])
+                .any(|(a, b)| (DVec3::from(*b) - DVec3::from(*a)).dot((*axis).into()) <= 1e-9)
+            {
+                return Err("empty_cut");
+            }
         }
     }
-    let zones = super::joints::span_zones(&stations, &directions, path, butt);
+    let zones = super::joints::span_zones(&stations, &directions, path, separate);
     let frames: Vec<_> = stations
         .iter_mut()
         .map(|station| {
@@ -282,7 +316,7 @@ pub fn generate(
         for ring in station {
             let mut points = Vec::new();
             for p in ring {
-                let slot = if butt {
+                let slot = if separate {
                     store.shell_vertex(*p, &mut change)
                 } else {
                     store.vertex(*p, &mut change)
@@ -295,17 +329,17 @@ pub fn generate(
         slots.push(rings);
     }
     for (s, station) in slots.iter().enumerate() {
-        let start_cap = if butt {
+        let start_cap = if separate {
             s % 2 == 0
         } else {
             !sweep.path.closed && s == 0
         };
-        let end_cap = if butt {
+        let end_cap = if separate {
             s % 2 == 1
         } else {
             !sweep.path.closed && s + 1 == slots.len()
         };
-        let span = if butt { s / 2 } else { s };
+        let span = if separate { s / 2 } else { s };
         let mut cap = Vec::new();
         for (r, points) in station.iter().enumerate() {
             let nodes = &outline.rings[r];
@@ -316,7 +350,18 @@ pub fn generate(
             }
             cap.push(ring);
             for (j, &slot) in points.iter().enumerate() {
-                let role = format!("{}/{r}/{}/station/{s}", namespace, nodes[j].role);
+                let source_station = if separate && !butt {
+                    span + usize::from(end_cap)
+                } else {
+                    s
+                };
+                let mut role = format!(
+                    "{}/{r}/{}/station/{source_station}",
+                    namespace, nodes[j].role
+                );
+                if separate && !butt && end_cap && (closed || span + 1 < count) {
+                    role.push_str("/incoming");
+                }
                 if vertices.insert(slot, role.clone()).is_some() {
                     return Err("collapsed_profile");
                 }
@@ -381,7 +426,11 @@ pub fn generate(
                 .add_welded_face(&cap, &mut change)
                 .map_err(|_| "invalid_profile")?;
             roles.push((
-                if let Some(p) = planes.iter().rev().find(|p| usize::from(p.end) == s) {
+                if let Some(p) = planes
+                    .iter()
+                    .rev()
+                    .find(|p| station_index(p.span, p.end) == s)
+                {
                     format!("cut/{}/plane", p.uid)
                 } else if s == 0 {
                     "cap/start".into()

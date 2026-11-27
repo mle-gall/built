@@ -285,6 +285,11 @@ def test_hosted_opening_on_a_pitched_wall_follows_its_placement(tmp_path):
           wall_host=dict(uid=wall.uid, outline=[[2, 0, 1], [3, 0, 1], [3, 0, 2], [2, 0, 2]],
                          normal=[0, -1, 0], initial_offset=0, offset=0, sill=1, flipped=False))
     assert solid_volume(wall) == pytest.approx(before - .25)
+    from built_core import command_protocol
+    scene.show_all_cutters = True
+    outline, = command_protocol.live_cut_display(scene)
+    assert len(outline["lines"]) == 12
+    assert outline["row"]["cutter"]["opening"]["fill"] == window.uid
     apply(h, "move_placements", placements=[wall.uid], delta=[1, 2, 0])
     assert window.xform.data()[12:15] == (3., 2., 1.)
     path = tmp_path / "pitched.built"
@@ -313,3 +318,180 @@ def test_pushpull_on_a_mitre_face_edits_its_live_joint(monkeypatch):
     assert extent(target)[0] == pytest.approx(2.0225 + 2**.5*.01)
     apply(h, "undo")
     assert extent(target)[0] == pytest.approx(2.0225)
+
+
+def test_multiple_targets_share_a_history_step(tmp_path):
+    from built_core import command_protocol as commands
+
+    scene = Scene()
+    h = History(scene)
+    for y in [0, .5]:
+        make_member(h, [[0, y, 0], [2, y, 0]])
+    targets = list(scene.groups)
+    cuts = [dict(kind="cut", uid=f"c07000000000200{i}", owner=g.uid,
+                 cutter={"plane": {"origin": [1, 0, 0], "normal": [1, 0, 0]}})
+            for i, g in enumerate(targets)]
+    apply(h, "live_set", row=cuts)
+    ids = [all_ids(g.mesh) for g in targets]
+    assert [extent(g)[0] for g in targets] == [1., 1.]
+    assert len(rows_of(scene, "cut")) == 2
+    apply(h, "undo")
+    assert [extent(g)[0] for g in targets] == [2., 2.]
+    assert rows_of(scene, "cut") == []
+    apply(h, "redo")
+    assert [all_ids(g.mesh) for g in targets] == ids
+    scene.show_all_cutters = True
+    assert len(commands.live_cut_display(scene)) == 2
+    scene.show_all_cutters = False
+    scene.select([targets[1]])
+    handles, = commands.live_cut_display(scene)
+    assert handles["row"]["owner"] == targets[1].uid
+    assert [g["kind"] for g in handles["grips"]] == ["offset", "angle"]
+    path = tmp_path / "pair.built"
+    igz.save_scene(scene, path)
+    back = Scene()
+    igz.load_into(back, path)
+    assert [all_ids(g.mesh) for g in back.groups] == ids
+
+
+@pytest.mark.parametrize("corner", ["butt", "mitre"])
+@pytest.mark.parametrize("span,end", [(0, "start"), (0, "end"), (1, "start"), (1, "end")])
+def test_fitting_individual_span_end(corner, span, end):
+    scene = Scene()
+    h = History(scene)
+    spec = member({"library": "basic/timber"}, [[0, 0, 0], [2, 0, 0], [2, 2, 0]])
+    apply(h, "create_sweeps", sweeps=[dict(spec, corner=corner)])
+    g = scene.groups[0]
+    point = .4 if end == "start" else 1.5
+    normal = [1, .2, 0] if span == 0 else [.2, 1, 0]
+    origin = [point, 0, 0] if span == 0 else [2, point, 0]
+    cut = dict(kind="cut", uid="c070000000002010", owner=g.uid, span=span, end=end,
+               cutter={"plane": {"origin": origin, "normal": normal}})
+    apply(h, "live_set", row=cut)
+    assert rows_of(scene, "cut")[0]["state"] == "ok"
+    planes = g.ext["built.live"]["butt_planes"]
+    assert len(planes) == 2
+    assert planes[span][int(end == "end")][0] == pytest.approx(origin)
+    ids = all_ids(g.mesh)
+    apply(h, "live_set", row=dict(cut, offset=10))
+    assert all_ids(g.mesh) == ids
+    apply(h, "live_set", row=dict(cut, span=5))
+    assert rows_of(scene, "cut")[0]["state"] == "end_unresolved"
+    assert all_ids(g.mesh) == ids
+
+
+def test_shift_pick_toggles_targets_and_keeps_each_span():
+    import json
+    from built_core import ToolMachine
+
+    class Host:
+        def __init__(self):
+            self.commands = []
+
+        def call(self, name, arg):
+            if name == "cut_pick":
+                index = int(arg[0])
+                return {"placement": str(index), "span": index, "end": "start"}
+
+        def run(self, name, payload):
+            self.commands.append((name, json.loads(payload)))
+            return True, 1, 0, None
+
+    machine = ToolMachine("cut")
+    host = Host()
+    for target, shift in [(1, False), (2, True), (3, True), (2, True), (4, False)]:
+        machine.event(dict(type="click", px=(target, 0), mods=0x02000000 if shift else 0), host)
+    (name, args), = host.commands
+    assert name == "live_set"
+    assert [(r["owner"], r["span"], r["cutter"]) for r in args["row"]] == [
+        ("1", 1, {"body": "4"}), ("3", 3, {"body": "4"})]
+
+
+@pytest.mark.parametrize("kind, cutter, anchor, expected", [
+    ("angle", {"plane": {}}, None, 30),
+    ("offset", {"section": "section"}, None, 30),
+    ("offset", {"plane": {}}, {"ref": {"placement": "host"}}, 30),
+])
+def test_grip_typed_value_edits_its_own_field(kind, cutter, anchor, expected):
+    import json
+    from built_core import ToolMachine
+
+    class Host:
+        def call(self, name, arg):
+            if name == "cut_grip":
+                return dict(kind=kind, at=[0, 0, 0], axis=[0, 0, 1], radius=.2,
+                            row=dict(cutter=cutter, anchor=anchor))
+
+        def run(self, name, payload):
+            assert name == "live_set"
+            self.edited = json.loads(payload)["row"]
+            return True, 1, 0, None
+
+    host = Host()
+    machine = ToolMachine("cut")
+    machine.event(dict(type="click", world=[0, 0, 0]), host)
+    assert machine.get("editing_grip")
+    machine.event(dict(type="value", value=30 if kind == "angle" else .03), host)
+    edited = host.edited
+    if kind == "angle":
+        assert edited["cutter"]["plane"]["angle"] == expected
+    elif anchor:
+        assert edited["anchor"]["offset"] == expected
+        assert edited["anchor"]["ref"] == anchor["ref"]
+    else:
+        assert edited["offset"] == expected
+
+
+def test_tree_cut_eye_and_release_use_the_target_history():
+    from tests.test_project_drawing_filters import Project
+
+    project = Project()
+    h = project.win.viewport.history
+    scene = project.scene
+    make_member(h, [[0, 0, 0], [2, 0, 0]])
+    target = scene.groups[0]
+    uid = "c070000000004001"
+    apply(h, "live_set", row=dict(kind="cut", owner=target.uid, uid=uid,
+                                  cutter={"plane": {"origin": [1, 0, 0]}}))
+    rows = project.rows()
+    owner_key = "i:" + target.uid
+    if owner_key not in rows:
+        rows = project.action("toggle", "n:")
+    assert rows[owner_key][1][7]
+    rows = project.action("toggle", owner_key)
+    key = "cut:" + uid
+    assert rows[key][1][0] == rows[owner_key][1][0] + 1
+    assert project.action("eye", key)[key][1][5] == 0
+    assert extent(target)[0] == pytest.approx(2)
+    project.action("eye", key)
+    assert extent(target)[0] == pytest.approx(1)
+    assert key not in project.action("releasecut", key)
+    assert extent(target)[0] == pytest.approx(1)
+    apply(h, "undo")
+    assert rows_of(scene, "cut")[0]["uid"] == uid
+
+
+def test_grip_drag_tracks_its_axis_across_an_occluding_face():
+    import json
+    from built_core import ToolMachine
+
+    class Host:
+        def call(self, name, arg):
+            if name == "cut_grip":
+                return dict(kind="offset", at=[0, 0, 0], axis=[1, 0, 0], radius=.2,
+                            row={"cutter": {"section": "section"}})
+            if name == "cut_drag":
+                return [arg["px"][0] / 1000, 0, 0]
+
+        def run(self, name, payload):
+            self.offset = json.loads(payload)["row"]["offset"]
+            return True, 1, 0, None
+
+    machine = ToolMachine("cut")
+    host = Host()
+    pointer = dict(type="click", world=[0, 0, 0], px=(0, 0))
+    machine.event(pointer, host)
+    machine.event(dict(pointer, type="hover", px=(30, 0)), host)
+    assert machine.get("grip_value") == pytest.approx(30)
+    machine.event(dict(pointer, px=(45, 0)), host)
+    assert host.offset == pytest.approx(45)

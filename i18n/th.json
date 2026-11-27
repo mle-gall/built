@@ -1,4 +1,7 @@
 {
+ "Show All Cutters": "แสดงตัวตัดทั้งหมด",
+ "Pick targets (Shift-click for more), then a cutter. Tab cycles operations, L presets, A anchor, D draw section.": "เลือกเป้าหมาย (กด Shift แล้วคลิกเพื่อเพิ่ม) แล้วเลือกตัวตัด Tab เปลี่ยนการทำงาน L ค่าที่ตั้งไว้ A จุดยึด D วาดหน้าตัด",
+ "Show or hide cutter outlines on every target.": "แสดงหรือซ่อนเส้นขอบของตัวตัดบนเป้าหมายทั้งหมด",
  "Pick a target, then its cutter. Tab changes operation, L picks a preset, A anchors, D draws a section.": "เลือกเป้าหมายแล้วเลือกตัวตัด กด Tab เพื่อเปลี่ยนการดำเนินการ L เพื่อเลือกค่าที่ตั้งไว้ A เพื่อกำหนดจุดยึด และ D เพื่อวาดหน้าตัด",
  "Pick a start, or press Enter to sweep selected edges.": "เลือกจุดเริ่มหรือกด Enter เพื่อใช้ขอบที่เลือก",
  "Pick the end or enter a length. Alt keeps the end free.": "เลือกปลายหรือป้อนความยาว กด Alt เพื่อให้ปลายเป็นอิสระ",

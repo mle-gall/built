@@ -1,4 +1,7 @@
 {
+ "Show All Cutters": "Tampilkan semua pemotong",
+ "Pick targets (Shift-click for more), then a cutter. Tab cycles operations, L presets, A anchor, D draw section.": "Pilih target (Shift-klik untuk menambah), lalu pemotong. Tab operasi, L preset, A jangkar, D gambar penampang.",
+ "Show or hide cutter outlines on every target.": "Tampilkan atau sembunyikan garis luar pemotong pada semua target.",
  "Pick a target, then its cutter. Tab changes operation, L picks a preset, A anchors, D draws a section.": "Pilih target, lalu pemotong. Tab mengganti operasi, L memilih prasetel, A menentukan tambatan, D menggambar penampang.",
  "Pick a start, or press Enter to sweep selected edges.": "Pilih titik awal atau tekan Enter untuk memakai tepi terpilih.",
  "Pick the end or enter a length. Alt keeps the end free.": "Pilih ujung atau ketik panjang. Alt membiarkan ujung bebas.",

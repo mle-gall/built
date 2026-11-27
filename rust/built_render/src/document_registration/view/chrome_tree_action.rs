@@ -684,6 +684,10 @@ impl<'a, 'py> Row<'a, 'py> {
                 py.import("built_core.project")?.call_method1("create", (&scene, path, win.getattr("_current_path")?))?;
                 win.call_method1("_relink_done", ("Project registry updated",))?;
             }
+        } else if self.verb == "releasecut" && rk.starts_with("cut:") {
+            self.core("live_release", fields!(py; "uid" => &rk[4..]))?;
+            self.changed()?;
+            self.rebuild()?;
         } else if self.is(&["eye"]) && rk.starts_with("cut:") {
             let api=py.import("built_core.command_protocol")?;
             for row in api.call_method1("live_rows",(&scene,))?.try_iter()? {

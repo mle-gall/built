@@ -16,6 +16,20 @@ fn args<T: serde::de::DeserializeOwned>(value: &Value) -> PyResult<T> {
     serde_json::from_value(value.clone()).map_err(|e| PyValueError::new_err(e.to_string()))
 }
 
+fn nearest_span_end(points: &[P3], spans: usize, point: DVec3) -> (usize, bool) {
+    let segments = points.iter().zip(points.iter().cycle().skip(1)).take(spans);
+    segments.enumerate().filter_map(|(index, (a, b))| {
+        let a = DVec3::from(*a);
+        let axis = DVec3::from(*b) - a;
+        let length_squared = axis.length_squared();
+        if length_squared < 1e-18 { return None; }
+        let t = ((point - a).dot(axis) / length_squared).clamp(0., 1.);
+        Some((index, t < 0.5, point.distance_squared(a + t * axis)))
+    }).min_by(|a, b| a.2.total_cmp(&b.2))
+        .map(|(span, start, _)| (span, start))
+        .unwrap_or_default()
+}
+
 pub(crate) fn local_plane(
     face: &Bound<'_, PyAny>,
     matrix: Option<&Bound<'_, PyAny>>,
@@ -172,6 +186,69 @@ impl ViewportToolHost {
                 }
                 json!(ids)
             }
+            "cut_drag" => {
+                let at: DVec3 = args(&arg["at"])?;
+                let axis: DVec3 = args(&arg["axis"])?;
+                let [x,y]: [f64;2] = args(&arg["px"])?;
+                if let (Some(project), Some(direction)) = (view.getattr_opt("_project_to_lock_line")?, axis.try_normalize()) {
+                    let p = project.call1((Vec3::from(at), Vec3::from(direction), x, y))?;
+                    if !p.is_none() { json!(xyz(&p)?) } else { Value::Null }
+                } else { Value::Null }
+            }
+            "cut_grip" => {
+                let items=crate::live::live_cut_display(&view.getattr("scene")?)?;
+                if items.len()?==0 {return Ok(Some(Value::Null));}
+                let camera=Projection::from_view(view)?;
+                let cursor=glam::DVec2::from(args::<[f64;2]>(arg)?);
+                let mut nearest=9.;
+                let mut hit=Value::Null;
+                for item in items.try_iter()? {
+                    let item=item?;
+                    for grip in item.get_item("grips")?.try_iter()?{
+                        let grip=grip?;
+                        let at=grip.get_item("at")?.extract::<P3>()?;
+                        if let Some(px)=camera.pixel(at.into())?{
+                            let distance=cursor.distance(px.into());
+                            if distance<nearest{
+                                nearest=distance;
+                                hit=json!({"kind":grip.get_item("kind")?.extract::<String>()?, "at":at,"row":super::py::py_to_json(&item.get_item("row")?)?,"axis":item.get_item("axis")?.extract::<P3>()?,"radius":item.get_item("radius")?.extract::<f64>()?});
+                            }
+                        }
+                    }
+                }
+                if hit.is_null() {
+                    // Project the visible wires without a depth query. A foreground
+                    // face cannot swallow a pick on the cutter behind it.
+                    for item in items.try_iter()? {
+                        let item=item?;
+                        for line in item.get_item("lines")?.extract::<Vec<[P3;2]>>()? {
+                            let (Some(a),Some(b))=(camera.pixel(line[0].into())?,camera.pixel(line[1].into())?) else {continue;};
+                            let a=glam::DVec2::from(a);
+                            let ab=glam::DVec2::from(b)-a;
+                            let u=((cursor-a).dot(ab)/ab.length_squared().max(1e-9)).clamp(0.,1.);
+                            let d=cursor.distance(a+u*ab);
+                            if d>=nearest.min(5.) {continue;}
+                            let row=item.get_item("row")?;
+                            let at=item.get_item("centre")?.extract::<P3>()?;
+                            let grips=item.get_item("grips")?;
+                            if grips.len()? > 0 {
+                                nearest=d;
+                                hit=json!({"kind":"offset","row":super::py::py_to_json(&row)?,"at":at,"axis":item.get_item("axis")?.extract::<P3>()?,"radius":item.get_item("radius")?.extract::<f64>()?});
+                            } else {
+                                let cutter=row.get_item("cutter")?;
+                                if let Ok(repeat)=cutter.get_item("repeat") {
+                                    nearest=d;
+                                    hit=json!({"placement":item.get_item("repeat_source")?.extract::<String>()?, "repeat":repeat.extract::<String>()?});
+                                } else if let Ok(body)=cutter.get_item("body").or_else(|_| cutter.get_item("opening")?.get_item("fill")) {
+                                    nearest=d;
+                                    hit=json!({"placement":body.extract::<String>()?});
+                                }
+                            }
+                        }
+                    }
+                }
+                hit
+            }
             "cut_pick" => {
                 let px:(f64,f64)=args(arg)?;
                 let Some(pair)=hit(view,"pick_face_placement",px)? else{return Ok(Some(Value::Null));};
@@ -184,13 +261,30 @@ impl ViewportToolHost {
                 let path:Vec<String>=scene.call_method1("occurrence_path",(&group,))?.extract()?;
                 let id=group.getattr("mesh")?.getattr("_store")?.call_method1("id_of",("face",face.getattr("key")?))?.extract()?;
                 let ring=face.getattr("vertices")?.try_iter()?.map(|v|Ok(xf.transform_point3(xyz(&v?)?).to_array())).collect::<PyResult<Vec<_>>>()?;
-                let local=xyz(&face.call_method0("centroid")?)?;
+                let centre = xyz(&face.call_method0("centroid")?)?;
+                let normal = xyz(&face.call_method0("normal")?)?;
+                let mut local = centre;
+                if let Some(ray) = hit(view, "_pixel_to_ray", px)? {
+                    let origin = ray.get_item(0)?;
+                    let direction = ray.get_item(1)?;
+                    if !origin.is_none() && !direction.is_none() {
+                        let inverse = xf.inverse();
+                        let origin = inverse.transform_point3(xyz(&origin)?);
+                        let direction = inverse.transform_vector3(xyz(&direction)?);
+                        let denominator = direction.dot(normal);
+                        if denominator.abs() > 1e-9 {
+                            local = origin + direction * (centre - origin).dot(normal) / denominator;
+                        }
+                    }
+                }
                 let ends=group.getattr("ext")?.call_method1("get",("built.live",))?;
                 let points=ends.get_item("path").and_then(|p|p.extract::<Vec<[f64;3]>>()).unwrap_or_default();
-                let start=points.first().zip(points.last()).is_some_and(|(a,b)|local.distance_squared((*a).into())<local.distance_squared((*b).into()));
                 let repeat = group.getattr("ext")?.get_item("built.repeat").ok()
                     .and_then(|m|m.get_item("row").ok()).and_then(|id|id.extract::<String>().ok());
-                json!({"repeat":repeat,"placement":group.getattr("uid")?.extract::<String>()?,"ring":ring,"face":{"path":path,"id":crate::element_ids::to_text('f',id)},"end":if start {"start"}else{"end"}})
+                let spans = ends.get_item("zones").and_then(|zones| zones.len())
+                    .unwrap_or(points.len().saturating_sub(1));
+                let (span, start) = nearest_span_end(&points, spans, local);
+                json!({"repeat":repeat,"placement":group.getattr("uid")?.extract::<String>()?,"ring":ring,"face":{"path":path,"id":crate::element_ids::to_text('f',id)},"span":span,"end":if start {"start"}else{"end"}})
             }
             "cut_selection" => {
                 let selected=view.getattr("scene")?.getattr("selection")?;
@@ -464,3 +558,16 @@ pub(super) const BOX_EDGES: [[usize; 2]; 12] = [
     [2, 6],
     [3, 7],
 ];
+
+#[cfg(test)]
+mod cut_pick_tests {
+    use super::*;
+
+    #[test]
+    fn picks_both_ends_of_the_closing_segment() {
+        let path = [[0., 0., 0.], [2., 0., 0.], [2., 2., 0.], [0., 2., 0.]];
+        assert_eq!(nearest_span_end(&path, 4, DVec3::new(0., 1.8, 0.)), (3, true));
+        assert_eq!(nearest_span_end(&path, 4, DVec3::new(0., 0.2, 0.)), (3, false));
+        assert_eq!(nearest_span_end(&path, 3, DVec3::new(0., 0.2, 0.)), (0, true));
+    }
+}
