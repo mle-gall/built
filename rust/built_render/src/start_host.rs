@@ -238,6 +238,7 @@ impl Page {
         sheet.bind(py).setattr("focus", py.None())?;
         sheet.bind(py).setattr("unit", py.None())?;
         sheet.bind(py).setattr("filter", "")?;
+        sheet.bind(py).setattr("missing_open", false)?;
         slf.borrow_mut().asked = monotonic(py)?;
         slf.borrow_mut().docs_sig = docs_sig(&win)?.into_any().unbind();
         slf.call_method0("load")?;
@@ -411,12 +412,13 @@ pub struct StartSheet {
     focus: Py<PyAny>,
     filter: String,
     projects_tab: bool,
+    missing_open: bool,
     unit: Option<usize>,
 }
 
 impl StartSheet {
     fn make(py: Python<'_>, page: &Bound<'_, PyAny>) -> PyResult<PyClassInitializer<Self>> {
-        Ok(PyClassInitializer::from(crate::sheet_runtime::Provider).add_subclass(StartSheet { page: page.clone().unbind(), focus: py.None(), filter: String::new(), projects_tab:false, unit:None }))
+        Ok(PyClassInitializer::from(crate::sheet_runtime::Provider).add_subclass(StartSheet { page: page.clone().unbind(), focus: py.None(), filter: String::new(), projects_tab:false, missing_open:false, unit:None }))
     }
 }
 
@@ -500,6 +502,10 @@ impl StartSheet {
             }
             "open" => slf.call_method1("activate", (&win, &arg)).map(|_| ())?,
             "menu" if args.len() > 1 => slf.call_method1("item_verb", (&win, &args[1], &arg)).map(|_| ())?,
+            "verb" if arg == "toggle_missing" => {
+                let mut sheet = slf.borrow_mut();
+                sheet.missing_open = !sheet.missing_open;
+            }
             "verb" => {
                 if matches!(arg.as_str(), "open" | "finder" | "locate" | "forget" | "pin") {
                     let focus = slf.getattr("focus")?;
@@ -611,6 +617,7 @@ fn state(sheet: &Bound<'_, StartSheet>, back: bool) -> PyResult<String> {
     d.set_item("cache", cache_view)?;
     d.set_item("meta", meta)?;
     d.set_item("pending", if pending.is_truthy()? { pending.getattr("job")?.getattr("label")? } else { s(py, "") })?;
+    d.set_item("missing_open", sheet.borrow().missing_open)?;
     d.set_item("projects_tab", sheet.borrow().projects_tab)?;
     d.set_item("usual_units", py.import("built_core.units")?.call_method0("new_document_units")?.get_item("length")?)?;
     let draft = match sheet.borrow().unit {

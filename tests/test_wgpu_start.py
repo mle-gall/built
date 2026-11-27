@@ -137,13 +137,13 @@ def test_show_home_puts_the_page_on_the_sheet(win, monkeypatch, tmp_path):
     recent.remember(a)
     recent.remember(b)
     recent.note(a, {"project": "Ride", "links": 2, "imported": "skp", "unfiled": 5,
-                    "problems": 13, "workspace": "Model"})
+                    "problems": 1869, "workspace": "Model"})
     ws.show(win)
     assert ws.shown(win) and cs.current(win) is ws.page(win).sheet
     assert getattr(win, "_home", None) is None          # no Qt dialog
     sh = sheet(win)
     assert sh["id"] == "start" and sh["closable"] is False   # blank untitled behind: no return
-    assert [v["id"] for v in sh["verbs"]] == ["openfile"]
+    assert [v["id"] for v in sh["verbs"]] == ["new", "openfile"]
     assert sh["menus"] == []
     assert [t["label"] for t in sh["tabs"]] == ["Models", "Projects"]
     assert sh["search"]["placeholder"]
@@ -151,7 +151,8 @@ def test_show_home_puts_the_page_on_the_sheet(win, monkeypatch, tmp_path):
     sh = sheet(win)
     beta, alpha = section(sh, "recent")
     assert beta["label"] == "beta.built"
-    assert alpha["label"] == "alpha.built" and alpha["badge"] == "13"
+    assert alpha["label"] == "alpha.built" and alpha["badge"] == "1869"
+    assert alpha["tip"].endswith("1,869 problems")
     assert alpha["sub"].startswith("Ride")
     assert alpha["icon"].startswith("thumb:")           # its picture, uploaded once
     assert "icon" not in beta
@@ -242,7 +243,11 @@ def test_typing_filters_the_list(win, monkeypatch, tmp_path):
     assert names == ["kiosk.built"]
     assert section(sh, "templates") == []
     act(win, "search", "zzz")
-    assert "Nothing matches" in sheet(win)["content"]["empty"]
+    sh = sheet(win)
+    assert "Nothing matches" in sh["content"]["empty"]
+    assert sh["footer"]["action"]["label"] == "Create model"
+    act(win, "verb", sh["footer"]["action"]["id"])
+    assert win._doc_is_blank() and not ws.shown(win)
 
 
 # ---- Keys --------------------------------------------------------------------
@@ -334,7 +339,7 @@ def test_new_model_and_templates(win, monkeypatch):
     monkeypatch.setattr("built_render.units_question.offer_at_start", lambda w: pytest.fail("unexpected units modal"))
     ws.show(win)
     sh = sheet(win)
-    assert sh["focus"] == "tpl:blank" and sh["footer"]["action"]["label"] == "New model"
+    assert sh["focus"] == "tpl:blank" and sh["footer"]["action"]["label"] == "Create model"
     act(win, "v", "units", "1")
     act(win, "verb", "open")
     assert win.viewport.scene.units["length"] == "cm"
@@ -526,22 +531,27 @@ def test_unavailable_paths_can_be_removed_independently(win, monkeypatch, tmp_pa
     old_site = tmp_path / "old" / "site.igz"            # gone: nothing replaces it
     for p in (old_site, old_ride, other, ride):
         recent.remember(p)
-    # A missing row ABOVE the existing one stays (it is not "further up").
+    # History order must not affect which path is shown.
     stale = tmp_path / "older" / "other.igz"
     rows = recent.entries()
+    rows.append(rows[-1].copy())  # legacy history may repeat the exact path
     rows.insert(0, {"path": str(stale), "pinned": False})
     settings().setValue("home/recent_files", json.dumps(rows))
     ws.show(win)
     wait_loader(win)
     sh = sheet(win)
-    missing = section(sh, "missing")
-    assert {r["id"] for r in missing} == {"file:" + str(p.resolve()) for p in (old_ride, old_site, stale)}
+    assert not section(sh, "missing")
+    disclosure = sh["content"]["blocks"][-1]
+    assert disclosure["kind"] == "disclosure" and disclosure["text"] == "Unavailable (1)"
+    act(win, "verb", disclosure["id"])
+    missing = section(sheet(win), "missing")
+    assert [r["id"] for r in missing] == ["file:" + str(old_site.resolve())]
     assert all(r["dim"] for r in missing)
     assert {r["label"] for r in section(sh, "recent")} == {ride.name, other.name}
     row = missing[0]
     assert [m for m in row["menu"] if m[0] == "forget"] == [["forget", "Remove from recents"]]
     act(win, "menu", row["id"], "forget")
-    assert len(section(sheet(win), "missing")) == 2
+    assert not section(sheet(win), "missing")
 
 
 def test_a_missing_row_still_offers_to_locate(win, monkeypatch, tmp_path):
@@ -553,8 +563,9 @@ def test_a_missing_row_still_offers_to_locate(win, monkeypatch, tmp_path):
     monkeypatch.setattr(ShellFileDialog, "getOpenFileName", lambda *a: (asked.append(a), (str(found), ""))[1])
     ws.show(win)
     wait_loader(win)
-    sh = sheet(win)
-    row = section(sh, "missing")[0]
+    sheet(win)
+    act(win, "verb", "toggle_missing")
+    row = section(sheet(win), "missing")[0]
     assert row["dim"]                                   # shown, missing
     act(win, "focus", row["id"])
     blocks = detail(sheet(win))
@@ -611,6 +622,18 @@ def test_saved_summary_does_not_read_document_or_geometry(tmp_path):
     row, = summary["links"]
     assert Path(row["found"]) == linked.resolve()
     assert row["status"] == "found"
+
+
+def test_header_new_uses_remembered_units_independent_of_template(win):
+    from built_core import units
+    usual = units.new_document_units()
+    ws.show(win)
+    sheet(win)
+    act(win, "focus", "tpl:steel")
+    act(win, "v", "units", "1")
+    act(win, "verb", "new")
+    assert not ws.shown(win) and win._doc_is_blank()
+    assert win.viewport.scene.units["length"] == usual["length"]
 
 
 def test_switching_templates_discards_unit_edits(win):

@@ -3,7 +3,7 @@
 use pyo3::prelude::*;
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 #[derive(Deserialize, Default, Clone)]
@@ -56,6 +56,7 @@ pub struct State {
     /// The opening job's label while one runs.
     pub pending: String,
     pub projects_tab: bool,
+    pub missing_open: bool,
     pub draft_units: String,
     pub usual_units: String,
     pub home: String,
@@ -212,6 +213,17 @@ fn size(bytes: u64) -> String {
     String::new()
 }
 
+fn problem_label(count: i64) -> String {
+    let digits = count.to_string();
+    let mut label = String::new();
+    for (i, digit) in digits.chars().enumerate() {
+        if i > 0 && (digits.len() - i) % 3 == 0 { label.push(','); }
+        label.push(digit);
+    }
+    label.push_str(if count == 1 { " problem" } else { " problems" });
+    label
+}
+
 fn joined(parts: &[&str]) -> String {
     parts.iter().filter(|p| !p.is_empty()).copied().collect::<Vec<_>>().join(" · ")
 }
@@ -263,8 +275,8 @@ pub enum Kind<'a> {
 }
 
 pub const SECTIONS: [(&str, &str); 5] = [
-    ("pinned", "Pinned"), ("recent", "Recent"), ("missing", "Unavailable"),
-    ("templates", "Templates"), ("projects", "Recent projects"),
+    ("templates", "Templates"), ("pinned", "Pinned"), ("recent", "Recent"),
+    ("missing", "Unavailable"), ("projects", "Recent projects"),
 ];
 
 pub struct View<'a> {
@@ -301,20 +313,31 @@ impl<'a> View<'a> {
             let text = hay.iter().filter(|h| !h.is_empty()).copied().collect::<Vec<_>>().join(" ").to_lowercase();
             words.iter().all(|w| text.contains(w.as_str()))
         };
-        let mut out: Vec<(&'static str, Vec<(String, Kind<'a>)>)> = SECTIONS.iter().map(|(k, _)| (*k, vec![])).collect();
+        let mut out = SECTIONS.map(|(key, _)| (key, Vec::new()));
+        let [(_, templates), (_, pinned), (_, recent), (_, missing), (_, projects)] = &mut out;
         if !self.st.projects_tab {
+            // History records paths. A moved model may still have an older
+            // unavailable path with the same filename as its live entry.
+            let live_names: HashSet<_> = self.st.files.iter()
+                .filter(|r| self.cache(&r.path).exists == Some(true))
+                .filter_map(|r| Path::new(&r.path).file_name()).collect();
+            let mut seen_paths = HashSet::new();
             for r in &self.st.files {
+                if !seen_paths.insert(&r.path) { continue; }
+                if self.missing(&r.path) && Path::new(&r.path).file_name().is_some_and(|n| live_names.contains(n)) {
+                    continue;
+                }
                 if matches(&[&name_of(&r.path), &self.meta(&r.path).text("project"), &r.path]) {
-                    let group = if self.missing(&r.path) { 2 } else if r.pinned { 0 } else { 1 };
-                    out[group].1.push((format!("file:{}", r.path), Kind::File(r)));
+                    let group = if self.missing(&r.path) { &mut *missing } else if r.pinned { &mut *pinned } else { &mut *recent };
+                    group.push((format!("file:{}", r.path), Kind::File(r)));
                 }
             }
             for t in TEMPLATES.iter().filter(|t| t.id == "blank").chain(TEMPLATES.iter().filter(|t| t.id != "blank")) {
                 if matches(&[t.name, t.desc]) {
-                    out[3].1.push((format!("tpl:{}", t.id), Kind::Tpl(t)));
+                    templates.push((format!("tpl:{}", t.id), Kind::Tpl(t)));
                 }
             }
-            return out;
+            return out.into();
         }
         for r in &self.st.projects {
             let names: Vec<String> = self.cache(&r.path).files.iter().flatten().map(|(f, _)| name_of(f)).collect();
@@ -323,9 +346,9 @@ impl<'a> View<'a> {
             if !matches(&hay.iter().map(String::as_str).collect::<Vec<_>>()) {
                 continue;
             }
-            out[4].1.push((format!("proj:{}", r.path), Kind::Proj(r)));
+            projects.push((format!("proj:{}", r.path), Kind::Proj(r)));
         }
-        out
+        out.into()
     }
 
     fn ago(&self, mtime: f64) -> String {
@@ -366,7 +389,8 @@ impl<'a> View<'a> {
                 let problems = m.problems();
                 prune(json!({"id": rid, "label": name_of(path), "sub": sub, "right": right, "icon": thumb(path),
                     "dim": missing, "badge": if problems != 0 && !missing { problems.to_string() } else { String::new() },
-                    "tip": path, "menu": menu, "kind":"file"}))
+                    "tip": if problems > 0 && !missing { format!("{path}\n{}", problem_label(problems)) } else { path.clone() },
+                    "menu": menu, "kind":"file"}))
             }
         }
     }
@@ -495,23 +519,32 @@ impl<'a> View<'a> {
             icons.push(backdrop.clone());
         }
         let sections = self.sections();
-        let order: Vec<&str> = sections.iter().flat_map(|(_, rows)| rows.iter().map(|(id, _)| id.as_str())).collect();
+        let visible = |key: &str| key != "missing" || st.missing_open;
+        let order: Vec<&str> = sections.iter().filter(|(key, _)| visible(key)).flat_map(|(_, rows)| rows.iter().map(|(id, _)| id.as_str())).collect();
         let focus = match &st.focus {
             Some(f) if order.contains(&f.as_str()) => Some(f.clone()),
-            _ => order.first().map(|s| s.to_string()),
+            _ => sections.iter().filter(|(key, _)| matches!(*key, "pinned" | "recent"))
+                .find_map(|(_, rows)| rows.first().map(|(id, _)| id.clone()))
+                .or_else(|| order.first().map(|s| s.to_string())),
         };
         let mut blocks = vec![];
 
-        if !st.projects_tab && st.files.is_empty() && st.filter.is_empty() {
-            blocks.push(block("caption", json!({"text":"Recent models"})));
-            blocks.push(block("text", json!({"text":"Models you open appear here.", "tone":"faint"})));
-        }
         for (key, rows) in &sections {
+            if *key == "recent" && !st.projects_tab && st.files.is_empty() && st.filter.is_empty() {
+                blocks.push(block("caption", json!({"text":"Recent models"})));
+                blocks.push(block("text", json!({"text":"Models you open appear here.", "tone":"faint"})));
+            }
             if rows.is_empty() {
                 continue;
             }
             let caption = SECTIONS.iter().find(|(k, _)| k == key).map_or("", |s| s.1);
-            blocks.push(block("caption", json!({"text": caption})));
+            if *key == "missing" {
+                blocks.push(block("disclosure", json!({"text": format!("{caption} ({})", rows.len()),
+                    "id": "toggle_missing", "expanded": st.missing_open})));
+                if !st.missing_open { continue; }
+            } else {
+                blocks.push(block("caption", json!({"text": caption})));
+            }
             let items: Vec<Value> = rows.iter().map(|(id, kind)| {
                 self.row(id, kind, &mut icons)
             }).collect();
@@ -523,13 +556,14 @@ impl<'a> View<'a> {
         let empty = if st.projects_tab && st.filter.is_empty() { "No recent projects".to_owned() } else if st.filter.is_empty() { "No recent files yet.".to_owned() }
                     else { format!("Nothing matches “{}”.", st.filter) };
         let mut verbs = vec![verb("openfile", if st.projects_tab {"Open project…"} else {"Open file…"}, "", 0)];
+        if !st.projects_tab { verbs.insert(0, verb("new", "New model", "", 0)); }
         let primary = match found.map(|(_, k)| k) {
-            Some(Kind::Tpl(_)) => Some(("open", "New model")),
+            Some(Kind::Tpl(_)) => Some(("open", "Create model")),
             Some(Kind::File(r) | Kind::Proj(r)) if self.missing(&r.path) => Some(("locate", "Locate…")),
             Some(Kind::File(_)) => Some(("open", "Open model")),
             Some(Kind::Proj(_)) => Some(("open", "Open project")),
             None if st.projects_tab => Some(("project","New project…")),
-            None => None,
+            None => Some(("new", "Create model")),
         };
         if st.projects_tab && found.is_some() {
             verbs.push(verb("project", "New project…", "", 0));
@@ -537,7 +571,7 @@ impl<'a> View<'a> {
         let links = [("libraries", "Library"), ("prefs", "Settings"), ("extensions", "Extensions"), ("help", "Help")];
         json!({
             "id": "start", "title": "Start", "closable": st.back, "width": 1180.0, "backdrop_icon": backdrop,
-            "default_verb": if st.projects_tab && found.is_none() {"project"} else {""},
+            "default_verb": if st.projects_tab && found.is_none() {"project"} else if found.is_none() {"new"} else {""},
             "tabs": [{"id":"models","label":"Models","on":!st.projects_tab},{"id":"projects","label":"Projects","on":st.projects_tab}],
             "verbs": verbs, "menus": [],
             "side": [], "side_width": 0.0,
@@ -624,8 +658,8 @@ mod tests {
     fn selection_owns_the_only_primary_action() {
         let files = json!([{"path":"file.built"},{"path":"lost.built","pinned":true}]);
         let cache = json!({"lost.built":{"exists":false}});
-        for (focus, action) in [("tpl:blank","New model"), ("file:file.built","Open model"), ("file:lost.built","Locate…")] {
-            let st = state(json!({"files":files,"cache":cache,"focus":focus}));
+        for (focus, action) in [("tpl:blank","Create model"), ("file:file.built","Open model"), ("file:lost.built","Locate…")] {
+            let st = state(json!({"files":files,"cache":cache,"focus":focus,"missing_open":true}));
             let spec = View::new(&st).sheet();
             assert_eq!(spec["focus"], focus);
             assert_eq!(spec["footer"]["action"]["label"], action);
