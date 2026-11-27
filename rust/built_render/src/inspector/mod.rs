@@ -17,7 +17,6 @@ pub struct Panels {
     pub popup_layers: Vec<egui::Id>,
     parts: parts::Parts,
     curve_editor: kit::CurveEditor,
-    numeric_profile: bool,
     bevel_curve: Option<bevel::Curve>,
     bevel_outline: Vec<[f64; 2]>,
     records: records::Records,
@@ -40,14 +39,14 @@ fn bevel_choice<const N: usize>(
     options: [(&'static str, &'static str); N],
     out: &mut Vec<String>,
     layers: &mut Vec<egui::Id>,
-) -> Option<&'static str> {
+) {
     let display = options.iter().find(|(key, _)| *key == current).map_or("—", |(_, name)| *name);
     let names = options.map(|(_, name)| name);
     let (selected, popup) = kit::select(ui, action, display, &names);
     layers.extend(popup);
-    let key = options[selected?].0;
-    send(out, action, json!(key));
-    Some(key)
+    if let Some(i) = selected {
+        send(out, action, json!(options[i].0));
+    }
 }
 
 fn number(
@@ -85,7 +84,6 @@ impl Panels {
                 || (data["shape"].is_string() && data["shape"] != self.data[key]["shape"])
             {
                 self.curve_editor = Default::default();
-                self.numeric_profile = false;
             }
             self.bevel_curve = serde_json::from_value(data["points"].clone()).ok();
             self.bevel_outline =
@@ -246,7 +244,7 @@ impl Panels {
 
     pub fn bevel(&mut self, ui: &mut Ui, out: &mut Vec<String>) {
         let b = &self.data["bevel"];
-        let shape = if self.numeric_profile && b["shape"].is_null() {
+        let shape = if b["numeric_profile"] == true && b["shape"].is_null() {
             "profile value"
         } else {
             bevel::shape_name(b)
@@ -277,9 +275,7 @@ impl Panels {
                 ui.data_mut(|d| d.remove::<String>(id));
             }
             kit::caption_plain(&mut cols[3], "Profile");
-            if let Some(key) = bevel_choice(&mut cols[3], "bevel.shape", shape, shapes, out, &mut self.popup_layers) {
-                self.numeric_profile = key == "profile value";
-            }
+            bevel_choice(&mut cols[3], "bevel.shape", shape, shapes, out, &mut self.popup_layers);
             kit::caption_plain(&mut cols[4], "Segments");
             let mut segments = b["segments"].as_f64().unwrap_or(3.);
             if cols[4].add(kit::number(&mut segments, "").range(1..=64).fixed_decimals(0)).changed() {

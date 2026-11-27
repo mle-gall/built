@@ -423,6 +423,7 @@ pub fn new_tool(kind: &str) -> Option<Box<dyn Tool>> {
         "paste" => Some(Box::new(paste::Paste::default())),
         "flip" => Some(Box::new(flip::Flip::default())),
         "tape" => Some(Box::new(tape::Tape::default())),
+        "chamfer" => Some(Box::new(fillet_tool::Fillet::chamfer())),
         "fillet" => Some(Box::new(fillet_tool::Fillet::default())),
         "protractor" => Some(Box::new(protractor::Protractor::default())),
         "paint" => Some(Box::new(paint::Paint)),

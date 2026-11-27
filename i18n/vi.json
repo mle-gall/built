@@ -1815,6 +1815,7 @@
  "Distort (perspective) is not available yet — use the red, green and blue pins.": "Hiện chưa có tính năng bóp méo (phối cảnh) — hãy sử dụng các ghim màu đỏ, xanh lá cây và xanh lam.",
  "Pin lifted — click where it should sit.": "Ghim đã được nhấc lên — nhấp vào vị trí cần đặt.",
  "Position restored — Esc again to leave.": "Vị trí được khôi phục - Esc một lần nữa để rời đi.",
+ "Chamfer": "Vát cạnh",
  "Fillet": "Bo góc",
  "Fillet 3D": "Bo góc 3D",
  "Pick an edge to round.": "Chọn một cạnh để làm tròn.",

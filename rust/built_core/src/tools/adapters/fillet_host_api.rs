@@ -333,12 +333,13 @@ fn apply_from_panel<'py>(a: &Args<'py>) -> Reply<'py> {
     let tool = a.get_item(0)?;
     let viewport = a.get_item(1)?;
     if !tool.call_method0("_current_edges")?.is_truthy()? {
-        let message = if tool.call_method0("_corners_mode")?.is_truthy()? {
-            "Fillet needs a selected vertex."
-        } else {
-            "Fillet needs a selected edge."
+        let message = match (tool.getattr("kind")?.eq("chamfer")?, tool.call_method0("_corners_mode")?.is_truthy()?) {
+            (true, true) => module.call_method1("tr", ("Chamfer needs a selected vertex.",))?,
+            (true, false) => module.call_method1("tr", ("Chamfer needs a selected edge.",))?,
+            (false, true) => module.call_method1("tr", ("Fillet needs a selected vertex.",))?,
+            (false, false) => module.call_method1("tr", ("Fillet needs a selected edge.",))?,
         };
-        viewport.call_method1("flash_status", (module.call_method1("tr", (message,))?, 4000))?;
+        viewport.call_method1("flash_status", (message, 4000))?;
         return Ok(none(py));
     }
     tool.call_method1(
@@ -669,6 +670,7 @@ fn set_shape<'py>(a: &Args<'py>) -> Reply<'py> {
         )?;
         return Ok(none(py));
     }
+    tool.get_type().setattr("numeric_profile", false)?;
     tool.get_type().into_any().setattr("shape", &shape)?;
     if shape.is_instance(&py.get_type::<pyo3::types::PyString>().into_any())? {
         viewport.call_method1("flash_status", (module.call_method("tr", ("Profile {p}",), Some(&fields!(py; "p" => module.call_method1("tr", (tool.call_method0("_shape_label")?,))?)))?,))?;
@@ -702,6 +704,7 @@ fn host_panel_value<'py>(a: &Args<'py>) -> Reply<'py> {
         )?;
     } else {
         if field.eq("profile")? {
+            tool.get_type().setattr("numeric_profile", true)?;
             tool.get_type().into_any().setattr("shape", none(py))?;
             viewport.call_method1("flash_status", (module.call_method("tr", ("Profile {p}",), Some(&fields!(py; "p" => [value.call_method1("__format__", (".2f",))?.extract::<String>()?].concat().into_bound_py_any(py)?)))?,))?;
         }

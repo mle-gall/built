@@ -30,6 +30,7 @@ registry. Regenerate it from that function after adding a tool.
 | flip | FlipTool | native | Rust state machine |
 | followme | FollowMeTool | native | Rust state machine, pick_edge, pick_face |
 | fillet | FilletTool | native | Rust state machine, rubber_band_lines |
+| chamfer | ChamferTool | native | Rust state machine, rubber_band_lines |
 | texture_position | TexturePositionTool | native | shared viewport / tool base |
 | paint | PaintTool | native | Rust state machine |
 | dimension | DimensionTool | native | Rust state machine, rubber_band_lines |

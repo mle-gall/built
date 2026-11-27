@@ -50,6 +50,7 @@ const TOOLS: &[(&str, [f32; 2])] = &[
 ];
 
 fn lookup(key: &str) -> Option<(u32, [f32; 2])> {
+    let key = if key == "chamfer" { "fillet" } else { key };
     TOOLS
         .iter()
         .enumerate()

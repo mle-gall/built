@@ -12,7 +12,7 @@ EXPORTS = {
     "circle": "CircleTool PolygonTool busy_plane flat_drawing",
     "dimension": "DimensionTool",
     "eraser": "EraserTool",
-    "fillet": "FilletTool",
+    "fillet": "FilletTool ChamferTool",
     "flip": "FlipTool",
     "followme": "FollowMeTool",
     "freehand": "FreehandTool",

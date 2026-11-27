@@ -38,9 +38,10 @@ def test_tools_menu_has_bridge(win):
     assert win._registry_actions["menu:bridge"].text() == "Bridge"
 
 
-def test_modify_toolbar_has_a_bridge_button_after_fillet(win):
+def test_modify_toolbar_has_a_bridge_button_after_bevel_tools(win):
     tools = next(family for family in rail_layout() if ("bridge", "_act_bridge") in family)
-    assert tools[tools.index(("fillet", "")) + 1] == ("bridge", "_act_bridge")
+    i = tools.index(("fillet", ""))
+    assert tools[i + 1:i + 3] == [("chamfer", ""), ("bridge", "_act_bridge")]
     assert win._act_bridge is win._registry_actions["menu:bridge"]
     assert win._act_bridge.portable_keys() == []
 

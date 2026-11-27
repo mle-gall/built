@@ -1815,6 +1815,7 @@
  "Distort (perspective) is not available yet — use the red, green and blue pins.": "Zniekształcenie perspektywiczne nie jest jeszcze dostępne — użyj czerwonego, zielonego i niebieskiego uchwytu.",
  "Pin lifted — click where it should sit.": "Uchwyt uniesiony — kliknij jego nowe położenie.",
  "Position restored — Esc again to leave.": "Przywrócono położenie — naciśnij ponownie Esc, aby wyjść.",
+ "Chamfer": "Fazowanie",
  "Fillet": "Zaokrąglenie",
  "Fillet 3D": "Zaokrąglenie 3D",
  "Pick an edge to round.": "Wybierz krawędź do zaokrąglenia.",

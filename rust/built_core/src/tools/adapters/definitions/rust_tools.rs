@@ -770,14 +770,21 @@ pub(super) fn install(module: &Bound<PyModule>) -> PyResult<()> {
             ],
         )?;
     }
-    {
+    // Each concrete class owns the values changed by the shared bevel host.
+    for (kind, name) in [("fillet", "FilletTool"), ("chamfer", "ChamferTool")] {
         let attrs = PyDict::new(py);
         attrs.set_item("__module__", module.name()?)?;
-        attrs.set_item("kind", "fillet")?;
+        attrs.set_item("kind", kind)?;
+        attrs.set_item("icon", kind)?;
+        attrs.set_item("numeric_profile", false)?;
+        if kind == "chamfer" {
+            attrs.set_item("profile", 0.25)?;
+            attrs.set_item("measure", "offset")?;
+        }
         attrs.set_item("_READ_DURING", ("sizing",))?;
         let cls = define(
             module,
-            "FilletTool",
+            name,
             &[module.getattr("FilletHost")?, module.getattr("RustTool")?],
             &attrs,
         )?;

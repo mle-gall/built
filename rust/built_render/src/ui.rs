@@ -1195,7 +1195,7 @@ impl Ui {
             let pointer = self.ctx.input(|i| i.pointer.hover_pos()).unwrap_or(self.screen.center());
             self.cursor.retype_anchor(revision).unwrap_or(pointer - egui::vec2(0., 22.))
         });
-        let confirming_fillet = self.active == "fillet" && self.cursor.live.as_ref().is_some_and(|v| v.typing);
+        let confirming_fillet = self.bevel_active() && self.cursor.live.as_ref().is_some_and(|v| v.typing);
         self.cursor.set(caption, value, typing, at, start.map(|(x, y)| pos2(x, y)), revision);
         if confirming_fillet && !typing && self.cursor.readback.is_some() {
             self.actions.push("tool:select".into());
@@ -1537,7 +1537,7 @@ impl Ui {
                             ui.label(egui::RichText::new(&self.status).font(strong(TYPE_BODY)).color(INK));
                             ui.add_space(SPACE_S);
                         }
-                        for (id, label, key, state) in self.options.iter().filter(|_| self.active != "fillet") {
+                        for (id, label, key, state) in self.options.iter().filter(|_| !self.bevel_active()) {
                             if *state == 2 {
                                 ui.label(egui::RichText::new(label).font(meta()).color(WARN));
                                 ui.add_space(SPACE_S);
@@ -1940,9 +1940,11 @@ impl Ui {
         (top + GUT, bottom - GUT)
     }
 
+    fn bevel_active(&self) -> bool { matches!(self.active.as_str(), "fillet" | "chamfer") }
+
     fn drawer_mode(&self) -> Option<DrawerMode> {
         DrawerMode::resolve(self.dialog.as_ref().is_some_and(|d| d.in_drawer()),
-                            self.active == "fillet" && self.panels.data["bevel"].is_object(),
+                            self.bevel_active() && self.panels.data["bevel"].is_object(),
                             self.plugins.has_pinned())
     }
 
@@ -1963,8 +1965,8 @@ impl Ui {
                         .show(ui, |ui| self.plugins.pinned(ui, &mut self.actions));
                 }
                 DrawerMode::Fillet => {
-                    kit::caption_plain(ui, "Fillet");
-                    self.panels.bevel(ui, &mut self.actions);
+                    kit::caption_plain(ui, if self.active == "chamfer" { "Chamfer" } else { "Fillet" });
+                    ui.push_id(&self.active, |ui| self.panels.bevel(ui, &mut self.actions));
                 }
                 DrawerMode::Form => self.drawer_form(ui),
             }

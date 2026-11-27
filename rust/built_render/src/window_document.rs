@@ -28,6 +28,7 @@ const TOOLS: &[(&str, &str, &str)] = &[
     ("flip", "tools.flip", "FlipTool"),
     ("followme", "tools.followme", "FollowMeTool"),
     ("fillet", "tools.fillet", "FilletTool"),
+    ("chamfer", "tools.fillet", "ChamferTool"),
     (
         "texture_position",
         "tools.texture_position",

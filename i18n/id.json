@@ -1797,6 +1797,7 @@
  "Distort (perspective) is not available yet — use the red, green and blue pins.": "Distorsi (perspektif) belum tersedia — gunakan pin merah, hijau, dan biru.",
  "Pin lifted — click where it should sit.": "Pin diangkat — klik tempat pin harus diletakkan.",
  "Position restored — Esc again to leave.": "Posisi dipulihkan — Esc lagi untuk keluar.",
+ "Chamfer": "Serong",
  "Fillet": "Pembulatan",
  "Fillet 3D": "Pembulatan 3D",
  "Pick an edge to round.": "Pilih sebuah tepi untuk dibulatkan.",

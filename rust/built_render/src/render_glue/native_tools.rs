@@ -129,6 +129,7 @@ pub const TOOL_DISPATCH: &[(&str, &str)] = &[
     ("PlaceGroupTool", "mesh"),
     ("PasteTool", "mesh"),
     ("FilletTool", "mesh"),
+    ("ChamferTool", "mesh"),
     ("ProtractorTool", "mesh"),
     ("GeoPathTool", "mesh"),
     ("ChangeAxesTool", "mesh"),
@@ -1743,7 +1744,7 @@ impl NativeTools {
             return Ok(none(py));
         }
         let tool = s.getattr("tool")?;
-        if class_name(&tool)? == "FilletTool" {
+        if matches!(class_name(&tool)?.as_str(), "FilletTool" | "ChamferTool") {
             s.setattr("_hover_edge", s.call_method1("pick_visible_edge", xy()?)?)?;
         }
         if !tool.is_none() {

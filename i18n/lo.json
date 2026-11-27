@@ -1815,6 +1815,7 @@
  "Distort (perspective) is not available yet — use the red, green and blue pins.": "ການດັດຮູບຊົງ (ຕາມທັດສະນີຍະພາບ) ຍັງບໍ່ຮອງຮັບໃນຕອນນີ້ — ໃຫ້ໃຊ້ໝຸດສີແດງ, ສີຂຽວ ແລະ ສີຟ້າ ແທນ.",
  "Pin lifted — click where it should sit.": "ຍົກໝຸດຂຶ້ນແລ້ວ — ຄລິກໃສ່ຈຸດທີ່ຕ້ອງການວາງ.",
  "Position restored — Esc again to leave.": "ຄືນຄ່າຕຳແໜ່ງແລ້ວ — ກົດ Esc ອີກຄັ້ງເພື່ອອອກ.",
+ "Chamfer": "ປາດມຸມ",
  "Fillet": "ລົບມຸມມົນ",
  "Fillet 3D": "ລົບມຸມມົນ 3 ມິຕິ",
  "Pick an edge to round.": "ເລືອກຂອບທີ່ຕ້ອງການລົບມຸມມົນ.",

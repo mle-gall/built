@@ -1814,6 +1814,7 @@
  "Distort (perspective) is not available yet — use the red, green and blue pins.": "ยังไม่รองรับการบิดเบี้ยว (มุมมองเพอร์สเปกทีฟ) — โปรดใช้หมุดสีแดง สีเขียว และสีน้ำเงิน",
  "Pin lifted — click where it should sit.": "ยกหมุดขึ้นแล้ว — คลิกจุดที่ต้องการวาง",
  "Position restored — Esc again to leave.": "คืนค่าตำแหน่งแล้ว — กด Esc อีกครั้งเพื่อออก",
+ "Chamfer": "ลบมุมเฉียง",
  "Fillet": "ลบมุมโค้ง",
  "Fillet 3D": "ลบมุมโค้ง 3 มิติ",
  "Pick an edge to round.": "เลือกเส้นขอบที่จะมนมุม",

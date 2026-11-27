@@ -1802,6 +1802,7 @@
  "Distort (perspective) is not available yet — use the red, green and blue pins.": "透視変形はまだ使えません。赤・緑・青のピンを使用してください。",
  "Pin lifted — click where it should sit.": "ピンを持ち上げました — 配置先をクリックしてください。",
  "Position restored — Esc again to leave.": "位置を元に戻しました — 再度 Esc で終了します。",
+ "Chamfer": "面取り",
  "Fillet": "フィレット",
  "Fillet 3D": "3D フィレット",
  "Pick an edge to round.": "丸めるエッジを選んでください。",

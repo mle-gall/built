@@ -1814,6 +1814,7 @@
  "Distort (perspective) is not available yet — use the red, green and blue pins.": "왜곡(원근)은 아직 사용할 수 없습니다 — 빨강, 초록, 파랑 핀을 사용하세요.",
  "Pin lifted — click where it should sit.": "핀을 들었습니다 — 놓을 곳을 클릭하세요.",
  "Position restored — Esc again to leave.": "위치가 복원되었습니다 — 나가려면 Esc를 다시 누르세요.",
+ "Chamfer": "모따기",
  "Fillet": "필렛",
  "Fillet 3D": "3D 필렛",
  "Pick an edge to round.": "둥글게 할 모서리를 고르세요.",

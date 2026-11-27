@@ -61,8 +61,10 @@ def test_las_dos_herramientas_que_cedieron_siguen_a_mano(ventana):
 def test_redondear_3d_va_con_mayus_f_y_la_f_sigue_siendo_equidistancia(ventana):
     """Redondear 3D no tenía tecla. La F es de Equidistancia en la tarjeta,
     así que Redondear toma Mayús+F, como las otras que llegaron después."""
-    assert _pulsar(ventana, Qt.Key_F, Qt.ShiftModifier) == ["Fillet 3D"]
+    assert _pulsar(ventana, Qt.Key_F, Qt.ShiftModifier) == ["Fillet"]
     assert ventana.viewport.active_tool is ventana._tools["fillet"]
+    assert _pulsar(ventana, Qt.Key_C, Qt.ShiftModifier) == ["Chamfer"]
+    assert ventana.viewport.active_tool is ventana._tools["chamfer"]
     assert _pulsar(ventana, Qt.Key_F) == ["Offset"]
     assert ventana.viewport.active_tool is ventana._tools["offset"]
 

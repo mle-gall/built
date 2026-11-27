@@ -1822,6 +1822,7 @@
  "Distort (perspective) is not available yet — use the red, green and blue pins.": "Спотворення (перспектива) поки недоступне — користуйтеся червоною, зеленою та синьою шпильками.",
  "Pin lifted — click where it should sit.": "Шпильку піднято — клацніть, куди її поставити.",
  "Position restored — Esc again to leave.": "Позицію відновлено — натисніть Esc ще раз, щоб вийти.",
+ "Chamfer": "Фаска",
  "Fillet": "Заокруглення",
  "Fillet 3D": "Заокруглення 3D",
  "Pick an edge to round.": "Виберіть ребро для заокруглення.",

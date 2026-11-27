@@ -1818,6 +1818,7 @@
  "Distort (perspective) is not available yet — use the red, green and blue pins.": "Distorsionar (perspectiva) aún no está disponible: usa los pines rojo, verde y azul.",
  "Pin lifted — click where it should sit.": "Pin levantado: haz clic donde deba quedar.",
  "Position restored — Esc again to leave.": "Posición restablecida: Esc otra vez para salir.",
+ "Chamfer": "Chaflán",
  "Fillet": "Redondear",
  "Fillet 3D": "Redondear 3D",
  "Pick an edge to round.": "Elige una arista para redondear.",

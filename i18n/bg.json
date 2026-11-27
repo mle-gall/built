@@ -1953,6 +1953,7 @@
  "Distort (perspective) is not available yet — use the red, green and blue pins.": "Перспективната деформация все още не е налична — използвайте червената, зелената и синята управляваща точка.",
  "Pin lifted — click where it should sit.": "Управляващата точка е повдигната — щракнете на желаното място.",
  "Position restored — Esc again to leave.": "Позицията е възстановена — натиснете отново Esc за изход.",
+ "Chamfer": "Фаска",
  "Fillet": "Закръгляне",
  "Fillet 3D": "Триизмерно закръгляне",
  "Pick an edge to round.": "Изберете ръб за закръгляне.",

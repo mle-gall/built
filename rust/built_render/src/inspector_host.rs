@@ -213,7 +213,7 @@ fn xyz<'py>(py: Python<'py>, v: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyLis
 
 /// The bevel panel's state while the Fillet tool is active.
 fn bevel_state<'py>(py: Python<'py>, tool: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyAny>> {
-    if type_name(tool) != "FilletTool" {
+    if !matches!(type_name(tool).as_str(), "FilletTool" | "ChamferTool") {
         return Ok(py.None().into_bound(py));
     }
     let profiles = py.import("built_core.bevel_profiles")?;
@@ -225,6 +225,7 @@ fn bevel_state<'py>(py: Python<'py>, tool: &Bound<'py, PyAny>) -> PyResult<Bound
     b.set_item("amount", py.import("built_core.units")?.call_method1("fmt_len_fine", (tool.getattr("radius")?,))?)?;
     b.set_item("segments", &segments)?;
     b.set_item("shape", &shape)?;
+    b.set_item("numeric_profile", tool.getattr("numeric_profile")?)?;
     b.set_item("profile", tool.getattr("profile")?)?;
     b.set_item("outline", if shape.is_truthy()? { profiles.call_method1("sample", (&shape, &segments))? } else { PyList::empty(py).into_any() })?;
     b.set_item("corners", tool.getattr("corners")?)?;
@@ -414,7 +415,7 @@ fn camera_edit(win: &Bound<'_, PyAny>, view: &Bound<'_, PyAny>, key: &str, v: &B
 #[pyfunction]
 fn bevel_edit(host: &Bound<'_, PyAny>, tool: &Bound<'_, PyAny>, key: &str, value: &Bound<'_, PyAny>) -> PyResult<()> {
     let py = host.py();
-    if type_name(tool) != "FilletTool" {
+    if !matches!(type_name(tool).as_str(), "FilletTool" | "ChamferTool") {
         return Ok(());
     }
     let text = value.extract::<String>().ok();
@@ -437,12 +438,14 @@ fn bevel_edit(host: &Bound<'_, PyAny>, tool: &Bound<'_, PyAny>, key: &str, value
         }
         ("shape", Some(s @ ("round" | "chamfer"))) => {
             tool.call_method1("on_profile_value", (host, if s == "round" { 0.5 } else { 0.25 }))?;
+            tool.get_type().setattr("numeric_profile", false)?;
         }
         ("profile", _) => {
             tool.call_method1("on_profile_value", (host, value))?;
         }
         ("shape", Some("profile value")) => {
             tool.call_method1("set_shape", (host, py.None()))?;
+            tool.get_type().setattr("numeric_profile", true)?;
         }
         ("shape", Some("drawn" | "custom")) => {
             let controls = py.import("built_core.bevel_profiles")?.call_method1("controls", (tool.getattr("shape")?, tool.getattr("segments")?))?;

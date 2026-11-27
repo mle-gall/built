@@ -1815,6 +1815,7 @@
  "Distort (perspective) is not available yet — use the red, green and blue pins.": "Verzerren (Perspektive) ist noch nicht verfügbar — verwende die roten, grünen und blauen Nadeln.",
  "Pin lifted — click where it should sit.": "Nadel angehoben — klicke, wo sie sitzen soll.",
  "Position restored — Esc again to leave.": "Position wiederhergestellt — nochmals Esc zum Verlassen.",
+ "Chamfer": "Fase",
  "Fillet": "Abrunden",
  "Fillet 3D": "Abrunden 3D",
  "Pick an edge to round.": "Wähle eine Kante zum Abrunden.",

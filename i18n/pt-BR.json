@@ -1819,6 +1819,7 @@
  "Distort (perspective) is not available yet — use the red, green and blue pins.": "Distorcer (perspectiva) ainda não está disponível — use os pinos vermelho, verde e azul.",
  "Pin lifted — click where it should sit.": "Pino levantado — clique onde ele deve ficar.",
  "Position restored — Esc again to leave.": "Posição restaurada — Esc novamente para sair.",
+ "Chamfer": "Chanfro",
  "Fillet": "Chanfro",
  "Fillet 3D": "Chanfro 3D",
  "Pick an edge to round.": "Escolha uma aresta para arredondar.",

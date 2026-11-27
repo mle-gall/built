@@ -1960,6 +1960,7 @@
  "Distort (perspective) is not available yet — use the red, green and blue pins.": "La déformation (perspective) n'est pas encore disponible — utilisez les épingles rouge, verte et bleue.",
  "Pin lifted — click where it should sit.": "Épingle soulevée — cliquez à l'endroit où elle doit se placer.",
  "Position restored — Esc again to leave.": "Position rétablie — Échap à nouveau pour quitter.",
+ "Chamfer": "Chanfrein",
  "Fillet": "Raccord",
  "Fillet 3D": "Raccord 3D",
  "Pick an edge to round.": "Choisissez une arête à arrondir.",

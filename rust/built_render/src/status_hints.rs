@@ -4,6 +4,10 @@ use crate::settings_rows::{s, tr, trf};
 use pyo3::{prelude::*, types::PyDict};
 
 type Phases = &'static [(&'static str, &'static str)];
+const BEVEL: Phases = &[
+    ("idle", "Click an edge (or select edges first); type the size and Enter."),
+    ("sizing", "Move to set the size, or type it and Enter; click to apply. 'Ns' = segments, '0.3p' = profile."),
+];
 const TOOLS: &[(&str, Phases)] = &[
     ("select", &[
         ("idle", "Shift = add/remove, Ctrl = add. Double-click a group to edit it. F3 = search commands."),
@@ -115,10 +119,8 @@ const TOOLS: &[(&str, Phases)] = &[
         ("idle", "Click a face, or connected edges, to offset."),
         ("started", "Move to set the offset, or type it and Enter."),
     ]),
-    ("fillet", &[
-        ("idle", "Click an edge (or select edges first); type the size and Enter."),
-        ("sizing", "Move to set the size, or type it and Enter; click to apply. 'Ns' = segments, '0.3p' = profile."),
-    ]),
+    ("fillet", BEVEL),
+    ("chamfer", BEVEL),
     ("tape", &[
         ("idle", "Click a point or an edge to measure. Arrows lock an axis."),
         ("started", "Click the second point, or type the distance and Enter."),
@@ -200,8 +202,8 @@ fn phase_of(key: &str, tool: &Bound<PyAny>) -> PyResult<&'static str> {
         "arc" if started("end_point")? => "bulge",
         "arc" if started("start_point")? => "end",
         "arc" => "idle",
-        "fillet" if truth(tool, "sizing", false)? => "sizing",
-        "fillet" => "idle",
+        "fillet" | "chamfer" if truth(tool, "sizing", false)? => "sizing",
+        "fillet" | "chamfer" => "idle",
         _ if started("start_point")?
             || truth(tool, "dragging", false)?
             || truth(tool, "nodes", false)? =>

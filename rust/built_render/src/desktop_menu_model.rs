@@ -181,6 +181,7 @@ pub const GROUPS: &[(&str, &[Row])] = &[
             Row::Entry("tool:followme"),
             Row::Entry("tool:offset"),
             Row::Entry("tool:fillet"),
+            Row::Entry("tool:chamfer"),
             Row::Entry("tool:outer_shell"),
             Row::Sub("Solid Tools"),
             Row::Entry("bridge"),

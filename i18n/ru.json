@@ -1819,6 +1819,7 @@
  "Distort (perspective) is not available yet — use the red, green and blue pins.": "Искажение (перспектива) пока недоступно — используйте красную, зеленую и синюю булавки.",
  "Pin lifted — click where it should sit.": "Булавка поднята — кликните туда, куда ее поставить.",
  "Position restored — Esc again to leave.": "Позиция восстановлена — еще раз Esc для выхода.",
+ "Chamfer": "Фаска",
  "Fillet": "Скругление (Fillet)",
  "Fillet 3D": "Скругление 3D",
  "Pick an edge to round.": "Выберите ребро для скругления.",

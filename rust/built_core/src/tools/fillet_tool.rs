@@ -7,7 +7,7 @@ use serde_json::{json, Value as Json};
 
 static INFO: ToolInfo = ToolInfo {
     kind: "fillet",
-    name: "Fillet 3D",
+    name: "Fillet",
     shortcut: "Shift+F",
     description:
         "Round or bevel the edges of a solid; Ctrl changes the measure, «0.3p» the profile.",
@@ -20,9 +20,18 @@ static INFO: ToolInfo = ToolInfo {
     axis_source_empty_only: false,
 };
 
+static CHAMFER: ToolInfo = ToolInfo {
+    kind: "chamfer",
+    name: "Chamfer",
+    shortcut: "Shift+C",
+    vcb_label: Some("Distance"),
+    ..INFO
+};
+
 #[derive(Default)]
 pub struct Fillet {
     sizing: bool,
+    chamfer: bool,
 }
 
 fn radius(world: P3, targets: &Json) -> Option<f64> {
@@ -48,6 +57,10 @@ fn radius(world: P3, targets: &Json) -> Option<f64> {
 }
 
 impl Fillet {
+    pub fn chamfer() -> Self {
+        Self { sizing: false, chamfer: true }
+    }
+
     fn commit(&mut self, host: &mut dyn ToolHost) -> Reply {
         let args = host.call("fillet_plan", Json::Null);
         if !args.is_object() {
@@ -67,7 +80,7 @@ impl Fillet {
 }
 impl Tool for Fillet {
     fn info(&self) -> &'static ToolInfo {
-        &INFO
+        if self.chamfer { &CHAMFER } else { &INFO }
     }
     fn busy(&self) -> bool {
         self.sizing

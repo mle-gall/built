@@ -402,7 +402,8 @@ Generated from the fixture (`(system …)` rows are AppKit's own).
 | Tools | Flip | `tool:flip` |  |
 | Tools | Follow Me | `tool:followme` |  |
 | Tools | Offset | `tool:offset` |  |
-| Tools | Fillet 3D | `tool:fillet` |  |
+| Tools | Fillet | `tool:fillet` |  |
+| Tools | Chamfer | `tool:chamfer` |  |
 | Tools | Outer Shell | `tool:outer_shell` |  |
 | Tools | Solid Tools ▸ |  |  |
 | Tools ▸ Solid Tools | Intersect | `tool:solid_intersect` |  |

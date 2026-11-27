@@ -1954,6 +1954,7 @@
  "Distort (perspective) is not available yet — use the red, green and blue pins.": "尚不支援扭曲（透視）— 請使用紅、綠、藍圖釘。",
  "Pin lifted — click where it should sit.": "圖釘已提起 — 請點擊要放置的位置。",
  "Position restored — Esc again to leave.": "位置已還原 — 再按一次 Esc 即可離開。",
+ "Chamfer": "倒角",
  "Fillet": "圓角",
  "Fillet 3D": "3D 圓角",
  "Pick an edge to round.": "請選取要圓角的邊線。",

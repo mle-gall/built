@@ -1835,6 +1835,7 @@
  "Distort (perspective) is not available yet — use the red, green and blue pins.": "التشويه (المنظور) غير متوفر بعد — استخدم المسامير الحمراء والخضراء والزرقاء.",
  "Pin lifted — click where it should sit.": "تم رفع الدبوس – انقر حيث يجب أن يجلس.",
  "Position restored — Esc again to leave.": "تمت استعادة الموضع - Esc مرة أخرى للمغادرة.",
+ "Chamfer": "شطف الحواف",
  "Fillet": "تدوير الحواف (Fillet)",
  "Fillet 3D": "تدوير الحواف ثلاثي الأبعاد (Fillet 3D)",
  "Pick an edge to round.": "اختر حافة للتقريب.",
