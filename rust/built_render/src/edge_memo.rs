@@ -37,6 +37,10 @@ struct Entry {
 }
 
 impl Entry {
+    fn overflow_bytes(&self) -> usize {
+        self.more.as_ref().map_or(0, |v| std::mem::size_of_val(v.as_ref())
+            + v.capacity() * std::mem::size_of::<(u64,[f32;3])>())
+    }
     fn get(&self, i: usize) -> (u64, [f32; 3]) {
         if i < 2 { self.ns[i] } else { self.more.as_ref().unwrap()[i - 2] }
     }
@@ -95,6 +99,7 @@ struct Shard {
     lookup: FastMap<Words, u32>,
     entries: Vec<Entry>,
     free: Vec<u32>,
+    overflow_bytes: usize,
 }
 
 pub(crate) struct Memo {
@@ -198,9 +203,7 @@ impl Memo {
             let buckets = (s.lookup.capacity() + 1).next_power_of_two();
             s.free.capacity() * 4 + buckets * (std::mem::size_of::<(Words,u32)>() + 1)
                 + s.entries.capacity() * std::mem::size_of::<Entry>()
-                + s.entries.iter().filter_map(|e| e.more.as_ref()).map(|v|
-                    std::mem::size_of_val(v.as_ref()) + v.capacity() * std::mem::size_of::<(u64,[f32;3])>()
-                ).sum::<usize>()
+                + s.overflow_bytes
         }).sum();
         sides + self.face_vertices.capacity() + self.records.capacity() + self.ranks.capacity() * 8
             + self.soft.capacity() * 24 + (self.soft_at.capacity() + 1).next_power_of_two() * 33
@@ -215,6 +218,7 @@ impl Memo {
         let build = |shard: usize| -> Shard {
             let mut own = Shard {
                 free: Vec::new(),
+                overflow_bytes: 0,
                 lookup: FastMap::with_capacity_and_hasher(tris * 3 / 2 / shards + 16, Default::default()),
                 entries: Vec::with_capacity(tris * 3 / 2 / shards + 1024),
             };
@@ -246,14 +250,17 @@ impl Memo {
                     own.entries[at as usize].hard += 1;
                 }
             }
+            own.overflow_bytes = own.entries.iter().map(Entry::overflow_bytes).sum();
             own
         };
         let shards: Vec<Shard> = std::thread::scope(|scope| {
             let handles: Vec<_> = (0..shards).map(|s| scope.spawn(move || build(s))).collect();
             handles.into_iter().map(|h| h.join().expect("an edge shard")).collect()
         });
+        let mut face_vertices = Vec::with_capacity((faces + crate::edit_slack(faces)) * 28);
+        face_vertices.extend_from_slice(&v[..faces*28]);
         let mut memo = Memo {
-            face_vertices: v[..faces * 28].to_vec(),
+            face_vertices,
             shards,
             records: Vec::new(),
             hard: pairs,
@@ -344,11 +351,11 @@ impl Memo {
             }
         }
         // Each side touched, with what its records showed before.
-        let mut before: FastMap<Words, ([[f32; 3]; 2], bool)> = FastMap::default();
+        let mut before: FastMap<Words, ([[f32; 3]; 2], bool, usize)> = FastMap::default();
         let mut touch = |memo: &mut Memo, k: &[u8; 24]| -> Words {
             let w = words(k);
             if !before.contains_key(&w) {
-                let was = memo.find(&w).map_or(([[0.; 3]; 2], false), |e| (e.normals(), e.profile()));
+                let was = memo.find(&w).map_or(([[0.; 3]; 2], false, 0), |e| (e.normals(), e.profile(),e.overflow_bytes()));
                 before.insert(w, was);
             }
             w
@@ -390,7 +397,7 @@ impl Memo {
         let mut renormal: FastMap<Words, [[f32; 3]; 2]> = FastMap::default();
         let mut leave: Vec<Words> = Vec::new();
         let mut join: Vec<[u8; 24]> = Vec::new();
-        for (w, (was, soft)) in &before {
+        for (w, (was, soft, _)) in &before {
             let (now, profile, k) = match self.find(w) {
                 Some(e) => (e.normals(), e.profile(), w.bytes()),
                 None => ([[0.; 3]; 2], false, [0; 24]),
@@ -404,30 +411,45 @@ impl Memo {
                 _ => {}
             }
         }
-        for w in before.keys() {
+        for (w, (_, _, old_overflow)) in &before {
             let index = shard_of(w, self.shards.len());
             let shard = &mut self.shards[index];
             if let Some(&at) = shard.lookup.get(w) {
                 let e = &shard.entries[at as usize];
+                shard.overflow_bytes -= old_overflow;
                 if e.len == 0 && e.hard == 0 {
                     shard.lookup.remove(w);
                     shard.entries[at as usize] = Entry::default();
                     shard.free.push(at);
+                } else {
+                    shard.overflow_bytes += e.overflow_bytes();
                 }
             }
         }
         // The hard records, in the new input order.
         let old_records = std::mem::take(&mut self.records);
         let old_soft = &old_records[self.hard * R..];
-        let mut records = vec![0u8; npn * R];
+        let mut records = Vec::with_capacity((npn + self.soft.len() + join.len())*R);
+        records.resize(npn*R,0);
         let mut fresh = vec![true; npn];
         for &(o, k, len) in &pair_runs {
             records[k * R..(k + len) * R].copy_from_slice(&old_records[o * R..(o + len) * R]);
             fresh[k..k + len].iter_mut().for_each(|f| *f = false);
         }
+        // Most edits change normals in just a few cells. Test the first
+        // endpoint against the range of the affected coordinate words before
+        // forming and hashing an unordered pair. Word bounds also cover NaNs.
+        let (mut low, mut high) = ([u32::MAX;3], [0u32;3]);
+        for w in renormal.keys() {
+            for endpoint in w.bytes().chunks_exact(12) {
+                let xyz: [u32;3] = bytemuck::pod_read_unaligned(endpoint);
+                for k in 0..3 { low[k] = low[k].min(xyz[k]); high[k] = high[k].max(xyz[k]); }
+            }
+        }
         for e in 0..npn {
-            if !fresh[e] && renormal.is_empty() {
-                continue;
+            if !fresh[e] {
+                let xyz: [u32;3] = bytemuck::pod_read_unaligned(&records[e*R..e*R+12]);
+                if (0..3).any(|k| xyz[k]<low[k] || xyz[k]>high[k]) { continue; }
             }
             let k = pair_key(v, faces, e);
             let w = words(&k);
@@ -478,6 +500,9 @@ impl Memo {
         let record_changes = Writes::from_runs(&old_records, &records, &record_runs, R);
         let new_faces = &v[..faces * 28];
         let face_changes = Writes::from_runs(&self.face_vertices, new_faces, &tri_runs, 84);
+        if self.face_vertices.capacity() < new_faces.len() {
+            self.face_vertices.reserve_exact(new_faces.len() - self.face_vertices.len() + crate::edit_slack(faces)*28);
+        }
         self.face_vertices.resize(new_faces.len(), 0);
         for &(_, dst, size) in &face_changes.moves {
             self.face_vertices[dst..dst+size].copy_from_slice(&new_faces[dst..dst+size]);
@@ -549,6 +574,7 @@ mod tests {
         // Cells gone, a corner raised: some triangles and edges new.
         let raised = |i: usize, j: usize| if (i, j) == (40, 40) { 2.0 } else { bump(i, j) };
         let (v2, faces2) = bake(200, raised, &[5, 6, 9000]);
+        let original_records = memo.records.clone();
         let rc = memo.update(&v2, faces2).expect("a small edit carries");
         let fresh = expanded(&v2, faces2);
         assert_eq!(memo.records.len(), fresh.len());
@@ -566,6 +592,13 @@ mod tests {
         for &(src,dst,size) in &rc.0.moves { replay[dst..dst+size].copy_from_slice(&v[src..src+size]); }
         for span in rc.0.upload { replay[span.clone()].copy_from_slice(&v2[span]); }
         assert_eq!(replay, v2[..faces2 * 28]);
+        let mut records = original_records.clone();
+        records.resize(memo.records.len(), 0);
+        for &(src,dst,size) in &rc.1.moves {
+            records[dst..dst+size].copy_from_slice(&original_records[src..src+size]);
+        }
+        for span in rc.1.upload { records[span.clone()].copy_from_slice(&memo.records[span]); }
+        assert_eq!(records, memo.records);
         // And back.
         memo.update(&v, faces).expect("undo carries");
         assert_eq!(split(&memo.records, memo.hard), split(&expanded(&v, faces), memo.hard));
