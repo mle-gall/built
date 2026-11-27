@@ -139,8 +139,8 @@ impl Ui {
                                     let row=if preset && key.contains(" · "){
                                         ui.horizontal(|ui|{
                                             let material=key.split(" · ").nth(1).unwrap_or("");
-                                            let color=match material{"C24"|"C16"|"Timber"=>egui::Color32::from_rgb(185,144,95),
-                                                "Concrete"=>egui::Color32::from_gray(153),"Aluminium"|"Stainless steel"=>egui::Color32::from_gray(194),
+                                            let color=match material{"C24"|"C16"|"Timber"=>MATERIAL_TIMBER,
+                                                "Concrete"=>MATERIAL_CONCRETE,"Aluminium"|"Stainless steel"=>MATERIAL_METAL,
                                                 _=>INK_2};
                                             let (rect,_)=ui.allocate_exact_size(vec2(11.,11.),egui::Sense::hover());
                                             kit::tag_swatch(ui,rect,Some(color));

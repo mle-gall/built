@@ -76,6 +76,9 @@ palette! {
     WARNING_HOVER = Color32::from_rgba_premultiplied(44, 33, 13, 46);
     IMAGE_BACK = Color32::from_rgba_premultiplied(0, 0, 0, 120);
     BRIGHT = Color32::WHITE;
+    MATERIAL_TIMBER = Color32::from_rgb(185, 144, 95);
+    MATERIAL_CONCRETE = Color32::from_gray(153);
+    MATERIAL_METAL = Color32::from_gray(194);
     SWATCH_FALLBACK = Color32::GRAY;
     // The model's axes, as the drawing axes paint them (axes.wgsl): the
     // view gizmo and anything else that names X, Y or Z by colour.
