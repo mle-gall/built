@@ -257,3 +257,64 @@ def test_group_only_clipboard_serializes_exact_definition():
     clip = clip_payload.decode(clip_payload.encode(dict(groups=[placed], ref=Vec3())))
     copy, = clip["groups"]
     assert copy.mesh._store.exact_plane(copy.mesh.faces[0].key) == rows
+
+
+@pytest.mark.parametrize(("surface", "uv", "expected"), [
+    (dict(type="cylinder", radius=3), (math.pi / 2, 1), (0, 3, 1)),
+    (dict(type="cone", radius=1, half_angle=math.pi / 6), (0, 2), (2, 0, math.sqrt(3))),
+    (dict(type="sphere", radius=2), (math.pi / 2, math.pi / 6), (0, math.sqrt(3), 1)),
+    (dict(type="torus", major=3, minor=1), (math.pi / 2, math.pi), (0, 2, 0)),
+    (dict(type="plane"), (3, 8), (3, 8, 0)),
+])
+def test_elementary_support_parameters(surface, uv, expected):
+    pool = ExactGeometry(json.dumps(dict(curves=[], surfaces=[dict(surface, frame=frame())])))
+    assert pool.surface_point(0, *uv) == pytest.approx(expected)
+
+
+def test_rational_tensor_and_revolution():
+    axis = dict(degree=1, knots=[0, 1], multiplicities=[2, 2], periodic=False)
+    net = dict(type="spline", u=axis, v=axis, rows=2, cols=2,
+               controls=[[0, 0, 0, 1], [0, 1, 0, 1], [1, 0, 0, 1], [1, 1, 1, 2]])
+    line = dict(type="line", origin=[2, 0, 0], direction=[0, 0, 1])
+    rev = dict(type="revolution", generator=0, origin=[0, 0, 0], axis=[0, 0, 1])
+    pool = ExactGeometry(json.dumps(dict(curves=[line], surfaces=[net, rev])))
+    assert pool.surface_point(0, 0.5, 0.5) == pytest.approx([0.6, 0.6, 0.4])
+    assert pool.surface_point(1, 3, math.pi/2) == pytest.approx([0, 2, 3])
+
+
+def test_planar_annulus_has_no_triangles_across_the_hole():
+    rows = dict(curves=[], surfaces=[dict(type="plane", frame=frame())])
+    loops, edges, vertices = [], [], {}
+    for i, (major, minor) in enumerate(((4, 3), (1, 0.5))):
+        rows["curves"].append(dict(type="ellipse", major=major, minor=minor, frame=frame()))
+        vertices[i] = [major, 0, 0]
+        edges.append(dict(id=i, curve=i, vertices=[i, i], interval=[0, math.tau]))
+        loops.append([dict(edge=i, projected=True, reversed=bool(i),
+                           uv=[[major, 0], [major, 0]], tolerance=0.01)])
+    rows["topology"] = dict(tolerance=0.02, vertices=vertices, edges=edges,
+                            faces=[dict(id=1, surface=0, reversed=False, loops=loops)])
+    mesh = json.loads(ExactGeometry(json.dumps(rows)).tessellate())
+    area = 0
+    for tri in mesh["triangles"]:
+        a, b, c = [mesh["points"][i] for i in tri]
+        x, y = [(a[k]+b[k]+c[k])/3 for k in (0, 1)]
+        assert x*x+4*y*y >= 0.98
+        area += ((b[0]-a[0])*(c[1]-a[1])-(b[1]-a[1])*(c[0]-a[0]))/2
+    assert area == pytest.approx(math.pi*(12-0.5), rel=0.005)
+
+
+def test_exact_plane_lost_on_partial_nonplanar_edit_and_restored_by_undo():
+    from built_core.history import History
+    from built_core.protocol import commands
+    from built_core.scene import Scene
+
+    scene = Scene()
+    h = History(scene)
+    commands.run(h, "add_face", outer=[[0, 0, 0], [2, 0, 0], [2, 2, 0], [0, 2, 0]])
+    key = scene.mesh.faces[0].key
+    assert commands.run(h, "bind_exact_plane", face=key, **frame())["ok"]
+    v = scene.mesh.vertices[0].key
+    assert commands.run(h, "move_vertices", vertices=[v], delta=[0, 0, 1])["ok"]
+    assert all(scene.mesh._store.exact_plane(f.key) is None for f in scene.mesh.faces)
+    h.undo()
+    assert scene.mesh._store.exact_plane(key) == list(frame().values())
