@@ -175,6 +175,17 @@ fn points(scene: &Obj<'_>, t: &LiveTable, row: &Row) -> PyResult<Option<Vec<DVec
 }
 
 fn freeze_children(copy: &Obj<'_>, source: &Obj<'_>, parent: &str) -> PyResult<()> {
+    if source
+        .getattr("ext")?
+        .get_item("link")
+        .is_ok_and(|link| link.get_item("path").is_ok())
+    {
+        let children = source
+            .py()
+            .import("built_core")?
+            .call_method1("link_copy_parts", (source, copy))?;
+        return copy.setattr("children", children);
+    }
     for (c, s) in copy
         .getattr("children")?
         .try_iter()?

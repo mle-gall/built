@@ -292,7 +292,7 @@ def test_a_grip_copy_and_array_still_work():
     tool.on_click(_ctx(vp, 9.0, 1.0))
     assert len(scene.groups) == 2
     assert tool.on_array_value(vp, 3, "x")
-    assert len(scene.groups) == 4
+    assert len(scene.groups[-1].children) == 3
 
 
 def test_esc_after_a_grip_pick_puts_it_back():

@@ -520,6 +520,24 @@ pub(crate) fn finish(
     }
     if journalled {
         run(scene, &mut t, seeds)?;
+        if let Some(uid) = command.getattr_opt("_repeat_selection_row")? {
+            if let Some(row) = t.rows.get(&uid.extract::<String>()?) {
+                if let Some(owner) = group(py, &t, &row.owner) {
+                    let before = pyo3::types::PyList::new(
+                        py,
+                        scene
+                            .getattr("selection")?
+                            .try_iter()?
+                            .collect::<PyResult<Vec<_>>>()?,
+                    )?;
+                    let copies = owner.getattr("children")?;
+                    command.setattr("_repeat_selection_before", before)?;
+                    command.setattr("_repeat_selection_after", &copies)?;
+                    command.setattr("_repeat_edit_context", scene.getattr("edit_group")?)?;
+                    scene.call_method1("select", (copies,))?;
+                }
+            }
+        }
         return put(scene, t);
     }
     // Opaque commands own their inverse. Only the evaluator's writes must
@@ -569,7 +587,21 @@ impl Mutation {
     fn bind_transaction(slf: &Bound<'_, Self>, txn: &Obj<'_>) -> PyResult<()> {
         slf.as_any().setattr("_doc_txn", txn)
     }
-    fn doc_after(&self, scene: &Obj<'_>, _phase: &str) -> PyResult<()> {
+    fn doc_after(slf: &Bound<'_, Self>, scene: &Obj<'_>, phase: &str) -> PyResult<()> {
+        let cmd = slf.as_any();
+        if cmd
+            .getattr_opt("_repeat_edit_context")?
+            .is_some_and(|c| scene.getattr("edit_group").is_ok_and(|open| c.is(&open)))
+        {
+            let key = if phase == "undo" {
+                "_repeat_selection_before"
+            } else {
+                "_repeat_selection_after"
+            };
+            if let Some(items) = cmd.getattr_opt(key)? {
+                scene.call_method1("select", (items,))?;
+            }
+        }
         scene.setattr("version", scene.getattr("version")?.add(1)?)
     }
     #[pyo3(name = "do")]
@@ -1038,7 +1070,9 @@ pub(crate) fn repeat_command<'p>(
         "uid": uid, "kind":"repeat", "source":source, "run":run, "rule":rule
     }))
     .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    Ok(Bound::new(py, Mutation(Edit::Set(row)))?.into_any())
+    let command = Bound::new(py, Mutation(Edit::Set(row)))?.into_any();
+    command.setattr("_repeat_selection_row", uid)?;
+    Ok(command)
 }
 #[pyfunction]
 fn live_sweep<'p>(scene: &Obj<'p>, owner: &str) -> PyResult<Obj<'p>> {

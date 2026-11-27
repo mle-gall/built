@@ -816,11 +816,21 @@ class MoveView(RectView):
         return None
 
 
+def _array_placements(scene):
+    # The gesture fixtures record physical placements. A live array now files
+    # its generated placements inside an identity-frame assembly.
+    for group in scene.groups:
+        if (group.ext or {}).get("built.live", {}).get("stations") is not None:
+            yield from group.children
+        else:
+            yield group
+
+
 def _move_snapshot(view, tool):
     mesh = view.scene.mesh
     faces = sorted(sorted(_pt(v) for v in f.vertices) for f in mesh.faces)
     label = tool.value_label()
-    return {"faces": faces, "groups": sorted(_pt(g.xform.map(__import__("built_core").Vec3())) for g in view.scene.groups),
+    return {"faces": faces, "groups": sorted(_pt(g.xform.map(__import__("built_core").Vec3())) for g in _array_placements(view.scene)),
             "undo": len(view.history.undo_stack), "start": _pt(tool.start_point),
             "copy": bool(tool._copy), "array": bool(tool.array_pending(view)),
             "lines": len(tool.rubber_band_lines()),
@@ -995,7 +1005,7 @@ def run_rotate(steps):
         out.append({"start": _pt(tool.start_point), "reference": _pt(tool.ref_point),
                     "copy": tool.cursor_plus, "array": tool.array_pending(view),
                     "vertices": sorted(_pt(v.position) for v in view.scene.mesh.vertices),
-                    "placements": sorted(_pt(g.xform.map(Vec3())) for g in view.scene.groups),
+                    "placements": sorted(_pt(g.xform.map(Vec3())) for g in _array_placements(view.scene)),
                     "undo": len(view.history.undo_stack), "result": result})
     return out
 
