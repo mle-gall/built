@@ -72,6 +72,15 @@ fn run_tag_curve(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResult<()
     Ok(())
 }
 
+fn run_weld_edges(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResult<()> {
+    let mesh = scene.getattr("mesh")?;
+    let me = running(py).expect("a running step");
+    me.setattr("snapshot", snapshot(s, py, &mesh)?)?;
+    mesh.getattr("_store")?.call_method1("weld_edges", (s.arg(py, 0), s.arg(py, 1)))?;
+    touch(&mesh)?;
+    version(scene)
+}
+
 fn run_explode_curves(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResult<()> {
     let me = running(py).expect("a running step");
     let mesh = scene.getattr("mesh")?;
@@ -338,6 +347,7 @@ macro_rules! steps {
 steps! {
     TagCurve = "TagCurveCommand";
     ExplodeCurves = "ExplodeCurvesCommand";
+    WeldEdges = "WeldEdgesCommand";
     AutoTagDrawnFaces = "AutoTagDrawnFacesCommand";
     PruneOrphanEdges = "PruneOrphanEdgesCommand";
     CoplanarMerge = "CoplanarMergeCommand";
@@ -352,6 +362,16 @@ fn step(name: &'static str, run: fn(&RecordStep, Python<'_>, &Obj<'_>) -> PyResu
 
 fn class_none(py: Python<'_>) -> Py<PyAny> {
     py.None()
+}
+
+#[pymethods]
+impl WeldEdges {
+    #[new]
+    fn new(py: Python<'_>, keys: Vec<u128>) -> PyResult<PyClassInitializer<Self>> {
+        let id = py.import("built_core.mesh")?.getattr("Mesh")?.call_method0("next_curve_id")?;
+        let args = vec![("keys", PyList::new(py, keys)?.into_any()), ("curve", id)];
+        Ok(PyClassInitializer::from(step("WeldEdgesCommand", run_weld_edges, args, after_snapshot)).add_subclass(Self))
+    }
 }
 
 #[pymethods]

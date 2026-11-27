@@ -11,6 +11,7 @@ use pyo3::{
 };
 use std::collections::{HashMap, HashSet};
 type Obj<'p> = Bound<'p, PyAny>;
+mod bindings;
 mod command;
 mod output;
 mod surface;
@@ -129,7 +130,12 @@ fn solid_volume(group: &Obj) -> PyResult<Option<f64>> {
     {
         return Ok(None);
     }
-    Ok(solid_report(&world(group)?)?.1)
+    let mesh = group.getattr("mesh")?;
+    let transform = group.getattr("xform")?;
+    let scale = if transform.is_none() { 1. } else {
+        crate::math::mat(&transform)?.determinant().abs()
+    };
+    Ok(solid_report(&mesh)?.1.map(|v| v * scale).filter(|v| *v > 1e-12))
 }
 #[pyfunction]
 fn is_solid(group: &Obj) -> PyResult<bool> {
@@ -145,7 +151,9 @@ struct EdgeFlag<'p> {
 #[derive(Default)]
 struct Sources<'p> {
     attrs: Vec<Bound<'p, PyDict>>,
+    donors: Vec<bindings::Donor>,
     soft: HashSet<(usize, usize)>,
+    flat: HashSet<(usize, usize)>,
     edges: Vec<EdgeFlag<'p>>,
 }
 fn order(a: usize, b: usize) -> (usize, usize) {
@@ -157,7 +165,14 @@ fn point_key(p: DVec3) -> [u64; 3] {
 impl<'p> Sources<'p> {
     fn operand(&mut self, group: &Obj<'p>, operand: usize) -> PyResult<Obj<'p>> {
         let py = group.py();
-        let mesh = world(group)?;
+        let definition = group.getattr("mesh")?;
+        let xf = group.getattr("xform")?;
+        let placement = (!xf.is_none()).then(|| crate::math::mat(&xf)).transpose()?;
+        let native = definition.getattr_opt("_store")?
+            .is_some_and(|st| st.getattr("native_exact").and_then(|v| v.extract::<bool>()).unwrap_or(false));
+        let sample_placement = native.then_some(placement).flatten();
+        let mesh = if native { definition.clone() } else { world(group)? };
+        let mut donors = bindings::donors(&definition, placement)?.into_iter();
         let mat = py
             .import("built_core.group")?
             .call_method1("effective_material", (group,))?;
@@ -212,6 +227,7 @@ impl<'p> Sources<'p> {
                 }
             }
             self.attrs.push(saved);
+            self.donors.push(donors.next().unwrap_or_default());
             if indexed.is_none() {
                 for tri in face.call_method0("triangulate")?.try_iter()? {
                     let points: [Obj; 3] = tri?.extract()?;
@@ -240,6 +256,7 @@ impl<'p> Sources<'p> {
                 }
                 if let [a, b] = faces[..] {
                     self.soft.insert(order(a, b));
+                    if e.getattr("flat")?.is_truthy()? { self.flat.insert(order(a,b)); }
                 }
             }
             let curve = e
@@ -250,12 +267,18 @@ impl<'p> Sources<'p> {
             let hidden = e.getattr("hidden")?.is_truthy()?;
             if curve.is_some() || !layer.is_none() || hidden {
                 self.edges.push(EdgeFlag {
-                    a: xyz(&e.getattr("a")?)?,
-                    b: xyz(&e.getattr("b")?)?,
+                    a: sample_placement.unwrap_or(glam::DMat4::IDENTITY).transform_point3(xyz(&e.getattr("a")?)?),
+                    b: sample_placement.unwrap_or(glam::DMat4::IDENTITY).transform_point3(xyz(&e.getattr("b")?)?),
                     curve,
                     layer,
                     hidden,
                 });
+            }
+        }
+        if let Some(m) = sample_placement {
+            for p in &mut soup.points { *p = m.transform_point3(*p); }
+            if m.determinant() < 0. {
+                for t in &mut soup.triangles { t.swap(1, 2); }
             }
         }
         soup.manifold(py)

@@ -1,4 +1,10 @@
 {
+ "Join connected edges into one curve.": "Обединяване на свързаните ръбове в една крива.",
+ "Weld Edges": "Обединяване на ръбове",
+ "Line on Surface": "Линия върху повърхност",
+ "Click the start point on a curved face.": "Щракнете върху начална точка на извита стена.",
+ "Click the end point to draw along the surface.": "Щракнете върху крайната точка, за да чертаете по повърхността.",
+ "Draw along a curved face.": "Чертане по извита стена.",
  "Click the first corner. Arrows pick the plane.": "Щракнете върху първия ъгъл. Стрелките избират равнината.",
  "Click the start of the angle.": "Щракнете в началото на ъгъла.",
  "Click the end, or type degrees and Enter.": "Щракнете в края или въведете градуси и натиснете Enter.",

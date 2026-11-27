@@ -41,7 +41,7 @@ pub(crate) struct Topology {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) display_tolerance: Option<f64>,
     #[serde(default)]
-    normal_tolerance: Option<f64>,
+    pub(super) normal_tolerance: Option<f64>,
     pub(crate) vertices: BTreeMap<u64, DVec3>,
     pub(crate) edges: Vec<Edge>,
     pub(crate) faces: Vec<Face>,
@@ -548,15 +548,20 @@ impl Topology {
                 }
             }
         }
+        let mut counts = HashMap::new();
+        let mut grid_counts = HashMap::new();
         for e in &self.edges {
             let c = &rows.curves[e.curve as usize];
             let (acceleration, angular_steps) = face_bounds.get(&e.id).copied().unwrap_or_default();
-            let n = divisions(
-                c.acceleration(e.interval[1] - e.interval[0])?
-                    .max(acceleration),
-                deflection / 4.,
-            )?
-            .max(angular_steps);
+            let bound = c.acceleration(e.interval[1] - e.interval[0])?.max(acceleration);
+            let n = divisions(bound, deflection / 4.)?.max(angular_steps);
+            grid_counts.insert(e.id, divisions(bound, deflection * 4.)?.max(angular_steps));
+            counts.insert(e.id,n);
+        }
+        let grids = super::ruled_mesh::torus_grids(self, rows, deflection, &grid_counts, &mut counts)?;
+        for e in &self.edges {
+            let n = counts[&e.id];
+            let c = &rows.curves[e.curve as usize];
             check(
                 mesh.points.len().saturating_add(n) <= 4_000_000,
                 "edge sample budget exceeded",
@@ -576,6 +581,10 @@ impl Topology {
             edges.insert(e.id, sample);
         }
         for f in &self.faces {
+            if let Some(&n) = grids.get(&f.id) {
+                super::ruled_mesh::grid(&mut mesh, f, rows, &edges, &vertices, n, deflection)?;
+                continue;
+            }
             mesh.face(
                 rows,
                 f,

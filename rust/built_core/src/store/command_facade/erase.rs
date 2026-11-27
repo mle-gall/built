@@ -83,6 +83,47 @@ fn merge_attrs(mesh: &Bound<'_, PyAny>, store: &Bound<'_, PyAny>, merges: Merges
     Ok(())
 }
 
+/// Compare the original face paint before a coplanar dissolve chooses
+/// its paint donor. Keep the endpoints of a former material boundary.
+fn painted_seams(
+    mesh: &Bound<'_, PyAny>,
+    store: &Bound<'_, PyAny>,
+    ends: &[Segment],
+) -> PyResult<Vec<u128>> {
+    use crate::store::{keys::Kind, py::PyMeshStore};
+    let owner = mesh.getattr("__dict__")?;
+    let own = owner.get_item("_attr_own")?.cast_into::<PyDict>()?;
+    if own.is_empty() && !owner.get_item("_attr_table")?.is_truthy()? {
+        return Ok(Vec::new());
+    }
+    let pairs: Vec<_> = {
+        let borrow = PyMeshStore::read(store)?;
+        let st = &borrow.inner;
+        ends.iter()
+            .filter_map(|&[p, q]| {
+                let e = st.find_edge(st.lookup(p)?, st.lookup(q)?)?;
+                let &[a, b] = st.edge_faces(e) else {
+                    return None;
+                };
+                (a != b).then(|| {
+                    (
+                        st.key(Kind::Edge, e),
+                        st.key(Kind::Face, a),
+                        st.key(Kind::Face, b),
+                    )
+                })
+            })
+            .collect()
+    };
+    let mut keep = Vec::new();
+    for (e, a, b) in pairs {
+        if !face_attrs(store, &owner, &own, a)?.eq(face_attrs(store, &owner, &own, b)?)? {
+            keep.push(e);
+        }
+    }
+    Ok(keep)
+}
+
 pub(crate) fn command_erase_selection(
     mesh: &Bound<'_, PyAny>,
     loops: Vec<Vec<Point>>,
@@ -106,8 +147,9 @@ pub(crate) fn command_erase_selection(
         .map(|[a, b]| Ok([input_point(mesh, a)?, input_point(mesh, b)?]))
         .collect::<PyResult<Vec<_>>>()?;
     let store = mesh.getattr("_store")?;
+    let protected = painted_seams(mesh, &store, &segments)?;
     let result: Option<StoreErase> = store
-        .call_method1("erase_selection", (loops, segments, hypot))?
+        .call_method1("erase_selection", (loops, segments, hypot, protected))?
         .extract()?;
     let Some((dirty, edges, faces, merges, slit_planes, across)) = result else {
         return Ok(None);

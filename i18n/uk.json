@@ -1,4 +1,10 @@
 {
+ "Join connected edges into one curve.": "Об’єднати з’єднані ребра в одну криву.",
+ "Weld Edges": "Об’єднати ребра",
+ "Line on Surface": "Лінія на поверхні",
+ "Click the start point on a curved face.": "Клацніть початкову точку на вигнутій грані.",
+ "Click the end point to draw along the surface.": "Клацніть кінцеву точку, щоб провести лінію по поверхні.",
+ "Draw along a curved face.": "Малювання по вигнутій грані.",
  "Click the first corner. Arrows pick the plane.": "Клацніть перший кут. Стрілками виберіть площину.",
  "Click the start of the angle.": "Клацніть початкову точку кута.",
  "Click the end, or type degrees and Enter.": "Клацніть кінцеву точку або введіть градуси й натисніть Enter.",

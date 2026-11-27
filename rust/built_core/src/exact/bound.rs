@@ -145,14 +145,7 @@ impl Curve {
         (d != 0.).then_some([ta, ta + d])
     }
 
-    /// Display samples between the interval ends, at most `step` radians
-    /// apart on a periodic curve; a line needs none.
-    pub(crate) fn samples(&self, interval: [f64; 2], step: f64) -> usize {
-        match self {
-            Self::Line { .. } => 1,
-            _ => (((interval[1] - interval[0]).abs() / step).ceil() as usize).clamp(1, 4096),
-        }
-    }
+
 
     /// The image under `p ↦ m p + t`, or None if it collapses. A circle
     /// whose plane is not mapped by a similarity becomes an ellipse.
@@ -899,31 +892,7 @@ fn basis(points: impl Iterator<Item = DVec3> + Clone) -> Option<(DVec3, DVec3, D
     Some((e1, e2, e1.cross(e2)))
 }
 
-/// A display tessellation of one trimmed region: points (the boundary
-/// samples first, in ring order, then interior grid points), triangles
-/// oriented along the support's parameters, and the exact unit normal
-/// (along `du × dv`) at each point; NaN where it is undefined (a pole).
-pub(crate) struct Tessellation {
-    pub points: Vec<DVec3>,
-    pub triangles: Vec<[usize; 3]>,
-    pub normals: Vec<DVec3>,
-}
-
 impl Support {
-    /// Parameters along which the support bends: they need interior
-    /// samples. A ruled direction (a cylinder's generators) needs none.
-    fn curved_params(&self) -> [bool; 2] {
-        let g = || self.generator.as_ref().is_some_and(Curve::periodic);
-        match &self.surface {
-            Surface::Plane { .. } => [false, false],
-            Surface::Cylinder { .. } | Surface::Cone { .. } => [true, false],
-            Surface::Sphere { .. } | Surface::Torus { .. } => [true, true],
-            Surface::Extrusion { .. } => [g(), false],
-            Surface::Revolution { .. } => [g(), true],
-            Surface::Spline { .. } => [false, false],
-        }
-    }
-
     pub(crate) fn derivatives_at(&self, uv: DVec2) -> Option<(DVec3, DVec3)> {
         self.derivatives(uv)
     }
@@ -952,38 +921,10 @@ impl Support {
     }
 }
 
-/// Triangulate a trimmed region of a support for display. The rings are
-/// the region's boundary samples in definition coordinates, shared with
-/// every neighbouring face, so adjacent patches meet without cracks: no
-/// point is ever inserted on the boundary. Interior points lie on a grid
-/// of `step` radians along each bending parameter, aligned to multiples of
-/// the step so neighbours' grids agree; one constrained Delaunay pass runs
-/// in parameters scaled to arc length, so triangles are well shaped.
-pub(crate) fn tessellate(s: &Support, rings: &[Vec<DVec3>], step: f64, tol: f64) -> Option<Tessellation> {
-    use spade::{ConstrainedDelaunayTriangulation, HasPosition, Point2, Triangulation};
-    #[derive(Clone, Copy)]
-    struct C {
-        at: DVec2,
-        id: usize,
-    }
-    impl HasPosition for C {
-        type Scalar = f64;
-        fn position(&self) -> Point2<f64> {
-            // The triangulation refuses subnormal-scale coordinates.
-            let snap = |x: f64| if x.abs() < 1e-30 { 0. } else { x };
-            Point2::new(snap(self.at.x), snap(self.at.y))
-        }
-    }
-    let debug = |why: &str| {
-        if std::env::var_os("BUILT_EXACT_DEBUG").is_some() {
-            eprintln!("exact: tessellation {why}");
-        }
-    };
+/// Validate editable facet trims in the support's unwrapped parameter space.
+pub(crate) fn trim_region(s: &Support, rings: &[Vec<DVec3>], tol: f64) -> Option<Vec<Vec<DVec2>>> {
     let periodic = s.periodic();
-    let mut points: Vec<DVec3> = Vec::new();
-    let mut point_uv: Vec<Option<DVec2>> = Vec::new();
     let mut uv_rings: Vec<Vec<DVec2>> = Vec::new();
-    let mut ids: Vec<Vec<usize>> = Vec::new();
     let mut previous: Option<DVec2> = None;
     for ring in rings {
         let raw: Vec<Option<DVec2>> = ring
@@ -1014,7 +955,6 @@ pub(crate) fn tessellate(s: &Support, rings: &[Vec<DVec3>], step: f64, tol: f64)
                 if step == n {
                     // The ring must close on the branch it started on.
                     if uv.distance(lifted[start]?) > 1e-6 {
-                        debug("ring wraps around the support");
                         return None;
                     }
                     break;
@@ -1024,20 +964,14 @@ pub(crate) fn tessellate(s: &Support, rings: &[Vec<DVec3>], step: f64, tol: f64)
             }
         }
         let mut uv_ring = Vec::new();
-        let mut ring_ids = Vec::new();
         for i in 0..n {
-            let id = points.len();
-            points.push(ring[i]);
             match lifted[i] {
                 Some(uv) => {
-                    point_uv.push(Some(uv));
                     uv_ring.push(uv);
-                    ring_ids.push(id);
                 }
                 None => {
                     // A pole: one model point, a parameter side from its
                     // neighbours' u to theirs.
-                    point_uv.push(None);
                     let before = (1..n).find_map(|k| lifted[(i + n - k) % n])?;
                     let after = (1..n).find_map(|k| lifted[(i + k) % n])?;
                     let v = s.uv(ring[i]).map_or(before.y, |uv| uv.y);
@@ -1045,7 +979,6 @@ pub(crate) fn tessellate(s: &Support, rings: &[Vec<DVec3>], step: f64, tol: f64)
                         let uv = DVec2::new(u, v);
                         if uv_ring.last() != Some(&uv) {
                             uv_ring.push(uv);
-                            ring_ids.push(id);
                         }
                     }
                 }
@@ -1069,171 +1002,9 @@ pub(crate) fn tessellate(s: &Support, rings: &[Vec<DVec3>], step: f64, tol: f64)
         }
         previous = uv_ring.first().copied();
         uv_rings.push(uv_ring);
-        ids.push(ring_ids);
     }
-    if let Err(e) = super::validate_polygon(&uv_rings) {
-        debug(e);
-        return None;
-    }
-    // Arc length per unit of each parameter at the region's centre.
-    let (lo, hi) = uv_rings.iter().flatten().fold(
-        (DVec2::splat(f64::INFINITY), DVec2::splat(f64::NEG_INFINITY)),
-        |(lo, hi), p| (lo.min(*p), hi.max(*p)),
-    );
-    let (du, dv) = s.derivatives((lo + hi) * 0.5)?;
-    let scale = DVec2::new(du.length(), dv.length()).max(DVec2::splat(1e-12));
-    let metric = |uv: DVec2| uv * scale;
-    let inside = |uv: DVec2| {
-        let hit = |r: &Vec<DVec2>| {
-            r.iter()
-                .zip(r.iter().cycle().skip(1))
-                .filter(|(a, b)| {
-                    (a.y > uv.y) != (b.y > uv.y) && uv.x < a.x + (uv.y - a.y) * (b.x - a.x) / (b.y - a.y)
-                })
-                .count()
-                % 2
-                == 1
-        };
-        hit(&uv_rings[0]) && !uv_rings[1..].iter().any(hit)
-    };
-    // Interior grid along the bending parameters.
-    let curved = s.curved_params();
-    let mut grid: Vec<DVec2> = Vec::new();
-    if curved[0] || curved[1] {
-        let lines = |k: usize| -> Vec<f64> {
-            if !curved[k] {
-                return Vec::new();
-            }
-            let (a, b) = ((lo[k] / step).ceil() as i64, (hi[k] / step).floor() as i64);
-            if b - a > 20_000 {
-                return Vec::new();
-            }
-            (a..=b).map(|i| i as f64 * step).filter(|x| *x > lo[k] && *x < hi[k]).collect()
-        };
-        let (us, vs) = (lines(0), lines(1));
-        // A ruled direction takes the other direction's spacing in arc
-        // length, so cells stay square where both are sampled.
-        let spacing = (if curved[0] { step * scale.x } else { f64::INFINITY })
-            .min(if curved[1] { step * scale.y } else { f64::INFINITY });
-        let fill = |k: usize, given: &Vec<f64>| -> Vec<f64> {
-            if curved[k] {
-                return given.clone();
-            }
-            // Only doubly curved supports fill ruled directions.
-            Vec::new()
-        };
-        let (us, vs) = (fill(0, &us), fill(1, &vs));
-        let segments: Vec<(DVec2, DVec2)> = uv_rings
-            .iter()
-            .flat_map(|r| r.iter().zip(r.iter().cycle().skip(1)).map(|(a, b)| (metric(*a), metric(*b))))
-            .collect();
-        let clear = |m: DVec2| {
-            segments.iter().all(|&(a, b)| {
-                let d = b - a;
-                let t = ((m - a).dot(d) / d.length_squared().max(f64::MIN_POSITIVE)).clamp(0., 1.);
-                (a + d * t).distance(m) > 0.45 * spacing
-            })
-        };
-        if !us.is_empty() && !vs.is_empty() {
-            for &u in &us {
-                for &v in &vs {
-                    let uv = DVec2::new(u, v);
-                    if inside(uv) && clear(metric(uv)) {
-                        grid.push(uv);
-                    }
-                }
-            }
-        }
-        if grid.len() > 200_000 {
-            debug("grid budget exceeded");
-            return None;
-        }
-    }
-    // A side that crosses parameter lines (a mitre's ellipse on a
-    // cylinder) is curved in parameters: three of its samples would close
-    // an ear standing in the curve's own plane. A point inside each such
-    // segment gives its triangle an apex on the surface instead.
-    if !matches!(s.surface, Surface::Plane { .. }) {
-        let segments: Vec<(DVec2, DVec2)> = uv_rings
-            .iter()
-            .flat_map(|r| r.iter().zip(r.iter().cycle().skip(1)).map(|(a, b)| (*a, *b)))
-            .collect();
-        let metric_segments: Vec<(DVec2, DVec2)> = segments.iter().map(|(a, b)| (metric(*a), metric(*b))).collect();
-        let mut added: Vec<DVec2> = Vec::new();
-        for &(a, b) in &segments {
-            let d = b - a;
-            if d.x.abs() <= 1e-12 * (1. + a.x.abs()) || d.y.abs() <= 1e-12 * (1. + a.y.abs()) {
-                continue;
-            }
-            let (ma, mb) = (metric(a), metric(b));
-            let len = ma.distance(mb);
-            let normal = (mb - ma).perp() / len.max(f64::MIN_POSITIVE);
-            for side in [1., -1.] {
-                let m = (ma + mb) * 0.5 + normal * (0.3 * len * side);
-                let uv = m / scale;
-                if !inside(uv) {
-                    continue;
-                }
-                let clear = metric_segments.iter().all(|&(x, y)| {
-                    let e = y - x;
-                    let t = ((m - x).dot(e) / e.length_squared().max(f64::MIN_POSITIVE)).clamp(0., 1.);
-                    (x + e * t).distance(m) > 0.2 * len
-                }) && added.iter().chain(grid.iter()).all(|q| metric(*q).distance(m) > 0.2 * len);
-                if clear {
-                    added.push(uv);
-                }
-                break;
-            }
-        }
-        debug(&format!("{} offset points for {} segments", added.len(), segments.len()));
-        grid.extend(added);
-    }
-    let mut corners: Vec<C> = Vec::new();
-    let mut constraints = Vec::new();
-    for (ring, ring_ids) in uv_rings.iter().zip(&ids) {
-        let first = corners.len();
-        for (uv, &id) in ring.iter().zip(ring_ids) {
-            corners.push(C { at: metric(*uv), id });
-        }
-        constraints.extend((first..corners.len() - 1).map(|i| [i, i + 1]));
-        constraints.push([corners.len() - 1, first]);
-    }
-    for uv in &grid {
-        corners.push(C { at: metric(*uv), id: points.len() });
-        points.push(s.point(*uv)?);
-        point_uv.push(Some(*uv));
-    }
-    let count = corners.len();
-    let mut conflict = false;
-    let cdt = ConstrainedDelaunayTriangulation::<C>::try_bulk_load_cdt(corners, constraints, |_| conflict = true)
-        .map_err(|e| debug(&format!("triangulation {e:?}")))
-        .ok()?;
-    if conflict || cdt.num_vertices() != count {
-        debug("constrained triangulation conflict");
-        return None;
-    }
-    let mut triangles = Vec::new();
-    for face in cdt.inner_faces() {
-        let c = face.vertices().map(|v| *v.data());
-        let centre = (c[0].at + c[1].at + c[2].at) / 3. / scale;
-        if !inside(centre) {
-            continue;
-        }
-        let t = c.map(|v| v.id);
-        if t[0] == t[1] || t[1] == t[2] || t[0] == t[2] {
-            continue; // the fan at a pole collapses on its model point
-        }
-        triangles.push(t);
-    }
-    if triangles.is_empty() {
-        debug("empty region");
-        return None;
-    }
-    let normals = point_uv
-        .iter()
-        .map(|uv| uv.and_then(|uv| s.normal(uv)).unwrap_or(DVec3::NAN))
-        .collect();
-    Some(Tessellation { points, triangles, normals })
+    super::validate_polygon(&uv_rings).ok()?;
+    Some(uv_rings)
 }
 
 #[cfg(test)]
@@ -1364,75 +1135,11 @@ mod tests {
     }
 
     #[test]
-    fn display_cylinder_patch_is_within_chord() {
-        let cyl = Support::new(Surface::Cylinder {
-            frame: z_frame(),
-            radius: 1.,
-        });
-        let arc = |z: f64, rev: bool| {
-            let mut v: Vec<_> = (0..=16)
-                .map(|i| {
-                    let t = 0.5 * i as f64 / 16.;
-                    DVec3::new(t.cos(), t.sin(), z)
-                })
-                .collect();
-            if rev {
-                v.reverse();
-            }
-            v
-        };
-        let mut ring = arc(0., false);
-        ring.extend(arc(2., true));
-        let t = tessellate(&cyl, &[ring], PI / 60., 1e-9).unwrap();
-        assert!(!t.triangles.is_empty());
-        for tri in &t.triangles {
-            let c = (t.points[tri[0]] + t.points[tri[1]] + t.points[tri[2]]) / 3.;
-            assert!((c.truncate().length() - 1.).abs() < 2e-3);
-        }
-        for (p, n) in t.points.iter().zip(&t.normals) {
-            assert!((n.truncate() - p.truncate()).length() < 1e-6, "{p} {n}");
-        }
-    }
-
-    #[test]
-    fn torus_patches_share_boundaries_and_stay_on_the_surface() {
-        // Four patches of a torus, each 30° x 45°, sampled edge by edge.
-        let torus = Support::new(Surface::Torus {
-            frame: z_frame(),
-            major: 3.,
-            minor: 0.8,
-        });
-        let at = |u: f64, v: f64| torus.point(DVec2::new(u, v)).unwrap();
-        let side = |a: DVec2, b: DVec2| -> Vec<DVec3> {
-            let n = (((b - a).abs().max_element()) / (PI / 60.)).ceil() as usize;
-            (0..n).map(|i| a.lerp(b, i as f64 / n as f64)).map(|p| at(p.x, p.y)).collect()
-        };
-        let mut uses = std::collections::HashMap::<[u64; 6], usize>::new();
-        for (u0, v0) in [(0., 2.6), (0.5, 2.6), (0., 3.1), (TAU - 0.5, 2.6)] {
-            let (u1, v1) = (u0 + 0.5, v0 + 0.5);
-            let corners = [DVec2::new(u0, v0), DVec2::new(u1, v0), DVec2::new(u1, v1), DVec2::new(u0, v1)];
-            let ring: Vec<DVec3> = (0..4).flat_map(|k| side(corners[k], corners[(k + 1) % 4])).collect();
-            let t = tessellate(&torus, &[ring], PI / 60., 1e-9).unwrap();
-            for tri in &t.triangles {
-                let [a, b, c] = tri.map(|i| t.points[i]);
-                let normal = (b - a).cross(c - a);
-                assert!(normal.length() > 1e-12, "degenerate triangle");
-                let centre = (a + b + c) / 3.;
-                let uv = torus.uv(centre).unwrap();
-                let exact = torus.normal(uv).unwrap();
-                assert!(normal.normalize().dot(exact) > 0.95, "triangle off the surface orientation {u0} {v0} {} {:?}", normal.normalize().dot(exact), tri.map(|i| torus.uv(t.points[i]).unwrap()));
-                assert!(torus.point(uv).unwrap().distance(centre) < 3e-3);
-                for (x, y) in [(a, b), (b, c), (c, a)] {
-                    let key = |p: DVec3| p.to_array().map(|x| (x * 1e9).round() as i64 as u64);
-                    let (x, y) = (key(x), key(y));
-                    let k = if x < y { [x[0], x[1], x[2], y[0], y[1], y[2]] } else { [y[0], y[1], y[2], x[0], x[1], x[2]] };
-                    *uses.entry(k).or_default() += 1;
-                }
-            }
-        }
-        // Inside each patch every side is used twice; shared boundaries are
-        // used twice in total: no T-junctions, no overlaps.
-        assert!(uses.values().all(|&n| n <= 2));
+    fn crossing_trims_are_rejected() {
+        let cyl = Support::new(Surface::Cylinder { frame: z_frame(), radius: 1. });
+        let ring = [(0.,0.), (0.5,1.), (0.5,0.), (0.,1.)]
+            .map(|(u,v)| cyl.point(DVec2::new(u,v)).unwrap());
+        assert!(trim_region(&cyl, &[ring.to_vec()], 1e-9).is_none());
     }
 
     #[test]
@@ -1451,7 +1158,7 @@ mod tests {
                 DVec3::new(2. * t.cos(), 2. * t.sin(), z)
             };
             let ring = vec![p(i, 0.), p(i + 1, 0.), p(i + 1, 4.), p(i, 4.)];
-            assert!(tessellate(&cyl, &[ring], f64::INFINITY, 4e-9).is_some(), "facet {i}");
+            assert!(trim_region(&cyl, &[ring], 4e-9).is_some(), "facet {i}");
         }
     }
 }

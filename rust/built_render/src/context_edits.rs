@@ -138,6 +138,50 @@ fn merge_groups(win: &Bound<'_, PyAny>) -> PyResult<()> {
     status(win, "{n} groups merged into one", Some(&vars), 3000)
 }
 
+pub fn can_weld(scene: &Bound<'_, PyAny>) -> PyResult<bool> {
+    let selection = scene.getattr("selection")?;
+    if selection.len()? < 2 {
+        return Ok(false);
+    }
+    let snap = selection.call_method0("snapshot")?;
+    if snap.get_item(3)?.extract::<usize>()? != selection.len()? {
+        return Ok(false);
+    }
+    let mesh = scene.getattr("mesh")?;
+    let store = mesh.getattr("_store")?;
+    let stamp = (
+        snap.get_item(6)?.extract::<u64>()?,
+        store.getattr("revision")?.extract::<u64>()?,
+        store.as_ptr() as usize,
+    );
+    thread_local! { static LAST: std::cell::Cell<Option<((u64, u64, usize), bool)>> = const { std::cell::Cell::new(None) }; }
+    if let Some((_, valid)) = LAST.get().filter(|(prior, _)| *prior == stamp) {
+        return Ok(valid);
+    }
+    let keys = selection.call_method1("element_keys", ("edge",))?;
+    let valid = store.call_method1("can_weld_edges", (keys,))?.is_truthy()?;
+    LAST.set(Some((stamp, valid)));
+    Ok(valid)
+}
+
+#[pyfunction]
+fn weld_edges(win: &Bound<'_, PyAny>) -> PyResult<()> {
+    let vp = win.getattr("viewport")?;
+    let scene = vp.getattr("scene")?;
+    if can_weld(&scene)? {
+        let keys = scene
+            .getattr("selection")?
+            .call_method1("element_keys", ("edge",))?;
+        let cmd = win
+            .py()
+            .import("built_core.history")?
+            .call_method1("WeldEdgesCommand", (keys,))?;
+        execute(&vp, &cmd)?;
+        vp.call_method0("update")?;
+    }
+    Ok(())
+}
+
 #[pyfunction]
 fn explode_curves(win: &Bound<'_, PyAny>) -> PyResult<()> {
     let py = win.py();
@@ -468,6 +512,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(unique_components, m)?)?;
     m.add_function(wrap_pyfunction!(merge_groups, m)?)?;
     m.add_function(wrap_pyfunction!(explode_curves, m)?)?;
+    m.add_function(wrap_pyfunction!(weld_edges, m)?)?;
     m.add_function(wrap_pyfunction!(align_face, m)?)?;
     m.add_function(wrap_pyfunction!(section_action, m)?)?;
     m.add_function(wrap_pyfunction!(context_lock, m)?)?;

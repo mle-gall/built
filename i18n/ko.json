@@ -1,4 +1,10 @@
 {
+ "Join connected edges into one curve.": "연결된 모서리를 하나의 곡선으로 결합합니다.",
+ "Weld Edges": "모서리 용접",
+ "Line on Surface": "곡면 위의 선",
+ "Click the start point on a curved face.": "곡면에서 시작점을 클릭하세요.",
+ "Click the end point to draw along the surface.": "끝점을 클릭해 곡면을 따라 그리세요.",
+ "Draw along a curved face.": "곡면을 따라 선을 그립니다.",
  "Click the first corner. Arrows pick the plane.": "첫 번째 모서리를 클릭하세요. 방향키로 평면을 선택합니다.",
  "Click the start of the angle.": "각도의 시작점을 클릭하세요.",
  "Click the end, or type degrees and Enter.": "끝점을 클릭하거나 각도를 입력하고 Enter를 누르세요.",

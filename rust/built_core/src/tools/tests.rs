@@ -26,6 +26,12 @@ impl ToolHost for Fake {
         let face_delta = if cmd.name == "add_edge" && !self.faces.is_empty() { self.faces.remove(0) } else { 0 };
         Answer { ok: true, revision: self.token, face_delta, error: None }
     }
+    fn call(&mut self, verb: &str, args: serde_json::Value) -> serde_json::Value {
+        if verb == "surface_path" {
+            return serde_json::json!({"path": [args["a"], [1., 1., 0.], args["b"]]});
+        }
+        serde_json::Value::Null
+    }
     fn revision(&mut self) -> u64 { self.token }
     fn has(&mut self, what: &str) -> bool { what == "linework" }
     fn query(&mut self, what: &str, _px: [f64; 2]) -> Vec<(Pick, f64)> {
@@ -63,6 +69,24 @@ fn at(x: f64, y: f64, z: f64) -> Pointer { Pointer { world: Some([x, y, z]), ..P
 fn px(x: f64, y: f64, mods: Mods, t: f64) -> Pointer { Pointer { px: [x, y], mods, t_ms: t, ..Pointer::default() } }
 fn shift() -> Mods { Mods { shift: true, ..Mods::default() } }
 fn ctrl() -> Mods { Mods { ctrl: true, ..Mods::default() } }
+
+#[test]
+fn only_the_surface_tool_projects_the_stroke() {
+    for kind in ["line", "line_on_surface"] {
+        let mut tool = new_tool(kind).unwrap();
+        let mut host = Fake::default();
+        tool.event(&ToolEvent::Click(at(0.,0.,0.)), &mut host);
+        tool.event(&ToolEvent::KeyRelease { key: "Alt".into(), tapped: true }, &mut host);
+        tool.event(&ToolEvent::Hover(at(2.,0.,0.)), &mut host);
+        assert_eq!(tool.preview().lines.len(), if kind == "line" { 1 } else { 2 });
+        tool.event(&ToolEvent::Click(at(2.,0.,0.)), &mut host);
+        if kind == "line" {
+            assert!(host.log[0].starts_with("add_edge ") && host.log[0].contains(r#""chord":true"#));
+        } else {
+            assert!(host.log[0].starts_with("add_edges "));
+        }
+    }
+}
 
 #[test]
 fn line_chains_and_ends_on_a_face() {

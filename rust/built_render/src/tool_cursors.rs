@@ -50,7 +50,7 @@ const TOOLS: &[(&str, [f32; 2])] = &[
 ];
 
 fn lookup(key: &str) -> Option<(u32, [f32; 2])> {
-    let key = if key == "chamfer" { "fillet" } else { key };
+    let key = match key { "chamfer" => "fillet", "line_on_surface" => "line", other => other };
     TOOLS
         .iter()
         .enumerate()
@@ -121,6 +121,7 @@ pub fn tool_cursor_art<'py>(
 /// Rail art drawn as SVG on the same 48-unit grid, 3-unit round strokes and
 /// 45 % fills as the atlas (the Sheets tools that had none, P10).
 const RAIL_SVG: &[(&str, &str)] = &[
+    ("line_on_surface", include_str!("../assets/line_on_surface.svg")),
     ("comp_vista", include_str!("../assets/sheet_icons/comp_vista.svg")),
     ("comp_etiqueta", include_str!("../assets/sheet_icons/comp_etiqueta.svg")),
     ("comp_nivel", include_str!("../assets/sheet_icons/comp_nivel.svg")),

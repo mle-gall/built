@@ -1,4 +1,10 @@
 {
+ "Join connected edges into one curve.": "つながったエッジを 1 本の曲線に結合します。",
+ "Weld Edges": "エッジを溶接",
+ "Line on Surface": "曲面上の線",
+ "Click the start point on a curved face.": "曲面上の始点をクリックします。",
+ "Click the end point to draw along the surface.": "終点をクリックして曲面に沿った線を描きます。",
+ "Draw along a curved face.": "曲面に沿って線を描きます。",
  "Click the first corner. Arrows pick the plane.": "最初の角をクリック。矢印キーで平面を選択。",
  "Click the start of the angle.": "角度の始点をクリック。",
  "Click the end, or type degrees and Enter.": "終点をクリックするか、角度を入力して Enter。",

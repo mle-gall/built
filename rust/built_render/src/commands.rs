@@ -480,7 +480,7 @@ pub fn leave_navigation(win: &Bound<'_, PyAny>) -> PyResult<bool> {
 pub fn rail_layout() -> Vec<Vec<(&'static str, &'static str)>> {
     vec![
         vec![("select", ""), ("eraser", ""), ("paint", ""), ("eyedropper", "_act_eyedropper"), ("components", "_act_library_components")],
-        vec![("line", ""), ("freehand", ""), ("rectangle", ""), ("rotated_rect", ""), ("circle", ""), ("polygon", ""), ("arc", ""), ("arc3", ""), ("center_arc", ""), ("pie", "")],
+        vec![("line", ""), ("line_on_surface", ""), ("freehand", ""), ("rectangle", ""), ("rotated_rect", ""), ("circle", ""), ("polygon", ""), ("arc", ""), ("arc3", ""), ("center_arc", ""), ("pie", "")],
         vec![("pushpull", ""), ("move", ""), ("rotate", ""), ("scale", ""), ("flip", ""), ("followme", ""), ("offset", ""), ("fillet", ""), ("chamfer", ""), ("bridge", "_act_bridge"), ("make_faces", "_act_make_faces")],
         vec![("tape", ""), ("protractor", ""), ("north", ""), ("dimension", ""), ("text", ""), ("text3d", "_act_3dtext"), ("geopath", ""), ("section", "")],
         vec![("outer_shell", ""), ("solid_union", ""), ("solid_subtract", ""), ("solid_trim", ""), ("solid_intersect", ""), ("solid_split", "")],
@@ -738,6 +738,7 @@ pub fn command_description(label: &str, key: &str) -> Option<&'static str> {
             "menu:hide_similar" => "Hide the other copies of the component being edited.",
             "menu:extensions" => "Install, enable and update extensions.",
             "menu:get_models" => "Free websites with models and textures that open in Built.",
+            "menu:weld_edges" => "Join connected edges into one curve.",
             "menu:heal_overlaps" => "Remove the faces left lying over their own subdivisions after drawing or erasing.",
             "menu:hide" => "Stop showing the selected objects, faces and edges; they stay in the document until unhidden.",
             "menu:import:alignment" => "Bring in a KML, KMZ or GeoJSON alignment as paths in their true place, ready to profile or measure.",

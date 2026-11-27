@@ -405,7 +405,7 @@ pub(crate) fn register(core: &Module<'_>) -> PyResult<()> {
         "HealOverlapsCommand RebuildPlanarFacesCommand RebuildPlaneFacesCommand",
     )?;
     exports(m, core.as_any(), "ExplodeGroupCommand UnlinkCommand")?;
-    exports(m,core.as_any(),"AutoTagDrawnFacesCommand CoplanarMergeCommand ExplodeCurvesCommand FlipFacesCommand PruneOrphanEdgesCommand SimplifyMeshCommand StitchSolidCommand TagCurveCommand")?;
+    exports(m,core.as_any(),"AutoTagDrawnFacesCommand CoplanarMergeCommand ExplodeCurvesCommand WeldEdgesCommand FlipFacesCommand PruneOrphanEdgesCommand SimplifyMeshCommand StitchSolidCommand TagCurveCommand")?;
     exports(
         m,
         core.as_any(),
@@ -799,7 +799,7 @@ loop). Same fail-safe doctrine as the BIM push guard, one level up."#,
         )?;
         class(m, "History", vec![], &ns)?.setattr("__module__", "built_core.history")?;
     }
-    for name in "MakeGroupCommand HideCommand HideEdgesCommand AssignLayerCommand MoveGroupCommand RotateGroupCommand ScaleGroupCommand FlipGroupsCommand ChangeAxesCommand AddEdgeCommand AddFaceCommand DeleteEdgesCommand DeleteFaceCommand EraseSelectionCommand MoveVerticesCommand FlipVerticesCommand RotateVerticesCommand ScaleVerticesCommand HealOverlapsCommand RebuildPlanarFacesCommand RebuildPlaneFacesCommand ExplodeGroupCommand TagCurveCommand ExplodeCurvesCommand AutoTagDrawnFacesCommand PruneOrphanEdgesCommand CoplanarMergeCommand StitchSolidCommand SimplifyMeshCommand RestampMaterialCommand EditTexturedMaterialCommand DeleteMaterialCommand".split_whitespace() {m.getattr("MeshCommand")?.call_method1("register",(m.getattr(name)?,))?;}
+    for name in "MakeGroupCommand HideCommand HideEdgesCommand AssignLayerCommand MoveGroupCommand RotateGroupCommand ScaleGroupCommand FlipGroupsCommand ChangeAxesCommand AddEdgeCommand AddFaceCommand DeleteEdgesCommand DeleteFaceCommand EraseSelectionCommand MoveVerticesCommand FlipVerticesCommand RotateVerticesCommand ScaleVerticesCommand HealOverlapsCommand RebuildPlanarFacesCommand RebuildPlaneFacesCommand ExplodeGroupCommand TagCurveCommand ExplodeCurvesCommand WeldEdgesCommand AutoTagDrawnFacesCommand PruneOrphanEdgesCommand CoplanarMergeCommand StitchSolidCommand SimplifyMeshCommand RestampMaterialCommand EditTexturedMaterialCommand DeleteMaterialCommand".split_whitespace() {m.getattr("MeshCommand")?.call_method1("register",(m.getattr(name)?,))?;}
     for name in "SetFaceColorCommand SetFaceOpacityCommand SetFaceTextureCommand SetFaceBackCommand SetFaceMaterialTagCommand FlipFacesCommand".split_whitespace() {m.getattr("FaceAttributeCommand")?.call_method1("register",(m.getattr(name)?,))?;}
     for name in ["NativeCommand", "RecordStep"] {
         m.getattr("Command")?

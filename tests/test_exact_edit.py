@@ -94,7 +94,7 @@ def test_circle_edges_are_one_exact_circle_and_polygon_stays_straight():
     assert store(other).exact_counts() == (0, 0)
 
 
-def test_arc_is_exact_and_display_follows_the_curve_not_the_segments():
+def test_arc_is_exact_and_display_follows_the_segments():
     scene, h = doc()
     pts = [[math.cos(a), math.sin(a), 0] for a in [i * math.pi / 8 for i in range(5)]]
     run(h, "add_arc", points=pts)
@@ -104,7 +104,7 @@ def test_arc_is_exact_and_display_follows_the_curve_not_the_segments():
     circle(h2, n=6)
     fine, h3 = doc()
     circle(h3, n=48)
-    # Segment count is a display setting: both circles draw the same curve.
+    # Segment count sets the number of editable and displayed edges.
     def drawn(s):
         d = s.mesh._store.display_arrays()
         import numpy as np
@@ -112,7 +112,7 @@ def test_arc_is_exact_and_display_follows_the_curve_not_the_segments():
         return len(d["edges"]), float(np.abs(np.hypot(p[:, 0], p[:, 1]) - 1).max())
     (n6, err6), (n48, err48) = drawn(coarse), drawn(fine)
     assert err6 < 1e-12 and err48 < 1e-12
-    assert n6 >= 100 and abs(n6 - n48) <= 48
+    assert (n6, n48) == (6, 48)
 
 
 def test_resegmenting_an_exact_circle_keeps_the_circle():
@@ -135,7 +135,7 @@ def test_push_pull_circle_makes_one_cylinder_with_soft_generators():
     assert len(curves(scene)) == 48
     import numpy as np
     d = store(scene).display_arrays(True)
-    owner = np.asarray(d["edge_owner"])
+    owner = np.arange(len(d["edges"]))
     flags = np.asarray(d["flags"])
     # Every generator (vertical logical edge) draws soft; rims stay hard.
     st = store(scene)
@@ -365,7 +365,7 @@ def test_line_across_disk_splits_it_and_both_halves_keep_exact_sides():
     d = store(scene).display_arrays()
     p = np.asarray(d["pos"]).reshape(-1, 3)
     rim = np.hypot(p[:, 0], p[:, 1])
-    assert (np.abs(rim - 1) < 1e-12).sum() > 100
+    assert (np.abs(rim - 1) < 1e-12).sum() == 24
     # Erasing the diameter merges the halves back; the rim stays exact.
     diameter = [e for e in scene.mesh.edges if not store(scene).exact_edge(e.key)][0]
     run(h, "erase", edges=[diameter.key])
@@ -408,7 +408,7 @@ def test_make_group_and_explode_keep_bindings_through_the_placement():
 
 # ---- line across a curved face ---------------------------------------------
 
-def test_line_around_a_cylinder_follows_the_surface():
+def test_line_around_a_cylinder_with_line_on_surface_follows_generators():
     scene, h = cylinder(height=2)
     st = store(scene)
     # Two points at one height on facets a quarter turn apart.
@@ -438,23 +438,26 @@ def test_line_around_a_cylinder_follows_the_surface():
     # The drawn circle stays a visible edge; the split generators stay soft.
     import numpy as np
     d = st.display_arrays(True)
-    owner, flags = np.asarray(d["edge_owner"]), np.asarray(d["flags"])
+    owner, flags = np.arange(len(d["edges"])), np.asarray(d["flags"])
     for i, e in enumerate(scene.mesh.edges):
         a, b = e.v0.position, e.v1.position
         if abs(a.z() - 1) < 1e-9 and abs(b.z() - 1) < 1e-9:
             assert ((flags[owner == i] & 1) == 0).all()
+        elif abs(a.x() - b.x()) < 1e-10 and abs(a.y() - b.y()) < 1e-10:
+            assert flags[i] & 1
     assert st.surface_path([5, 5, 5], [6, 6, 6]) is None
 
 
-def test_chord_mode_line_stays_straight():
+@pytest.mark.parametrize("span", [1, 6])
+def test_chord_mode_of_plain_line_stays_straight_across_facets(span):
     scene, h = cylinder(height=2)
     st = store(scene)
     k = 3
     p = lambda t, z: [math.cos(TAU * t / 24), math.sin(TAU * t / 24), z]  # noqa: E731
-    run(h, "add_edge", a=p(k, 1), b=p(k + 1, 1), chord=True)
+    run(h, "add_edge", a=p(k, 1), b=p(k + span, 1), chord=True)
     chord = [e for e in scene.mesh.edges if abs(e.v0.position.z() - 1) < 1e-12 and abs(e.v1.position.z() - 1) < 1e-12]
     assert chord and not any(st.exact_edge(e.key) for e in chord)
-    # Without chord mode the same line is the circle at that height.
+    # The surface tool uses this parameter section along a wall facet.
     other, h2 = cylinder(height=2)
     run(h2, "add_edge", a=p(k, 1), b=p(k + 1, 1))
     arc = [e for e in other.mesh.edges if abs(e.v0.position.z() - 1) < 1e-12 and abs(e.v1.position.z() - 1) < 1e-12]
@@ -540,79 +543,94 @@ def revolved(kind):
     return scene, h
 
 
-def display_quality(scene):
+@pytest.mark.parametrize("kind", ["torus", "cone", "sphere", "cylinder", "mitred"])
+def test_bound_faces_draw_the_editable_facets(kind):
     import numpy as np
-    from collections import Counter
-    d = store(scene).display_arrays(True)
-    P = np.asarray(d["pos"]).reshape(-1, 3)
-    C = np.asarray(d["corners"])
-    sizes = np.asarray(d["ring_sizes"])
-    counts = np.asarray(d["ring_counts"])
-    N = np.asarray(d["corner_normals"])
-    assert N.shape == (len(C), 3)
-    starts = np.concatenate([[0], np.cumsum(sizes)[:-1]])
-    tri = (sizes == 3) & (counts == 1)
-    sides = Counter()
-    degenerate = misoriented = refined = 0
-    for s0 in starts[tri]:
-        ids = C[s0:s0 + 3]
-        n = N[s0:s0 + 3]
-        a, b, c = P[ids]
-        cross = np.cross(b - a, c - a)
-        area = np.linalg.norm(cross)
-        for i, j in ((0, 1), (1, 2), (2, 0)):
-            sides[tuple(sorted((ids[i], ids[j])))] += 1
-        if not np.isfinite(n).all():
-            continue
-        refined += 1
-        assert np.allclose(np.linalg.norm(n, axis=1), 1, atol=1e-6)
-        if area < 1e-14:
-            degenerate += 1
-        elif (cross / area) @ n.mean(0) < 0.5:
-            misoriented += 1
-    return dict(refined=refined, degenerate=degenerate, misoriented=misoriented,
-                overused=sum(1 for v in sides.values() if v > 2),
-                open=sum(1 for v in sides.values() if v == 1))
-
-
-@pytest.mark.parametrize("kind", ["torus", "cone", "sphere", "cylinder"])
-def test_revolutions_draw_watertight_with_exact_normals(kind):
     scene, _ = revolved(kind)
     st = store(scene)
-    # Every curved facet is bound; planar annuli and caps need no support.
-    expected = {"torus": 192, "sphere": 192, "cone": 32, "cylinder": 12}[kind]
-    assert st.exact_counts()[1] == expected
-    q = display_quality(scene)
-    assert q["refined"] > 0 and q["degenerate"] == 0 and q["misoriented"] == 0 and q["overused"] == 0
-    if kind in ("torus", "sphere"):
-        assert q["open"] == 0  # closed surfaces: no crack anywhere
+    display, logical = st.display_arrays(True), st.arrays()
+    for field in ("pos", "edges", "flags", "corners", "ring_sizes", "ring_counts"):
+        np.testing.assert_array_equal(display[field], logical[field])
+    normals = display["corner_normals"]
+    finite = normals[np.isfinite(normals).all(axis=1)]
+    assert np.allclose(np.linalg.norm(finite, axis=1), 1)
+    if kind == "cylinder":
+        assert len(finite) == 4 * 12
+        pos = display["pos"][display["corners"]]
+        valid = np.isfinite(normals[:, 0])
+        np.testing.assert_allclose(abs((normals[valid, :2] * pos[valid, :2]).sum(axis=1)), 1)
 
 
-def test_mitred_pipe_walls_are_all_cylinders_and_draw_cleanly():
-    scene, _ = revolved("mitred")
-    faces = curves(scene, "face")
-    assert len(faces) == 24 and kinds(faces, "surface") == ["cylinder"]
-    q = display_quality(scene)
-    assert q["degenerate"] == 0 and q["overused"] == 0
-    # Thin fans against the joint's ellipse may stand in its plane; the
-    # exact normals shade them, and they stay a small minority.
-    assert q["misoriented"] * 20 < q["refined"]
+def test_hardened_cylinder_shades_flat():
+    import numpy as np
+    scene, _ = cylinder()
+    for edge in scene.mesh.edges:
+        edge.soft = False
+    assert np.isnan(store(scene).display_arrays()["corner_normals"]).all()
 
 
-def test_display_tessellation_is_cached_per_face_and_refreshed_by_an_edit():
-    from built_core.store_mesh import StoreMesh  # noqa: F401
-    scene, h = revolved("cylinder")
-    st = store(scene)
-    st.display_arrays(True)
-    hits, misses, _ = type(st).exact_display_cache()
-    st.display_arrays(True)
-    hits2, misses2, _ = type(st).exact_display_cache()
-    assert misses2 == misses and hits2 - hits >= 14
-    run(h, "push_pull", face=cap(scene, 2.5).key, distance=0.5)
-    st.display_arrays(True)
-    _, misses3, _ = type(st).exact_display_cache()
-    # The moved cap and the walls that grew: retessellated; nothing else.
-    assert 0 < misses3 - misses2 <= 26
+def test_helix_segment_can_be_softened_and_smoothed():
+    from built_core.soften import SoftenByAngleCommand, selected_edges
+    scene, h = cylinder(n=12)
+    a, b = [1, 0, 0.25], [math.cos(TAU/12), math.sin(TAU/12), 1.75]
+    run(h, "add_edge", a=a, b=b, chord=True)
+    diagonal = next(e for e in scene.mesh.edges if abs(abs(e.a.z()-e.b.z())-1.5) < 1e-7)
+    assert not store(scene).exact_edge(diagonal.key)
+    scene.select([diagonal])
+    h.execute(SoftenByAngleCommand(selected_edges(scene), 180))
+    assert diagonal.soft and not diagonal.flat
+    h.undo()
+    assert not diagonal.soft
+
+
+def test_erase_branch_rejoins_straight_line_and_keeps_longer_id():
+    scene, h = doc()
+    run(h, "add_edge", a=[0, 0, 0], b=[3, 0, 0])
+    run(h, "add_edge", a=[1, 0, 0], b=[1, 2, 0])
+    branch = next(e for e in scene.mesh.edges if e.a.y() or e.b.y())
+    longer = next(e for e in scene.mesh.edges if max(e.a.x(), e.b.x()) == 3)
+    keep = store(scene).id_of("edge", longer.key)
+    run(h, "erase", edges=[branch.key])
+    assert len(scene.mesh.edges) == 1
+    assert store(scene).id_of("edge", scene.mesh.edges[0].key) == keep
+    h.undo()
+    assert len(scene.mesh.edges) == 3
+    h.redo()
+    assert len(scene.mesh.edges) == 1
+
+
+@pytest.mark.parametrize("reopen", [False, True])
+def test_erasing_an_arc_branch_restores_its_authored_segments(tmp_path, reopen):
+    scene, h = doc()
+    run(h, "add_arc", points=ring(n=12)[:5])
+    e = scene.mesh.edges[1]
+    p = (e.a + e.b) * 0.5
+    run(h, "add_edge", a=[p.x(), p.y(), 0], b=[p.x(), p.y(), 1])
+    if reopen:
+        from formats import igz
+        path = tmp_path / "branched-arc.built"
+        igz.save_scene(scene, path)
+        scene, h = doc()
+        igz.load_into(scene, path)
+    branch = next(e for e in scene.mesh.edges if e.a.z() or e.b.z())
+    run(h, "erase", edges=[branch.key])
+    assert len(scene.mesh.edges) == len(curves(scene)) == 4
+    assert len({e.curve for e in scene.mesh.edges}) == 1
+
+
+def test_weld_group_exact_fit_and_undo():
+    from built_core.history import WeldEdgesCommand
+    scene, h = doc()
+    run(h, "add_face", outer=ring(n=12))
+    keys = [e.key for e in scene.mesh.edges]
+    assert not store(scene).can_weld_edges(keys[::2])
+    assert store(scene).can_weld_edges(keys)
+    h.execute(WeldEdgesCommand(keys))
+    assert len(scene.mesh.curve_edges(scene.mesh.edges[0])) == len(curves(scene)) == 12
+    h.undo()
+    assert len(curves(scene)) == 0 and all(e.curve is None for e in scene.mesh.edges)
+    h.redo()
+    assert len(curves(scene)) == 12
 
 
 def test_make_group_keeps_element_ids():
@@ -627,3 +645,72 @@ def test_make_group_keeps_element_ids():
     h.redo()
     g = scene.groups[0].mesh._store
     assert sorted(int(i) for i in g.ids("face")) == ids["face"]
+
+
+def test_dividing_a_soft_generator_keeps_every_piece_soft_through_save(tmp_path):
+    from formats import igz
+
+    scene, h = cylinder(n=12)
+    generator = next(e for e in scene.mesh.edges if e.soft)
+    x, y, _ = generator.a.toTuple()
+    run(h, "divide_edges", edges=[generator.key], n=3)
+    path = tmp_path / "split.built"
+    igz.save_scene(scene, path)
+    reopened = Scene()
+    igz.load_into(reopened, path)
+    pieces = [e for e in reopened.mesh.edges if e.a.x() == e.b.x() == x and e.a.y() == e.b.y() == y]
+    assert len(pieces) == 3 and all(e.soft and not e.flat and len(e.faces) == 2 for e in pieces)
+
+
+def test_welding_a_non_circular_chain_drops_partial_circle_bindings():
+    from built_core.history import WeldEdgesCommand
+
+    scene, hist = doc()
+    points = ring(n=12)[:4]
+    run(hist, "add_arc", points=points)
+    run(hist, "add_edge", a=points[-1], b=[0, 2, 1])
+    previous = bindings(scene)
+    hist.execute(WeldEdgesCommand([e.key for e in scene.mesh.edges]))
+    assert len({e.curve for e in scene.mesh.edges}) == 1
+    assert not curves(scene)
+    hist.undo()
+    assert bindings(scene) == previous
+
+
+@pytest.mark.parametrize("different_paint", [False, True])
+def test_erasing_coplanar_seam_preserves_material_boundary_corners(different_paint):
+    from built_core import Vec3
+    scene, hist = doc()
+    mesh = scene.mesh
+    for left, right in ((0, 2), (2, 3)):
+        mesh.add_face([Vec3(left, 0, 0), Vec3(right, 0, 0), Vec3(right, 2, 0), Vec3(left, 2, 0)])
+    if different_paint:
+        mesh.faces[0].attrs["color"] = [1., 0., 0.]
+    seam = next(e for e in mesh.edges if len(e.faces) == 2)
+    longer = next(e for e in mesh.edges if e.a.y() == e.b.y() == 0 and abs(e.a.x()-e.b.x()) == 2)
+    pid = mesh._store.id_of("edge", longer.key)
+    run(hist, "erase", edges=[seam.key])
+    assert len(mesh.faces) == 1
+    assert len(mesh.faces[0].vertices) == (6 if different_paint else 4)
+    assert any(mesh._store.id_of("edge", e.key) == pid for e in mesh.edges)
+    hist.undo()
+    assert len(mesh.faces) == 2
+
+
+def test_erasing_branch_at_authored_arc_corner_rejoins_group_and_keeps_vertex(tmp_path):
+    from formats import igz
+
+    scene, hist = doc()
+    points = ring(n=12)[:5]
+    run(hist, "add_arc", points=points)
+    run(hist, "add_edge", a=points[2], b=[0, 0, 0])
+    assert len({e.curve for e in scene.mesh.edges if e.curve is not None}) == 2
+    path = tmp_path / "original-corner.built"
+    igz.save_scene(scene, path)
+    reopened, history = doc()
+    igz.load_into(reopened, path)
+    branch = next(e for e in reopened.mesh.edges if e.curve is None)
+    run(history, "erase", edges=[branch.key])
+    assert len(reopened.mesh.vertices) == 5
+    assert len(curves(reopened)) == 4
+    assert len({e.curve for e in reopened.mesh.edges}) == 1

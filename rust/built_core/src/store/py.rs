@@ -930,12 +930,6 @@ impl PyMeshStore {
         self.inner.surface_path(a, b).map(|p| p.path)
     }
 
-    /// (hits, misses, entries) of the process-wide exact display cache.
-    #[staticmethod]
-    fn exact_display_cache() -> (u64, u64, usize) {
-        super::exact_display::cache_stats()
-    }
-
     /// Live (edges, faces) carrying a curved binding.
     fn exact_counts(&self) -> (usize, usize) {
         let Some(c) = self.inner.state.exact.curved.as_deref() else {
@@ -1055,7 +1049,7 @@ impl PyMeshStore {
             .map_err(|err| PyValueError::new_err(err.to_string()))?;
         // Persistent ids after the store (older archives end before them).
         bytes.extend(bincode::serialize(&self.inner.state.ids).map_err(|err| PyValueError::new_err(err.to_string()))?);
-        if !self.inner.state.exact.is_faceted() {
+        if !self.inner.state.exact.is_faceted() || !self.inner.state.split_runs.is_empty() {
             let planes: Vec<_> = self.inner.bound_planes().collect();
             bytes.extend(
                 bincode::serialize(&planes)
@@ -1065,8 +1059,11 @@ impl PyMeshStore {
         if let Some(patch) = &self.inner.state.exact.native {
             serde_json::to_writer(&mut bytes, &patch.rows)
                 .map_err(|err| PyValueError::new_err(err.to_string()))?;
-        } else if let Some(c) = self.inner.state.exact.curved.as_deref() {
+        } else if self.inner.state.exact.curved.is_some() || !self.inner.state.split_runs.is_empty() {
+            let empty = super::exact::Curved::default();
+            let c = self.inner.state.exact.curved.as_deref().unwrap_or(&empty);
             let rows = crate::exact::file::CurvedRows {
+                split_runs: self.inner.split_run_ids(),
                 edges: c.edges.iter().map(|(s, b)| (*s as u64, b.clone())).collect(),
                 faces: c.faces.iter().map(|(s, b)| (*s as u64, b.clone())).collect(),
             };
@@ -1108,6 +1105,7 @@ impl PyMeshStore {
                     }
                     let t: Tail = serde_json::from_slice(tail)
                         .map_err(|err| PyValueError::new_err(format!("invalid exact archive: {err}")))?;
+                    store.restore_split_runs(&t.curved_slots.split_runs);
                     store.install_curved_slots(
                         t.curved_slots.edges.into_iter().map(|(s, b)| (s as u32, b)).collect(),
                         t.curved_slots.faces.into_iter().map(|(s, b)| (s as u32, b)).collect(),
@@ -1261,18 +1259,18 @@ impl PyMeshStore {
     /// Resident draw data. Logical element order remains the editing API.
     #[pyo3(signature=(bake=false))]
     fn display_arrays<'py>(&self, py: Python<'py>, bake: bool) -> PyResult<Bound<'py, PyDict>> {
-        if self.inner.has_curved() {
-            let d = py.detach(|| self.inner.curved_display(bake));
-            let out = dense_dict(py, d.dense)?;
-            out.set_item("face_owner", d.face_owner.into_pyarray(py))?;
-            out.set_item("edge_owner", d.edge_owner.into_pyarray(py))?;
-            let normals = numpy::ndarray::Array2::from_shape_fn((d.corner_normals.len(), 3), |(i, j)| d.corner_normals[i][j]);
-            out.set_item("corner_normals", normals.into_pyarray(py))?;
-            return Ok(out);
-        }
         let Some(patch) = &self.inner.state.exact.native else {
-            // The resident baker reads no edge's faces.
-            return self.arrays(py, !bake, true);
+            let (dense, normals) = py.detach(|| {
+                let dense = self.inner.dense_parts(!bake, true);
+                let normals = self.inner.facet_normals(dense.corners.len());
+                (dense, normals)
+            });
+            let out = dense_dict(py, dense)?;
+            if let Some(normals) = normals {
+                let rows = numpy::ndarray::Array2::from_shape_fn((normals.len(), 3), |(i, j)| normals[i][j]);
+                out.set_item("corner_normals", rows.into_pyarray(py))?;
+            }
+            return Ok(out);
         };
         let mesh = patch.mesh().map_err(PyValueError::new_err)?;
         let logical = self.inner.dense();
@@ -3014,6 +3012,16 @@ impl PyMeshStore {
         self.inner.tag_curve_path(&points, closed, id)
     }
 
+    fn can_weld_edges(&self, keys: Vec<u128>) -> bool {
+        let slots = keys.into_iter().map(|k| slot_of(&self.inner, Kind::Edge, k)).collect::<PyResult<Vec<_>>>();
+        slots.is_ok_and(|slots| self.inner.weld_chain(&slots).is_some())
+    }
+
+    fn weld_edges(&mut self, keys: Vec<u128>, id: i128) -> PyResult<()> {
+        let slots = keys.into_iter().map(|k| slot_of(&self.inner, Kind::Edge, k)).collect::<PyResult<Vec<_>>>()?;
+        self.inner.weld_edges(&slots, id).map_err(PyValueError::new_err)
+    }
+
     fn explode_curves(&mut self, ids: std::collections::HashSet<i128>, record: bool) -> Vec<(u128, i128)> {
         let mut prior = Vec::new();
         for e in self.inner.live_slots(Kind::Edge) {
@@ -3068,13 +3076,15 @@ impl PyMeshStore {
             .map(|r| (r.seams, r.healed_faces, r.orphan_vertices, r.dirty)))
     }
 
-    fn erase_selection(&mut self, loops: Vec<Vec<[f64;3]>>, ends: Vec<[[f64;3];2]>, hypot: &str)
+    #[pyo3(signature=(loops, ends, hypot, protected=None))]
+    fn erase_selection(&mut self, loops: Vec<Vec<[f64;3]>>, ends: Vec<[[f64;3];2]>, hypot: &str, protected: Option<Vec<u128>>)
         -> PyResult<Option<(usize, Vec<u128>, Vec<u128>, Vec<(u128,Vec<u128>,bool)>, Vec<super::erase::Plane>, Vec<u128>)>> {
         let h = crate::hypot_of(hypot)?;
         // Publish only a representable edit. The object fallback must see the
         // original incidence, revision and key allocator.
         let mut work = self.inner.clone();
-        match work.erase_selection(&loops,&ends,h) {
+        let protected = protected.unwrap_or_default().into_iter().collect();
+        match work.erase_selection(&loops,&ends,h,&protected) {
             Ok(out) => {
                 self.inner = work;
                 Ok(Some((out.dirty,out.edges,out.faces,out.merges,out.slits,out.across)))

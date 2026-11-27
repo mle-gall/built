@@ -39,6 +39,8 @@ struct Header {
 #[derive(Serialize, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct CurvedRows {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub split_runs: Vec<([u64;3],bool)>,
     pub edges: Vec<(u64, super::bound::EdgeBind)>,
     pub faces: Vec<(u64, super::bound::Support)>,
 }
@@ -176,8 +178,11 @@ pub(crate) fn capture(st: &crate::store::Store, arrays: &Bound<'_, PyDict>) -> P
         }
         if !ids.is_empty(){arrays.set_item("_arc_ids",ids.into_pyarray(arrays.py()))?;arrays.set_item("_arc_rows",values)?;}
     }
-    if let Some(c) = st.state.exact.curved.as_deref() {
+    if st.state.exact.curved.is_some() || !st.state.split_runs.is_empty() {
+        let empty = crate::store::exact::Curved::default();
+        let c = st.state.exact.curved.as_deref().unwrap_or(&empty);
         let rows = CurvedRows {
+            split_runs: st.split_run_ids(),
             edges: c
                 .edges
                 .iter()
@@ -191,7 +196,7 @@ pub(crate) fn capture(st: &crate::store::Store, arrays: &Bound<'_, PyDict>) -> P
                 .map(|(s, b)| (st.pid(Kind::Face, *s), b.clone()))
                 .collect(),
         };
-        if !rows.edges.is_empty() || !rows.faces.is_empty() {
+        if !rows.edges.is_empty() || !rows.faces.is_empty() || !rows.split_runs.is_empty() {
             arrays.set_item("_curved_rows", serde_json::to_string(&rows).map_err(bad)?)?;
         }
     }
@@ -230,6 +235,7 @@ pub(crate) fn encode(
                     .ok_or_else(|| bad("missing origin"))?;
                 Ok(eid::pack(origin as u32, eid::counter(id)))
             };
+            for id in rows.split_runs.iter_mut().flat_map(|(ids, _)| ids.iter_mut()) { *id = file_id(*id)?; }
             for r in &mut rows.edges {
                 r.0 = file_id(r.0)?;
             }
@@ -714,7 +720,10 @@ pub(crate) fn curved_rows(arrays: &Obj<'_>, table: &PlaneTable, map: Option<&[u3
             None => Ok(id),
         }
     };
+    let mut split_runs = rows.split_runs.clone();
+    for id in split_runs.iter_mut().flat_map(|(ids, _)| ids.iter_mut()) { *id = remap(*id)?; }
     Ok(Some(CurvedRows {
+        split_runs,
         edges: rows.edges.iter().map(|(id, b)| Ok((remap(*id)?, b.clone()))).collect::<PyResult<_>>()?,
         faces: rows.faces.iter().map(|(id, b)| Ok((remap(*id)?, b.clone()))).collect::<PyResult<_>>()?,
     }))
@@ -732,6 +741,7 @@ pub(crate) fn bind_curved(mesh: &Obj<'_>, rows: &CurvedRows) -> PyResult<()> {
 impl Clone for CurvedRows {
     fn clone(&self) -> Self {
         Self {
+            split_runs: self.split_runs.clone(),
             edges: self.edges.clone(),
             faces: self.faces.clone(),
         }

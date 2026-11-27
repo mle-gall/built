@@ -212,13 +212,19 @@ pub(super) fn group<'p>(
                     .flatten())
             };
             if let (Some(a), Some(b)) = (owner(a)?, owner(b)?) {
-                if sources.soft.contains(&order(a, b)) {
+                if sources.soft.contains(&order(a, b))
+                    || (a == b && sources.donors[a].native_smooth)
+                {
                     e.setattr("soft", true)?;
+                    if sources.flat.contains(&order(a, b)) {
+                        e.setattr("flat", true)?;
+                    }
                 }
             }
         }
     }
     propagate(&mesh, &sources.edges)?;
+    bindings::apply(&mesh, &ids, &sources.donors)?;
     let kw = PyDict::new(py);
     kw.set_item("name", name)?;
     let group = py

@@ -1,4 +1,10 @@
 {
+ "Join connected edges into one curve.": "将相连的边合并为一条曲线。",
+ "Weld Edges": "焊接边线",
+ "Line on Surface": "曲面上的线",
+ "Click the start point on a curved face.": "单击曲面上的起点。",
+ "Click the end point to draw along the surface.": "单击终点，沿曲面绘制线条。",
+ "Draw along a curved face.": "沿曲面绘制线条。",
  "Click the first corner. Arrows pick the plane.": "点击第一个角点。方向键选择平面。",
  "Click the start of the angle.": "点击角的起点。",
  "Click the end, or type degrees and Enter.": "点击终点，或输入度数并按回车。",

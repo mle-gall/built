@@ -1,4 +1,10 @@
 {
+ "Join connected edges into one curve.": "Una as arestas conectadas em uma única curva.",
+ "Weld Edges": "Soldar arestas",
+ "Line on Surface": "Linha sobre superfície",
+ "Click the start point on a curved face.": "Clique no ponto inicial em uma face curva.",
+ "Click the end point to draw along the surface.": "Clique no ponto final para desenhar sobre a superfície.",
+ "Draw along a curved face.": "Desenhe sobre uma face curva.",
  "Click the first corner. Arrows pick the plane.": "Clique no primeiro canto. As setas escolhem o plano.",
  "Click the start of the angle.": "Clique no início do ângulo.",
  "Click the end, or type degrees and Enter.": "Clique no fim ou digite os graus e pressione Enter.",

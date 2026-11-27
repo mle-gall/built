@@ -83,6 +83,10 @@ impl Frame {
         self.placement.is_none() && self.origin == [0.; 3]
     }
 
+    pub fn model_normal(&self, n: DVec3) -> DVec3 {
+        self.placement.as_ref().map_or(n, |p| (p.inverse.transpose() * n).normalize())
+    }
+
     pub fn definition_delta(&self, delta: DVec3) -> DVec3 {
         self.placement.as_ref().map_or(delta, |p| p.inverse * delta)
     }

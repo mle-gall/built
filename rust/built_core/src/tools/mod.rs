@@ -431,6 +431,7 @@ pub fn new_tool(kind: &str) -> Option<Box<dyn Tool>> {
         "position_camera" | "look_around" | "walk" | "first_person" => Some(Box::new(walkthrough::Walkthrough::new(kind))),
         "select" => Some(Box::new(select::SelectTool::default())),
         "line" => Some(Box::new(line::LineTool::default())),
+        "line_on_surface" => Some(Box::new(line::LineTool::on_surface())),
         "rectangle" => Some(Box::new(rectangle::RectangleTool::default())),
         "circle" => Some(Box::new(circle::RadialTool::circle())),
         "polygon" => Some(Box::new(circle::RadialTool::polygon())),

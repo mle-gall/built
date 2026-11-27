@@ -239,6 +239,10 @@ pub(super) fn install(module: &Bound<PyModule>) -> PyResult<()> {
         )?;
         let cls = define(module, "LineTool", &[module.getattr("RustTool")?], &attrs)?;
         register_tool_adapter(&cls)?;
+        let surface = PyDict::new(py);
+        surface.set_item("__module__", module.name()?)?;
+        surface.set_item("kind", "line_on_surface")?;
+        define(module, "LineOnSurfaceTool", &[cls], &surface)?;
     }
     {
         let attrs = PyDict::new(py);

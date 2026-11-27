@@ -26,6 +26,7 @@ pub struct Menus {
     recent: Submenu,
     plugins: Submenu,
     fixed_plugin_items: usize,
+    weld: MenuItem,
     model_checks: Vec<CheckMenuItem>,
 }
 
@@ -104,6 +105,7 @@ pub fn build() -> muda::Result<Menus> {
     for &(id, label) in IMPORTS {
         import.append(&item(id, label, None))?;
     }
+    let weld = MenuItem::with_id("weld_edges", "Weld Edges", false, None);
     let mut model_checks = Vec::new();
     let mut groups: std::collections::HashMap<String, Submenu> = std::collections::HashMap::from([("File ▸ Import".to_owned(), import.clone())]);
     for &(name, rows) in GROUPS {
@@ -111,6 +113,7 @@ pub fn build() -> muda::Result<Menus> {
         for row in rows {
             match *row {
                 Row::Command(id, label, accel) => sub.append(&item(id, label, accel))?,
+                Row::Entry("weld_edges") => sub.append(&weld)?,
                 Row::Entry(id) => {
                     let entry = entries().iter().find(|e| e.id == id).expect("placed model-menu command");
                     append(&sub, &entry_item(entry, &mut model_checks))?;
@@ -167,11 +170,12 @@ pub fn build() -> muda::Result<Menus> {
         window.set_as_windows_menu_for_nsapp();
     }
     index_bar(&bar);
-    Ok(Menus { _bar: bar, recent, model_checks, fixed_plugin_items: plugins.items().len(), plugins })
+    Ok(Menus { _bar: bar, recent, weld, model_checks, fixed_plugin_items: plugins.items().len(), plugins })
 }
 
 impl Menus {
-    pub fn reflect_model_checks(&self, rest: &str, transitions: bool, similar: bool, playing: bool) {
+    pub fn reflect_model_checks(&self, rest: &str, transitions: bool, similar: bool, playing: bool, weldable: bool) {
+        if self.weld.is_enabled() != weldable { self.weld.set_enabled(weldable); }
         for item in &self.model_checks {
             let on=match item.id().0.as_str(){
                 "scene_transitions"=>transitions,

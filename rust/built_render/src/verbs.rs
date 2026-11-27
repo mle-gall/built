@@ -62,6 +62,7 @@ pub struct Facts {
     pub kept: bool,
     pub solids: usize,
     pub loose_edges: usize,
+    pub weldable: bool,
     pub curve: bool,
     pub include_nested: Option<bool>,
     pub host: bool,
@@ -365,6 +366,7 @@ pub fn menu_rows(f: &Facts, kind: &str) -> Vec<Row> {
             r.one(zoom());
             r.one(make());
             if f.bridgeable { r.one(vec![e("bridge", "Bridge")]); }
+            if f.weldable { r.one(vec![e("weld_edges", "Weld Edges")]); }
             if faces {
                 r.one(vec![e("reverse", "Reverse faces"), e("orient", "Orient faces")]);
                 r.family("Intersect", intersect());
@@ -711,6 +713,7 @@ pub fn dispatch(kind: &str, id: &str) -> (&'static str, String, String) {
         "texreset" => slot("_on_texture_reset", ""),
         "divide" => slot("_on_divide", ""),
         "join" => slot("_on_join_segments", ""),
+        "weld_edges" => slot("_on_weld_edges", ""),
         "explodecurve" => slot("_on_explode_curve", ""),
         "bridge" => slot("_on_bridge", ""),
         "open" => tree("open"),
