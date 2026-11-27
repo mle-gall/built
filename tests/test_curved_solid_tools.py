@@ -144,3 +144,37 @@ def test_drilled_plate_keeps_analytic_bore(tmp_path):
     step.save_step(scene, path)
     assert "= CYLINDRICAL_SURFACE(" in path.read_text()
     assert not step.prepare_step(path)["problems"]
+
+
+@pytest.mark.parametrize("kind", ["step", "cylinder"])
+def test_curved_instance_cut_uses_placed_supports(kind):
+    from built_core import Matrix4
+
+    subject = body(kind)
+    before = exact(subject.mesh)
+    xf = Matrix4()
+    xf.translate(3., -2., 1.)
+    subject.xform = xf
+    bounds = np.asarray(subject.mesh._store.display_arrays()["pos"])
+    mid = 1. + (bounds[:, 2].min() + bounds[:, 2].max()) / 2
+    box = _box(.5, -4., 0., 5., 0., mid, BLUE)
+    volume = solids.solid_volume(subject)
+    _, (cut,) = solids.run("subtract", [box, subject])
+    assert solids.solid_volume(cut) == pytest.approx(volume / 2)
+    assert exact(subject.mesh) == before and exact(cut.mesh)[2]
+    assert min(p.position.x() for p in cut.mesh.vertices) >= 2.
+
+
+def test_off_support_intersection_leaves_only_affected_facets_unbound():
+    cylinder_group = body("cylinder")
+    for face in cylinder_group.mesh.faces:
+        if cylinder_group.mesh._store.exact_face(face.key):
+            face.attrs["source"] = "wall"
+    cutter = _box(.32, -2., -1., 2., 2., 3., BLUE)
+    _, (result,) = solids.run("subtract", [cutter, cylinder_group])
+    walls = [f for f in result.mesh.faces if f.attrs.get("source") == "wall"]
+    st = result.mesh._store
+    touched = [f for f in walls if any(abs(v.x()-.32) < 1e-9 for v in f.vertices)]
+    assert len(touched) == 2
+    assert all(not st.exact_face(f.key) for f in touched)
+    assert all(st.exact_face(f.key) for f in walls if f not in touched)
