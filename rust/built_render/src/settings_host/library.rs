@@ -11,17 +11,28 @@ fn left<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
     [("align", "left")].into_py_dict(py)
 }
 
+/// A folder as shown: the home folder as `~`.
+fn shown(path: &std::path::Path) -> String {
+    let text = path.to_string_lossy().into_owned();
+    match std::env::var_os("HOME").map(std::path::PathBuf::from) {
+        Some(home) if !home.as_os_str().is_empty() && path.starts_with(&home) => {
+            format!("~{}", &text[home.to_string_lossy().trim_end_matches('/').len()..])
+        }
+        _ => text,
+    }
+}
+
 /// The pane's blocks.
 pub(super) fn pane(c: &Bound<'_, PyAny>) -> PyResult<()> {
     let py = c.py();
     let cfg = dest::config(py)?;
     c.call_method1("caption", (tr(py, "My library")?,))?;
-    let default = dest::default_mine().map(|p| p.to_string_lossy().into_owned()).unwrap_or_default();
     let (path, which) = match &cfg.mine {
-        Some(p) => (p.to_string_lossy().into_owned(), tr(py, "Chosen folder")?),
-        None => (default.clone(), tr(py, "Default folder")?),
+        Some(p) => (shown(p), tr(py, "Chosen folder")?),
+        None => (dest::default_mine().as_deref().map(shown).unwrap_or_default(), tr(py, "Default folder")?),
     };
-    c.call_method1("kv", (PyList::new(py, [(which, path)])?,))?;
+    c.call_method1("kv", (PyList::new(py, [(tr(py, "Folder")?, which)])?,))?;
+    c.call_method1("text", (path, "dim"))?;
     c.call_method1("text", (tr(py, "Saved items for every model on this machine. Point it at a synced folder to have them everywhere.")?, "faint"))?;
     let mut buttons = vec![verb(py, "lib_root", "Change folder…")?];
     if cfg.mine.is_some() {
@@ -36,7 +47,8 @@ pub(super) fn pane(c: &Bound<'_, PyAny>) -> PyResult<()> {
     for (i, s) in cfg.shared.iter().enumerate() {
         let state = if s.read_only { tr(py, "Read-only")? } else { tr(py, "Saves allowed")? };
         let missing = if s.path.is_dir() { String::new() } else { format!(" · {}", tr(py, "folder not found")?) };
-        c.call_method1("kv", (PyList::new(py, [(s.name.clone(), format!("{} · {state}{missing}", s.path.to_string_lossy()))])?,))?;
+        c.call_method1("kv", (PyList::new(py, [(s.name.clone(), format!("{state}{missing}"))])?,))?;
+        c.call_method1("text", (shown(&s.path), "dim"))?;
         c.call_method("buttons", (vec![verb(py, &format!("lib_edit:{i}"), "Edit…")?, verb(py, &format!("lib_remove:{i}"), "Remove")?],), Some(&left(py)?))?;
     }
     c.call_method("buttons", (vec![verb(py, "lib_add", "Add shared library…")?],), Some(&left(py)?))?;

@@ -238,8 +238,7 @@ def test_save_drawer_lists_destinations_and_remembers_the_last_one(win, tmp_path
     labels = [o[1] for o in dest.options]
     # Writable first (This model, My library), then the greyed ones with why.
     assert labels[:2] == ["This model", "My library"] and dest.choice_limit == 2
-    assert any(lbl.startswith("This project — ") for lbl in labels[2:])
-    assert any(lbl.startswith("Vendor — ") for lbl in labels[2:])
+    assert labels[2:] == ["This project · not in a project", "Vendor · read-only"]
     assert form.value("destination") == "mine"                      # first save: My library
     form.on_done("ok", dict(form.values(), name="Clay", description="Warm", tags="soft, soft, matte", destination="model"))
     row, = L.library_items("styles", win.viewport.scene)
@@ -327,7 +326,7 @@ def test_styles_tab_and_display_panel_use_saved_styles(win, monkeypatch):
     frame(win)
     act(win, "side", "s:bundled")
     names = {t["label"]: t.get("place", "") for t in tiles(frame(win))}
-    assert names["Default"] == "Built"
+    assert names["Default"] == "Bundled"
     act(win, "side", "s:mine")
     sh = frame(win)
     assert [(t["label"], t["place"]) for t in tiles(sh)] == [("Clay", "My library")]
@@ -365,8 +364,9 @@ def test_settings_library_pane_sets_folders_and_shared_libraries(win, tmp_path, 
     sheet = settings("side", "library")
     blocks = sheet["content"]["blocks"]
     assert [b["text"] for b in blocks if b["kind"] == "caption"] == ["My library", "Shared libraries"]
-    default = L.settings_state()[1]
-    assert any(row[1] == default for b in blocks if b["kind"] == "kv" for row in b["rows"])
+    texts = [b.get("text") for b in blocks if b["kind"] == "text"]
+    assert L.settings_state()[1] in texts                                  # the default folder, in the profile
+    assert any(list(row[:2]) == ["Folder", "Default folder"] for b in blocks if b["kind"] == "kv" for row in b["rows"])
     team = tmp_path / "team"
     team.mkdir()
     settings("verb", "lib_add")
@@ -375,7 +375,8 @@ def test_settings_library_pane_sets_folders_and_shared_libraries(win, tmp_path, 
     form.on_done("ok", dict(name="Team", folder=str(team), read_only=True))
     sheet = settings("side", "library")
     rows = [row for b in sheet["content"]["blocks"] if b["kind"] == "kv" for row in b["rows"]]
-    assert ["Team", f"{team} · Read-only"] in [list(r[:2]) for r in rows]
+    assert ["Team", "Read-only"] in [list(r[:2]) for r in rows]
+    assert str(team) in [b.get("text") for b in sheet["content"]["blocks"] if b["kind"] == "text"]
     assert L.settings_state()[2] == [("Team", str(team), True)]
     settings("verb", "lib_edit:0")
     shown[-1].on_done("ok", dict(name="Team drive", folder=str(team), read_only=False))

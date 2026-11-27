@@ -77,7 +77,7 @@ impl Item {
             "model" => "This model".into(),
             "project" => "This project".into(),
             "mine" | "local" => "My library".into(),
-            "bundled" => "Built".into(),
+            "bundled" => "Bundled".into(),
             "linked" => base_name(self.file.as_deref().unwrap_or("Linked file")),
             s if s.starts_with("shared:") => s["shared:".len()..].to_owned(),
             s if s.starts_with("collection:") => "My library".into(),
@@ -582,6 +582,11 @@ pub(crate) fn detail(inp: &Input, e: &Item, thumbs: &mut Vec<String>) -> Vec<Val
         out.push(block("kv", json!({"rows":[["IFC class", facets::class(e), ""],["Source", facets::source(e), ""]]})));
         return out;
     }
+    if inp.kind == "styles" {
+        out.push(block("buttons", json!({"buttons": [verb("apply", "Use this style", "↩", PRIMARY)], "align": "fill"})));
+        out.push(block("text", json!({"text": "Built's own style. Change it in the Display panel, then Save style… keeps your version.", "tone": "faint"})));
+        return out;
+    }
     let buttons = |list: Vec<Value>, align: &str| block("buttons", json!({"buttons": list, "align": align}));
     match e.key.split_once(':').map_or("", |x| x.0) {
         "uc" => {
@@ -633,7 +638,8 @@ pub(crate) fn detail(inp: &Input, e: &Item, thumbs: &mut Vec<String>) -> Vec<Val
 /// with it there.
 fn saved_detail(inp: &Input, e: &Item, mut out: Vec<Value>) -> Vec<Value> {
     let writable = e.verbs.iter().any(|v| v == "libdelete");
-    let right = if writable { e.place() } else { format!("{} · read-only", e.place()) };
+    // "Saved in" names the place; the heading only says what cannot change.
+    let right = if writable { e.place() } else { "Read-only".to_owned() };
     out.push(block("heading", json!({"text": e.shown(), "right": right})));
     let primary = match inp.kind.as_str() {
         "materials" => "Paint with it",
@@ -654,12 +660,16 @@ fn saved_detail(inp: &Input, e: &Item, mut out: Vec<Value>) -> Vec<Value> {
         out.push(block("buttons", json!({"buttons": first, "align": "fill"})));
     }
     out.push(block("kv", json!({"rows": e.defaults})));
-    let actions: Vec<Value> = [("update", "Update"), ("copyto", "Copy to…"), ("moveto", "Move to…"), ("reveal", REVEAL), ("libedit", "Edit…"), ("libdelete", "Delete…")]
-        .into_iter()
-        .filter(|(id, _)| e.verbs.iter().any(|v| v == id))
-        .map(|(id, title)| verb(id, title, "", QUIET))
-        .collect();
-    out.push(block("buttons", json!({"buttons": actions, "align": "left"})));
+    // Two short rows: where it goes, then what it is (the pane is narrow).
+    for row in [&[("update", "Update"), ("copyto", "Copy to…"), ("moveto", "Move to…")][..], &[("libedit", "Edit…"), ("reveal", REVEAL), ("libdelete", "Delete…")][..]] {
+        let actions: Vec<Value> = row.iter()
+            .filter(|(id, _)| e.verbs.iter().any(|v| v == id))
+            .map(|(id, title)| verb(id, title, "", QUIET))
+            .collect();
+        if !actions.is_empty() {
+            out.push(block("buttons", json!({"buttons": actions, "align": "left"})));
+        }
+    }
     out
 }
 
@@ -862,7 +872,9 @@ mod tests {
         assert_eq!(scope_title("s:shared:Team"), "Team");
         assert_eq!(scope_title("s:project"), "This project");
         assert_eq!(items[2].place(), "Team");
-        assert_eq!(items[4].place(), "Built");
+        assert_eq!(items[4].place(), "Bundled");
+        let style = detail(&Input { kind: "styles".into(), ..Default::default() }, &items[4], &mut Vec::new());
+        assert_eq!(style[2]["buttons"][0]["label"], "Use this style");
         // Without project or shared items those rows are not offered.
         let ids: Vec<String> = scopes(&items[..1]).into_iter().map(|s| s.0).collect();
         assert_eq!(ids, ["model", "recent", "mine", "bundled"]);
@@ -872,10 +884,10 @@ mod tests {
         let inp = Input { kind: "styles".into(), ..Default::default() };
         let blocks = detail(&inp, &saved, &mut Vec::new());
         assert_eq!(blocks[1]["right"], "My library");
-        let ids: Vec<&str> = blocks.last().unwrap()["buttons"].as_array().unwrap().iter().map(|b| b["id"].as_str().unwrap()).collect();
+        let ids: Vec<&str> = blocks[blocks.len() - 2..].iter().flat_map(|b| b["buttons"].as_array().unwrap()).map(|b| b["id"].as_str().unwrap()).collect();
         assert_eq!(ids, ["copyto", "moveto", "reveal", "libdelete"]);
         saved.verbs = vec!["apply".into(), "copyto".into()];
-        assert_eq!(detail(&inp, &saved, &mut Vec::new())[1]["right"], "My library · read-only");
+        assert_eq!(detail(&inp, &saved, &mut Vec::new())[1]["right"], "Read-only");
     }
 
     #[test]

@@ -481,7 +481,20 @@ fn drawer(win: &Bound<'_, PyAny>, title: &str, name: &str, description: &str, ta
     let chosen = store::default_destination(&dests, &p.kind, last(py, &p.kind)?.as_deref()).map(|d| d.key.clone());
     let options: Vec<(String, String)> = ordered
         .iter()
-        .map(|d| (d.key.clone(), if d.writable { tr(py, &d.label).unwrap_or(d.label.clone()) } else { format!("{} — {}", tr(py, &d.label).unwrap_or(d.label.clone()), tr(py, &d.reason).unwrap_or(d.reason.clone())) }))
+        .map(|d| {
+            let label = tr(py, &d.label).unwrap_or(d.label.clone());
+            if d.writable {
+                return (d.key.clone(), label);
+            }
+            // Short, so the greyed entry fits the drawer's choice.
+            let why = match d.key.as_str() {
+                "project" => "not in a project",
+                "model" => "no model open",
+                k if k.starts_with("shared:") => "read-only",
+                _ => "unavailable",
+            };
+            (d.key.clone(), format!("{label} · {}", tr(py, why).unwrap_or(why.into())))
+        })
         .collect();
     let forms = py.import("built_render.chrome_forms")?;
     let field = forms.getattr("Field")?;

@@ -1426,12 +1426,12 @@ impl Ui {
                 }
                 if let Some(s) = spec.search.as_ref().filter(|_| spec.id != "start") {
                     let sw = (inner.width() * 0.30).clamp(200.0, 320.0);
-                    let width = if spec.menus.iter().any(|m| m.id == "group") {
-                        let menus: f32 = spec.menus.iter().filter(|m| !m.left).map(|m| {
-                            ui.painter().layout_no_wrap(m.label.clone(), body(), INK).size().x + 36.0 + SPACE_S
-                        }).sum();
-                        sw.min((ui.available_width() - menus - SPACE_M).max(80.0))
-                    } else { sw };
+                    // The search yields to the menus beside it, so a narrow sheet
+                    // with many tabs never overprints them.
+                    let menus: f32 = spec.menus.iter().filter(|m| !m.left).map(|m| {
+                        ui.painter().layout_no_wrap(m.label.clone(), body(), INK).size().x + 36.0 + SPACE_S
+                    }).sum();
+                    let width = sw.min((ui.available_width() - menus - SPACE_M).max(80.0));
                     Self::lsheet_search(ui, st, s, width);
                 }
                 if spec.search.is_some() { ui.add_space(SPACE_XS); }
