@@ -142,13 +142,35 @@ def painted_model(path, x0=0., n=GRID):
         mesh._store.set_edge_flags(edge, 1)
     fittings, _ = cylinder()
     assembly = Group(name="Fittings")
-    for i in range(4):
-        part = Group(fittings.mesh, name=f"Sleeve {i}")
-        part.xform = _at(x0 + 20 + i * 4, 20, 0)
-        assembly.adopt([part])
+    sections = []
+    for row in range(2):
+        section = Group(name=f"Fitting row {row}")
+        section.xform = _at(x0 + 20, 20 + row * 4, 0)
+        parts = []
+        for i in range(2):
+            part = Group(fittings.mesh, name=f"Sleeve {row}.{i}")
+            part.xform = _at(i * 4, 0, 0)
+            parts.append(part)
+        section.adopt(parts)
+        sections.append(section)
+    assembly.adopt(sections)
     scene.groups.append(assembly)
     igz.save_scene(scene, path)
     return path
+
+
+def test_painted_fixture_keeps_shared_curves_after_reopen(tmp_path):
+    from built_core.scene import Scene
+    from formats import igz
+
+    scene = Scene()
+    igz.load_into(scene, painted_model(tmp_path / "painted.built", n=6))
+    sections = scene.groups[0].children
+    assert [len(group.children) for group in sections] == [2, 2]
+    meshes = [child.mesh for group in sections for child in group.children]
+    assert all(mesh is meshes[0] for mesh in meshes)
+    assert meshes[0]._store.exact_counts() == (48, 24)
+    assert "corner_normals" in meshes[0]._store.display_arrays()
 
 
 def _settle(host, rounds=3):
@@ -183,7 +205,7 @@ def _busy():
                          ids=["assembly", "painted", "painted-far"])
 def test_big_model_interaction_budgets(tmp_path, model, x0):
     source = (model(tmp_path / "big.igz") if model is big_model else
-              model(tmp_path / "big.igz", x0=x0))
+              model(tmp_path / "painted.built", x0=x0))
     def point(x, y, z=0.):
         return V(x0 + x, y, z)
 
