@@ -50,6 +50,7 @@ const BREAKS: &[&str] = &[
 /// Check rows: their state is mirrored from the window.
 pub const CHECKS: &[&str] = &[
     "scene_play", "scene_transitions", "hide_similar", "rest_normal", "rest_fade", "rest_hide",
+    "show_keystrokes",
 ];
 
 #[derive(Clone, Copy)]
@@ -67,9 +68,20 @@ enum Handler {
     RestMode(&'static str),
     DisplaySettings,
     Review,
+    /// View ▸ Show Keystrokes: the overlay for recordings (keycast.rs).
+    Keystrokes,
     Export(&'static str),
     /// `shell_files::command` runs it before the model menu is asked.
     Shell,
+}
+
+/// Retired command ids that scripts and saved shortcuts may still name.
+/// Join Segments is part of Weld Edges since the .skp parity pass.
+pub const ALIASES: &[(&str, &str)] = &[("join_segments", "weld_edges")];
+
+/// The command an id names now (the id itself unless it was retired).
+pub fn alias(id: &str) -> &str {
+    ALIASES.iter().find(|(old, _)| *old == id).map_or(id, |(_, new)| *new)
 }
 
 pub fn entries() -> &'static [MenuEntry] {
@@ -135,7 +147,6 @@ fn build_entries() -> Vec<MenuEntry> {
         ("orient_faces", "Orient Faces", "", "_on_orient_faces"),
         ("heal_overlaps", "Heal Overlapping Faces", "", "_on_heal_overlaps"),
         ("rebuild_planar", "Rebuild Faces (Planar)", "", "_on_rebuild_planar"),
-        ("join_segments", "Join Segments", "", "_on_join_segments"),
         ("weld_edges", "Weld Edges", "", "_on_weld_edges"),
         ("verb:simplify_mesh", "Simplify Mesh…", "", "_on_simplify_mesh"),
         ("convert_path", "Convert Path to Geometry", "", "_on_convert_geopath"),
@@ -200,6 +211,8 @@ fn build_entries() -> Vec<MenuEntry> {
         add(id, "View ▸ Model Views", label, "", Argument("set_view_layout", key));
     }
     add("maximize_model_view", "View ▸ Model Views", "Maximize / Restore View", "Ctrl+Space", Window("_maximize_model_view"));
+    add("look_at_face", "View", "Look at Face", "V", Window("_on_look_at_face"));
+    add("show_keystrokes", "View", "Show Keystrokes", "", Keystrokes);
     // Draw and Tools: the tools you arm, then what runs at once.
     for (id, path, label, tool) in [
         ("tool:line", "Draw", "Line", "line"),
@@ -261,6 +274,7 @@ fn build_entries() -> Vec<MenuEntry> {
 
 #[pyfunction]
 pub fn run_model_menu(win: &Bound<'_, PyAny>, id: &str) -> PyResult<bool> {
+    let id = alias(id);
     let Some(entry) = entries().iter().find(|row| row.id == id) else {
         return Ok(false);
     };
@@ -287,6 +301,15 @@ pub fn run_model_menu(win: &Bound<'_, PyAny>, id: &str) -> PyResult<bool> {
             .py()
             .import("built_render.settings_sheet")?
             .call_method1("show", (win, "display"))?,
+        Handler::Keystrokes => {
+            let on = !crate::keycast::shown();
+            crate::keycast::set_shown(on);
+            let py = win.py();
+            py.import("built_core.settings")?.getattr("settings")?.call0()?
+                .call_method1("setValue", (crate::keycast::SETTING, if on { "1" } else { "0" }))?;
+            let view = win.getattr("view")?;
+            view.call_method0("update")?
+        }
         Handler::Review => {
             let view = win.getattr("view")?;
             let renderer = view.getattr("renderer")?;

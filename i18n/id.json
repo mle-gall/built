@@ -3838,5 +3838,18 @@
  "Korean translation of the interface, and the AI key from an environment variable. In 0.6.2, soft shadows and fixes for macOS.": "Terjemahan antarmuka ke bahasa Korea, dan kunci AI dari variabel lingkungan. Di 0.6.2, bayangan lembut dan perbaikan untuk macOS.",
  "Exact Move+Ctrl copies, overlapping rotated copies, faster box selection on huge models and the reviewed Indonesian translation.": "Salinan Pindah+Ctrl yang persis, salinan putar yang saling tumpang tindih, seleksi kotak yang lebih cepat pada model sangat besar, dan terjemahan bahasa Indonesia yang direvisi.",
  "Snapping to the rest of the model from inside a group or component.": "Snap ke bagian lain model dari dalam grup atau komponen.",
- "“{name}” is no longer linked: its geometry is now part of this model": "“{name}” tidak lagi tertaut: geometrinya kini menjadi bagian dari model ini"
+ "“{name}” is no longer linked: its geometry is now part of this model": "“{name}” tidak lagi tertaut: geometrinya kini menjadi bagian dari model ini",
+ "Weld": "Las",
+ "Select connected edges to weld.": "Pilih tepi yang tersambung untuk dilas.",
+ "Join connected edges into one curve, or into one straight edge when they line up; with nothing selected, join the model's collinear pieces.": "Menyatukan tepi yang tersambung menjadi satu kurva, atau satu tepi lurus bila segaris; tanpa pilihan, menyatukan potongan segaris pada model.",
+ "Look at Face": "Lihat Bidang",
+ "Look straight at the face under the cursor, from the side you see it, in parallel projection until the next orbit.": "Melihat lurus ke bidang di bawah kursor, dari sisi yang Anda lihat, dalam proyeksi paralel sampai orbit berikutnya.",
+ "Point at a face, then press V to look at it.": "Tunjuk sebuah bidang, lalu tekan V untuk melihatnya.",
+ "Show Keystrokes": "Tampilkan Tombol",
+ "Show the keys you press, the values you type and the tool a key picks at the bottom of the model, for screen recordings.": "Menampilkan di bagian bawah model tombol yang Anda tekan, nilai yang Anda ketik, dan alat yang dipilih tombol, untuk rekaman layar.",
+ "Show keystrokes": "Tampilkan tombol",
+ "A pill at the bottom of the model shows the keys you press, the value you type and the tool a key picks, for screen recordings.": "Pil di bagian bawah model menampilkan tombol yang Anda tekan, nilai yang Anda ketik, dan alat yang dipilih tombol, untuk rekaman layar.",
+ "Recording": "Perekaman",
+ "Animate camera moves": "Animasikan gerakan kamera",
+ "Standard views, Look at Face, Zoom Extents, Zoom Selection and scene changes glide into place in a quarter second; off, they jump.": "Tampilan standar, Lihat Bidang, Zoom Semua, Zoom Pilihan, dan perpindahan adegan meluncur ke tempatnya dalam seperempat detik; jika mati, langsung melompat."
 }

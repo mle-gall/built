@@ -68,12 +68,12 @@ Isolate is left out: it shows placements, and loose geometry has none.
 | 4 | Make group \| Make component… | Make group \| Make component… | Make group \| Make component… |
 | 5 | Reverse faces \| Orient faces | Make faces *(if they close a loop)* | Reverse faces \| Orient faces |
 | 6 | Intersect: Model \| Selection \| Context | Divide… | Intersect: Model \| Selection \| Context |
-| 7 | Soften / Smooth edges… | Join segments \| Explode curve *(two or more; a curve)* | Soften / Smooth edges… |
+| 7 | Soften / Smooth edges… | Weld Edges *(two or more)* \| Explode curve *(a curve)* | Soften / Smooth edges… |
 | 8 | Heal overlapping faces | Soften / Smooth edges… | Make faces *(if they close a loop)* |
 | 9 | Rebuild faces (planar) | Bridge *(two loops)* | Heal overlapping faces |
 | 10 | Simplify mesh… | Flip along: Red \| Green \| Blue | Rebuild faces (planar) |
 | 11 | Flip along: Red \| Green \| Blue | | Simplify mesh… |
-| 12 | Align view *(one face)* | | Flip along: Red \| Green \| Blue |
+| 12 | Look at Face *(one face; V)* | | Flip along: Red \| Green \| Blue |
 | 13 | Texture: Position \| Reset *(a textured face)* | | |
 | 14 | Select: Connected \| Boundary \| Same material \| Same tag | Select: Connected \| Same tag | Select: Connected \| Boundary \| Same material \| Same tag |
 
@@ -144,7 +144,7 @@ have a home.
 | Soften / Smooth edges… | faces, edges, faces and edges, groups, several groups, geometry and groups |
 | Reverse faces \| Orient faces | faces, faces and edges, geometry and groups *(with faces)* |
 | Heal overlapping faces | faces, faces and edges |
-| Join segments | edges *(two or more)* |
+| Weld Edges | edges *(two or more: one chain becomes one curve, or one straight edge when it is straight; several straight runs each become one edge)* |
 | Rebuild faces (planar) | faces, faces and edges |
 | Split into pieces | one group |
 | Simplify mesh… | faces, faces and edges |

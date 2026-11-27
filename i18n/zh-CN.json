@@ -3836,5 +3836,18 @@
  "Korean translation of the interface, and the AI key from an environment variable. In 0.6.2, soft shadows and fixes for macOS.": "界面的韩语翻译，以及从环境变量读取 AI 密钥。0.6.2 中还有柔和阴影和 macOS 修复。",
  "Exact Move+Ctrl copies, overlapping rotated copies, faster box selection on huge models and the reviewed Indonesian translation.": "精确的移动+Ctrl 复制、相互重叠的旋转复制、在超大模型上更快的框选，以及校订后的印尼语翻译。",
  "Snapping to the rest of the model from inside a group or component.": "在组或组件内部捕捉到模型其余部分。",
- "“{name}” is no longer linked: its geometry is now part of this model": "“{name}”已不再链接：其几何体现已成为此模型的一部分"
+ "“{name}” is no longer linked: its geometry is now part of this model": "“{name}”已不再链接：其几何体现已成为此模型的一部分",
+ "Weld": "焊接",
+ "Select connected edges to weld.": "请选择要焊接的相连边线。",
+ "Join connected edges into one curve, or into one straight edge when they line up; with nothing selected, join the model's collinear pieces.": "将相连的边线合并为一条曲线；若它们共线，则合并为一条直边。未选择任何内容时，合并模型中共线的线段。",
+ "Look at Face": "正视面",
+ "Look straight at the face under the cursor, from the side you see it, in parallel projection until the next orbit.": "从你所见的一侧正视光标下的面，在下一次环绕之前使用平行投影。",
+ "Point at a face, then press V to look at it.": "指向一个面，然后按 V 正视它。",
+ "Show Keystrokes": "显示按键",
+ "Show the keys you press, the values you type and the tool a key picks at the bottom of the model, for screen recordings.": "在模型底部显示你按下的键、输入的数值和按键选取的工具，用于屏幕录制。",
+ "Show keystrokes": "显示按键",
+ "A pill at the bottom of the model shows the keys you press, the value you type and the tool a key picks, for screen recordings.": "模型底部的胶囊显示你按下的键、输入的数值和按键选取的工具，用于屏幕录制。",
+ "Recording": "录制",
+ "Animate camera moves": "相机移动动画",
+ "Standard views, Look at Face, Zoom Extents, Zoom Selection and scene changes glide into place in a quarter second; off, they jump.": "标准视图、正视面、充满视窗、缩放选择和场景切换在四分之一秒内平滑到位；关闭时直接跳转。"
 }

@@ -231,6 +231,8 @@ pub struct Ui {
     activity_open: bool,
     activity_secondary: std::collections::HashMap<String, String>,
     hovered_toast: Option<String>,
+    /// The keystroke overlay's pill (keycast.rs), shown with View ▸ Show Keystrokes.
+    keycast: crate::keycast::Keycast,
     link_banner: String,
     /// The dock's width (points): dragged on its left edge, kept by Python.
     dock_w: f32,
@@ -438,6 +440,7 @@ impl Ui {
             activity_open: false,
             activity_secondary: Default::default(),
             hovered_toast: None,
+            keycast: Default::default(),
             link_banner: String::new(),
             dock_w: DOCK_W,
             destination: Destination::Project,
@@ -1175,6 +1178,30 @@ impl Ui {
         true
     }
 
+    /// The keystroke overlay (keycast.rs): a key or chord pressed, the tool
+    /// it armed, the value field's text after a key, a mouse button.
+    pub fn keycast_key(&mut self, keys: String) {
+        let now = self.start.elapsed().as_secs_f64();
+        self.keycast.key(keys, now);
+    }
+    pub fn keycast_tool(&mut self, keys: String, tool: String) {
+        let now = self.start.elapsed().as_secs_f64();
+        self.keycast.tool(keys, tool, now);
+    }
+    pub fn keycast_typed(&mut self, value: String) {
+        let now = self.start.elapsed().as_secs_f64();
+        self.keycast.typed(value, now);
+    }
+    pub fn keycast_button(&mut self, button: u32, mods: i64) {
+        let now = self.start.elapsed().as_secs_f64();
+        self.keycast.button(button, mods, now);
+    }
+    /// What the pill shows now (keys, tool, typed), empty once it faded.
+    pub fn keycast_chips(&self) -> Vec<(String, String, bool)> {
+        let now = self.start.elapsed().as_secs_f64();
+        if !crate::keycast::shown() || self.keycast.opacity(now).is_none() { return Vec::new(); }
+        self.keycast.chips.iter().map(|c| (c.keys.clone(), c.tool.clone(), c.typed)).collect()
+    }
     pub fn set_active(&mut self, id: String) {
         // Another tool is the next action: the committed value's readback goes.
         if id != self.active { self.cursor.end_readback(); }
@@ -3051,6 +3078,39 @@ impl Ui {
         }
     }
 
+    /// The keystroke pill at the bottom centre of the free area, above the
+    /// bottom bar and the Paint strip, moved up over the value field when
+    /// they would meet (it never covers the status bar or the field).
+    fn keystrokes(&self, ctx: &egui::Context, screen: Rect) {
+        if !crate::keycast::shown() { return; }
+        let now = self.start.elapsed().as_secs_f64();
+        let Some(opacity) = self.keycast.opacity(now) else { return };
+        if let Some(ms) = self.keycast.repaint_ms(now) {
+            ctx.request_repaint_after(std::time::Duration::from_secs_f64(ms / 1000.));
+        }
+        let left = if self.review { GUT } else { GUT + self.rail_w + GUT };
+        let right = if self.review { screen.max.x - GUT } else { self.free_right(ctx, screen) - GUT };
+        let (_, mut bottom) = self.band(ctx, screen);
+        let area = |name: &str| ctx.memory(|m| m.area_rect(egui::Id::new(name)));
+        if self.paint_strip_shown() && !self.review {
+            if let Some(r) = area("paint_strip") { bottom = bottom.min(r.top() - GUT); }
+        }
+        let size = area("keystrokes").map_or(vec2(160., 36.), |r| r.size());
+        let centre = (left + right) / 2.0;
+        let mut pill = Rect::from_center_size(pos2(centre, bottom - size.y / 2.0), size);
+        for name in ["cursor_value", "value_readback"] {
+            if let Some(field) = area(name).filter(|r| r.expand(GUT / 2.0).intersects(pill)) {
+                pill = pill.translate(vec2(0., field.top() - GUT - pill.bottom()));
+            }
+        }
+        egui::Area::new(egui::Id::new("keystrokes"))
+            .pivot(egui::Align2::CENTER_BOTTOM)
+            .fixed_pos(pos2(centre, pill.bottom()))
+            .order(egui::Order::Foreground)
+            .interactable(false)
+            .show(ctx, |ui| kit::keystroke_pill(ui, &self.keycast.chips, opacity));
+    }
+
     /// Lay out, tessellate and draw the chrome over ``target`` (already
     /// holding the frame). Called last in the frame, after the overlay.
     pub fn paint(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, e: &mut wgpu::CommandEncoder,
@@ -3124,6 +3184,7 @@ impl Ui {
                     self.panels.frame_guide(ctx, screen);
                 }
                 if !sheet_up { self.cursor_value(ctx, screen); }
+                if !sheet_up { self.keystrokes(ctx, screen); }
                 if !self.review && !sheet_up { self.task_pins(ctx, screen); }
                 self.view_overlay(ctx);
             }

@@ -5,16 +5,33 @@ use pyo3::{
     types::{PyDict, PyList},
 };
 
-/// How long a view command's camera move takes (UX pass 2, M03): 250 ms,
-/// or none in a scripted run (`built --script`), whose frames must come out
-/// the same every time.
-pub(crate) fn camera_motion_seconds(scripted: bool) -> f64 {
-    if scripted { 0. } else { 0.25 }
+/// How long a camera move takes (aligned views, Look at Face, zoom extents
+/// and selection, scene changes without Scene Transitions): 250 ms, eased
+/// in and out; none with Settings › Navigation › Animate camera moves off,
+/// or in a scripted run (`built --script`), whose frames must come out the
+/// same every time. `forced` is BUILT_CAMERA_MOTION: "1" animates even a
+/// scripted run (a recording beat), "0" never does (tests).
+pub(crate) fn camera_motion_seconds(scripted: bool, animate: bool, forced: Option<bool>) -> f64 {
+    let on = forced.unwrap_or(animate && !scripted);
+    if on { 0.25 } else { 0. }
 }
 
 /// Is this a scripted run? The app sets `BUILT_SCRIPTED` for `--script`.
 pub(crate) fn scripted() -> bool {
     std::env::var_os("BUILT_SCRIPTED").is_some_and(|v| !v.is_empty() && v != "0")
+}
+
+/// The settings key of Settings › Navigation › Animate camera moves.
+pub(crate) const ANIMATE_CAMERA: &str = "nav/animate_camera";
+
+/// This run's camera move time (see `camera_motion_seconds`).
+pub(crate) fn camera_motion(py: Python<'_>) -> PyResult<f64> {
+    let animate = !matches!(
+        crate::navigation::setting(py, ANIMATE_CAMERA, "1")?.to_ascii_lowercase().as_str(),
+        "0" | "false"
+    );
+    let forced = std::env::var("BUILT_CAMERA_MOTION").ok().map(|v| !matches!(v.as_str(), "" | "0"));
+    Ok(camera_motion_seconds(scripted(), animate, forced))
 }
 
 /// Settings > Navigation > Auto perspective (on by default): an aligned view
@@ -38,7 +55,7 @@ pub(crate) fn glide_after(
     let pose = py.import("built_core")?.getattr("Pose")?;
     let before = pose.call_method1("of_camera", (&camera,))?;
     change(&vp)?;
-    let seconds = camera_motion_seconds(scripted());
+    let seconds = camera_motion(py)?;
     let drawn = win
         .getattr_opt("view")?
         .and_then(|v| v.getattr_opt("renderer").ok().flatten())
@@ -323,7 +340,13 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
 mod tests {
     #[test]
     fn a_scripted_run_jumps_and_a_live_one_glides_a_quarter_second() {
-        assert_eq!(super::camera_motion_seconds(true), 0.);
-        assert_eq!(super::camera_motion_seconds(false), 0.25);
+        use super::camera_motion_seconds as secs;
+        assert_eq!(secs(true, true, None), 0.);
+        assert_eq!(secs(false, true, None), 0.25);
+        // Settings › Navigation › Animate camera moves off.
+        assert_eq!(secs(false, false, None), 0.);
+        // BUILT_CAMERA_MOTION: a recording beat glides; a test never does.
+        assert_eq!(secs(true, true, Some(true)), 0.25);
+        assert_eq!(secs(false, true, Some(false)), 0.);
     }
 }

@@ -253,6 +253,9 @@ impl Host {
             timers.call_method("timer", (w.getattr("_on_autosave_tick")?,), Some(&kw))?,
         )?;
         guarded(h, "autosave setup", w.call_method0("_setup_autosave"))?;
+        // View ▸ Show Keystrokes is a preference (the overlay for recordings).
+        let keys = crate::navigation::setting(py, crate::keycast::SETTING, "0")?;
+        crate::keycast::set_shown(matches!(keys.to_ascii_lowercase().as_str(), "1" | "true"));
         h.setattr("startup_ms", start.elapsed().as_secs_f64() * 1000.)?;
         w.call_method0("_update_title")?;
         Ok(host.unbind())
@@ -700,6 +703,14 @@ impl Host {
         let w = h.getattr("window")?;
         h.getattr("input_state")?
             .call_method1("pointer", (x, y, held, modifiers))?;
+        if kind == "press" && crate::keycast::shown() {
+            let renderer = Self::renderer(slf)?;
+            let over_chrome = !renderer.is_none()
+                && renderer.call_method1("ui_over_chrome", (x, y)).and_then(|v| v.is_truthy()).unwrap_or(false);
+            if !renderer.is_none() && !over_chrome {
+                renderer.call_method1("ui_keycast", ("button", format!("{button}:{modifiers}")))?;
+            }
+        }
         if matches!(kind, "press" | "double") {
             w.getattr("viewport")?.setattr("_clean_alt_press", false)?;
             w.getattr("scene_player")?.call_method0("stop")?;
@@ -828,6 +839,52 @@ impl Host {
     }
     #[pyo3(signature=(pressed,key,modifiers=0,text="",repeat=false))]
     fn key(
+        slf: &Bound<'_, Self>,
+        pressed: bool,
+        key: i64,
+        modifiers: i64,
+        text: &str,
+        repeat: bool,
+    ) -> PyResult<bool> {
+        let cast = pressed && !repeat && crate::keycast::shown();
+        let before = if cast { Self::keycast_probe(slf).ok() } else { None };
+        let out = Self::key_event(slf, pressed, key, modifiers, text, repeat)?;
+        if let Some(before) = before {
+            guarded(slf.as_any(), "keystrokes", Self::keycast_after(slf, key, modifiers, before).map(|_| none(slf.py())))?;
+        }
+        Ok(out)
+    }
+    /// The active tool and the value field's text, before a key.
+    fn keycast_probe(slf: &Bound<'_, Self>) -> PyResult<(Option<String>, String)> {
+        let vp = slf.getattr("window")?.getattr("viewport")?;
+        let tool = vp.getattr("active_tool")?;
+        let key = if tool.is_none() { None } else { slf.getattr("window")?.call_method1("_tool_key", (&tool,))?.extract()? };
+        let buffer = vp.getattr_opt("_value_buffer")?.map(|b| b.extract::<String>()).transpose()?.unwrap_or_default();
+        Ok((key, buffer))
+    }
+    /// What the key did, for the keystroke overlay: armed a tool, typed
+    /// into the value field, entered the value, or just the key itself.
+    fn keycast_after(slf: &Bound<'_, Self>, key: i64, modifiers: i64, before: (Option<String>, String)) -> PyResult<()> {
+        let renderer = Self::renderer(slf)?;
+        if renderer.is_none() { return Ok(()); }
+        let Some(keys) = crate::keycast::chord(key, modifiers) else { return Ok(()) };
+        let (tool, buffer) = Self::keycast_probe(slf)?;
+        let entered = matches!(key, crate::keycast::RETURN | crate::keycast::ENTER) && !before.1.is_empty();
+        if tool.is_some() && tool != before.0 {
+            let active = slf.getattr("window")?.getattr("viewport")?.getattr("active_tool")?;
+            let name: String = active.getattr("name")?.extract()?;
+            let label = crate::model_edit::translated(slf.py(), &name, None)?;
+            renderer.call_method1("ui_keycast", ("tool", keys, label))?;
+        } else if buffer != before.1 && !buffer.is_empty() {
+            renderer.call_method1("ui_keycast", ("typed", buffer))?;
+        } else if entered {
+            renderer.call_method1("ui_keycast", ("key", keys))?;
+        } else if buffer == before.1 {
+            renderer.call_method1("ui_keycast", ("key", keys))?;
+        }
+        Ok(())
+    }
+    fn key_event(
         slf: &Bound<'_, Self>,
         pressed: bool,
         key: i64,

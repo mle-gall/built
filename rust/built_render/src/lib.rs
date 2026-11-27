@@ -1,5 +1,6 @@
 //! A resident Metal scene: compute compaction precedes native indirect draws.
 mod timing;
+pub mod keycast;
 mod pick_tile;
 mod captured_frame;
 use captured_frame::CapturedFrame;
@@ -34,6 +35,7 @@ mod section_display;
 mod inspection_edits;
 mod context_edits;
 pub use context_edits::can_weld;
+pub use edge_commands::weld_available;
 mod native_view_actions;
 mod plugin_workspace;
 mod link_watch;
@@ -2852,6 +2854,26 @@ impl Renderer {
         self.ui.as_mut().is_some_and(|ui| ui.key(name, pressed, modifiers))
     }
     fn ui_text(&mut self, text: String) -> bool { self.ui.as_mut().is_some_and(|ui| ui.text(text)) }
+    /// The keystroke overlay (keycast.rs): `kind` "key", "tool" (with the
+    /// tool's name), "typed" (the value field's text) or "button" (keys
+    /// holds the button number and modifiers, "1:0").
+    #[pyo3(signature = (kind, keys, tool=String::new()))]
+    fn ui_keycast(&mut self, kind: &str, keys: String, tool: String) {
+        let Some(ui) = self.ui.as_mut() else { return };
+        match kind {
+            "tool" => ui.keycast_tool(keys, tool),
+            "typed" => ui.keycast_typed(keys),
+            "button" => {
+                let (b, m) = keys.split_once(':').unwrap_or((&keys, "0"));
+                ui.keycast_button(b.parse().unwrap_or(0), m.parse().unwrap_or(0));
+            }
+            _ => ui.keycast_key(keys),
+        }
+    }
+    /// What the keystroke pill shows now: (keys, tool, typed) per chip.
+    fn ui_keycast_chips(&self) -> Vec<(String, String, bool)> {
+        self.ui.as_ref().map(ui::Ui::keycast_chips).unwrap_or_default()
+    }
     /// IME composition for the chrome's focused field (enabled, preedit, commit, disabled).
     fn ui_ime(&mut self, kind: &str, text: String) -> bool { self.ui.as_mut().is_some_and(|ui| ui.ime(kind, text)) }
     /// The focused field's text cursor (points), for the candidate window.

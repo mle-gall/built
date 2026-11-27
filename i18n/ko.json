@@ -3835,5 +3835,18 @@
  "Korean translation of the interface, and the AI key from an environment variable. In 0.6.2, soft shadows and fixes for macOS.": "인터페이스 한국어 번역, 그리고 환경 변수에서 읽는 AI 키. 0.6.2에서는 부드러운 그림자와 macOS 수정도.",
  "Exact Move+Ctrl copies, overlapping rotated copies, faster box selection on huge models and the reviewed Indonesian translation.": "정확한 이동+Ctrl 복사, 겹치는 회전 복사, 거대한 모델에서 더 빠른 상자 선택, 그리고 검토된 인도네시아어 번역.",
  "Snapping to the rest of the model from inside a group or component.": "그룹이나 컴포넌트 안에서 모델의 나머지 부분으로 스냅.",
- "“{name}” is no longer linked: its geometry is now part of this model": "“{name}”의 링크가 해제되었습니다: 이제 해당 지오메트리는 이 모델의 일부입니다"
+ "“{name}” is no longer linked: its geometry is now part of this model": "“{name}”의 링크가 해제되었습니다: 이제 해당 지오메트리는 이 모델의 일부입니다",
+ "Weld": "용접",
+ "Select connected edges to weld.": "용접할 연결된 모서리를 선택하세요.",
+ "Join connected edges into one curve, or into one straight edge when they line up; with nothing selected, join the model's collinear pieces.": "연결된 모서리를 하나의 곡선으로, 일직선이면 하나의 직선 모서리로 합칩니다. 선택이 없으면 모델의 일직선 조각을 합칩니다.",
+ "Look at Face": "면 바라보기",
+ "Look straight at the face under the cursor, from the side you see it, in parallel projection until the next orbit.": "커서 아래의 면을 보이는 쪽에서 정면으로 바라봅니다. 다음 궤도 회전까지 평행 투영입니다.",
+ "Point at a face, then press V to look at it.": "면을 가리킨 다음 V를 눌러 바라보세요.",
+ "Show Keystrokes": "키 입력 표시",
+ "Show the keys you press, the values you type and the tool a key picks at the bottom of the model, for screen recordings.": "누른 키, 입력한 값, 키로 고른 도구를 모델 아래쪽에 표시합니다. 화면 녹화용입니다.",
+ "Show keystrokes": "키 입력 표시",
+ "A pill at the bottom of the model shows the keys you press, the value you type and the tool a key picks, for screen recordings.": "모델 아래쪽의 알약이 누른 키, 입력한 값, 키로 고른 도구를 보여 줍니다. 화면 녹화용입니다.",
+ "Recording": "녹화",
+ "Animate camera moves": "카메라 이동 애니메이션",
+ "Standard views, Look at Face, Zoom Extents, Zoom Selection and scene changes glide into place in a quarter second; off, they jump.": "표준 뷰, 면 바라보기, 전체 보기, 선택 항목 보기, 장면 전환이 4분의 1초 동안 부드럽게 이동합니다. 끄면 바로 바뀝니다."
 }

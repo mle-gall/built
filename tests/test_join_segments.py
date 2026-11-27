@@ -237,9 +237,10 @@ def test_the_menu_command_joins_the_selection_and_reselects_the_line(host):
         hist.execute(AddEdgeCommand(V(x, 0), V(x + 1, 0)))
     hist.execute(AddEdgeCommand(V(0, 5), V(1, 5)))
     scene.selection.update(e for e in scene.mesh.edges if abs(e.a.y()) < 1e-9)
+    # Join Segments is part of Weld Edges now: the old id still runs it,
+    # and a selected straight chain becomes one edge at once.
     host.menu("join_segments")
-    assert len(scene.mesh.edges) == 5          # only the preview so far
-    chrome_forms.current(win).press("ok")
+    assert chrome_forms.current(win) is None
     assert len(scene.mesh.edges) == 2
     assert len(scene.selection) == 1
     (line,) = scene.selection
@@ -317,8 +318,8 @@ def test_the_preview_panel_paints_and_cancel_leaves_the_model_alone(host):
     hist = win.viewport.history
     for x in range(3):
         hist.execute(AddEdgeCommand(V(x, 0), V(x + 1, 0)))
-    scene.selection.update(scene.mesh.edges)
-    host.menu("join_segments")
+    scene.selection.clear()                    # the whole model: a preview
+    host.menu("weld_edges")
     form = chrome_forms.current(win)
     assert form.field("join_reason_join").label.startswith("2  ")
     from built_core import Matrix4
@@ -330,6 +331,42 @@ def test_the_preview_panel_paints_and_cancel_leaves_the_model_alone(host):
     form.press("cancel")
     assert len(scene.mesh.edges) == 3
     assert chrome_forms.current(win) is None
+
+
+def test_weld_straightens_a_straight_chain_and_curves_a_bent_one(host):
+    win = host.window
+    scene = win.viewport.scene
+    hist = win.viewport.history
+    for x in range(3):
+        hist.execute(AddEdgeCommand(V(x, 0), V(x + 1, 0)))
+    scene.selection.update(scene.mesh.edges)
+    host.menu("weld_edges")
+    (line,) = scene.mesh.edges
+    assert _ends(line) == [(0, 0, 0), (3, 0, 0)]
+    assert getattr(line, "curve", None) is None
+    hist.undo()
+    assert len(scene.mesh.edges) == 3
+    # A corner: Weld keeps every point and makes the chain one curve.
+    hist.execute(AddEdgeCommand(V(3, 0), V(3, 2)))
+    scene.selection.clear()
+    scene.selection.update(scene.mesh.edges)
+    host.menu("weld_edges")
+    assert len(scene.mesh.edges) == 4
+    curves = {e.curve for e in scene.mesh.edges}
+    assert len(curves) == 1 and None not in curves
+
+
+def test_weld_joins_several_straight_runs(host):
+    win = host.window
+    scene = win.viewport.scene
+    hist = win.viewport.history
+    for x in range(2):
+        hist.execute(AddEdgeCommand(V(x, 0), V(x + 1, 0)))
+        hist.execute(AddEdgeCommand(V(x, 5), V(x + 1, 5)))
+    scene.selection.update(scene.mesh.edges)
+    host.menu("weld_edges")
+    assert sorted(_ends(e) for e in scene.mesh.edges) == [
+        [(0, 0, 0), (2, 0, 0)], [(0, 5, 0), (2, 5, 0)]]
 
 
 def test_nothing_to_show_skips_the_panel(host):
@@ -360,7 +397,7 @@ state
 key escape
 wait 150
 state
-menu join_segments
+menu weld_edges
 wait 150
 key enter
 wait 150

@@ -81,6 +81,7 @@ fn entry_check(state: &Desktop, id: &str) -> Option<bool> {
             "scene_transitions" => *transitions,
             "scene_play" => *playing,
             "hide_similar" => *similar,
+            "show_keystrokes" => crate::keycast::shown(),
             id => id.strip_prefix("rest_")? == rest,
         })
     })

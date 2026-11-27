@@ -364,7 +364,7 @@ impl Host {
             let transitions=scene.getattr("animation")?.getattr("enabled")?.is_truthy()?;
             let similar=scene.getattr("hide_similar_components")?.is_truthy()?;
             let playing = self.obj.bind(py).getattr("window")?.getattr("scene_player")?.call_method0("is_playing")?.is_truthy()?;
-            Ok((viewport.getattr("edit_rest_mode")?.extract()?,transitions,similar,playing,built_render::can_weld(&scene)?))
+            Ok((viewport.getattr("edit_rest_mode")?.extract()?,transitions,similar,playing,built_render::weld_available(&scene)?))
         }).ok()
     }
 

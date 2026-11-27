@@ -3835,5 +3835,18 @@
  "Korean translation of the interface, and the AI key from an environment variable. In 0.6.2, soft shadows and fixes for macOS.": "Traducción al coreano de la interfaz, y la clave de IA desde una variable de entorno. En la 0.6.2, las sombras suaves y arreglos para macOS.",
  "Exact Move+Ctrl copies, overlapping rotated copies, faster box selection on huge models and the reviewed Indonesian translation.": "Copias exactas con Mover+Ctrl, copias giradas que se solapan, selección por caja más rápida en modelos enormes y la traducción al indonesio revisada.",
  "Snapping to the rest of the model from inside a group or component.": "Los enganches con el resto del modelo desde dentro de un grupo o componente.",
- "“{name}” is no longer linked: its geometry is now part of this model": "«{name}» ya no está vinculado: su geometría forma parte ahora de este modelo"
+ "“{name}” is no longer linked: its geometry is now part of this model": "«{name}» ya no está vinculado: su geometría forma parte ahora de este modelo",
+ "Weld": "Soldar",
+ "Select connected edges to weld.": "Seleccione aristas conectadas para soldar.",
+ "Join connected edges into one curve, or into one straight edge when they line up; with nothing selected, join the model's collinear pieces.": "Une aristas conectadas en una sola curva, o en una sola arista recta si están alineadas; sin selección, une los segmentos alineados del modelo.",
+ "Look at Face": "Mirar la cara",
+ "Look straight at the face under the cursor, from the side you see it, in parallel projection until the next orbit.": "Mirar de frente la cara bajo el cursor, desde el lado en que la ve, en proyección paralela hasta la próxima órbita.",
+ "Point at a face, then press V to look at it.": "Señale una cara y pulse V para mirarla.",
+ "Show Keystrokes": "Mostrar teclas",
+ "Show the keys you press, the values you type and the tool a key picks at the bottom of the model, for screen recordings.": "Muestra abajo del modelo las teclas que pulsa, los valores que escribe y la herramienta que elige una tecla, para grabaciones de pantalla.",
+ "Show keystrokes": "Mostrar teclas",
+ "A pill at the bottom of the model shows the keys you press, the value you type and the tool a key picks, for screen recordings.": "Una píldora abajo del modelo muestra las teclas que pulsa, el valor que escribe y la herramienta que elige una tecla, para grabaciones de pantalla.",
+ "Recording": "Grabación",
+ "Animate camera moves": "Animar los movimientos de cámara",
+ "Standard views, Look at Face, Zoom Extents, Zoom Selection and scene changes glide into place in a quarter second; off, they jump.": "Las vistas estándar, Mirar la cara, Zoom extensión, Zoom a la selección y los cambios de escena se deslizan en un cuarto de segundo; desactivado, saltan."
 }

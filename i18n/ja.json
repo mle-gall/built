@@ -3835,5 +3835,18 @@
  "Korean translation of the interface, and the AI key from an environment variable. In 0.6.2, soft shadows and fixes for macOS.": "インターフェースの韓国語翻訳、および環境変数からの AI キー。0.6.2 ではソフトシャドウと macOS 向けの修正も。",
  "Exact Move+Ctrl copies, overlapping rotated copies, faster box selection on huge models and the reviewed Indonesian translation.": "移動+Ctrl の正確なコピー、重なる回転コピー、巨大モデルでの高速な矩形選択、そして見直されたインドネシア語訳。",
  "Snapping to the rest of the model from inside a group or component.": "グループやコンポーネントの内側からモデルの残りへのスナップ。",
- "“{name}” is no longer linked: its geometry is now part of this model": "「{name}」のリンクを解除しました：そのジオメトリはこのモデルの一部になりました"
+ "“{name}” is no longer linked: its geometry is now part of this model": "「{name}」のリンクを解除しました：そのジオメトリはこのモデルの一部になりました",
+ "Weld": "溶接",
+ "Select connected edges to weld.": "溶接する、つながったエッジを選択してください。",
+ "Join connected edges into one curve, or into one straight edge when they line up; with nothing selected, join the model's collinear pieces.": "つながったエッジを1本の曲線に、一直線に並ぶ場合は1本の直線エッジにまとめます。何も選択していないときは、モデルの同一直線上の線分をまとめます。",
+ "Look at Face": "面を正面から見る",
+ "Look straight at the face under the cursor, from the side you see it, in parallel projection until the next orbit.": "カーソルの下の面を、見えている側から正面に見ます。次のオービットまで平行投影です。",
+ "Point at a face, then press V to look at it.": "面を指してから V を押すと、その面を正面から見ます。",
+ "Show Keystrokes": "キー入力を表示",
+ "Show the keys you press, the values you type and the tool a key picks at the bottom of the model, for screen recordings.": "押したキー、入力した値、キーで選んだツールをモデルの下部に表示します。画面収録用です。",
+ "Show keystrokes": "キー入力を表示",
+ "A pill at the bottom of the model shows the keys you press, the value you type and the tool a key picks, for screen recordings.": "モデルの下部のピルに、押したキー、入力した値、キーで選んだツールを表示します。画面収録用です。",
+ "Recording": "収録",
+ "Animate camera moves": "カメラの移動をアニメーション",
+ "Standard views, Look at Face, Zoom Extents, Zoom Selection and scene changes glide into place in a quarter second; off, they jump.": "標準ビュー、面を正面から見る、全体表示、選択範囲を表示、シーンの切り替えが 4 分の 1 秒で滑らかに移動します。オフにすると瞬時に切り替わります。"
 }

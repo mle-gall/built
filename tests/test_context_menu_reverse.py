@@ -77,9 +77,12 @@ def test_align_view_from_face_menu(ventana, vertices):
     camera = ventana.viewport.camera
     camera.set_projection("parallel")
     distance = camera.distance
+    seen = QVector3D.dotProduct(camera.eye() - face.centroid(), face.normal()) > 0
     _choose(ventana, _entries(ventana, [face]), "alignview")
     assert (camera.target - face.centroid()).length() < 1e-5
-    assert QVector3D.dotProduct(camera.forward(), face.normal()) < -0.99999
+    # Look at Face looks square at the face from the side the camera saw.
+    facing = QVector3D.dotProduct(camera.forward(), face.normal())
+    assert (facing < -0.99999) if seen else (facing > 0.99999)
     assert camera.distance == distance
     assert camera.projection_mode() == "parallel"
 

@@ -117,21 +117,19 @@ impl WindowPlayback {
         Self::begin(slf, &vp, vec![view.clone()], arrive)?;
         Ok(true)
     }
-    /// A view command's camera move (a standard view, zoom extents): the
-    /// camera is already where it ends; it goes back to `from` and eases
-    /// out to there over `seconds`. False (the camera stays put) when there
-    /// is nothing to move.
+    /// A view command's camera move (a standard view, Look at Face, zoom
+    /// extents): the camera is already where it ends; it goes back to
+    /// `from` and eases in and out to there over `seconds`. Any input that
+    /// moves the camera, a click in the view or Esc stops it where it is.
+    /// False (the camera stays put) when there is nothing to move.
     fn glide_camera(slf: &Bound<Self>, from: &Obj, seconds: f64) -> PyResult<bool> {
         Self::cancel(slf)?;
         let py = slf.py();
         let vp = slf.getattr("_window")?.call_method0("_active_view")?;
         let camera = vp.getattr("camera")?;
-        let kw = PyDict::new(py);
-        kw.set_item("ease_out", true)?;
-        let started = slf.getattr("timeline")?.call_method(
+        let started = slf.getattr("timeline")?.call_method1(
             "start_glide",
             (from, pose(&camera)?, seconds, slf.call_method0("_clock")?),
-            Some(&kw),
         )?;
         if !started.is_truthy()? {
             return Ok(false);

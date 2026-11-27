@@ -1,0 +1,44 @@
+# A box with a cylinder on top: Rectangle, Push/Pull, Circle, Push/Pull,
+# then an orbit and Zoom Extents. Coordinates are logical pixels of a
+# 1600 x 1000 window on a blank model (the default isometric camera).
+size 1600 1000
+
+pause 500
+key r                       # Rectangle
+click 640 520               # first corner, on the ground
+point 820 600               # pull it open
+type 4;3                    # 4 m by 3 m
+key enter
+capture 1-rectangle
+pause 400
+
+key p                       # Push/Pull
+click 760 540               # the rectangle
+point 760 420
+type 2.5                    # 2.5 m up
+key enter
+capture 2-box
+pause 400
+
+key c                       # Circle
+click 798 388               # the centre, on the top face
+point 860 396
+type 0.8                    # radius
+key enter
+capture 3-circle
+pause 400
+
+key p
+click 798 386               # the disc
+point 798 290
+type 1.5
+key enter
+capture 4-cylinder
+pause 500
+
+point 800 650
+orbit -240 70 1200          # middle-button orbit
+key z shift                 # Zoom Extents (glides)
+pause 600
+capture 5-orbit
+pause 1200

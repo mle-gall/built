@@ -3843,5 +3843,18 @@
  "Korean translation of the interface, and the AI key from an environment variable. In 0.6.2, soft shadows and fixes for macOS.": "Koreańskie tłumaczenie interfejsu oraz klucz AI ze zmiennej środowiskowej. W 0.6.2 miękkie cienie i poprawki dla macOS.",
  "Exact Move+Ctrl copies, overlapping rotated copies, faster box selection on huge models and the reviewed Indonesian translation.": "Dokładne kopie przez Przesuń+Ctrl, nakładające się obrócone kopie, szybsze zaznaczanie ramką w ogromnych modelach i poprawione tłumaczenie indonezyjskie.",
  "Snapping to the rest of the model from inside a group or component.": "Przyciąganie do reszty modelu z wnętrza grupy lub komponentu.",
- "“{name}” is no longer linked: its geometry is now part of this model": "„{name}” nie jest już połączony: jego geometria jest teraz częścią tego modelu"
+ "“{name}” is no longer linked: its geometry is now part of this model": "„{name}” nie jest już połączony: jego geometria jest teraz częścią tego modelu",
+ "Weld": "Zespawaj",
+ "Select connected edges to weld.": "Zaznacz połączone krawędzie do zespawania.",
+ "Join connected edges into one curve, or into one straight edge when they line up; with nothing selected, join the model's collinear pieces.": "Łączy połączone krawędzie w jedną krzywą albo w jedną prostą krawędź, gdy leżą w linii; bez zaznaczenia łączy współliniowe odcinki modelu.",
+ "Look at Face": "Spójrz na ścianę",
+ "Look straight at the face under the cursor, from the side you see it, in parallel projection until the next orbit.": "Spójrz prosto na ścianę pod kursorem, od strony, z której ją widzisz, w rzucie równoległym do następnego obrotu.",
+ "Point at a face, then press V to look at it.": "Wskaż ścianę i naciśnij V, aby na nią spojrzeć.",
+ "Show Keystrokes": "Pokaż klawisze",
+ "Show the keys you press, the values you type and the tool a key picks at the bottom of the model, for screen recordings.": "Pokazuje na dole modelu naciskane klawisze, wpisywane wartości i narzędzie wybrane klawiszem, do nagrań ekranu.",
+ "Show keystrokes": "Pokaż klawisze",
+ "A pill at the bottom of the model shows the keys you press, the value you type and the tool a key picks, for screen recordings.": "Pastylka na dole modelu pokazuje naciskane klawisze, wpisywaną wartość i narzędzie wybrane klawiszem, do nagrań ekranu.",
+ "Recording": "Nagrywanie",
+ "Animate camera moves": "Animuj ruchy kamery",
+ "Standard views, Look at Face, Zoom Extents, Zoom Selection and scene changes glide into place in a quarter second; off, they jump.": "Widoki standardowe, Spójrz na ścianę, Pokaż wszystko, Pokaż zaznaczenie i zmiany sceny płynnie przechodzą w ćwierć sekundy; wyłączone przeskakują."
 }

@@ -3869,5 +3869,18 @@
  "Korean translation of the interface, and the AI key from an environment variable. In 0.6.2, soft shadows and fixes for macOS.": "الترجمة الكورية للواجهة، ومفتاح الذكاء الاصطناعي من متغير بيئة. وفي 0.6.2: الظلال الناعمة وإصلاحات لنظام macOS.",
  "Exact Move+Ctrl copies, overlapping rotated copies, faster box selection on huge models and the reviewed Indonesian translation.": "نسخ دقيقة بـ Move+Ctrl، ونسخ مدوَّرة متداخلة، وتحديد بالمربع أسرع في النماذج الضخمة، ومراجعة الترجمة الإندونيسية.",
  "Snapping to the rest of the model from inside a group or component.": "الالتقاط إلى بقية النموذج من داخل مجموعة أو مكوّن.",
- "“{name}” is no longer linked: its geometry is now part of this model": "لم يعد «{name}» مرتبطًا: أصبحت هندسته الآن جزءًا من هذا النموذج"
+ "“{name}” is no longer linked: its geometry is now part of this model": "لم يعد «{name}» مرتبطًا: أصبحت هندسته الآن جزءًا من هذا النموذج",
+ "Weld": "لحام",
+ "Select connected edges to weld.": "حدد حوافًا متصلة للحامها.",
+ "Join connected edges into one curve, or into one straight edge when they line up; with nothing selected, join the model's collinear pieces.": "يجمع الحواف المتصلة في منحنى واحد، أو في حافة مستقيمة واحدة إذا كانت على استقامة واحدة؛ دون تحديد، يجمع القطع المتسامتة في النموذج.",
+ "Look at Face": "النظر إلى الوجه",
+ "Look straight at the face under the cursor, from the side you see it, in parallel projection until the next orbit.": "النظر مباشرة إلى الوجه تحت المؤشر، من الجهة التي تراه منها، بإسقاط متوازٍ حتى الدوران التالي.",
+ "Point at a face, then press V to look at it.": "أشر إلى وجه، ثم اضغط V للنظر إليه.",
+ "Show Keystrokes": "إظهار المفاتيح",
+ "Show the keys you press, the values you type and the tool a key picks at the bottom of the model, for screen recordings.": "يعرض أسفل النموذج المفاتيح التي تضغطها والقيم التي تكتبها والأداة التي يختارها مفتاح، لتسجيلات الشاشة.",
+ "Show keystrokes": "إظهار المفاتيح",
+ "A pill at the bottom of the model shows the keys you press, the value you type and the tool a key picks, for screen recordings.": "شارة أسفل النموذج تعرض المفاتيح التي تضغطها والقيمة التي تكتبها والأداة التي يختارها مفتاح، لتسجيلات الشاشة.",
+ "Recording": "التسجيل",
+ "Animate camera moves": "تحريك حركات الكاميرا",
+ "Standard views, Look at Face, Zoom Extents, Zoom Selection and scene changes glide into place in a quarter second; off, they jump.": "تنزلق المناظر القياسية والنظر إلى الوجه وتكبير الكل وتكبير التحديد وتغييرات المشاهد إلى مكانها في ربع ثانية؛ عند الإيقاف، تقفز."
 }

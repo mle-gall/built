@@ -65,9 +65,9 @@ def test_the_folder_opens_through_xdg_open_with_the_host_env(frozen_appimage):
 
 
 def test_a_web_page_too(frozen_appimage):
-    D.open_url("https://ingetrazo.com/extensiones")
+    D.open_url("https://github.com/mle-gall/built/blob/main/docs/plugins.md")
     (cmd, _kw), = frozen_appimage
-    assert cmd[1] == "https://ingetrazo.com/extensiones"
+    assert cmd[1] == "https://github.com/mle-gall/built/blob/main/docs/plugins.md"
 
 
 @pytest.mark.parametrize("box", ["FLATPAK_ID", "SNAP"])

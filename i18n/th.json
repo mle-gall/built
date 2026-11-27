@@ -3838,5 +3838,18 @@
  "Korean translation of the interface, and the AI key from an environment variable. In 0.6.2, soft shadows and fixes for macOS.": "คำแปลภาษาเกาหลีของส่วนติดต่อผู้ใช้ และคีย์ AI จากตัวแปรสภาพแวดล้อม ใน 0.6.2 มีเงานุ่มและการแก้ไขสำหรับ macOS",
  "Exact Move+Ctrl copies, overlapping rotated copies, faster box selection on huge models and the reviewed Indonesian translation.": "การคัดลอกด้วย ย้าย+Ctrl ที่แม่นยำ สำเนาที่หมุนแล้วซ้อนทับกัน การเลือกแบบกรอบที่เร็วขึ้นในโมเดลขนาดใหญ่มาก และคำแปลภาษาอินโดนีเซียที่ปรับปรุงแล้ว",
  "Snapping to the rest of the model from inside a group or component.": "การสแนปกับส่วนอื่นของโมเดลจากภายในกลุ่มหรือคอมโพเนนต์",
- "“{name}” is no longer linked: its geometry is now part of this model": "“{name}” ไม่ได้ลิงก์อีกต่อไป: รูปทรงเรขาคณิตของมันเป็นส่วนหนึ่งของโมเดลนี้แล้ว"
+ "“{name}” is no longer linked: its geometry is now part of this model": "“{name}” ไม่ได้ลิงก์อีกต่อไป: รูปทรงเรขาคณิตของมันเป็นส่วนหนึ่งของโมเดลนี้แล้ว",
+ "Weld": "เชื่อม",
+ "Select connected edges to weld.": "เลือกขอบที่ต่อกันเพื่อเชื่อม",
+ "Join connected edges into one curve, or into one straight edge when they line up; with nothing selected, join the model's collinear pieces.": "รวมขอบที่ต่อกันเป็นเส้นโค้งเดียว หรือเป็นขอบตรงเส้นเดียวเมื่ออยู่ในแนวเดียวกัน ถ้าไม่ได้เลือกอะไร จะรวมชิ้นส่วนที่อยู่ในแนวเดียวกันของโมเดล",
+ "Look at Face": "มองตรงไปที่หน้า",
+ "Look straight at the face under the cursor, from the side you see it, in parallel projection until the next orbit.": "มองตรงไปที่หน้าใต้เคอร์เซอร์จากด้านที่คุณเห็น ในภาพฉายขนานจนกว่าจะหมุนวงโคจรครั้งถัดไป",
+ "Point at a face, then press V to look at it.": "ชี้ไปที่หน้า แล้วกด V เพื่อมองตรงไปที่หน้านั้น",
+ "Show Keystrokes": "แสดงปุ่มที่กด",
+ "Show the keys you press, the values you type and the tool a key picks at the bottom of the model, for screen recordings.": "แสดงปุ่มที่คุณกด ค่าที่คุณพิมพ์ และเครื่องมือที่ปุ่มเลือก ที่ด้านล่างของโมเดล สำหรับการบันทึกหน้าจอ",
+ "Show keystrokes": "แสดงปุ่มที่กด",
+ "A pill at the bottom of the model shows the keys you press, the value you type and the tool a key picks, for screen recordings.": "ป้ายด้านล่างของโมเดลแสดงปุ่มที่คุณกด ค่าที่คุณพิมพ์ และเครื่องมือที่ปุ่มเลือก สำหรับการบันทึกหน้าจอ",
+ "Recording": "การบันทึก",
+ "Animate camera moves": "เคลื่อนไหวกล้องอย่างนุ่มนวล",
+ "Standard views, Look at Face, Zoom Extents, Zoom Selection and scene changes glide into place in a quarter second; off, they jump.": "มุมมองมาตรฐาน มองตรงไปที่หน้า ซูมทั้งหมด ซูมส่วนที่เลือก และการเปลี่ยนฉาก จะเลื่อนเข้าที่ภายในหนึ่งในสี่วินาที ถ้าปิด จะกระโดดไปทันที"
 }

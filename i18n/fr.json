@@ -3991,5 +3991,18 @@
  "No edges need changing": "Aucune arête à modifier",
  "Smoothed {n} edge(s)": "{n} arête(s) lissée(s)",
  "Unsoftened {n} edge(s)": "{n} arête(s) rendue(s) vive(s)",
- "“{name}” is no longer linked: its geometry is now part of this model": "« {name} » n'est plus lié : sa géométrie fait maintenant partie de ce modèle"
+ "“{name}” is no longer linked: its geometry is now part of this model": "« {name} » n'est plus lié : sa géométrie fait maintenant partie de ce modèle",
+ "Weld": "Souder",
+ "Select connected edges to weld.": "Sélectionnez des arêtes reliées à souder.",
+ "Join connected edges into one curve, or into one straight edge when they line up; with nothing selected, join the model's collinear pieces.": "Réunit des arêtes reliées en une seule courbe, ou en une seule arête droite si elles sont alignées ; sans sélection, réunit les segments alignés du modèle.",
+ "Look at Face": "Regarder la face",
+ "Look straight at the face under the cursor, from the side you see it, in parallel projection until the next orbit.": "Regarder la face sous le curseur bien en face, du côté où vous la voyez, en projection parallèle jusqu'à la prochaine orbite.",
+ "Point at a face, then press V to look at it.": "Pointez une face, puis appuyez sur V pour la regarder.",
+ "Show Keystrokes": "Afficher les touches",
+ "Show the keys you press, the values you type and the tool a key picks at the bottom of the model, for screen recordings.": "Affiche en bas du modèle les touches pressées, les valeurs tapées et l'outil qu'une touche choisit, pour les enregistrements d'écran.",
+ "Show keystrokes": "Afficher les touches",
+ "A pill at the bottom of the model shows the keys you press, the value you type and the tool a key picks, for screen recordings.": "Une pastille en bas du modèle montre les touches pressées, la valeur tapée et l'outil qu'une touche choisit, pour les enregistrements d'écran.",
+ "Recording": "Enregistrement",
+ "Animate camera moves": "Animer les mouvements de caméra",
+ "Standard views, Look at Face, Zoom Extents, Zoom Selection and scene changes glide into place in a quarter second; off, they jump.": "Les vues standard, Regarder la face, Zoom étendu, Zoom sur la sélection et les changements de scène glissent en place en un quart de seconde ; désactivé, ils sautent."
 }

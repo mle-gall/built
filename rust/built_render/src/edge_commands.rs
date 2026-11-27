@@ -178,7 +178,7 @@ const REASONS: [(&str, &str, &str); 5] = [
     ("curve", "Curve", "Kept: part of a curve"),
 ];
 
-fn placement<'py>(scene: &Bound<'py, PyAny>) -> PyResult<Option<Bound<'py, PyAny>>> {
+pub(crate) fn placement<'py>(scene: &Bound<'py, PyAny>) -> PyResult<Option<Bound<'py, PyAny>>> {
     let group = scene.getattr("edit_group")?;
     if group.is_none() {
         return Ok(None);
@@ -227,6 +227,143 @@ impl JoinMarks {
             })
             .collect()
     }
+}
+
+/// What Weld Edges does with the edges a selection holds (the .skp
+/// command, with what Join Segments used to do folded in):
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum WeldPlan {
+    /// Nothing selected: the model's collinear pieces, after a preview.
+    JoinModel,
+    /// One connected chain that is straight end to end: one straight edge.
+    Straighten,
+    /// One connected chain with corners or bends: one curve.
+    Curve,
+    /// Straight pieces of several runs: each run becomes one edge.
+    JoinRuns,
+    /// Nothing Weld can do with these.
+    Nothing,
+}
+
+/// `chain`: the selection is one connected edge chain (Store::weld_chain);
+/// `joins`: points Join would take away. A chain of n edges is straight
+/// when Join takes away all of its n - 1 inner points.
+pub(crate) fn weld_plan(selected: usize, chain: bool, joins: usize) -> WeldPlan {
+    match (selected, chain) {
+        (0, _) => WeldPlan::JoinModel,
+        (_, true) if joins > 0 && joins + 1 == selected => WeldPlan::Straighten,
+        (_, true) => WeldPlan::Curve,
+        _ if joins > 0 => WeldPlan::JoinRuns,
+        _ => WeldPlan::Nothing,
+    }
+}
+
+/// Weld Edges (Edit menu, right-click): a connected chain becomes one curve,
+/// or one straight edge when the chain is straight; with several straight
+/// runs selected each becomes one edge; with nothing selected, the model's
+/// collinear pieces are joined after a preview. `join_segments` is kept as
+/// an alias of this command for scripts.
+#[pyfunction]
+fn weld_edges(win: &Bound<'_, PyAny>) -> PyResult<()> {
+    let py = win.py();
+    let vp = win.getattr("viewport")?;
+    let scene = vp.getattr("scene")?;
+    let mesh = scene.getattr("mesh")?;
+    let selection = scene.getattr("selection")?;
+    if !selection.is_truthy()? {
+        return join_segments(win);
+    }
+    let selected = live_edges(&mesh, &selection)?;
+    if selected.is_empty() || selected.len() != selection.len()? {
+        return status(win, "Select connected edges to weld.", 0);
+    }
+    let chain = crate::context_edits::can_weld(&scene)?;
+    let verdicts = py
+        .import("built_core.edits")?
+        .call_method1("join_preview", (&mesh, &selected))?
+        .cast_into::<PyDict>()?;
+    let mut joins = 0;
+    for (_, reason) in verdicts.iter() {
+        if reason.extract::<String>()? == "join" {
+            joins += 1;
+        }
+    }
+    match weld_plan(selected.len(), chain, joins) {
+        WeldPlan::Curve => {
+            let keys = selection.call_method1("element_keys", ("edge",))?;
+            let cmd = py
+                .import("built_core.history")?
+                .call_method1("WeldEdgesCommand", (keys,))?;
+            vp.getattr("history")?.call_method1("execute", (&cmd,))?;
+            vp.call_method0("update")?;
+            Ok(())
+        }
+        WeldPlan::Straighten | WeldPlan::JoinRuns => join_answer(
+            win, &mesh, scene.getattr("version")?.extract()?, selected.as_any(), false, joins, "ok",
+            &py.None().into_bound(py),
+        ),
+        WeldPlan::JoinModel => join_segments(win),
+        WeldPlan::Nothing => status(win, "Select connected edges to weld.", 0),
+    }
+}
+
+/// Two of these edges continue one another in a straight line (a point
+/// Weld would take away): they share an end and leave it in opposite
+/// directions along one line.
+pub(crate) fn straight_pair(ends: &[(glam::DVec3, glam::DVec3)]) -> bool {
+    let tol = 1e-9;
+    ends.iter().enumerate().any(|(i, &(a0, a1))| {
+        ends[i + 1..].iter().any(|&(b0, b1)| {
+            [(a0, a1, b0, b1), (a0, a1, b1, b0), (a1, a0, b0, b1), (a1, a0, b1, b0)]
+                .into_iter()
+                .any(|(p, u, q, v)| {
+                    let (du, dv) = (u - p, v - q);
+                    let scale = du.length() * dv.length();
+                    (p - q).length() <= tol * (1. + p.length())
+                        && scale > 0.
+                        && du.cross(dv).length() <= 1e-9 * scale
+                        && du.dot(dv) < 0.
+                })
+        })
+    })
+}
+
+/// Weld Edges is offered for the selection: nothing selected (the model's
+/// collinear pieces), one connected chain, or edges of which two line up.
+/// Beyond 256 edges any edge-only selection (checking would cost a frame).
+pub fn weld_available(scene: &Bound<'_, PyAny>) -> PyResult<bool> {
+    let selection = scene.getattr("selection")?;
+    if !selection.is_truthy()? {
+        return Ok(true);
+    }
+    Ok(weld_offered(scene)?)
+}
+
+/// Weld Edges for a non-empty selection of edges only (the context menu).
+pub(crate) fn weld_offered(scene: &Bound<'_, PyAny>) -> PyResult<bool> {
+    let selection = scene.getattr("selection")?;
+    let n = selection.len()?;
+    let snap = selection.call_method0("snapshot")?;
+    if n < 2 || snap.get_item(3)?.extract::<usize>()? != n {
+        return Ok(false);
+    }
+    if crate::context_edits::can_weld(scene)? || n > 256 {
+        return Ok(true);
+    }
+    let store = scene.getattr("mesh")?.getattr("_store")?;
+    let stamp = (snap.get_item(6)?.extract::<u64>()?, store.getattr("revision")?.extract::<u64>()?, store.as_ptr() as usize);
+    thread_local! { static LAST: std::cell::Cell<Option<((u64, u64, usize), bool)>> = const { std::cell::Cell::new(None) }; }
+    if let Some((_, offered)) = LAST.get().filter(|(prior, _)| *prior == stamp) {
+        return Ok(offered);
+    }
+    use crate::document_host::xyz;
+    let mut ends = Vec::with_capacity(n);
+    for edge in matching(&selection, "built_core.mesh", "Edge")?.iter() {
+        ends.push((xyz(&edge.getattr("a")?)?, xyz(&edge.getattr("b")?)?));
+    }
+    let offered = straight_pair(&ends);
+    LAST.set(Some((stamp, offered)));
+    Ok(offered)
 }
 
 #[pyfunction]
@@ -289,7 +426,7 @@ fn join_segments(win: &Bound<'_, PyAny>) -> PyResult<()> {
     let buttons = PyList::empty(py);
     buttons.append(("cancel", translated(py, "Cancel", None)?))?;
     if counts[0] > 0 {
-        buttons.append(("ok", translated(py, "Join", None)?))?;
+        buttons.append(("ok", translated(py, "Weld", None)?))?;
         kw.set_item(
             "note",
             translated(py, "{n} points will be taken away", Some(&vars))?,
@@ -297,7 +434,7 @@ fn join_segments(win: &Bound<'_, PyAny>) -> PyResult<()> {
     } else {
         kw.set_item("note", translated(py, "No point can be taken away", None)?)?;
     }
-    kw.set_item("key", "join_segments")?;
+    kw.set_item("key", "weld_edges")?;
     kw.set_item("width", 288)?;
     kw.set_item("buttons", buttons)?;
     kw.set_item(
@@ -317,7 +454,7 @@ fn join_segments(win: &Bound<'_, PyAny>) -> PyResult<()> {
     )?;
     let form = forms
         .getattr("Form")?
-        .call((translated(py, "Join Segments", None)?, fields), Some(&kw))?;
+        .call((translated(py, "Weld Edges", None)?, fields), Some(&kw))?;
     form.setattr("join_marks", Py::new(py, JoinMarks { points })?)?;
     forms.call_method1("show", (win, form))?;
     Ok(())
@@ -387,5 +524,38 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(divide_selected, m)?)?;
     m.add_function(wrap_pyfunction!(split_pieces, m)?)?;
     m.add_function(wrap_pyfunction!(join_segments, m)?)?;
+    m.add_function(wrap_pyfunction!(weld_edges, m)?)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod weld_tests {
+    use super::{weld_plan, WeldPlan::*};
+
+    #[test]
+    fn weld_takes_over_what_join_did() {
+        // Nothing selected: the model's collinear pieces, after a preview.
+        assert_eq!(weld_plan(0, false, 0), JoinModel);
+        // A straight chain becomes one straight edge, not a curve.
+        assert_eq!(weld_plan(4, true, 3), Straighten);
+        // A chain with a corner or a bend is one curve, as .skp welds it,
+        // even where some of its pieces line up.
+        assert_eq!(weld_plan(4, true, 2), Curve);
+        assert_eq!(weld_plan(3, true, 0), Curve);
+        // Several straight runs: each one joined.
+        assert_eq!(weld_plan(6, false, 4), JoinRuns);
+        assert_eq!(weld_plan(2, false, 0), Nothing);
+    }
+
+    #[test]
+    fn weld_is_offered_where_two_edges_line_up() {
+        use glam::DVec3 as V;
+        let x = |a: f64, b: f64| (V::new(a, 0., 0.), V::new(b, 0., 0.));
+        assert!(super::straight_pair(&[x(0., 1.), x(2., 1.)]));
+        assert!(super::straight_pair(&[x(1., 2.), x(0., 1.)]));
+        // Opposite sides of a square, a corner, or a fold back: no.
+        assert!(!super::straight_pair(&[x(0., 1.), (V::new(0., 1., 0.), V::new(1., 1., 0.))]));
+        assert!(!super::straight_pair(&[x(0., 1.), (V::new(1., 0., 0.), V::new(1., 1., 0.))]));
+        assert!(!super::straight_pair(&[x(0., 1.), x(1., 0.5)]));
+    }
 }

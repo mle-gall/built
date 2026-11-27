@@ -748,6 +748,7 @@ fn navigation<'py>(py: Python<'py>, env: &Bound<'py, PyAny>) -> PyResult<Bound<'
         Binding::new("touch_slide", key_get(py, "nav/touch_slide", obj(py, "orbit")?, Kind::Str)?, key_set(py, "nav/touch_slide", Kind::Str)?),
         Binding::new("trackpad_inertia", key_get(py, "nav/trackpad_inertia", obj(py, "1")?, Kind::Bool)?, key_set(py, "nav/trackpad_inertia", Kind::Bool)?),
         Binding::new("auto_perspective", key_get(py, "nav/auto_perspective", obj(py, "1")?, Kind::Bool)?, key_set(py, "nav/auto_perspective", Kind::Bool)?),
+        Binding::new("animate_camera", key_get(py, crate::native_view_actions::ANIMATE_CAMERA, obj(py, "1")?, Kind::Bool)?, key_set(py, crate::native_view_actions::ANIMATE_CAMERA, Kind::Bool)?),
         Binding::new("pinch_sensitivity", key_get(py, "nav/pinch_sensitivity", obj(py, 100)?, Kind::Int)?, key_set(py, "nav/pinch_sensitivity", Kind::Str)?),
         Binding::new("trackpad_slide", func(py, |py, _a| Ok(py.import("built_render")?.getattr("trackpad_nav")?.call_method0("load_slide_mode")?.unbind()))?, applier(py, "apply_slides")?),
         Binding::new("cursor_style", func(py, |py, a| {
@@ -836,6 +837,16 @@ fn display<'py>(py: Python<'py>, env: &Bound<'py, PyAny>) -> PyResult<Bound<'py,
             Ok(none(py))
         })?),
         fade,
+        Binding::new("show_keystrokes", func(py, |py, _a| obj(py, crate::keycast::shown()))?, func(py, |py, a| {
+            let (env, v) = (a.get_item(0)?, a.get_item(1)?);
+            let on = v.is_truthy()?;
+            crate::keycast::set_shown(on);
+            let st = env.getattr("st")?;
+            st.call_method1("setValue", (crate::keycast::SETTING, if on { "1" } else { "0" }))?;
+            st.call_method0("sync")?;
+            env.getattr("win")?.getattr("view")?.call_method0("update")?;
+            Ok(none(py))
+        })?),
     ];
     pref_page(py, env, "display", rows)
 }
