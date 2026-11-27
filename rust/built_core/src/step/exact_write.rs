@@ -52,7 +52,78 @@ fn orient(rev: bool) -> Orientation {
         Orientation::Forward
     }
 }
+/// Exact mass property for a complete circular band. STEP producers can
+/// start a wire at any coedge, which must not change a reopen comparison.
+fn circular_volume(rows: &Rows) -> Option<f64> {
+    use std::f64::consts::{PI, TAU};
+    let t = rows.topology.as_ref()?;
+    if !t.void_starts.is_empty() || t.faces.len() != 3 || t.edges.len() != 3 {
+        return None;
+    }
+    let mut caps = Vec::new();
+    let mut wall = None;
+    for f in &t.faces {
+        let [ring] = f.loops.as_slice() else {
+            return None;
+        };
+        match &rows.surfaces[f.surface as usize] {
+            Surface::Plane { frame } => {
+                let [c] = ring.as_slice() else { return None };
+                let e = t.edges.iter().find(|e| Some(e.id) == c.edge)?;
+                if e.vertices[0] != e.vertices[1]
+                    || (e.interval[1] - e.interval[0] - TAU).abs() > 1e-10
+                {
+                    return None;
+                }
+                let Curve::Circle { frame: rim, radius } = &rows.curves[e.curve as usize] else {
+                    return None;
+                };
+                caps.push((
+                    rim.origin,
+                    *radius,
+                    frame.axis * if f.reversed { -1. } else { 1. },
+                    e.id,
+                ));
+            }
+            Surface::Cylinder { frame, .. } | Surface::Cone { frame, .. }
+                if !f.reversed && ring.len() == 4 =>
+            {
+                if wall.replace((frame, ring)).is_some() {
+                    return None;
+                }
+            }
+            _ => return None,
+        }
+    }
+    let [(a, ra, na, ea), (b, rb, nb, eb)] = caps.as_slice() else {
+        return None;
+    };
+    let (frame, ring) = wall?;
+    if ea == eb
+        || [ea, eb]
+            .iter()
+            .any(|&&id| ring.iter().filter(|c| c.edge == Some(id)).count() != 1)
+    {
+        return None;
+    }
+    let d = *b - *a;
+    let h = d.length();
+    let axis = d.try_normalize()?;
+    if na.dot(axis) > -1. + 1e-12
+        || nb.dot(axis) < 1. - 1e-12
+        || frame.axis.cross(axis).length() > 1e-10
+    {
+        return None;
+    }
+    Some(PI * h * (ra * ra + ra * rb + rb * rb) / 3.)
+}
 fn volume(rows: &Rows, tolerance: f64) -> Result<f64, String> {
+    if let Some((_, r)) = super::sphere::full(rows) {
+        return Ok(super::sphere::volume(r));
+    }
+    if let Some(v) = circular_volume(rows) {
+        return Ok(v);
+    }
     let mut t = rows.topology.clone().ok_or("missing topology")?;
     t.display_tolerance = Some(tolerance.max(super::DISPLAY_DEFLECTION));
     let mesh = t.mesh(rows)?;
@@ -87,6 +158,9 @@ impl Geometry {
             };
             return body.add(b, part, name);
         };
+        if let Some((f, r)) = super::sphere::full(&p.rows) {
+            return super::sphere::add(b, part, name, f, r).map_err(|e| e.to_string());
+        }
         let t = p.topology();
         let mut vertices = HashMap::new();
         for (&id, point) in &t.vertices {
@@ -163,7 +237,9 @@ impl Geometry {
             for (i, ring) in f.loops.iter().enumerate() {
                 let mut coedges = Vec::new();
                 for c in ring {
-                    let id = c.edge.ok_or("unsupported singular bound")?;
+                    // A collapsed chart side is a vertex in space. Both
+                    // neighbouring edges already terminate at that vertex.
+                    let Some(id) = c.edge else { continue };
                     uses.entry(id).or_default().push(c.reversed);
                     coedges.push((edges[&id], orient(c.reversed)));
                 }

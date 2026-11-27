@@ -12,6 +12,7 @@ use std::collections::HashMap;
 struct Segment {
     a: DVec2,
     b: DVec2,
+    middle: Option<DVec2>,
     error: f64,
     accel: f64,
     ring: usize,
@@ -104,6 +105,19 @@ pub(super) fn certify(
                 all.push(Segment {
                     a,
                     b,
+                    middle: match curve {
+                        Curve::Circle { frame, .. } | Curve::Ellipse { frame, .. }
+                            if dt.abs() / (n as f64) < std::f64::consts::PI =>
+                        {
+                            let at = edge.interval[start] + dt * (j as f64 - 0.5) / n as f64;
+                            Some(project(
+                                frame.origin
+                                    + (curve.point(at)? - frame.origin)
+                                        / (dt / (2. * n as f64)).cos(),
+                            ))
+                        }
+                        _ => None,
+                    },
                     error: bound / 8. + c.tolerance,
                     accel: bound,
                     ring: k,
@@ -117,6 +131,32 @@ pub(super) fn certify(
         rings.push(corners);
     }
     separated(all, &rings)
+}
+/// An affine image of a positive-weight quadratic Bezier arc lies
+/// strictly on one side of a line if all three control points are on
+/// its closed side and at least one is on its open side. Endpoint
+/// contacts are checked independently, including at a tangent cusp.
+fn line_conic(line: Segment, arc: Segment, adjacent: bool) -> bool {
+    let Some(mid) = arc.middle else { return false };
+    if line.accel != 0. {
+        return false;
+    }
+    let d = line.b - line.a;
+    let side = |p: DVec2| d.perp_dot(p - line.a);
+    let signs = [side(arc.a), side(mid), side(arc.b)];
+    if !([1., -1.]
+        .into_iter()
+        .any(|sign| signs.iter().all(|&v| v * sign >= 0.) && signs.iter().any(|&v| v * sign > 0.)))
+    {
+        return false;
+    }
+    [arc.a, arc.b].into_iter().all(|p| {
+        if side(p) != 0. {
+            return true;
+        }
+        let t = (p - line.a).dot(d);
+        t < 0. || t > d.length_squared() || (adjacent && (p == line.a || p == line.b))
+    })
 }
 fn separated(mut all: Vec<Segment>, rings: &[Vec<DVec2>]) -> Result<()> {
     // Overlapping x ranges prune almost all pairs on finely sampled conics.
@@ -134,6 +174,9 @@ fn separated(mut all: Vec<Segment>, rings: &[Vec<DVec2>]) -> Result<()> {
             }
             let delta = a.index.abs_diff(b.index);
             if a.ring == b.ring && (delta == 1 || delta + 1 == rings[a.ring].len()) {
+                continue;
+            }
+            if line_conic(a, b, false) || line_conic(b, a, false) {
                 continue;
             }
             check(
@@ -183,6 +226,9 @@ fn joins(all: &[Segment], count: usize) -> Result<()> {
     for i in 0..all.len() {
         let a = all[i];
         let b = all[(i + 1) % count];
+        if line_conic(a, b, true) || line_conic(b, a, true) {
+            continue;
+        }
         let da = a.b - a.a;
         let db = b.b - b.a;
         let bisector = (da.normalize() + db.normalize())
@@ -245,6 +291,7 @@ pub(super) fn cylinder(
                 all.push(Segment {
                     a,
                     b,
+                    middle: None,
                     error: 0.,
                     accel: 0.,
                     ring: k,
@@ -265,7 +312,7 @@ pub(super) fn cylinder(
             // derivative at most A+2V²/R. R*atan2 has bound 2A+8V²/R.
             let radial = acc + 2. * speed.powi(2) / radius;
             let chart = 3. * acc + 8. * speed.powi(2) / radius;
-            let n = super::patch::divisions(chart, c.tolerance)?
+            let n = super::patch::divisions(chart, c.tolerance / 4.)?
                 .max((speed * 4. / radius).ceil() as usize)
                 .max(1);
             check(
@@ -305,6 +352,7 @@ pub(super) fn cylinder(
                     all.push(Segment {
                         a,
                         b,
+                        middle: None,
                         error: chart / (8. * sq),
                         accel: chart / sq,
                         ring: k,

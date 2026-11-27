@@ -10,7 +10,7 @@ use step_io::{
 pub struct Authored(pub crate::Measure, pub m::RepresentationItemRef);
 type Occurrence = (usize, Frame, m::NextAssemblyUsageOccurrenceId);
 
-fn frame(a: &mut Ap242Author, f: Frame) -> Result<m::Axis2Placement3dId, AuthorError> {
+pub fn frame(a: &mut Ap242Author, f: Frame) -> Result<m::Axis2Placement3dId, AuthorError> {
     let p = a.add_cartesian_point("", f.origin.into())?;
     let z = a.add_direction("", f.axis.into())?;
     let x = a.add_direction("", f.ref_dir.into())?;

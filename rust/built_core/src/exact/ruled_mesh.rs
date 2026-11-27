@@ -9,6 +9,9 @@ use glam::DVec2;
 use std::{collections::HashMap, f64::consts::TAU};
 
 fn triangle(m: &mut Mesh, f: &Face, mut indices: [usize; 3], mut uv: [DVec2; 3]) {
+    if indices[0] == indices[1] || indices[1] == indices[2] || indices[2] == indices[0] {
+        return;
+    }
     if ((uv[1] - uv[0]).perp_dot(uv[2] - uv[0]) < 0.) != f.reversed {
         indices.swap(1, 2);
         uv.swap(1, 2);
@@ -200,10 +203,7 @@ pub(super) fn rectangle(
     let [a, b, c, d] = ring.as_slice() else {
         return Ok(None);
     };
-    if t.edges.len() != 4
-        || t.vertices.len() != 4
-        || ring.iter().any(|u| u.projected || u.edge.is_none())
-    {
+    if ring.iter().any(|u| u.projected) {
         return Ok(None);
     }
     let surface = &rows.surfaces[f.surface as usize];
@@ -275,7 +275,10 @@ pub(super) fn rectangle(
                 None
             };
             let id = if let Some((e, h)) = side {
-                m.edge_samples[&e.edge.unwrap()][if e.reversed { n - h } else { h }]
+                match e.edge {
+                    Some(id) => m.edge_samples[&id][if e.reversed { n - h } else { h }],
+                    None => verts[&e.pole.unwrap()],
+                }
             } else {
                 let id = m.points.len();
                 m.points.push(p.to_array());

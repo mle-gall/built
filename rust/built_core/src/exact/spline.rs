@@ -168,6 +168,44 @@ pub(super) fn bounds(points: &[DVec4], axes: &[(&Axis, f64)]) -> Result<Bounds> 
             .fold(f64::INFINITY, f64::min);
         scale += 2. * axis.degree as f64 * step.abs() / spacing;
     }
+    if let [(axis, step)] = axes {
+        // Derivative control polygons bound the complete homogeneous curve.
+        // Working around a local origin also bounds the rational quotient
+        // independently of the model's distance from the global origin.
+        let knots: Vec<_> = axis
+            .knots
+            .iter()
+            .zip(&axis.multiplicities)
+            .flat_map(|(&k, &m)| std::iter::repeat_n(k, m))
+            .collect();
+        let mut poles: Vec<_> = points
+            .iter()
+            .map(|p| ((p.truncate() - origin) * p.w).extend(p.w))
+            .collect();
+        let mut deriv = [(0f64, 0f64); 2];
+        for (order, (dx, dw)) in deriv.iter_mut().enumerate().take(axis.degree.min(2)) {
+            let degree = axis.degree - order;
+            for i in 0..poles.len() - 1 {
+                let span = knots[i + axis.degree + 1] - knots[i + order + 1];
+                check(span > 0., "undefined spline derivative")?;
+                let d = (poles[i + 1] - poles[i]) * (degree as f64 * step.abs() / span);
+                *dx = dx.max(d.truncate().length());
+                *dw = dw.max(d.w.abs());
+                poles[i] = d;
+            }
+            poles.pop();
+        }
+        let speed = (deriv[0].0 + extent * deriv[0].1) / w_min;
+        let acceleration = (deriv[1].0 + extent * deriv[1].1 + 2. * speed * deriv[0].1) / w_min;
+        check(
+            speed.is_finite() && acceleration.is_finite(),
+            "unresolved spline derivative bound",
+        )?;
+        return Ok(Bounds {
+            speed,
+            acceleration,
+        });
+    }
     let ratio = w_max / w_min;
     let speed = 2. * extent * ratio * scale;
     let acceleration = 2. * extent * ratio * scale * scale + 2. * speed * ratio * scale;

@@ -266,7 +266,7 @@ impl Builder<'_> {
         Ok(())
     }
 }
-pub(super) fn recover(st: &Store) -> Result<NativePatch> {
+pub(super) fn recover(st: &Store) -> Result<Vec<NativePatch>> {
     if st
         .live_slots(Kind::Edge)
         .into_iter()
@@ -274,6 +274,26 @@ pub(super) fn recover(st: &Store) -> Result<NativePatch> {
     {
         return Err("loose or nonmanifold edge in bound geometry");
     }
+    let mut remaining: HashSet<_> = st.live_slots(Kind::Face).into_iter().collect();
+    let mut patches = Vec::new();
+    for root in st.live_slots(Kind::Face) {
+        if !remaining.remove(&root) {
+            continue;
+        }
+        let mut faces = vec![root];
+        let mut i = 0;
+        while i < faces.len() {
+            for (e, _) in st.boundary_edges(faces[i]).into_iter().flatten().flatten() {
+                faces.extend(st.edge_faces(e).into_iter().filter(|g| remaining.remove(g)));
+            }
+            i += 1;
+        }
+        patches.push(component(st, faces)?);
+    }
+    Ok(patches)
+}
+
+fn component(st: &Store, faces: Vec<u32>) -> Result<NativePatch> {
     let mut b = Builder {
         st,
         rows: Rows::default(),
@@ -283,7 +303,6 @@ pub(super) fn recover(st: &Store) -> Result<NativePatch> {
     b.t.tolerance = TOL;
     b.t.display_tolerance = Some(super::DISPLAY_DEFLECTION);
     let mut quads = HashMap::new();
-    let faces = st.live_slots(Kind::Face);
     for &f in &faces {
         if let Some(strip) = st.source_strip(f) {
             let v: [u32; 4] = st.face_rings(f)[0]

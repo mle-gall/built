@@ -281,6 +281,21 @@ pub(super) fn shell_rows(
         metres,
         angle,
     };
+    if shell.faces().count() == 1 && shell.is_closed() {
+        let f = shell.faces().next().unwrap();
+        let bounds: Vec<_> = f.bounds().collect();
+        if let [bound] = bounds.as_slice() {
+            if let (Some(v), SurfaceKind::Spherical(s)) = (bound.vertex(), f.surface().kind()) {
+                return super::sphere::rows(
+                    geom.surface_frame(&s.position)?,
+                    s.radius * metres,
+                    DVec3::from(v.point().ok_or("missing sphere pole")?.xyz()) * metres,
+                    tol,
+                    f.orientation() != sense,
+                );
+            }
+        }
+    }
     let mut t = Topology::default();
     t.tolerance = tol;
     t.display_tolerance = Some(tol.max(super::DISPLAY_DEFLECTION));
@@ -288,6 +303,7 @@ pub(super) fn shell_rows(
     let mut vertices = HashMap::new();
     let mut edges = HashMap::new();
     let mut surfaces = HashMap::new();
+    let pcurve_supports = std::cell::OnceCell::new();
     let mut flipped = std::collections::HashSet::new();
     let mut incidence = HashMap::<u64, Vec<bool>>::new();
     for face in shell.faces() {
@@ -355,7 +371,21 @@ pub(super) fn shell_rows(
                 | SurfaceKind::Bezier(_)
                 | SurfaceKind::Other("COMPLEX" | "RATIONAL_B_SPLINE_SURFACE") => {
                     let n = s.to_nurbs().ok_or("unresolved spline surface")?;
-                    if let Some((surface, flip)) = super::splines::ruled_circle(&n, metres) {
+                    let authored = pcurve_supports.get_or_init(|| {
+                        model
+                            .all::<m::Pcurve>()
+                            .map(|(_, p)| p.basis_surface.entity_key())
+                            .chain(
+                                model
+                                    .all::<m::BoundedPcurve>()
+                                    .map(|(_, p)| p.basis_surface.entity_key()),
+                            )
+                            .collect::<std::collections::HashSet<_>>()
+                    });
+                    if let Some((surface, flip)) = (!authored.contains(&s.key()))
+                        .then(|| super::splines::ruled_circle(&n, metres))
+                        .flatten()
+                    {
                         if flip {
                             flipped.insert(s.key());
                         }
@@ -381,6 +411,7 @@ pub(super) fn shell_rows(
                 uses.reverse()
             }
             let mut ring: Vec<Coedge> = Vec::new();
+            let mut authored = Vec::new();
             for (edge, dir) in uses {
                 let id = if let Some(&id) = edges.get(&edge.key()) {
                     id
@@ -432,6 +463,22 @@ pub(super) fn shell_rows(
                     || matches!(support, Surface::Cylinder { .. })
                         && matches!(curve, Curve::Spline { .. } | Curve::Ellipse { .. })
                         && edge.curve().curve_3d().is_none();
+                let pole = |q: DVec2| match support {
+                    Surface::Cone {
+                        radius, half_angle, ..
+                    } => (radius + q.y * half_angle.sin()).abs() <= tol * 0.1,
+                    Surface::Sphere { radius, .. } => radius * q.y.cos().abs() <= tol * 0.1,
+                    _ => false,
+                };
+                if (pole(a) || pole(b))
+                    && matches!(support, Surface::Cone { .. } | Surface::Sphere { .. })
+                {
+                    if pole(a) {
+                        a.x = b.x;
+                    } else {
+                        b.x = a.x;
+                    }
+                }
                 if let Surface::Cylinder { frame, .. } | Surface::Cone { frame, .. } = support {
                     if let Some(last) = ring.last() {
                         a.x += ((last.uv[1].x - a.x) / TAU).round() * TAU
@@ -493,15 +540,102 @@ pub(super) fn shell_rows(
                     }
                     b = previous;
                 }
-                let trim = geom.pcurve(edge.curve().kind(), s.key(), support, [a, b])?;
+                if edge.curve().curve_3d().is_some() {
+                    authored.push((ring.len(), edge.curve(), e.curve));
+                }
                 ring.push(Coedge {
                     edge: Some(id),
                     pole: None,
                     projected,
                     reversed,
-                    uv: trim,
+                    uv: [a, b],
                     tolerance: tol,
                 });
+            }
+            if !authored.is_empty() {
+                // The initial inverse chart is arbitrary up to a whole turn.
+                // Pick one shift for the entire wire, so two coedges using
+                // the same seam cannot choose the same authored branch.
+                let turns = &[-TAU, 0., TAU][..];
+                let single = &[0.][..];
+                let us = if matches!(
+                    support,
+                    Surface::Cylinder { .. }
+                        | Surface::Cone { .. }
+                        | Surface::Sphere { .. }
+                        | Surface::Torus { .. }
+                ) {
+                    turns
+                } else {
+                    single
+                };
+                let vs = if matches!(support, Surface::Torus { .. }) {
+                    turns
+                } else {
+                    single
+                };
+                let mut best = None;
+                for &u in us {
+                    for &v in vs {
+                        let shift = DVec2::new(u, v);
+                        let mut uses = ring.clone();
+                        for c in &mut uses {
+                            c.uv = c.uv.map(|p| p + shift);
+                        }
+                        let mut score = 0.;
+                        for &(i, source, id) in &authored {
+                            let expected = uses[i].uv;
+                            let trim = geom.pcurve(
+                                source.kind(),
+                                s.key(),
+                                support,
+                                expected,
+                                &rows.curves[id as usize],
+                                tol,
+                            )?;
+                            score += trim[0].distance_squared(expected[0])
+                                + trim[1].distance_squared(expected[1]);
+                            uses[i].uv = trim;
+                        }
+                        if best.as_ref().is_none_or(
+                            |(old, old_shift, _): &(f64, f64, Vec<Coedge>)| {
+                                score < *old || score == *old && shift.length_squared() < *old_shift
+                            },
+                        ) {
+                            best = Some((score, shift.length_squared(), uses));
+                        }
+                    }
+                }
+                ring = best.unwrap().2;
+            }
+            // Coalescing roundoff in two authored chart anchors is followed
+            // by independent lift validation on both incident coedges.
+            for i in 0..ring.len() {
+                let j = (i + 1) % ring.len();
+                if ring[i].uv[1].distance(ring[j].uv[0]) <= 1e-11 {
+                    ring[j].uv[0] = ring[i].uv[1];
+                }
+            }
+            if matches!(support, Surface::Cone { .. } | Surface::Sphere { .. }) && !ring.is_empty()
+            {
+                let mut expanded = Vec::new();
+                for i in 0..ring.len() {
+                    let cur = &ring[i];
+                    let [a, b] = [cur.uv[1], ring[(i + 1) % ring.len()].uv[0]];
+                    expanded.push(cur.clone());
+                    if a != b && a.y == b.y {
+                        let e = &t.edges[cur.edge.unwrap() as usize];
+                        expanded.push(Coedge {
+                            edge: None,
+                            pole: Some(e.vertices[usize::from(!cur.reversed)]),
+                            projected: false,
+                            reversed: false,
+                            uv: [a, b],
+                            tolerance: tol,
+                        });
+                    }
+                }
+                ring = expanded;
             }
             if ring.is_empty() {
                 return Err("unsupported empty or vertex bound");

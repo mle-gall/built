@@ -264,13 +264,52 @@ pub(super) fn ruled_circle(n: &NurbsSurface, m: f64) -> Option<(Surface, bool)> 
             n.weights[i].clone()
         },
     };
-    let a = row(0);
-    let b = row(1);
-    if a.weights != b.weights {
+    let (first, second) = (row(0), row(1));
+    // Equal relative weights make each generator a straight interpolation
+    // between corresponding points on the two end sections.
+    if first.weights.len() != second.weights.len()
+        || first
+            .weights
+            .iter()
+            .zip(&second.weights)
+            .any(|(a, b)| (a * second.weights[0] - b * first.weights[0]).abs() > 1e-13)
+    {
         return None;
     }
-    let (fa, ra, sa) = circular(&a, m)?;
-    let (fb, rb, sb) = circular(&b, m)?;
+    let ca = circular(&first, m);
+    let cb = circular(&second, m);
+    let (mut frame, radius, apex, row_is_first) = match (&ca, &cb) {
+        (Some((f, r, _)), None) => (Some(f.clone()), *r, &second, true),
+        (None, Some((f, r, _))) => (Some(f.clone()), *r, &first, false),
+        _ => (None, 0., &first, false),
+    };
+    if let Some(mut f) = frame.take() {
+        let o = DVec3::from(*apex.control_points.first()?) * m;
+        if !apex
+            .control_points
+            .iter()
+            .all(|p| (DVec3::from(*p) * m).distance(o) < 1e-13)
+        {
+            return None;
+        }
+        let delta = f.origin - o;
+        let h = delta.dot(f.axis);
+        if h.abs() < 1e-12 || (delta - f.axis * h).length() > 1e-12 {
+            return None;
+        }
+        let ab = if row_is_first { -h } else { h };
+        f.axis *= h.signum();
+        return Some((
+            Surface::Cone {
+                frame: f,
+                radius,
+                half_angle: (radius / h.abs()).atan(),
+            },
+            if transposed { ab < 0. } else { ab > 0. },
+        ));
+    }
+    let (fa, ra, sa) = ca?;
+    let (fb, rb, sb) = cb?;
     if (sa - sb).abs() > 1e-10
         || fa.axis.distance(fb.axis) > 1e-10
         || fa.reference.distance(fb.reference) > 1e-10

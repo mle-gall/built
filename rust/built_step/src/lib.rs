@@ -56,7 +56,7 @@ fn missing_name_offset(source: &[u8]) -> Option<usize> {
 }
 
 mod representation;
-pub use representation::Authored;
+pub use representation::{frame as placement_frame, Authored};
 pub mod planar;
 pub mod sheet;
 #[derive(Clone, Copy, Debug)]

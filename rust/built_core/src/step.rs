@@ -9,6 +9,8 @@ mod import;
 mod pcurve;
 mod planar_merge;
 mod rim_solid;
+pub(crate) mod scope;
+mod sphere;
 mod splines;
 mod swept;
 mod units;
@@ -31,10 +33,14 @@ fn bodies(mesh: &Bound<'_, PyAny>) -> PyResult<Vec<Geometry>> {
         return Ok(vec![Geometry::Exact(patch.clone())]);
     }
     if s.state.exact.arcs.is_some() {
-        let patch = rim_solid::recover(s)
+        let patches = rim_solid::recover(s)
+            .map(|p| vec![p])
             .or_else(|_| bands::recover(s))
             .map_err(bad)?;
-        return Ok(vec![Geometry::Exact(std::sync::Arc::new(patch))]);
+        return Ok(patches
+            .into_iter()
+            .map(|p| Geometry::Exact(std::sync::Arc::new(p)))
+            .collect());
     }
     let d = s.dense();
     if d.ef_start.windows(2).any(|w| w[0] == w[1]) {
@@ -144,7 +150,12 @@ fn placement(m: DMat4) -> PyResult<Frame> {
         ref_dir: x.to_array(),
     })
 }
-type BranchKey = (usize, Vec<(usize, [u64; 9])>);
+fn structure(group: &Bound<'_, PyAny>, kind: &str) -> PyResult<bool> {
+    let ext = group.getattr("ext")?;
+    Ok(ext.is_instance_of::<pyo3::types::PyDict>()
+        && ext.call_method1("get", ("step_structure",))?.eq(kind)?)
+}
+type BranchKey = (Vec<usize>, Vec<(usize, [u64; 9])>);
 fn children(
     groups: &Bound<'_, PyAny>,
     defs: &mut Vec<Definition<Geometry>>,
@@ -158,9 +169,29 @@ fn children(
     for g in groups.try_iter()? {
         let g = g?;
         let mesh = g.getattr("mesh")?;
-        let nested = children(&g.getattr("children")?, defs, known, depth + 1)?;
+        let groups = g.getattr("children")?;
+        let mut meshes = vec![mesh];
+        let child_groups = if structure(&g, "product")? {
+            let real = pyo3::types::PyList::empty(g.py());
+            for child in groups.try_iter()? {
+                let child = child?;
+                let xf = child.getattr("xform")?;
+                if structure(&child, "body")?
+                    && !child.getattr("children")?.is_truthy()?
+                    && (xf.is_none() || mat(&xf)? == DMat4::IDENTITY)
+                {
+                    meshes.push(child.getattr("mesh")?);
+                } else {
+                    real.append(child)?;
+                }
+            }
+            real.into_any()
+        } else {
+            groups
+        };
+        let nested = children(&child_groups, defs, known, depth + 1)?;
         let key = (
-            mesh.as_ptr() as usize,
+            meshes.iter().map(|m| m.as_ptr() as usize).collect(),
             nested
                 .iter()
                 .map(|(child, frame)| {
@@ -184,7 +215,13 @@ fn children(
             let id = defs.len();
             defs.push(Definition {
                 name: g.getattr("name")?.extract()?,
-                bodies: bodies(&mesh)?,
+                bodies: meshes
+                    .iter()
+                    .map(bodies)
+                    .collect::<PyResult<Vec<_>>>()?
+                    .into_iter()
+                    .flatten()
+                    .collect(),
                 children: nested,
             });
             known.insert(key, id);

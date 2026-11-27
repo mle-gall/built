@@ -150,6 +150,9 @@ fn context(model: &StepModel, c: &m::RepresentationContextRef) -> Result<Units> 
 
 pub(super) struct Contexts {
     items: HashMap<Key, Units>,
+    pub(super) reps: HashMap<Key, Units>,
+    pub(super) owners: HashMap<Key, Key>,
+    pub(super) mapped_parents: HashMap<Key, Vec<Key>>,
     definitions: HashMap<Key, Units>,
     fallback: Option<Units>,
 }
@@ -158,6 +161,7 @@ impl Contexts {
         let mut cache = HashMap::new();
         let mut items = HashMap::new();
         let mut reps = HashMap::new();
+        let mut mapped_parents = HashMap::<Key, Vec<Key>>::new();
         macro_rules! collect {
             ($t:ty,$kind:ident) => {
                 for (id, r) in model.all::<$t>() {
@@ -171,6 +175,12 @@ impl Contexts {
                     };
                     reps.insert(Key::$kind(id), units);
                     for item in &r.items {
+                        if matches!(item.entity_key(), Key::MappedItem(_)) {
+                            mapped_parents
+                                .entry(item.entity_key())
+                                .or_default()
+                                .push(Key::$kind(id));
+                        }
                         if items
                             .insert(item.entity_key(), units)
                             .is_some_and(|prev: Units| {
@@ -197,11 +207,13 @@ impl Contexts {
             TessellatedShapeRepresentation
         );
         let mut definitions = HashMap::new();
+        let mut owners = HashMap::new();
         for (_, s) in model.all::<m::ShapeDefinitionRepresentation>() {
             if let m::RepresentedDefinitionRef::ProductDefinitionShape(i) = s.definition {
                 if let Some(&u) = reps.get(&s.used_representation.entity_key()) {
                     let k = model[i].definition.entity_key();
                     definitions.entry(k).or_insert(u);
+                    owners.insert(s.used_representation.entity_key(), k);
                 }
             }
         }
@@ -210,6 +222,9 @@ impl Contexts {
         Ok(Self {
             items,
             definitions,
+            owners,
+            reps,
+            mapped_parents,
             fallback,
         })
     }

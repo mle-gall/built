@@ -15,6 +15,8 @@ pub(super) fn make_mesh<'p>(
     let mut borrow = store.try_borrow_mut()?;
     let s = &mut borrow.inner;
     let mut change = Change::default();
+    let mut plane_ids = HashMap::new();
+    let mut planes = Vec::new();
     for indices in &body.faces {
         let rings: Vec<Vec<_>> = indices
             .iter()
@@ -27,8 +29,20 @@ pub(super) fn make_mesh<'p>(
             let (frame, _) = body.plane(indices).map_err(bad)?;
             let plane =
                 Plane::from_array([frame.origin.map(|x| x / 1000.), frame.axis, frame.ref_dir]);
-            s.bind_plane(f, plane).map_err(bad)?;
+            plane.validate().map_err(bad)?;
+            s.validate_plane(f, &plane).map_err(bad)?;
+            let key = [plane.origin, plane.axis, plane.reference]
+                .map(|v| v.to_array().map(|x| if x == 0. { 0 } else { x.to_bits() }));
+            let id = *plane_ids.entry(key).or_insert_with(|| {
+                let id = planes.len() as u32;
+                planes.push(plane);
+                id
+            });
+            s.state.exact.inherit(crate::store::keys::Kind::Face, f, id);
         }
+    }
+    if !planes.is_empty() {
+        s.state.exact.planes = Some(std::sync::Arc::new(planes));
     }
     s.finish(change);
     drop(borrow);
@@ -36,7 +50,10 @@ pub(super) fn make_mesh<'p>(
     Ok(mesh)
 }
 
-fn native_mesh<'p>(py: Python<'p>, rows: crate::exact::Rows) -> PyResult<Bound<'p, PyAny>> {
+pub(super) fn native_mesh<'p>(
+    py: Python<'p>,
+    rows: crate::exact::Rows,
+) -> PyResult<Bound<'p, PyAny>> {
     let patch = crate::store::native::NativePatch::new(rows).map_err(bad)?;
     let mesh = py.import("built_core.mesh")?.call_method0("Mesh")?;
     let store = mesh.getattr("_store")?.cast_into::<PyMeshStore>()?;
@@ -79,8 +96,15 @@ fn instance<'p>(
     g.setattr("xform", Matrix4::from(xf))?;
     let children = g.getattr("children")?;
     if n.meshes.len() > 1 {
+        let ext = PyDict::new(py);
+        ext.set_item("step_structure", "product")?;
+        g.setattr("ext", ext)?;
         for mesh in &n.meshes {
-            children.call_method1("append", (group.call1((mesh, &n.name))?,))?;
+            let body = group.call1((mesh, &n.name))?;
+            let ext = PyDict::new(py);
+            ext.set_item("step_structure", "body")?;
+            body.setattr("ext", ext)?;
+            children.call_method1("append", (body,))?;
         }
     }
     for &(child, at) in &n.children {
@@ -121,10 +145,69 @@ pub(super) fn prepare_step(py: Python<'_>, path: PathBuf) -> PyResult<Bound<'_, 
     let mut missing = 0;
     let mut nodes = HashMap::new();
     let mut owned = HashSet::new();
-    for def in scene.all_product_definitions() {
-        let name = label(def);
+    let mut prototypes = Vec::new();
+    let mut mapped_links = Vec::new();
+    let mut mapped_sources = HashSet::new();
+    let mut mapped_children = HashSet::new();
+    for item in scene.all_mapped_instances() {
+        let key = item.key();
+        let m::EntityKey::MappedItem(id) = key else {
+            unreachable!()
+        };
+        let m::RepresentationMapRef::RepresentationMap(map) = model[id].mapping_source else {
+            missing += 1;
+            problems.push(format!("Unresolved mapping source {}", label_entity(key)));
+            continue;
+        };
+        let rep = model[map].mapped_representation.entity_key();
+        let child = contexts.owners.get(&rep).copied().unwrap_or(rep);
+        let parents = contexts.mapped_parents.get(&key);
+        let placement = item
+            .transform()
+            .zip(contexts.reps.get(&rep))
+            .zip(contexts.item(key).ok())
+            .and_then(|((mut xf, src), dst)| {
+                xf.from.origin = xf.from.origin.map(|v| v * src.metres);
+                xf.to.origin = xf.to.origin.map(|v| v * dst.metres);
+                xf.matrix()
+                    .map(|m| DMat4::from_cols_array_2d(&m).transpose())
+            });
+        let Some((parents, xf)) = parents.zip(placement) else {
+            missing += 1;
+            problems.push(format!("Unresolved mapped placement {}", label_entity(key)));
+            continue;
+        };
+        if child == rep && mapped_sources.insert(rep) {
+            prototypes.push((
+                rep,
+                item.name().to_string(),
+                None,
+                item.solids().collect::<Vec<_>>(),
+                item.surface_models().collect::<Vec<_>>(),
+            ));
+        }
+        for parent in parents {
+            mapped_links.push((
+                contexts.owners.get(parent).copied().unwrap_or(*parent),
+                child,
+                xf,
+                key,
+            ));
+        }
+    }
+    // Collect handles only for definitions that actually own geometry.
+    prototypes.extend(scene.all_product_definitions().map(|d| {
+        (
+            d.key(),
+            label(d),
+            Some(d),
+            d.solids().collect(),
+            d.surface_models().collect(),
+        )
+    }));
+    for (key, name, def, solids, sheets) in prototypes {
         let mut meshes = Vec::new();
-        for solid in def.solids() {
+        for solid in solids {
             owned.insert(solid.key());
             let u = contexts.item(solid.key()).map_err(bad)?;
             let result = super::exact_read::rows(model, solid, u.metres, u.tolerance, u.angle)
@@ -142,7 +225,7 @@ pub(super) fn prepare_step(py: Python<'_>, path: PathBuf) -> PyResult<Bound<'_, 
                 }
             }
         }
-        for sheet in def.surface_models() {
+        for sheet in sheets {
             owned.insert(sheet.key());
             for (shell, sense) in sheet.shells() {
                 let u = contexts.item(sheet.key()).map_err(bad)?;
@@ -175,13 +258,13 @@ pub(super) fn prepare_step(py: Python<'_>, path: PathBuf) -> PyResult<Bound<'_, 
             }
         }
         let mut children = Vec::new();
-        for occurrence in def.occurrences() {
+        for occurrence in def.iter().flat_map(|d| d.occurrences()) {
             let Some((child, mut xf)) = occurrence.definition().zip(occurrence.transform()) else {
                 missing += 1;
                 problems.push(format!("{name}: unresolved occurrence"));
                 continue;
             };
-            let parent_unit = contexts.definition(def.key()).map_err(bad)?;
+            let parent_unit = contexts.definition(key).map_err(bad)?;
             let child_unit = contexts.definition(child.key()).map_err(bad)?;
             xf.from.origin = xf.from.origin.map(|v| v * child_unit.metres);
             xf.to.origin = xf.to.origin.map(|v| v * parent_unit.metres);
@@ -193,7 +276,7 @@ pub(super) fn prepare_step(py: Python<'_>, path: PathBuf) -> PyResult<Bound<'_, 
             children.push((child.key(), DMat4::from_cols_array_2d(&rows).transpose()));
         }
         nodes.insert(
-            def.key(),
+            key,
             Node {
                 assembly_mesh: py.import("built_core.mesh")?.call_method0("Mesh")?,
                 name,
@@ -213,12 +296,14 @@ pub(super) fn prepare_step(py: Python<'_>, path: PathBuf) -> PyResult<Bound<'_, 
         rejected += 1;
         problems.push(format!("Unsupported sheet {}", label_entity(sheet.key())));
     }
-    for mapped in scene.all_mapped_instances() {
-        missing += 1;
-        problems.push(format!(
-            "Unresolved mapped placement {}",
-            label_entity(mapped.key())
-        ));
+    for (parent, child, xf, key) in mapped_links {
+        if let Some(n) = nodes.get_mut(&parent) {
+            n.children.push((child, xf));
+            mapped_children.insert(child);
+        } else {
+            missing += 1;
+            problems.push(format!("Unowned mapped placement {}", label_entity(key)));
+        }
     }
     let (faceted, invalid_meshes) = super::display_mesh::read(
         py,
@@ -253,7 +338,10 @@ pub(super) fn prepare_step(py: Python<'_>, path: PathBuf) -> PyResult<Bound<'_, 
         )));
     }
     let groups = PyList::empty(py);
-    for root in scene.root_definitions() {
+    for root in scene
+        .root_definitions()
+        .filter(|d| !mapped_children.contains(&d.key()))
+    {
         groups.append(instance(
             py,
             &nodes,

@@ -205,10 +205,14 @@ fn run_delivery<'p>(
     let folder = target.parent().unwrap_or(&target).canonicalize()?;
     delivery_finish(history, key, &folder.to_string_lossy(), "Delivered", None)
 }
-fn mesh_part<'p>(mesh: &Obj<'p>, keep: Option<&Obj<'p>>) -> PyResult<Obj<'p>> {
+fn mesh_part<'p>(mesh: &Obj<'p>, keep: Option<&Obj<'p>>,step:bool) -> PyResult<Obj<'p>> {
+    if mesh.is_none() {return mesh.py().import("built_core.mesh")?.call_method0("Mesh")}
     let Some(keep) = keep else {
         return Ok(mesh.clone());
     };
+    if step && mesh.getattr("_store")?.getattr("has_exact_bindings")?.is_truthy()? {
+        return crate::step::scope::subset(mesh,keep);
+    }
     let out = mesh.py().import("built_core.mesh")?.call_method0("Mesh")?;
     for f in mesh.getattr("faces")?.try_iter()? {
         let f = f?;
@@ -236,6 +240,7 @@ fn mesh_part<'p>(mesh: &Obj<'p>, keep: Option<&Obj<'p>>) -> PyResult<Obj<'p>> {
     Ok(out)
 }
 struct Scope<'p> {
+    step:bool,
     scene: Obj<'p>,
     wanted: Option<Obj<'p>>,
     visible: Option<Obj<'p>>,
@@ -279,14 +284,14 @@ impl<'p> Scope<'p> {
         let mesh = g.getattr("mesh")?;
         if editing {
             let test = self.wanted.as_ref().unwrap().getattr("__contains__")?;
-            item.setattr("mesh", mesh_part(&mesh, Some(&test))?)?
+            item.setattr("mesh", mesh_part(&mesh, Some(&test),self.step)?)?
         } else if !inside {
             item.setattr("mesh", py.import("built_core.mesh")?.call_method0("Mesh")?)?
         } else if let Some(visible) = &self.visible {
             let part = match self.meshes.entry(mesh.as_ptr() as usize) {
                 std::collections::hash_map::Entry::Occupied(e) => e.into_mut(),
                 std::collections::hash_map::Entry::Vacant(e) => {
-                    e.insert(mesh_part(&mesh, Some(visible))?)
+                    e.insert(mesh_part(&mesh, Some(visible),self.step)?)
                 }
             };
             item.setattr("mesh", &*part)?
@@ -306,6 +311,7 @@ fn delivery_visible(_entity: &Obj<'_>) -> bool {
 fn delivery_scoped<'p>(py: Python<'p>, scene: &Obj<'p>, record: &Obj<'p>) -> PyResult<Obj<'p>> {
     let scope = record.get_item("scope")?.extract::<String>()?;
     let mut ctx = Scope {
+        step:record.call_method1("get",("format",""))?.eq("step")?,
         scene: scene.clone(),
         wanted: None,
         visible: None,
@@ -427,7 +433,7 @@ fn delivery_scoped<'p>(py: Python<'p>, scene: &Obj<'p>, record: &Obj<'p>) -> PyR
         .or(ctx.visible);
     out.setattr(
         "mesh",
-        mesh_part(&scene.getattr("loose_mesh")?, pred.as_ref())?,
+        mesh_part(&scene.getattr("loose_mesh")?, pred.as_ref(),ctx.step)?,
     )?;
     if scope != "scenes" {
         out.setattr(
