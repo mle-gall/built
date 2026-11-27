@@ -1,4 +1,6 @@
 {
+ "Pick a start, or press Enter to sweep selected edges.": "Scegli l’inizio o premi Invio per usare gli spigoli selezionati.",
+ "Pick the end or enter a length. Alt keeps the end free.": "Scegli la fine o digita la lunghezza. Alt lascia libera la fine.",
  "Join connected edges into one curve.": "Unisci gli spigoli connessi in una sola curva.",
  "Weld Edges": "Salda spigoli",
  "Line on Surface": "Linea su superficie",

@@ -38,10 +38,73 @@ pub enum Station {
     Offset { from: String, mm: f64 },
 }
 
+#[derive(Clone, Default, Debug, Serialize, Deserialize)]
+pub struct SketchFields {
+    #[serde(
+        default,
+        skip_serializing_if = "serde_json::Value::is_null",
+        rename = "name"
+    )]
+    pub name: serde_json::Value,
+    #[serde(
+        default,
+        skip_serializing_if = "serde_json::Value::is_null",
+        rename = "use"
+    )]
+    pub usage: serde_json::Value,
+    #[serde(
+        default,
+        skip_serializing_if = "serde_json::Value::is_null",
+        rename = "plane"
+    )]
+    pub plane: serde_json::Value,
+    #[serde(
+        default,
+        skip_serializing_if = "serde_json::Value::is_null",
+        rename = "points"
+    )]
+    pub points: serde_json::Value,
+    #[serde(
+        default,
+        skip_serializing_if = "serde_json::Value::is_null",
+        rename = "origin"
+    )]
+    pub origin: serde_json::Value,
+    #[serde(
+        default,
+        skip_serializing_if = "serde_json::Value::is_null",
+        rename = "attach"
+    )]
+    pub attach: serde_json::Value,
+    #[serde(
+        default,
+        skip_serializing_if = "serde_json::Value::is_null",
+        rename = "dims"
+    )]
+    pub dims: serde_json::Value,
+    #[serde(
+        default,
+        skip_serializing_if = "serde_json::Value::is_null",
+        rename = "extrude"
+    )]
+    pub extrude: serde_json::Value,
+    #[serde(
+        default,
+        skip_serializing_if = "serde_json::Value::is_null",
+        rename = "next_id"
+    )]
+    pub next_id: serde_json::Value,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Row {
     pub uid: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub owner: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub curves: Option<serde_json::Value>,
+    #[serde(flatten)]
+    pub sketch_fields: SketchFields,
     pub kind: String,
     #[serde(default = "one")]
     pub v: u32,
@@ -55,6 +118,21 @@ pub struct Row {
     pub slots: std::collections::BTreeMap<String, Reference>,
     #[serde(default)]
     pub state: String,
+    #[serde(flatten, deserialize_with = "read_sweep")]
+    pub sweep: Option<Box<super::sweep::Sweep>>,
+}
+// The JSON reader uses arbitrary-precision numbers. Buffer flattened fields as
+// JSON so decimal dimensions also survive the live_set and file-load paths.
+fn read_sweep<'de, D: serde::Deserializer<'de>>(
+    d: D,
+) -> Result<Option<Box<super::sweep::Sweep>>, D::Error> {
+    let remaining = serde_json::Value::deserialize(d)?;
+    if remaining.get("profile").is_none() && remaining.get("path").is_none() {
+        return Ok(None);
+    }
+    serde_json::from_value(remaining)
+        .map(Some)
+        .map_err(serde::de::Error::custom)
 }
 fn one() -> u32 {
     1
@@ -69,9 +147,18 @@ pub enum Key {
     Row(String),
 }
 impl Row {
+    pub fn references(&self) -> impl Iterator<Item = &Reference> {
+        self.inputs
+            .iter()
+            .chain(self.slots.values())
+            .chain(self.sweep.iter().flat_map(|s| s.path.references()))
+    }
     fn keys(&self) -> HashSet<Key> {
         let mut keys = HashSet::new();
-        for r in self.inputs.iter().chain(self.slots.values()) {
+        if let Some(uid) = self.sweep.as_ref().and_then(|s| s.profile.sketch.as_ref()) {
+            keys.insert(Key::Row(uid.clone()));
+        }
+        for r in self.references() {
             match r {
                 Reference::Point(_) | Reference::Slot { .. } => (),
                 Reference::Axis { sweep, .. } => {
@@ -160,7 +247,7 @@ impl LiveTable {
         Some(row)
     }
     pub fn insert(&mut self, row: Row) -> Result<(), &'static str> {
-        if self.owners.get(&row.owner).is_some_and(|id| id != &row.uid) {
+        if !row.owner.is_empty() && self.owners.get(&row.owner).is_some_and(|id| id != &row.uid) {
             return Err("placement already has a recipe");
         }
         if self
@@ -178,7 +265,9 @@ impl LiveTable {
         for k in row.keys() {
             self.users.entry(k).or_default().insert(row.uid.clone());
         }
-        self.owners.insert(row.owner.clone(), row.uid.clone());
+        if !row.owner.is_empty() {
+            self.owners.insert(row.owner.clone(), row.uid.clone());
+        }
         self.order.insert(row.uid.clone(), ordinal);
         self.rows.insert(row.uid.clone(), Arc::new(row));
         Ok(())
@@ -260,6 +349,9 @@ mod tests {
             kind: "test_box".into(),
             v: 1,
             size: unit(),
+            sweep: None,
+            curves: None,
+            sketch_fields: Default::default(),
             open_top: false,
             inputs,
             slots: Default::default(),

@@ -58,6 +58,13 @@ pub fn generate(store: &mut Store, row: &Row, origin: [f64; 3]) -> Result<(), &'
         let (a, b) = (corner(a)?, corner(b)?);
         roles.push((format!("edge/{}/{}", a.min(b), a.max(b)), Kind::Edge, e));
     }
+    assign_roles(store, roles)
+}
+
+pub(super) fn assign_roles(
+    store: &mut Store,
+    mut roles: Vec<(String, Kind, u32)>,
+) -> Result<(), &'static str> {
     roles.sort_unstable_by(|a, b| a.0.cmp(&b.0));
     let index = eid::intern(h64(b"built:generated:v1")).map_err(|_| "origin_limit")?;
     let mut used = HashSet::new();

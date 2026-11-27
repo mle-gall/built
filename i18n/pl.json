@@ -1,4 +1,6 @@
 {
+ "Pick a start, or press Enter to sweep selected edges.": "Wskaż początek lub naciśnij Enter, aby użyć wybranych krawędzi.",
+ "Pick the end or enter a length. Alt keeps the end free.": "Wskaż koniec lub podaj długość. Alt pozostawia wolny koniec.",
  "Join connected edges into one curve.": "Połącz stykające się krawędzie w jedną krzywą.",
  "Weld Edges": "Scal krawędzie",
  "Line on Surface": "Linia na powierzchni",

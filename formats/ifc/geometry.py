@@ -153,3 +153,134 @@ def mapped_body(w, group, base, excluded, context_id, geometry, cache, axis):
     w.last_shape_item = items
     return w.add('IFCSHAPEREPRESENTATION', f'#{context_id}', "'Body'",
                  "'MappedRepresentation'", '(' + ','.join(f'#{i}' for i in items) + ')')
+
+
+def sweep_body(w, group, base, row, context_id):
+    """Write the extrusion spans of a member, clipping each at its mitre planes."""
+    import numpy as np
+    from built_core import group_np_affine
+    from built_core.command_protocol import sweep_profile
+    from core.bim import _compose
+    from .step import _s
+
+    points = group.ext['built.live'].get('path', [])
+    if len(points) < 2 or group.children or row['state'] != 'ok':
+        return None
+    matrix = _compose(base, group.xform)
+    rot, trans = group_np_affine(matrix) if matrix is not None else (np.eye(3), np.zeros(3))
+    scale = np.linalg.norm(rot[:, 0])
+    if scale < 1e-12 or np.linalg.det(rot) <= 0 or not np.allclose(
+            rot.T @ rot, np.eye(3) * scale**2, rtol=1e-10, atol=1e-14):
+        return None
+    profile = sweep_profile(row)
+    points = np.asarray(points)
+    closed = row['path'].get('closed', False)
+    if closed:
+        points = np.vstack([points, points[0]])
+    vectors = np.diff(points, axis=0)
+    depths = np.linalg.norm(vectors, axis=1)
+    if np.any(depths < 1e-12):
+        return None
+    axes = vectors / depths[:, None]
+    axis = axes[0]
+    x = np.cross([0., 0., 1.], axis)
+    x = x / np.linalg.norm(x) if np.linalg.norm(x) > 0. else np.array([1., 0., 0.])
+    angle = np.deg2rad(row['rotation'])
+    x = np.cos(angle) * x + np.sin(angle) * np.cross(axis, x)
+    def coords(v):
+        return '(' + ','.join(format(float(n), '.16E') for n in v) + ')'
+    def add(entity, *args):
+        return '#' + str(w.add(entity, *args))
+    offset = np.array(profile['offset'])
+    factor = np.array([-1 if row['mirror'] else 1, 1]) * scale / 1000
+    size = np.array([profile['width'], profile['height']])
+    middle = (size / 2 - offset) * factor
+    centre = add('IFCAXIS2PLACEMENT2D', add('IFCCARTESIANPOINT', coords(middle)), '$')
+    w0, h0, t, f, r = [_f(profile[k] * scale / 1000) for k in ('width', 'height', 'web', 'flange', 'radius')]
+    args = ('.AREA.', _s(profile['name'] or 'Drawn profile'), centre)
+    family = profile['family']
+    section = None
+    if family == 'rectangle':
+        section = add('IFCRECTANGLEPROFILEDEF', *args, w0, h0)
+    elif family == 'chs':
+        section = add('IFCCIRCLEHOLLOWPROFILEDEF', *args, _f(float(w0) / 2), t)
+    elif family == 'rhs':
+        section = add('IFCRECTANGLEHOLLOWPROFILEDEF', *args, w0, h0, t,
+                      _f(max(0., float(r) - float(t))), r)
+    elif family == 'i':
+        section = add('IFCISHAPEPROFILEDEF', *args, w0, h0, t, f, r, '$', '$')
+    curves = []
+    for ring in ([] if section else profile['rings']):
+        pts, segments = [], []
+        for i, (vertex, centre) in enumerate(ring):
+            p = np.asarray(vertex)
+            pts.append(coords((p - offset) * factor))
+            start = len(pts)
+            if centre is None:
+                kind, indices = 'IFCLINEINDEX', [start]
+            else:
+                c = np.asarray(centre)
+                q = np.asarray(ring[(i + 1) % len(ring)][0])
+                bisector = (p + q) / 2 - c
+                mid = c + bisector * np.linalg.norm(p - c) / np.linalg.norm(bisector)
+                pts.append(coords((mid - offset) * factor))
+                kind, indices = 'IFCARCINDEX', [start, len(pts)]
+            indices.append(1 if i + 1 == len(ring) else len(pts) + 1)
+            segments.append(kind + '((' + ','.join(map(str, indices)) + '))')
+        plist = add('IFCCARTESIANPOINTLIST2D', '(' + ','.join(pts) + ')')
+        curves.append(add('IFCINDEXEDPOLYCURVE', plist, '(' + ','.join(segments) + ')', '.F.'))
+    section = section or (add('IFCARBITRARYCLOSEDPROFILEDEF', '.AREA.', _s(profile['name'] or 'Drawn profile'), curves[0])
+               if len(curves) == 1 else add('IFCARBITRARYPROFILEDEFWITHVOIDS', '.AREA.',
+                    _s(profile['name'] or 'Drawn profile'), curves[0], '(' + ','.join(curves[1:]) + ')'))
+    def placement(point, normal, reference=None):
+        pos = add('IFCCARTESIANPOINT', coords(rot @ point + trans))
+        return add('IFCAXIS2PLACEMENT3D', pos, add('IFCDIRECTION', coords(rot @ normal / scale)),
+                   '$' if reference is None else add('IFCDIRECTION', coords(rot @ reference / scale)))
+
+    def joint(previous, following):
+        normal = previous + following
+        return normal / np.linalg.norm(normal)
+
+    # A square-ended extrusion must extend as far as the outermost point
+    # of each oblique trim. The bounding-box diagonal covers analytic fillets.
+    radius = max(np.linalg.norm(np.array([u, v]) - offset)
+                 for u in (0, size[0]) for v in (0, size[1])) / 1000
+    up = add('IFCDIRECTION', '(0.,0.,1.)')
+    items = []
+    clipped = False
+    butt_planes = group.ext['built.live'].get('butt_planes', [])
+    for i, (axis, depth) in enumerate(zip(axes, depths)):
+        start_plane = joint(axes[i-1], axis) if i or closed else axis
+        end_plane = joint(axis, axes[(i+1) % len(axes)]) if i+1 < len(axes) or closed else axis
+        if i:
+            # The generator projects its frame onto the joint along the
+            # incoming span, then onto the new section along the outgoing span.
+            x -= axes[i-1] * (x @ start_plane) / (axes[i-1] @ start_plane)
+            x -= axis * (x @ axis)
+            x /= np.linalg.norm(x)
+        start, end = points[i], points[i+1]
+        if butt_planes:
+            (first, start_plane), (last, end_plane) = np.asarray(butt_planes[i])
+            start = start + axis * ((first - start) @ start_plane) / (axis @ start_plane)
+            end = end + axis * ((last - end) @ end_plane) / (axis @ end_plane)
+            depth = (end - start) @ axis
+        def margin(normal):
+            cosine = min(1., abs(axis @ normal))
+            return radius * np.sqrt(max(0., 1 - cosine**2)) / cosine
+        before, after = margin(start_plane), margin(end_plane)
+        pos = placement(start - before * axis, axis, x)
+        solid = add('IFCEXTRUDEDAREASOLID', section, pos, up, _f((depth + before + after) * scale))
+        for distance, point, outward in ((before, start, -start_plane),
+                                          (after, end, end_plane)):
+            if distance > 1e-12:
+                plane = add('IFCPLANE', placement(point, outward))
+                cutter = add('IFCHALFSPACESOLID', plane, '.F.')
+                solid = add('IFCBOOLEANCLIPPINGRESULT', '.DIFFERENCE.', solid, cutter)
+                clipped = True
+        items.append(solid)
+    w.last_shape_item = int(items[0][1:])
+    representation = "'Clipping'" if clipped else "'SweptSolid'"
+    rep = w.add('IFCSHAPEREPRESENTATION', f'#{context_id}', "'Body'", representation,
+                '(' + ','.join(items) + ')')
+    vertices = [add('IFCCARTESIANPOINT', coords(rot @ p + trans)) for p in points]
+    return rep, add('IFCPOLYLINE', '(' + ','.join(vertices) + ')')

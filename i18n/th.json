@@ -1,4 +1,6 @@
 {
+ "Pick a start, or press Enter to sweep selected edges.": "เลือกจุดเริ่มหรือกด Enter เพื่อใช้ขอบที่เลือก",
+ "Pick the end or enter a length. Alt keeps the end free.": "เลือกปลายหรือป้อนความยาว กด Alt เพื่อให้ปลายเป็นอิสระ",
  "Join connected edges into one curve.": "รวมขอบที่เชื่อมต่อกันให้เป็นเส้นโค้งเดียว",
  "Weld Edges": "เชื่อมขอบ",
  "Line on Surface": "เส้นบนพื้นผิว",

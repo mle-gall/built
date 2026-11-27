@@ -1,4 +1,6 @@
 {
+ "Pick a start, or press Enter to sweep selected edges.": "Укажите начало или нажмите Enter, чтобы использовать выбранные рёбра.",
+ "Pick the end or enter a length. Alt keeps the end free.": "Укажите конец или введите длину. Alt оставляет конец свободным.",
  "Join connected edges into one curve.": "Объединить соединённые рёбра в одну кривую.",
  "Weld Edges": "Объединить рёбра",
  "Line on Surface": "Линия на поверхности",

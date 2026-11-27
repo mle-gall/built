@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! Resolve stable references into the local coordinates of the generator.
 use super::*;
-fn frame(mut k: doc::Key) -> DMat4 {
+pub(super) fn frame(mut k: doc::Key) -> DMat4 {
     let d = doc::lock();
     let mut m = DMat4::IDENTITY;
     while let Some(n) = d.node(k) {
@@ -58,6 +58,40 @@ pub(super) fn origin(
             let Some(host) = group(py, table, &source.owner) else {
                 return Ok(None);
             };
+            if source.kind == "sweep" {
+                let p = host
+                    .getattr("ext")?
+                    .get_item(EXT)?
+                    .get_item("path")?
+                    .extract::<Vec<[f64; 3]>>()?;
+                let len: f64 = p
+                    .windows(2)
+                    .map(|v| DVec3::from(v[0]).distance(v[1].into()))
+                    .sum();
+                let mut station = match at {
+                    table::Station::Fraction(t) => len * t,
+                    table::Station::End(s) if s == "start" => 0.,
+                    table::Station::End(s) if s == "end" => len,
+                    table::Station::Offset { from, mm } if from == "start" => mm / 1000.,
+                    table::Station::Offset { from, mm } if from == "end" => len - mm / 1000.,
+                    _ => return Ok(None),
+                };
+                if !matches!(point.as_deref(), None | Some("origin")) {
+                    return Ok(None);
+                }
+                for (i, pair) in p.windows(2).enumerate() {
+                    let (a, b) = (DVec3::from(pair[0]), DVec3::from(pair[1]));
+                    let span = a.distance(b);
+                    if station <= span || i + 2 == p.len() {
+                        let local = a + (b - a) * (station / span);
+                        return Ok(Some(frame(owner).inverse().transform_point3(
+                            frame(table.groups[&source.owner]).transform_point3(local),
+                        )));
+                    }
+                    station -= span;
+                }
+                return Ok(None);
+            }
             // The test generator exposes its bottom left corner as the path
             // origin, local X as its axis, and a named profile centre.
             let store = host
@@ -154,7 +188,7 @@ pub(super) fn origin(
 pub(super) fn bind_frames(t: &mut LiveTable, uid: &str) -> bool {
     let row = &t.rows[uid];
     let mut result = HashSet::new();
-    if !row.inputs.is_empty() {
+    if row.references().next().is_some() {
         let d = doc::lock();
         let chain = |mut key: Option<doc::Key>| {
             let mut keys = HashSet::new();
@@ -189,7 +223,7 @@ pub(super) fn bind_frames(t: &mut LiveTable, uid: &str) -> bool {
             }
             Some(key)
         };
-        for input in row.inputs.iter().chain(row.slots.values()) {
+        for input in row.references() {
             let target = match input {
                 Reference::Point(_) => {
                     result.extend(owner);
@@ -208,4 +242,175 @@ pub(super) fn bind_frames(t: &mut LiveTable, uid: &str) -> bool {
         }
     }
     t.bind_frames(uid, result.into_iter().collect())
+}
+
+/// Resolve an occurrence's edge or face vertices in the generated definition.
+fn element_points(
+    scene: &Obj<'_>,
+    t: &LiveTable,
+    row: &Row,
+    r: &Reference,
+    kind: Kind,
+) -> PyResult<Option<Vec<DVec3>>> {
+    let mut r = r;
+    let mut visited = HashSet::new();
+    while let Reference::Slot { slot } = r {
+        if !visited.insert(slot) {
+            return Ok(None);
+        }
+        let Some(next) = row.slots.get(slot) else {
+            return Ok(None);
+        };
+        r = next;
+    }
+    let Reference::Element { path, id } = r else {
+        return Ok(None);
+    };
+    let Ok((letter, pid)) = eid::from_text(id) else {
+        return Ok(None);
+    };
+    if eid::kind_name(letter).and_then(Kind::parse) != Some(kind) {
+        return Ok(None);
+    }
+    let (mesh, m) = if path.is_empty() {
+        (loose_mesh(scene)?, DMat4::IDENTITY)
+    } else {
+        let g = scene.call_method1("resolve_occurrence", (path,))?;
+        if g.is_none() {
+            return Ok(None);
+        }
+        (g.getattr("mesh")?, frame(g.getattr("_doc_key")?.extract()?))
+    };
+    let store = mesh.getattr("_store")?.cast_into::<PyMeshStore>()?;
+    let borrow = store.try_borrow()?;
+    let s = &borrow.inner;
+    let Some(slot) = s.slot_of_pid(kind, pid) else {
+        return Ok(None);
+    };
+    let ring = if kind == Kind::Edge {
+        s.state.ends.get(slot as usize).to_vec()
+    } else {
+        s.face_rings(slot).remove(0)
+    };
+    let m = frame(t.groups[&row.owner]).inverse() * m;
+    Ok(Some(
+        ring.into_iter()
+            .map(|v| {
+                m.transform_point3(
+                    s.state
+                        .frame
+                        .definition_point(*s.state.vpos.get(v as usize))
+                        .into(),
+                )
+            })
+            .collect(),
+    ))
+}
+
+pub(super) fn sweep_path(
+    scene: &Obj<'_>,
+    t: &LiveTable,
+    row: &Row,
+    path: &sweep::Path,
+) -> PyResult<Option<Vec<[f64; 3]>>> {
+    let mut points = Vec::<DVec3>::new();
+    if !path.chain.is_empty() {
+        for r in &path.chain {
+            let Some(edge) = element_points(scene, t, row, r, Kind::Edge)? else {
+                return Ok(None);
+            };
+            let [a, b] = [edge[0], edge[1]];
+            if points.is_empty() {
+                points.extend([a, b]);
+                continue;
+            }
+            if points.len() == 2 && (points[0].distance(a) < 1e-9 || points[0].distance(b) < 1e-9) {
+                points.reverse()
+            }
+            let end = *points.last().unwrap();
+            if end.distance(a) < 1e-9 {
+                points.push(b)
+            } else if end.distance(b) < 1e-9 {
+                points.push(a)
+            } else {
+                return Ok(None);
+            }
+        }
+        if path.closed && points.last().is_some_and(|p| p.distance(points[0]) < 1e-9) {
+            points.pop();
+        }
+    } else {
+        for p in &path.points {
+            let Some(p) = origin(scene, t, &Reference::Point(*p), row)? else {
+                return Ok(None);
+            };
+            points.push(p);
+        }
+    }
+    if let Some(ends) = &path.ends {
+        if points.is_empty() {
+            for end in ends {
+                let r = match end {
+                    sweep::End::Point(p) => Reference::Point(*p),
+                    sweep::End::Anchored { to, .. } => to.clone(),
+                };
+                let Some(p) = origin(scene, t, &r, row)? else {
+                    return Ok(None);
+                };
+                points.push(p);
+            }
+        } else if points.len() == 2 {
+            for (i, end) in ends.iter().enumerate() {
+                if let sweep::End::Point(p) = end {
+                    let Some(p) = origin(scene, t, &Reference::Point(*p), row)? else {
+                        return Ok(None);
+                    };
+                    points[i] = p;
+                }
+            }
+        }
+        if points.len() != 2 {
+            return Ok(None);
+        }
+        let Some(dir) = (points[1] - points[0]).try_normalize() else {
+            return Ok(None);
+        };
+        let original = [points[0], points[1]];
+        for (i, end) in ends.iter().enumerate() {
+            if let sweep::End::Anchored { to, offset, extend } = end {
+                let reach = if let Some(face) = element_points(scene, t, row, to, Kind::Face)? {
+                    let Some((_, normal)) =
+                        crate::snap_planes::face_plane(face.iter().map(|v| v.to_array()).collect())
+                    else {
+                        return Ok(None);
+                    };
+                    let normal = DVec3::from(normal);
+                    let dot = normal.dot(dir);
+                    if dot.abs() < 1e-10 {
+                        return Ok(None);
+                    }
+                    normal.dot(face[0] - original[i]) / dot
+                } else {
+                    let Some(anchor) = origin(scene, t, to, row)? else {
+                        return Ok(None);
+                    };
+                    (anchor - original[i]).dot(dir)
+                };
+                let dist = reach
+                    + if i == 0 {
+                        offset / 1000.
+                    } else {
+                        -offset / 1000.
+                    };
+                if !extend && ((i == 0 && dist < -1e-9) || (i == 1 && dist > 1e-9)) {
+                    return Ok(None);
+                }
+                points[i] = original[i] + dist * dir;
+            }
+        }
+        if (points[1] - points[0]).dot(dir) <= 1e-9 {
+            return Ok(None);
+        }
+    }
+    Ok(Some(points.into_iter().map(|p| p.to_array()).collect()))
 }

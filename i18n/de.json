@@ -1,4 +1,6 @@
 {
+ "Pick a start, or press Enter to sweep selected edges.": "Start wählen oder Enter für ausgewählte Kanten drücken.",
+ "Pick the end or enter a length. Alt keeps the end free.": "Ende wählen oder Länge eingeben. Alt hält das Ende frei.",
  "Join connected edges into one curve.": "Verbundene Kanten zu einer Kurve zusammenfügen.",
  "Weld Edges": "Kanten verschweißen",
  "Line on Surface": "Linie auf Fläche",

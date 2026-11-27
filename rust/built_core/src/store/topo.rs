@@ -370,6 +370,18 @@ impl Store {
         if let Some(v) = self.probe(k, &q) {
             return Ok(v);
         }
+        self.insert_vertex(q, k, ch)
+    }
+
+    /// Touching ends of two separate manufactured members belong to distinct
+    /// shells. Index each point normally for future editing, without welding
+    /// coincident vertices across their interface.
+    pub(crate) fn shell_vertex(&mut self, p: [f64; 3], ch: &mut Change) -> Result<u32, OpError> {
+        let q = self.finite(p)?;
+        self.insert_vertex(q, self.cell(&q), ch)
+    }
+
+    fn insert_vertex(&mut self, q: [f64; 3], k: super::cow::Cell, ch: &mut Change) -> Result<u32, OpError> {
         let v = self.new_slot(Kind::Vertex)?;
         self.state.vpos.set(v as usize, q);
         self.state.registry.insert(k, v);

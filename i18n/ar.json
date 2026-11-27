@@ -1,4 +1,6 @@
 {
+ "Pick a start, or press Enter to sweep selected edges.": "اختر البداية أو اضغط Enter لمدّ المقطع على الحواف المحددة.",
+ "Pick the end or enter a length. Alt keeps the end free.": "اختر النهاية أو أدخل الطول. يبقي Alt النهاية حرة.",
  "Join connected edges into one curve.": "ضم الحواف المتصلة في منحنى واحد.",
  "Weld Edges": "لحام الحواف",
  "Line on Surface": "خط على سطح",

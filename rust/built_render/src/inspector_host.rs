@@ -152,6 +152,9 @@ fn selection(view: &Bound<'_, PyAny>, win: &Bound<'_, PyAny>) -> PyResult<()> {
                 record.set_item("quantities", effective.call_method1("get", ("quantities",PyDict::new(py)))?)?;
             }
             record.set_item("uid", record_address(&scene, g)?)?;
+            if groups.len()==1 && g.getattr("ext")?.is_truthy()? && g.getattr("ext")?.contains("built.live")?{
+                record.set_item("sweep",py.import("built_core.command_protocol")?.call_method1("live_sweep",(&scene,g.getattr("uid")?))?)?;
+            }
             records.append(record)?;
         }
     }
@@ -666,6 +669,24 @@ fn inspector_action(win: &Bound<'_, PyAny>, view: &Bound<'_, PyAny>, payload: &s
     let (surface, verb) = key.split_once('.').ok_or_else(|| pyo3::exceptions::PyValueError::new_err(key.clone()))?;
     let vp = win.getattr("viewport")?;
     let result = match surface {
+        "sweep" => {
+            let row=py.import("built_core.command_protocol")?.call_method1("live_sweep",(vp.getattr("scene")?,&v))?;
+            if !row.is_none(){
+                if verb=="path"{
+                    win.call_method1("_activate_tool",("sweep",))?;
+                    win.getattr("_tools")?.get_item("sweep")?.getattr("_machine")?.call_method1("set",("edit",&row))?;
+                }else if matches!(verb,"mitre"|"butt"){
+                    row.set_item("corner",verb)?;
+                    let kw=PyDict::new(py);kw.set_item("row",&row)?;
+                    commands(py)?.call((vp.getattr("history")?,"live_set"),Some(&kw))?;
+                    vp.call_method0("notify_scene_changed")?;
+                }else if verb=="release"{
+                    let kw=PyDict::new(py);kw.set_item("uid",row.get_item("uid")?)?;
+                    commands(py)?.call((vp.getattr("history")?,"live_release"),Some(&kw))?;
+                    vp.call_method0("notify_scene_changed")?;
+                }
+            } Ok(())
+        }
         "record" => record_edit(view, &vp, verb, &v),
         "rule" => rule_edit(view, &vp, verb, &v),
         "parts" => parts_edit(win, view, &vp, verb, &v),

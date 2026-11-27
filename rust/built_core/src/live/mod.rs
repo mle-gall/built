@@ -1,9 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! The root's journalled attribute holds a frozen, structurally shared table.
 //! Definition replacements and placement markers are ordinary document ops.
+mod drawn_profile;
 mod file;
 mod geometry;
+mod joints;
+pub(crate) mod profile;
 mod reference;
+mod sweep;
 pub(crate) use file::{load, save};
 mod table;
 use crate::{
@@ -99,10 +103,15 @@ fn metadata<'p>(g: &Obj<'p>) -> PyResult<Bound<'p, PyDict>> {
 }
 fn evaluate(scene: &Obj<'_>, t: &LiveTable, row: &Row) -> PyResult<&'static str> {
     let py = scene.py();
+    if row.kind == "sketch" {
+        return Ok(drawn_profile::outline(&serde_json::json!(row), 24)
+            .err()
+            .unwrap_or("ok"));
+    }
     let Some(g) = group(py, t, &row.owner) else {
         return Ok("ref_lost");
     };
-    if row.kind != "test_box" || row.v != 1 {
+    if !matches!(row.kind.as_str(), "test_box" | "sweep" | "sketch") || row.v != 1 {
         return Ok("unsupported");
     }
     let mut origin = DVec3::ZERO;
@@ -114,15 +123,50 @@ fn evaluate(scene: &Obj<'_>, t: &LiveTable, row: &Row) -> PyResult<&'static str>
     }
     let mesh = py.import("built_core.mesh")?.call_method0("Mesh")?;
     let store = mesh.getattr("_store")?.cast_into::<PyMeshStore>()?;
+    let mut resolved_path = None;
+    let mut span_geometry = None;
     let stamp = {
         let mut s = store.try_borrow_mut()?;
-        if let Err(state) = geometry::generate(&mut s.inner, row, origin.to_array()) {
+        let result = if row.kind == "sweep" {
+            let Some(spec) = &row.sweep else {
+                return Ok("invalid_profile");
+            };
+            let Some(points) = reference::sweep_path(scene, t, row, &spec.path)? else {
+                return Ok("end_unresolved");
+            };
+            let mut spec = (**spec).clone();
+            if let Some(uid) = &spec.profile.sketch {
+                let Some(source) = t.rows.get(uid).filter(|r| r.kind == "sketch") else {
+                    return Ok("profile_missing");
+                };
+                if source.state != "ok" {
+                    return Ok("unchanged");
+                }
+                spec.profile.drawing = Some(serde_json::json!(source));
+            }
+            let result = sweep::generate(&mut s.inner, &spec, &points)
+                .map(|geometry| span_geometry = Some(geometry));
+            resolved_path = Some(points);
+            result
+        } else {
+            geometry::generate(&mut s.inner, row, origin.to_array())
+        };
+        if let Err(state) = result {
             return Ok(state);
         }
         geometry::stamp(&s.inner)
     };
     let marker = PyDict::new(py);
     marker.set_item("row", &row.uid)?;
+    if let Some(points) = resolved_path {
+        marker.set_item("path", points)?;
+    }
+    if let Some(geometry) = span_geometry {
+        marker.set_item("zones", geometry.zones)?;
+        if !geometry.butt_planes.is_empty() {
+            marker.set_item("butt_planes", geometry.butt_planes)?;
+        }
+    }
     marker.set_item("key", &stamp)?;
     marker.set_item("stamp", &stamp)?;
     let ext = metadata(&g)?;
@@ -322,6 +366,7 @@ pub(crate) fn finish(
 
 #[derive(Clone)]
 enum Edit {
+    Create(Vec<sweep::Sweep>),
     Set(Row),
     Release(String),
     Reevaluate(String),
@@ -375,8 +420,78 @@ impl Mutation {
             ..Default::default()
         });
         match &self.0 {
+            Edit::Create(sweeps) => {
+                for spec in sweeps {
+                    let key = &spec.profile.library;
+                    let name = profile::label(key).unwrap_or("Drawn profile");
+                    let g = py.import("built_core.group")?.getattr("Group")?.call0()?;
+                    g.setattr("name", name)?;
+                    g.setattr("xform", py.import("built_core")?.call_method0("Matrix4")?)?;
+                    let record = PyDict::new(py);
+                    record.set_item(
+                        "class",
+                        if key == "basic/wall" {
+                            "IfcWall"
+                        } else {
+                            "IfcBeam"
+                        },
+                    )?;
+                    record.set_item("name", name)?;
+                    g.setattr("ifc", record)?;
+                    let parent = scene.getattr("edit_group")?;
+                    let mut spec = spec.clone();
+                    if let Some(mut drawing) = spec.profile.drawing.take() {
+                        if spec.profile.sketch.is_none() {
+                            let uid = eid::new_uid();
+                            drawing["uid"] = serde_json::json!(uid);
+                            drawing["kind"] = serde_json::json!("sketch");
+                            let source = serde_json::from_value(drawing)
+                                .map_err(|e| PyValueError::new_err(e.to_string()))?;
+                            t.insert(source).map_err(PyValueError::new_err)?;
+                            t.pending.insert(uid.clone());
+                            spec.profile.sketch = Some(uid);
+                        }
+                    }
+                    if parent.is_none() {
+                        scene.getattr("groups")?.call_method1("append", (&g,))?;
+                    } else {
+                        let inverse =
+                            reference::frame(parent.getattr("_doc_key")?.extract()?).inverse();
+                        for point in &mut spec.path.points {
+                            *point = inverse.transform_point3((*point).into()).to_array();
+                        }
+                        for end in spec.path.ends.iter_mut().flatten() {
+                            if let sweep::End::Point(p) = end {
+                                *p = inverse.transform_point3((*p).into()).to_array();
+                            }
+                        }
+                        parent.getattr("children")?.call_method1("append", (&g,))?;
+                    }
+                    crate::structure::file_created_placement(scene, &g)?;
+                    let owner: String = g.getattr("uid")?.extract()?;
+                    let uid = eid::new_uid();
+                    Arc::make_mut(&mut t.groups)
+                        .insert(owner.clone(), g.getattr("_doc_key")?.extract()?);
+                    t.insert(Row {
+                        kind: "sweep".into(),
+                        uid: uid.clone(),
+                        owner,
+                        v: 1,
+                        size: [1.; 3],
+                        inputs: vec![],
+                        slots: Default::default(),
+                        open_top: false,
+                        state: String::new(),
+                        curves: None,
+                        sketch_fields: Default::default(),
+                        sweep: Some(Box::new(spec)),
+                    })
+                    .map_err(PyValueError::new_err)?;
+                    t.pending.insert(uid);
+                }
+            }
             Edit::Set(row) => {
-                if group(py, &t, &row.owner).is_none() {
+                if row.kind != "sketch" && group(py, &t, &row.owner).is_none() {
                     return Err(PyValueError::new_err("unknown recipe owner"));
                 }
                 if t.rows.get(&row.uid).is_some_and(|r| r.state == "stale") {
@@ -435,14 +550,149 @@ fn to_py<'p>(py: Python<'p>, v: &impl serde::Serialize) -> PyResult<Obj<'p>> {
     py.import("json")?.call_method1("loads", (raw,))
 }
 #[pyfunction]
+fn live_sweep<'p>(scene: &Obj<'p>, owner: &str) -> PyResult<Obj<'p>> {
+    let Some(t) = current(scene.py(), root(scene)?) else {
+        return Ok(scene.py().None().into_bound(scene.py()));
+    };
+    let Some(row) = t
+        .owners
+        .get(owner)
+        .and_then(|uid| t.rows.get(uid))
+        .filter(|r| r.kind == "sweep")
+    else {
+        return Ok(scene.py().None().into_bound(scene.py()));
+    };
+    let value = to_py(scene.py(), row)?;
+    let k = t.groups[owner];
+    let parent = doc::lock().node(k).and_then(|n| n.owners.first().copied());
+    value.set_item(
+        "parent_frame",
+        parent
+            .map(reference::frame)
+            .unwrap_or(DMat4::IDENTITY)
+            .to_cols_array(),
+    )?;
+    if let Some(spec) = &row.sweep {
+        let name = spec
+            .profile
+            .sketch
+            .as_ref()
+            .and_then(|uid| t.rows.get(uid))
+            .and_then(|r| r.sketch_fields.name.as_str())
+            .or_else(|| profile::label(&spec.profile.library))
+            .unwrap_or("Drawn profile");
+        value.set_item("profile_name", name)?;
+        if let Some(g) = group(scene.py(), &t, owner) {
+            if let Ok(path) = g.getattr("ext")?.get_item(EXT)?.get_item("path") {
+                value.set_item("resolved_points", path)?;
+                value.set_item("owner_frame", reference::frame(k).to_cols_array())?;
+            }
+        }
+    }
+    Ok(value)
+}
+#[pyfunction]
+fn sweep_thumbnail<'p>(
+    py: Python<'p>,
+    key: String,
+    pixels: u32,
+) -> PyResult<Bound<'p, pyo3::types::PyBytes>> {
+    if !(1..=512).contains(&pixels) {
+        return Err(PyValueError::new_err("invalid thumbnail size"));
+    }
+    let profile = profile::Profile {
+        sketch: None,
+        drawing: None,
+        library: key,
+        params: Default::default(),
+    };
+    let outline = profile.outline(48).map_err(PyValueError::new_err)?;
+    let scale = pixels as f64 * 0.8 / outline.height.max(outline.width);
+    let mut paths = tiny_skia::PathBuilder::new();
+    for ring in outline.rings {
+        for (i, n) in ring.iter().enumerate() {
+            let x = (pixels as f64 / 2. + (n.p.x - outline.width / 2.) * scale) as f32;
+            let y = (pixels as f64 / 2. - (n.p.y - outline.height / 2.) * scale) as f32;
+            if i == 0 {
+                paths.move_to(x, y)
+            } else {
+                paths.line_to(x, y)
+            }
+        }
+        paths.close();
+    }
+    let path = paths
+        .finish()
+        .ok_or_else(|| PyValueError::new_err("invalid profile"))?;
+    let mut pix = tiny_skia::Pixmap::new(pixels, pixels).unwrap();
+    let mut paint = tiny_skia::Paint::default();
+    paint.set_color_rgba8(196, 200, 203, 255);
+    paint.anti_alias = true;
+    pix.fill_path(
+        &path,
+        &paint,
+        tiny_skia::FillRule::EvenOdd,
+        tiny_skia::Transform::identity(),
+        None,
+    );
+    Ok(pyo3::types::PyBytes::new(py, pix.data()))
+}
+#[pyfunction]
+fn sweep_profile<'p>(row: &Obj<'p>) -> PyResult<Obj<'p>> {
+    let spec: sweep::Sweep = json(row)?;
+    let outline = spec
+        .profile
+        .outline(spec.segments)
+        .map_err(PyValueError::new_err)?;
+    let rings: Vec<Vec<_>> = outline
+        .rings
+        .iter()
+        .map(|ring| {
+            ring.iter()
+                .map(|n| serde_json::json!([n.p, n.arc]))
+                .collect()
+        })
+        .collect();
+    to_py(
+        row.py(),
+        &serde_json::json!({"family":outline.family,"web":outline.web,"flange":outline.flange,"radius":outline.radius,"width":outline.width,"height":outline.height,"rings":rings,"offset":outline.attachment(&spec.attachment).map_err(PyValueError::new_err)?,"name":profile::label(&spec.profile.library)}),
+    )
+}
+#[pyfunction]
+fn create_sweeps<'p>(history: &Obj<'p>, sweeps: &Obj<'p>) -> PyResult<Bound<'p, PyDict>> {
+    let specs: Vec<sweep::Sweep> = json(sweeps)?;
+    if specs.is_empty() {
+        return Err(PyValueError::new_err("expected a sweep"));
+    }
+    for spec in &specs {
+        if spec.profile.sketch.is_none() {
+            spec.profile
+                .outline(spec.segments)
+                .map_err(PyValueError::new_err)?;
+        }
+        if (spec.path.chain.is_empty() && spec.path.ends.is_none() && spec.path.points.len() < 2)
+            || spec
+                .path
+                .points
+                .windows(2)
+                .any(|ab| DVec3::from(ab[0]).distance(DVec3::from(ab[1])) < 1e-9)
+        {
+            return Err(PyValueError::new_err("invalid_path"));
+        }
+    }
+    edit(history, Edit::Create(specs))
+}
+#[pyfunction]
 fn live_set<'p>(history: &Obj<'p>, row: &Obj<'p>) -> PyResult<Bound<'p, PyDict>> {
     let row: Row = json(row)?;
-    for uid in [&row.uid, &row.owner] {
+    for uid in std::iter::once(&row.uid)
+        .chain((row.kind != "sketch" || !row.owner.is_empty()).then_some(&row.owner))
+    {
         if uid.len() != 16 || !uid.bytes().all(|c| c.is_ascii_hexdigit()) {
             return Err(PyValueError::new_err("expected 16-hex uid"));
         }
     }
-    if row.kind != "test_box" || row.v != 1 {
+    if !matches!(row.kind.as_str(), "test_box" | "sweep" | "sketch") || row.v != 1 {
         return Err(PyValueError::new_err("unsupported recipe"));
     }
     edit(history, Edit::Set(row))
@@ -461,6 +711,10 @@ fn live_rows<'p>(scene: &Obj<'p>) -> PyResult<Obj<'p>> {
     to_py(scene.py(), &t.by_creation())
 }
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(sweep_thumbnail, m)?)?;
+    m.add_function(wrap_pyfunction!(live_sweep, m)?)?;
+    m.add_function(wrap_pyfunction!(sweep_profile, m)?)?;
+    m.add_function(wrap_pyfunction!(create_sweeps, m)?)?;
     m.add_function(wrap_pyfunction!(live_set, m)?)?;
     m.add_function(wrap_pyfunction!(live_release, m)?)?;
     m.add_function(wrap_pyfunction!(live_reevaluate, m)?)?;

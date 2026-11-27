@@ -7,6 +7,8 @@ use std::collections::BTreeMap;
 pub(super) struct Records {
     pub(super) editor: super::record_editor::Editor,
     pub rows: BTreeMap<Vec<String>, Row>,
+    sweep:Value,
+    sweep_editable:bool,
     total: usize,
     writable: Vec<String>,
     set_name: String,
@@ -31,6 +33,10 @@ impl Records {
     pub fn new(data: &Value, selection_count: usize) -> Self {
         let mut result = Self::default();
         for object in data.as_array().into_iter().flatten() {
+            if selection_count==1{
+                result.sweep=object["sweep"].clone();
+                result.sweep_editable=object["editable"]==true;
+            }
             result.total += 1;
             if object["editable"] == true {
                 result.writable.push(label(&object["uid"]).into());
@@ -80,6 +86,39 @@ impl Records {
         layers: &mut Vec<egui::Id>,
         measured: &[(String, String)],
     ) {
+        if let Some(row)=self.sweep.as_object(){
+            kit::disclosure(ui,"sweep record","Sweep",true,|ui|{
+                let property = |ui: &mut egui::Ui, name: &str, value: &str| {
+                    kit::property_control(ui, name, |ui| { ui.label(value); });
+                };
+                for (key, title) in [("profile_name", "Profile"), ("preset", "Preset"), ("attachment", "Attachment"), ("state", "State")] {
+                    if let Some(value) = row.get(key).and_then(Value::as_str) {
+                        property(ui, title, value);
+                    }
+                }
+                property(ui, "Rotation", &format!("{}°", self.sweep["rotation"]));
+                property(ui, "Mirror", if self.sweep["mirror"] == true { "On" } else { "Off" });
+                if let Some(path) = self.sweep["resolved_points"].as_array() {
+                    let count = path.len().saturating_sub(1) + usize::from(self.sweep["path"]["closed"] == true);
+                    property(ui, "Path", &format!("{count} {}", if count == 1 { "span" } else { "spans" }));
+                    if path.len()>2{
+                        let current=usize::from(self.sweep["corner"]=="butt");
+                        let mut selected=current;
+                        ui.add_enabled_ui(self.sweep_editable,|ui|ui.horizontal(|ui|{
+                            ui.label("Corner");
+                            kit::choice(ui,"sweep corner",&mut selected,&["Mitre","Butt"]);
+                        }));
+                        if current!=selected{send(out,if selected==1{"sweep.butt"}else{"sweep.mitre"},self.sweep["owner"].clone());}
+                    }
+                }
+                ui.add_enabled_ui(self.sweep_editable,|ui|ui.horizontal(|ui|{
+                    if self.sweep["path"]["points"].is_array() && kit::quiet(ui,"Edit path").clicked(){
+                        send(out,"sweep.path",self.sweep["owner"].clone());
+                    }
+                    if kit::quiet(ui,"Release").clicked(){send(out,"sweep.release",self.sweep["owner"].clone());}
+                }));
+            });
+        }
         kit::disclosure(ui, "record identity", "Identity", true, |ui| {
             self.editor.identity(ui, out, layers)
         });

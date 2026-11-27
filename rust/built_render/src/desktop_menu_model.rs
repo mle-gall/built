@@ -159,6 +159,7 @@ pub const GROUPS: &[(&str, &[Row])] = &[
         &[
             Row::Entry("tool:line"),
             Row::Entry("tool:line_on_surface"),
+            Row::Entry("tool:sweep"),
             Row::Entry("tool:freehand"),
             Row::Entry("tool:geopath"),
             Row::Separator,

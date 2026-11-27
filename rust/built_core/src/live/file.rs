@@ -70,7 +70,10 @@ pub(crate) fn load(scene: &Obj<'_>, ext: &Bound<'_, PyDict>) -> PyResult<()> {
     let attr = doc::attr_id("ext").map_err(PyValueError::new_err)?;
     for mut row in rows {
         let id = row.uid.clone();
-        if row.v != 1 || row.kind != "test_box" || t.rows.contains_key(&id) {
+        if row.v != 1
+            || !matches!(row.kind.as_str(), "test_box" | "sweep" | "sketch")
+            || t.rows.contains_key(&id)
+        {
             return Ok(());
         }
         if let Some(k) = t.groups.get(&row.owner) {
@@ -90,10 +93,10 @@ pub(crate) fn load(scene: &Obj<'_>, ext: &Bound<'_, PyDict>) -> PyResult<()> {
             } else if row.state == "ok" {
                 row.state = "stale".into();
             }
-        } else {
+        } else if row.kind != "sketch" {
             row.state = "ref_lost".into();
         }
-        let has_inputs = !row.inputs.is_empty();
+        let has_inputs = row.references().next().is_some();
         if t.insert(row).is_err() {
             return Ok(());
         }

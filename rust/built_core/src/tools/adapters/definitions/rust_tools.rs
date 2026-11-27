@@ -218,6 +218,20 @@ fn place_group_tool_offset<'py>(a: &Args<'py>) -> Reply<'py> {
     let tool = a.get_item(0)?;
     tool.call_method1("_point", ("offset",))
 }
+fn sweep_key(code:i32)->Option<&'static str>{
+    match code{0x1000001=>Some("Tab"),82=>Some("R"),70=>Some("F"),76=>Some("L"),0x1000004|0x1000005=>Some("Enter"),_=>None}
+}
+fn sweep_claims<'p>(a:&Args<'p>)->Reply<'p>{
+    let code=a.get_item(1)?.extract()?;
+    (a.get_item(2)?.extract::<i32>()?==0 && sweep_key(code).is_some_and(|key|key!="Enter")).into_bound_py_any(a.py())
+}
+fn sweep_on_key<'p>(a:&Args<'p>)->Reply<'p>{
+    if let Some(key)=sweep_key(a.get_item(2)?.extract()?){
+        let ev=fields!(a.py();"type"=>"key","key"=>key);
+        return a.get_item(0)?.call_method1("_send",(a.get_item(1)?,ev))?.get_item("consumed")
+    }
+    false.into_bound_py_any(a.py())
+}
 pub(super) fn install(module: &Bound<PyModule>) -> PyResult<()> {
     let py = module.py();
     module.add("json", py.import("json")?)?;
@@ -239,6 +253,14 @@ pub(super) fn install(module: &Bound<PyModule>) -> PyResult<()> {
         )?;
         let cls = define(module, "LineTool", &[module.getattr("RustTool")?], &attrs)?;
         register_tool_adapter(&cls)?;
+        let sweep=PyDict::new(py);
+        sweep.set_item("__module__",module.name()?)?;
+        sweep.set_item("kind","sweep")?;
+        let sweep=define(module,"SweepTool",&[cls.clone()],&sweep)?;
+        install_methods(module,&sweep,&[
+            ("claims_key",Mode::Method,sweep_claims,&["self","key","modifiers"],"bool",""),
+            ("on_key",Mode::Method,sweep_on_key,&["self","viewport","key","modifiers"],"bool",""),
+        ])?;
         let surface = PyDict::new(py);
         surface.set_item("__module__", module.name()?)?;
         surface.set_item("kind", "line_on_surface")?;

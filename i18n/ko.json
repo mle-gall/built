@@ -1,4 +1,6 @@
 {
+ "Pick a start, or press Enter to sweep selected edges.": "시작점을 선택하거나 Enter를 눌러 선택한 모서리를 사용하세요.",
+ "Pick the end or enter a length. Alt keeps the end free.": "끝점을 선택하거나 길이를 입력하세요. Alt를 누르면 자유단이 됩니다.",
  "Join connected edges into one curve.": "연결된 모서리를 하나의 곡선으로 결합합니다.",
  "Weld Edges": "모서리 용접",
  "Line on Surface": "곡면 위의 선",
