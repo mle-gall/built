@@ -434,3 +434,26 @@ def test_glue_only_counts_the_overlap_of_the_two_stock_faces():
                   roles={"a": root["roles"]["joining"], "b": {"placement": plate["owner"], "face": "end"}}))["uid"]
     row = next(r for r in live.live_rows(scene) if r["uid"] == child)
     assert row["state"] == "ok" and abs(row["params"]["area"] - 20 * 145) < .01
+
+
+def test_moving_the_portal_knee_keeps_the_bolt_grid_and_weld(capfd):
+    import os
+    import re
+    from statistics import median
+
+    scene, history, uid = knee_fixture(portal=True)
+    rows = {r["key"]: r for r in live.live_rows(scene) if "key" in r}
+    grid = scene.groups_by_uid()[rows["bolts:repeat"]["owner"]]
+    stations = [g.uid for g in grid.children]
+    definition = grid.children[0].children[0].mesh
+    capfd.readouterr()
+    for i in range(21):
+        apply(history, "move_placements", placements=[scene.groups[1].uid],
+              delta=[.001 if i % 2 == 0 else -.001, 0, 0])
+    assert [g.uid for g in grid.children] == stations
+    assert all(g.children[0].mesh is definition for g in grid.children)
+    assert all(r["state"] == "ok" for r in live.live_rows(scene))
+    if os.environ.get("BUILT_PERF"):
+        samples = re.findall(r"Junction live evaluation ([\d.]+) ms", capfd.readouterr().err)
+        assert len(samples) == 21
+        print(f"One knee, median live evaluation {median(map(float, samples)):.3f} ms")
