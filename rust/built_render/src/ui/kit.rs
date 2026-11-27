@@ -1601,12 +1601,12 @@ impl FontPicker {
         ui.label(egui::RichText::new(&self.choice.title).font(title_font()));
         if self.choice.editable {
             ui.horizontal(|ui| {
-                ui.label("Text");
+                ui.label(&super::tr("Text"));
                 ui.add(field(&mut self.choice.text).desired_width(ui.available_width()));
             });
         }
         let search =
-            ui.add(search(&mut self.filter, "Search fonts").desired_width(ui.available_width()));
+            ui.add(search(&mut self.filter, &super::tr("Search fonts")).desired_width(ui.available_width()));
         if self.focus {
             search.request_focus();
             self.focus = false;
@@ -1627,7 +1627,7 @@ impl FontPicker {
             list = list.vertical_scroll_offset(y);
         }
         if rows.is_empty() {
-            ui.label("No matching families");
+            ui.label(&super::tr("No matching families"));
         }
         let scale = ui.ctx().pixels_per_point();
         let key = (
@@ -1651,7 +1651,7 @@ impl FontPicker {
                     } else {
                         "☆"
                     };
-                    if quiet(ui, star).on_hover_text("Favourite font").clicked() {
+                    if quiet(ui, star).on_hover_text(&super::tr("Favourite font")).clicked() {
                         self.toggle_star(name);
                     }
                     let selected = name == &self.choice.font;
@@ -1698,11 +1698,11 @@ impl FontPicker {
             }
         });
         ui.columns(2, |cols| {
-            if switch_row(&mut cols[0], "Bold", self.choice.bold, true).clicked() { self.choice.bold = !self.choice.bold; }
-            if switch_row(&mut cols[1], "Italic", self.choice.italic, true).clicked() { self.choice.italic = !self.choice.italic; }
+            if switch_row(&mut cols[0], &super::tr("Bold"), self.choice.bold, true).clicked() { self.choice.bold = !self.choice.bold; }
+            if switch_row(&mut cols[1], &super::tr("Italic"), self.choice.italic, true).clicked() { self.choice.italic = !self.choice.italic; }
         });
         ui.horizontal(|ui| {
-            ui.label("Size");
+            ui.label(&super::tr("Size"));
             if let Some(lengths) = &mut self.choice.lengths {
                 lengths.edit(0, ui, &mut self.choice.height, self.choice.minimum, self.choice.maximum);
             } else {
@@ -1711,7 +1711,7 @@ impl FontPicker {
         });
         if let Some(depth) = &mut self.choice.thickness {
             ui.horizontal(|ui| {
-                ui.label("Extrusion");
+                ui.label(&super::tr("Extrusion"));
                 if let Some(lengths) = &mut self.choice.lengths {
                     lengths.edit(1, ui, depth, 0., self.choice.maximum);
                 } else {
@@ -1729,12 +1729,12 @@ impl FontPicker {
             let valid = lengths_valid && rows.contains(&self.choice.font)
                 && (!self.choice.editable || !self.choice.text.trim().is_empty());
             ui.add_enabled_ui(valid, |ui| {
-                if sheet_button(ui, "Apply", "↩", 1) || valid && ui.input(|i| i.key_pressed(Key::Enter)) {
+                if sheet_button(ui, &super::tr("Apply"), "↩", 1) || valid && ui.input(|i| i.key_pressed(Key::Enter)) {
                     self.remember();
                     answer = Some(true);
                 }
             });
-            if sheet_button(ui, "Cancel", "esc", 0) || ui.input(|i| i.key_pressed(Key::Escape)) {
+            if sheet_button(ui, &super::tr("Cancel"), "esc", 0) || ui.input(|i| i.key_pressed(Key::Escape)) {
                 answer = Some(false);
             }
         });

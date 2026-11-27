@@ -514,6 +514,7 @@ fn panels_stage(view: &Obj<'_>) -> PyResult<u8> {
 }
 
 fn before_frame<'py>(a: &Args<'py>) -> Reply<'py> {
+    crate::ui::sync_language(a.py())?;
     let py = a.py();
     let view = a.get_item(0)?;
     if !truthy(&view, "_ui_attached")? {

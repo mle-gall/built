@@ -246,6 +246,12 @@ fn active<'py>(m: &Module<'py>) -> PyResult<Bound<'py, Catalogue>> {
     Ok(m.getattr("_active")?.cast_into()?)
 }
 
+/// A snapshot for native widgets that paint without a Python interpreter.
+#[pyfunction(pass_module)]
+fn translations<'py>(m: &Module<'py>) -> PyResult<Bound<'py, PyDict>> {
+    active(m)?.get().translations.bind(m.py()).copy()
+}
+
 /// Return the active language code.
 #[pyfunction(pass_module)]
 fn current_language(m: &Module<'_>) -> PyResult<String> {
@@ -309,6 +315,7 @@ pub(super) fn install(m: &Module<'_>) -> PyResult<()> {
     for f in [
         wrap_pyfunction!(available_languages, m)?,
         wrap_pyfunction!(current_language, m)?,
+        wrap_pyfunction!(translations, m)?,
         wrap_pyfunction!(is_rtl, m)?,
         wrap_pyfunction!(language_for_locales, m)?,
         wrap_pyfunction!(language_coverage, m)?,

@@ -135,3 +135,27 @@ def test_inventory_tracks_new_ui_strings_and_drops_retired_catalogue_keys(tmp_pa
         'tr(py, "New Rust label"); tr.call1(("Hint",)); ui.label("New control");')
     (src / "preference_rows.json").write_text('{}')
     assert audit.inventory() == ["Hint", "Menu", "New Rust label", "New control", "New plugin label"]
+
+
+def test_reviewed_panels_translate_literal_widget_labels():
+    import ast
+    import re
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    labels = {"field": 1, "section": 1, "item": 2}
+    for filename in ("_blender_panel.py", "python_console.py"):
+        tree = ast.parse((root / "plugins" / filename).read_text())
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Name):
+                continue
+            index = labels.get(node.func.id)
+            if index is not None and len(node.args) > index:
+                arg = node.args[index]
+                assert not (isinstance(arg, ast.Constant) and isinstance(arg.value, str)
+                            and arg.value.strip()), (filename, node.lineno)
+
+    bare = re.compile(r'(?:ui\.(?:label|strong|button)|on_hover_text|RichText::new)\(\s*"[A-Za-z]')
+    for name in ("activity.rs", "sheets.rs"):
+        source = (root / "rust/built_render/src/ui" / name).read_text().split("#[cfg(test)]")[0]
+        assert not bare.search(source), name

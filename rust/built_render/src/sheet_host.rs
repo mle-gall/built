@@ -1,5 +1,6 @@
 //! Host adapters for the shared sheet. Files and preview decoding remain with
 //! the existing recent-file worker. Export reuses the delivery form's model.
+use crate::settings_rows::tr;
 use pyo3::{exceptions::PyInterruptedError, prelude::*, types::PyDict};
 
 #[pyclass]
@@ -49,7 +50,7 @@ impl PreviewTask {
             Err(e) if e.is_instance_of::<PyInterruptedError>(py) => {
                 let current = svg
                     .borrow_mut()
-                    .finish_preview(self.ticket, "Preview cancelled".into());
+                    .finish_preview(self.ticket, tr(py, "Preview cancelled")?);
                 if current {
                     svg.call_method1("receive", ("svg_preview", "0"))?;
                 }
@@ -107,15 +108,15 @@ pub fn show_view_export<'py>(
     field.set_item("filters", "SVG (*.svg)")?;
     let destination = forms
         .getattr("Field")?
-        .call(("destination", "path", "Destination", ""), Some(&field))?;
+        .call(("destination", "path", tr(py, "Destination")?, ""), Some(&field))?;
     let args = PyDict::new(py);
-    args.set_item("buttons", [("cancel", "Cancel"), ("export", "Export")])?;
+    args.set_item("buttons", [("cancel", tr(py, "Cancel")?), ("export", tr(py, "Export")?)])?;
     args.set_item("default", "export")?;
     args.set_item("validate", svg.getattr("validate_view")?)?;
     args.set_item("on_done", write)?;
     let form = forms
         .getattr("Form")?
-        .call(("Export", vec![destination]), Some(&args))?;
+        .call((tr(py, "Export")?, vec![destination]), Some(&args))?;
     show_delivery_form(py, win, &form, true, svg, preview)?;
     Ok(form)
 }
@@ -174,7 +175,7 @@ impl ExportSheet {
                 (ctx.getattr("win")?.getattr("viewport")?.getattr("scene")?,),
             )?;
             let selected = form.getattr_opt("_delivery_key")?;
-            sheet.call_method1("side_caption", ("Kept deliveries",))?;
+            sheet.call_method1("side_caption", (tr(py, "Kept deliveries")?,))?;
             for (key, record) in records.cast::<PyDict>()?.iter() {
                 let kw = PyDict::new(py);
                 kw.set_item(
@@ -185,7 +186,7 @@ impl ExportSheet {
                 )?;
                 sheet.call_method("side_item", (&key, record.get_item("name")?), Some(&kw))?;
             }
-            sheet.call_method1("side_item", ("new", "New delivery…"))?;
+            sheet.call_method1("side_item", ("new", tr(py, "New delivery…")?))?;
             let values = form.call_method0("values")?;
             let get = |k: &str| -> PyResult<String> { values.get_item(k)?.extract() };
             let date = py
@@ -206,8 +207,8 @@ impl ExportSheet {
                 .collect();
             let folder = std::path::PathBuf::from(get("destination")?)
                 .join(format!("{date}_{}", name.trim()));
-            content.call_method1("kv", ([("Folder preview", folder.to_string_lossy())],))?;
-            content.call_method1("caption", ("Outputs",))?;
+            content.call_method1("kv", ([(tr(py, "Folder preview")?, folder.to_string_lossy())],))?;
+            content.call_method1("caption", (tr(py, "Outputs")?,))?;
             let items = pyo3::types::PyList::empty(py);
             let mut count = 0;
             let selection = get("output_options")?;
@@ -215,24 +216,24 @@ impl ExportSheet {
             for (id, title, file) in crate::deliveries_host::package_outputs(py)? {
                 let item = PyDict::new(py);
                 item.set_item("id", &id)?;
-                item.set_item("label", format!("{} · {title}", id.to_uppercase()))?;
+                item.set_item("label", format!("{} · {}", id.to_uppercase(), tr(py, &title)?))?;
                 let source = match id.as_str() {
                     "pdf" => {
                         if get("sheet_names")?.trim().is_empty() {
-                            "All sheets".into()
+                            tr(py, "All sheets")?
                         } else {
                             get("sheet_names")?.replace('\n', ", ")
                         }
                     }
                     "bcf" => {
                         if get("topics")?.trim().is_empty() {
-                            "All topics".into()
+                            tr(py, "All topics")?
                         } else {
-                            "Selected topics".into()
+                            tr(py, "Selected topics")?
                         }
                     }
                     "manifest" => "JSON + text · SHA-256".into(),
-                    "dxf" if !get("drawing_names")?.trim().is_empty() => "Selected scenes".into(),
+                    "dxf" if !get("drawing_names")?.trim().is_empty() => tr(py, "Selected scenes")?,
                     _ => {
                         let scope = get(&format!("source_{id}"))?;
                         let scope = if scope.is_empty() {
@@ -241,8 +242,8 @@ impl ExportSheet {
                             scope
                         };
                         match scope.as_str() {
-                            "whole" => "Whole model".into(),
-                            "node" => "Project node".into(),
+                            "whole" => tr(py, "Whole model")?,
+                            "node" => tr(py, "Project node")?,
                             _ => scope,
                         }
                     }
@@ -253,7 +254,7 @@ impl ExportSheet {
                 count += usize::from(enabled);
                 items.append(item)?;
                 if id == selection {
-                    info = format!("{title} · {file}");
+                    info = format!("{} · {file}", tr(py, &title)?);
                 }
             }
             let block = PyDict::new(py);
@@ -282,24 +283,24 @@ impl ExportSheet {
                     .getattr_opt("_project_host_path")?
                     .is_some_and(|v| v.is_truthy().unwrap_or(false));
             let hint = if unsaved {
-                "Choose an absolute destination for this unsaved model".into()
+                tr(py, "Choose an absolute destination for this unsaved model")?
             } else if missing_pdf {
-                "PDF needs a sheet · Other outputs can run".into()
+                tr(py, "PDF needs a sheet · Other outputs can run")?
             } else if let Some(e) = error {
                 e.value(py).str()?.to_string()
             } else {
-                format!("{count} outputs selected · Ready to run")
+                tr(py, "{count} outputs selected · Ready to run")?.replace("{count}", &count.to_string())
             };
             if selection == "review" {
-                let detail = sheet.call_method1("detail", (330., "Review checks"))?;
+                let detail = sheet.call_method1("detail", (330., tr(py, "Review checks")?))?;
                 detail.call_method1("text", (&hint,))?;
                 if let Some(run) = form.getattr_opt("_delivery_run")? {
                     crate::deliveries_host::review_content(&detail, &run)?;
                 } else {
-                    detail.call_method1("text", ("IDS checks run on the exported IFC model.",))?;
+                    detail.call_method1("text", (tr(py, "IDS checks run on the exported IFC model.")?,))?;
                 }
             }
-            sheet.call_method1("footer", ([("setup-review", "Review")], hint))?;
+            sheet.call_method1("footer", ([("setup-review", tr(py, "Review")?)], hint))?;
         }
         if is_svg {
             content.call_method1("fields", (svg, "svg"))?;
@@ -341,7 +342,7 @@ impl ExportSheet {
             }
         }
         if preview {
-            let pane = sheet.call_method1("detail", (400., "Preview"))?;
+            let pane = sheet.call_method1("detail", (400., tr(py, "Preview")?))?;
             let (ready, guide, error) = svg
                 .call_method0("preview_block")?
                 .extract::<(bool, String, String)>()?;
@@ -358,9 +359,9 @@ impl ExportSheet {
                 pane.call_method1(
                     "text",
                     (if error.is_empty() {
-                        "Preparing preview…"
+                        tr(py, "Preparing preview…")?
                     } else {
-                        &error
+                        error
                     },),
                 )?;
             }
@@ -372,7 +373,7 @@ impl ExportSheet {
             let verb = PyDict::new(py);
             if id == "run" && form.call_method1("value", ("format",))?.eq("package")? {
                 verb.set_item("id", &id)?;
-                verb.set_item("label", "Run handover package")?;
+                verb.set_item("label", tr(py, "Run handover package")?)?;
                 verb.set_item("role", 1)?;
                 sheet.call_method1("footer_action", (verb,))?;
                 continue;

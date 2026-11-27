@@ -425,7 +425,10 @@ impl FieldShows {
 }
 
 fn scopes<'py>(py: Python<'py>, fmt: &Bound<'py, PyAny>, has_nodes: bool) -> PyResult<Bound<'py, PyAny>> {
-    py.import("built_core")?.call_method1("delivery_scopes", (fmt, has_nodes))
+    let options: Vec<(String, String)> = py.import("built_core")?.call_method1("delivery_scopes", (fmt, has_nodes))?.extract()?;
+    let rows = PyList::empty(py);
+    for (key, label) in options { rows.append((key, crate::settings_rows::tr(py, &label)?))?; }
+    Ok(rows.into_any())
 }
 
 /// A new format: its scopes and file filter.
@@ -652,7 +655,7 @@ pub fn export_form<'py>(win: &Bound<'py, PyAny>, key: Option<String>, one_off: b
         for (k, v) in extra {
             kwargs.set_item(k, v)?;
         }
-        field_cls.call((fid, kind, label, value), Some(&kwargs))
+        field_cls.call((fid, kind, crate::settings_rows::tr(py, label)?, value), Some(&kwargs))
     };
     let shows = |fid: &str| -> PyResult<Bound<'py, PyAny>> { Ok(Py::new(py, FieldShows { fid: fid.into() })?.into_bound(py).into_any()) };
     let any = |v: &str| -> Bound<'py, PyAny> { v.into_pyobject(py).expect("str").into_any() };
@@ -662,7 +665,7 @@ pub fn export_form<'py>(win: &Bound<'py, PyAny>, key: Option<String>, one_off: b
         let k = k?;
         formats.append((&k, k.str()?.to_string().to_uppercase()))?;
     }
-    formats.append(("package", "Handover package"))?;
+    formats.append(("package", crate::settings_rows::tr(py, "Handover package")?))?;
     let node_choices = PyList::empty(py);
     for (k, n) in nodes.cast::<PyDict>()?.iter() {
         node_choices.append((&k, n.get_item("name")?))?;
@@ -670,7 +673,7 @@ pub fn export_form<'py>(win: &Bound<'py, PyAny>, key: Option<String>, one_off: b
     let first_node = nodes.try_iter()?.next().transpose()?.unwrap_or_else(|| any(""));
     let names = options.call_method1("get", ("names", PyList::empty(py)))?;
     let names = any("\n").call_method1("join", (names,))?;
-    let profiles = PyList::new(py, [(any(""), any("Default IFC4"))])?;
+    let profiles = PyList::new(py, [(any(""), any(&crate::settings_rows::tr(py, "Default IFC4")?))])?;
     for (k, v) in registry.call_method1("get", ("export_profiles", PyDict::new(py)))?.cast_into::<PyDict>()?.iter() {
         profiles.append((&k, v.call_method1("get", ("name", &k))?))?;
     }
@@ -759,15 +762,10 @@ pub fn export_form<'py>(win: &Bound<'py, PyAny>, key: Option<String>, one_off: b
         } else {
             source
         };
-        let choices = PyList::new(
-            py,
-            [
-                ("", "Delivery scope"),
-                ("whole", "Whole model"),
-                ("visible", "Visible"),
-                ("selection", "Selection"),
-            ],
-        )?;
+        let choices = PyList::empty(py);
+        for (key, label) in [("", "Delivery scope"), ("whole", "Whole model"), ("visible", "Visible"), ("selection", "Selection")] {
+            choices.append((key, crate::settings_rows::tr(py, label)?))?;
+        }
         fields.push(field(
             &fid,
             "choice",
@@ -783,12 +781,13 @@ pub fn export_form<'py>(win: &Bound<'py, PyAny>, key: Option<String>, one_off: b
         buttons.extend([("save", "Keep delivery"), ("run", "Run")]);
     }
     let kwargs = PyDict::new(py);
-    kwargs.set_item("buttons", &buttons)?;
+    let translated_buttons: Vec<_> = buttons.iter().map(|(id, label)| Ok((*id, crate::settings_rows::tr(py, label)?))).collect::<PyResult<_>>()?;
+    kwargs.set_item("buttons", translated_buttons)?;
     kwargs.set_item("default", buttons.last().expect("buttons").0)?;
     kwargs.set_item("on_done", Py::new(py, FormDone { win: win.clone().unbind(), history: history.clone().unbind(), key: key.clone(), one_off, svg: svg.clone().unbind() })?)?;
     kwargs.set_item("on_change", Py::new(py, FormChanged { has_nodes })?)?;
     kwargs.set_item("validate", Py::new(py, FormCheck { export_scene: one_off.then(|| scene.clone().unbind()), svg: svg.clone().unbind() })?)?;
-    let form = forms.getattr("Form")?.call((if one_off { "Export" } else { "Delivery" }, fields), Some(&kwargs))?;
+    let form = forms.getattr("Form")?.call((crate::settings_rows::tr(py, if one_off { "Export" } else { "Delivery" })?, fields), Some(&kwargs))?;
     form.setattr("_delivery_key",key.as_deref())?;
     if let Some(run) = stored["runs"].as_array().and_then(|v|v.last()) {
         form.setattr("_delivery_run",json_loads(py,&run.to_string())?)?;

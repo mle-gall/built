@@ -150,7 +150,7 @@ class ConsolePanel(_ConsoleExecution):
     def __init__(self, app, invalidate):
         self._viewport = app.viewport
         self._scope = {"__name__": "__console__"}
-        self.lines = ["Globals: scene, mesh, selection, viewport."]
+        self.lines = [tr("Globals: scene, mesh, selection, viewport.")]
         self.history = []
 
     def _append_text(self, text, role="out"):
@@ -161,8 +161,8 @@ class ConsolePanel(_ConsoleExecution):
         from built_core.plugin_panels import section, item
         return [section("session", "", item("log", "output", lines=self.lines),
                         item("console", "prompt", history=self.history),
-                        item("button", "help", "API help"), item("button", "script", "Run script file…"),
-                        item("button", "clear", "Clear output"))]
+                        item("button", "help", tr("API help")), item("button", "script", tr("Run script file…")),
+                        item("button", "clear", tr("Clear output")))]
 
     def event(self, control, event, value):
         if control == "clear":

@@ -266,15 +266,16 @@ fn lock(f: &Facts) -> Vec<Entry> {
 /// Sheet menu entries carry the same inspector edits and page commands as the dock and keys.
 pub fn sheet_menu(doc: &crate::sheet_page::Snapshot, keys: &[u64], clip: Option<&str>) -> (String, Vec<Row>) {
     use crate::sheet_inspector::{edit, style_fields, title_of};
+    use crate::ui::tr;
     let items: Vec<_> = keys.iter().filter_map(|k| doc.items.iter().find(|i| i.key == *k)).collect();
     let mut rows = Rows(Vec::new());
-    let mut one = |id: &str, label: &str| rows.one(vec![e(id, label)]);
+    let mut one = |id: &str, label: &str| rows.one(vec![e(id, &tr(label))]);
     if items.is_empty() {
         one("sheets:fit", "Fit page");
         one("sheets:tool\x1fvista", "Place view");
         one("sheets:tool\x1ftexto", "Place text");
         one("sheets:add", "Add sheet");
-        return ("Sheet".into(), rows.0);
+        return (tr("Sheet"), rows.0);
     }
     let title = if let [item] = items.as_slice() {
         let kind = item.kind.as_str();
@@ -302,19 +303,19 @@ pub fn sheet_menu(doc: &crate::sheet_page::Snapshot, keys: &[u64], clip: Option<
                 let on = item.data["fields"][field].as_bool().unwrap_or(false);
                 let value = value.unwrap_or(if on { "0" } else { "1" });
                 if let Some(action) = edit(doc, &format!("{}:{field}", item.key), value) {
-                    let mut entry = e(&format!("sheets:{action}"), label);
+                    let mut entry = e(&format!("sheets:{action}"), &tr(label));
                     if check { entry = checked(entry, on); }
                     rows.one(vec![entry]);
                 }
             }
         }
-        title_of(kind).into()
+        tr(title_of(kind))
     } else {
-        plural(items.len(), "item")
+        format!("{} {}", items.len(), tr("items"))
     };
     let first = items[0];
     let movable = items.iter().any(|i| i.kind != "titleblock");
-    let mut one = |id: &str, label: &str| rows.one(vec![e(id, label)]);
+    let mut one = |id: &str, label: &str| rows.one(vec![e(id, &tr(label))]);
     if !style_fields(&first.kind).is_empty() && items.len() == 1 { one("page:copy_style", "Copy style"); }
     if items.iter().any(|i| !i.locked && Some(i.kind.as_str()) == clip) { one("page:paste_style", "Paste style"); }
     if items.iter().any(|i| i.data["fields"]["group_id"].as_str().is_some_and(|g| !g.is_empty())) {

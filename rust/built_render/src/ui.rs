@@ -15,6 +15,27 @@ pub mod operation_form;
 mod library_previews;
 /// Sheets, a workspace of the window (sheet_workspace).
 mod sheets;
+thread_local! {
+    static LABELS: std::cell::RefCell<(String, std::collections::HashMap<String, String>)> = Default::default();
+}
+
+pub(crate) fn sync_language(py: pyo3::Python<'_>) -> pyo3::PyResult<()> {
+    use pyo3::prelude::*;
+    let module = py.import("built_core.i18n")?;
+    let language: String = module.call_method0("current_language")?.extract()?;
+    LABELS.with_borrow_mut(|(active, labels)| {
+        if language != *active {
+            *labels = module.call_method0("translations")?.extract()?;
+            *active = language;
+        }
+        Ok(())
+    })
+}
+
+pub(crate) fn tr(source: &str) -> String {
+    LABELS.with_borrow(|(_, labels)| labels.get(source).cloned().unwrap_or_else(|| source.into()))
+}
+
 mod activity;
 mod plugins;
 

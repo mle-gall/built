@@ -27,7 +27,7 @@ impl Ui {
         ui.horizontal_wrapped(|ui| {
             ui.colored_label(color, mark);
             ui.label(egui::RichText::new(title).strong().color(color));
-            if compact && quiet(ui, "×").on_hover_text("Dismiss").clicked() {
+            if compact && quiet(ui, "×").on_hover_text(super::tr("Dismiss")).clicked() {
                 actions.push(format!("dismiss:{id}"));
             }
         });
@@ -135,13 +135,13 @@ impl Ui {
                             };
                             if ui
                                 .small_button(label)
-                                .on_hover_text("Activity history")
+                                .on_hover_text(super::tr("Activity history"))
                                 .clicked()
                             {
                                 self.activity_open = !self.activity_open;
                             }
                             if let Some((id, title, _, fraction, cancel)) = self.jobs.first() {
-                                if *cancel && ui.small_button("×").on_hover_text("Cancel").clicked()
+                                if *cancel && ui.small_button("×").on_hover_text(super::tr("Cancel")).clicked()
                                 {
                                     self.actions.push(format!("job:cancel:{id}"));
                                 }
@@ -169,13 +169,13 @@ impl Ui {
                 if self.activity_open {
                     popover().show(ui, |ui| {
                         ui.horizontal(|ui| {
-                            ui.strong("Recent activity");
-                            if quiet(ui, "×").on_hover_text("Close").clicked() {
+                            ui.strong(super::tr("Recent activity"));
+                            if quiet(ui, "×").on_hover_text(super::tr("Close")).clicked() {
                                 self.activity_open = false;
                             }
                         });
                         if self.history.is_empty() && self.jobs.is_empty() {
-                            ui.label("No recent activity");
+                            ui.label(super::tr("No recent activity"));
                         }
                         egui::ScrollArea::vertical()
                             .min_scrolled_height(120.0)

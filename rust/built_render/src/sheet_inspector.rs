@@ -187,7 +187,7 @@ fn row(doc: &Snapshot, owner: &str, fields: &J, (name, label, kind): &Row) -> Op
         J::Number(n) => num_text(n.as_f64().unwrap_or(0.0)),
         _ => String::new(),
     };
-    Some(((*label).to_string(), match kind {
+    Some((crate::ui::tr(label), match kind {
         F::Num(unit) => {
             let t = if *name == "sep_mm" {
                 v.as_f64().map(|n| format!("{n:.1}")).unwrap_or_else(|| text(v))
@@ -201,7 +201,7 @@ fn row(doc: &Snapshot, owner: &str, fields: &J, (name, label, kind): &Row) -> Op
         F::Check => format!("{ED}check{ED}{fid}{ED}{}", u8::from(v.as_bool().unwrap_or(false))),
         F::Pick(opts) => {
             let at = opts.iter().position(|(k, _)| Some(*k) == v.as_str()).unwrap_or(0);
-            let labels: Vec<&str> = opts.iter().map(|(_, l)| *l).collect();
+            let labels: Vec<_> = opts.iter().map(|(_, label)| crate::ui::tr(label)).collect();
             format!("{ED}pick{ED}{fid}{ED}{}{ED}{at}", labels.join("|"))
         }
         F::Choices(list) => {
@@ -223,7 +223,7 @@ pub fn sections(doc: &Snapshot, selection: &[u64]) -> (String, Vec<(String, Vec<
     match items.as_slice() {
         [] => {
             let rows = SHEET.iter().filter_map(|r| row(doc, "sheet", &doc.fields, r)).collect();
-            ("Sheet".into(), vec![(String::new(), rows)])
+            (crate::ui::tr("Sheet"), vec![(String::new(), rows)])
         }
         [item] => {
             let fields = &item.data["fields"];
@@ -242,7 +242,7 @@ pub fn sections(doc: &Snapshot, selection: &[u64]) -> (String, Vec<(String, Vec<
                 cells.append(&mut rows);
                 rows = cells;
             }
-            (title_of(&item.kind).into(), vec![(String::new(), rows)])
+            (crate::ui::tr(title_of(&item.kind)), vec![(String::new(), rows)])
         }
         many => {
             let all_locked = many.iter().all(|i| i.locked);

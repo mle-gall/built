@@ -674,65 +674,68 @@ class BlenderPanel:
         details = []
         if editing:
             light = lights[selected]
-            details = [field("name", "Name", "text", light["name"]),
-                       field("on", "Enabled", "toggle", light["on"]),
-                       field("power", "Power", "number", light["power"], min=0, max=1e6, unit=" W"),
-                       field("kelvin", "Temperature", "number", light["kelvin"] or rb.DEFAULT_KELVIN,
+            details = [field("name", tr("Name"), "text", light["name"]),
+                       field("on", tr("Enabled"), "toggle", light["on"]),
+                       field("power", tr("Power"), "number", light["power"], min=0, max=1e6, unit=" W"),
+                       field("kelvin", tr("Temperature"), "number", light["kelvin"] or rb.DEFAULT_KELVIN,
                              min=rb.MIN_KELVIN, max=rb.MAX_KELVIN, unit=" K")]
             if light["kind"] == "spot":
                 heading, tilt = rb.angles_from_aim(light["dir"])
-                details.extend([field("heading", "Heading", "number", heading, min=0, max=360),
-                                field("tilt", "Tilt", "number", tilt, min=-90, max=90)])
-                details.append(field("angle", "Cone", "number", light["angle"], min=1, max=179, unit="°"))
-            details.append(item("button", "remove", "Remove light"))
-        cameras = ["Current view", *[f"{i + 1}. {v.name}" for i, v in enumerate(self.scene.saved_views)]]
+                details.extend([field("heading", tr("Heading"), "number", heading, min=0, max=360),
+                                field("tilt", tr("Tilt"), "number", tilt, min=-90, max=90)])
+                details.append(field("angle", tr("Cone"), "number", light["angle"], min=1, max=179, unit="°"))
+            details.append(item("button", "remove", tr("Remove light")))
+        cameras = [tr("Current view"), *[f"{i + 1}. {v.name}" for i, v in enumerate(self.scene.saved_views)]]
         self._settings()
         if self.camera not in cameras or self.selected_camera_key != rb.camera_key(self.app.viewport.camera):
             self.camera = cameras[0]
-        result = [field("quality", "Preset", "choice", opts["quality"], options=["Draft", "Final"]),
-                  field("camera", "Camera", "choice", self.camera, options=cameras),
-                  item("progress", "activity", self.status, fraction=self.fraction),
-                  item("button", "render", "Render", primary=True, enabled=self.found is not None and self.proc is None)]
+        result = [field("quality", tr("Preset"), "choice", tr(opts["quality"]), options=[tr("Draft"), tr("Final")]),
+                  field("camera", tr("Camera"), "choice", self.camera, options=cameras),
+                  item("progress", "activity", tr(self.status), fraction=self.fraction),
+                  item("button", "render", tr("Render"), primary=True, enabled=self.found is not None and self.proc is None)]
         if not self.found:
-            result.insert(0, item("chip", "availability", "Blender unavailable", available=False))
-            result.append(item("button", "settings", "Blender settings…"))
+            result.insert(0, item("chip", "availability", tr("Blender unavailable"), available=False))
+            result.append(item("button", "settings", tr("Blender settings…")))
         if self.proc:
-            result.append(item("button", "cancel", "Cancel render"))
+            result.append(item("button", "cancel", tr("Cancel render")))
         preview = []
         if self.image:
             preview.append(item("image", "preview", path=str(self.image)))
         if self.image and not self.proc:
-            preview.extend([item("button", "save", "Save PNG…"),
-                           item("button", "folder", "Open folder"),
-                           field("sync", "Follow camera", "toggle", self.sync_timer.isActive())])
+            preview.extend([item("button", "save", tr("Save PNG…")),
+                           item("button", "folder", tr("Open folder")),
+                           field("sync", tr("Follow camera"), "toggle", self.sync_timer.isActive())])
         if self.recent:
-            preview.extend([item("list", "recent", columns=["Recent renders", "Preset", "Resolution"],
+            preview.extend([item("list", "recent", columns=[tr("Recent renders"), tr("Preset"), tr("Resolution")],
                                 rows=[dict(key=str(path), cells=[name, quality, size])
                                       for path, name, quality, size in self.recent], selection=self.recent_path),
-                           item("button", "open_image", "Open image")])
+                           item("button", "open_image", tr("Open image"))])
         if self.lines and self.status == "Failed":
             result.append(item("log", "worker", lines=self.lines))
-        lighting = [field("lights_open", "Show light controls", "toggle", self.lights_open)]
+        lighting = [field("lights_open", tr("Show light controls"), "toggle", self.lights_open)]
         if self.lights_open:
-            lighting.extend([field("ambience", "Ambience", "choice", state["ambience"], options=list(rb.AMBIENCES)),
-                             field("sun_scale", "Sun intensity", "number", state["sun_scale"], min=0.1, max=2),
-                             item("button", "shadows", "Change date and time…"),
-                             item("list", "lights", columns=["Scene lights"], rows=light_rows, selection=self.selected),
-                             item("button", "point", "Place point"), item("button", "spot", "Place spot"),
-                             item("button", "aim", "Aim…", enabled=editing), *details])
+            lighting.extend([field("ambience", tr("Ambience"), "choice", tr(state["ambience"]), options=[tr(k) for k in rb.AMBIENCES]),
+                             field("sun_scale", tr("Sun intensity"), "number", state["sun_scale"], min=0.1, max=2),
+                             item("button", "shadows", tr("Change date and time…")),
+                             item("list", "lights", columns=[tr("Scene lights")], rows=light_rows, selection=self.selected),
+                             item("button", "point", tr("Place point")), item("button", "spot", tr("Place spot")),
+                             item("button", "aim", tr("Aim…"), enabled=editing), *details])
         return [section("link", tr("Blender link"), *self.link.sections()),
                 section("job", "", *result),
                 section("preview_output", "", *preview),
-                section("output", "Output",
-                        field("width", "Width", "number", opts["width"], min=64, max=16384, unit=" px"),
-                        field("height", "Height", "number", opts["height"], min=64, max=16384, unit=" px"),
-                        field("ground", "Ground plane", "toggle", opts["ground"]),
-                        field("keep_blend", "Keep .blend", "toggle", opts["keep_blend"])),
-                section("lighting", "Lighting", *lighting)]
+                section("output", tr("Output"),
+                        field("width", tr("Width"), "number", opts["width"], min=64, max=16384, unit=" px"),
+                        field("height", tr("Height"), "number", opts["height"], min=64, max=16384, unit=" px"),
+                        field("ground", tr("Ground plane"), "toggle", opts["ground"]),
+                        field("keep_blend", tr("Keep .blend"), "toggle", opts["keep_blend"])),
+                section("lighting", tr("Lighting"), *lighting)]
 
     def event(self, control, event, value):
         if control.startswith("link_") and self.link.event(control, event, value):
             return
+        if event == "commit" and control in ("quality", "ambience"):
+            options = ("Draft", "Final") if control == "quality" else rb.AMBIENCES
+            value = next((key for key in options if tr(key) == value), value)
         if event == "commit" and control in ("quality", "width", "height", "ground", "keep_blend"):
             self.opts[control] = int(value) if control in ("width", "height") else value
         elif event == "commit" and control in ("sun_scale", "ambience"):
@@ -777,7 +780,7 @@ class BlenderPanel:
                 st["lights"][idx][control] = value
             _store(self.app, st)
         elif control == "camera":
-            if value != "Current view":
+            if value != tr("Current view"):
                 self.scene.saved_views[int(value.split(".", 1)[0]) - 1].apply_camera(self.app.viewport.camera)
                 self.app.viewport.update()
             self.selected_camera_key = rb.camera_key(self.app.viewport.camera)
