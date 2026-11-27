@@ -348,28 +348,45 @@ def test_big_model_interaction_budgets(tmp_path, model, x0):
 
         # Move's hover over the yard of 3,000 parts and the nested blocks:
         # the box grips and rotation handles come from the cached bounds.
-        host.menu("tool:move")
-        vp.camera.set_view("top")
-        vp.camera.fit_to(V(-170, -205, 0), V(35, 45, 2))
+        if model is big_model:
+            ms["move_grip_hover"] = _grip_hovers(host, vp, view, move)
+
+    table = "\n".join(f"  {k:<24} {ms[k]:8.1f} ms  (budget {v} ms)" for k, v in BUDGET_MS.items() if k in ms)
+    print("\nbig model budgets:\n" + table)
+    over = {k: round(ms[k], 1) for k, v in BUDGET_MS.items() if k in ms and ms[k] >= v}
+    if over and _busy():
+        pytest.skip(f"machine busy (load {os.getloadavg()[0]:.0f}); over budget: {over}\n{table}")
+    assert not over, f"over budget: {over}\n{table}"
+
+
+def _grip_hovers(host, vp, view, move):
+    """Move's hover over the yard of 3,000 crates under one container: on
+    a crate (the grips) and between crates (inside the box, kept). The
+    offscreen host draws no pick IDs, so the group pick answers the yard
+    wherever the yard is; the rest of the hover (cached bounds, grips,
+    handles, their projection and hit test) runs as in the window."""
+    host.menu("tool:move")
+    vp.camera.set_view("top")
+    vp.camera.fit_to(V(-62, -202, 0), V(-30, -178, 1))
+    _settle(host)
+    tools = host.view.tools
+    tool = tools.tool
+    yard = next(g for g in vp.scene.groups if g.name == "Yard")
+    tools.pick_group = lambda x, y: yard
+    try:
+        move(V(-59.8, -199.8, .5))
         _settle(host)
-        tool = host.view.tool
-        move(V(-59.7, -199.7, .3))
-        _settle(host)
-        assert tool._grip_group is not None and tool._box_grips
+        assert tool._grip_group is yard and len(tool._box_grips) == 8
         grips = []
         for i in range(60):
-            p = (V(-59.7 + (i * 1.5) % 60, -199.7 + 1.5 * (i % 7), .3) if i % 2
-                 else V(-59.7 - 22 * (i % 4), .3 + 2 * (i % 9), .6))
-            x, y = _px(view, p)
+            c, r = i % 20, (i * 7) % 14
+            gap = .75 if i % 2 else 0.
+            x, y = _px(view, V(-59.8 + 1.5 * c + gap, -199.8 + 1.5 * r + gap, .5))
             start = time.perf_counter()
             host.pointer("move", x, y, 0, 0, 0)
             host.idle()
             grips.append((time.perf_counter() - start) * 1e3)
-        ms["move_grip_hover"] = statistics.median(grips)
-
-    table = "\n".join(f"  {k:<24} {ms[k]:8.1f} ms  (budget {v} ms)" for k, v in BUDGET_MS.items())
-    print("\nbig model budgets:\n" + table)
-    over = {k: round(ms[k], 1) for k, v in BUDGET_MS.items() if ms[k] >= v}
-    if over and _busy():
-        pytest.skip(f"machine busy (load {os.getloadavg()[0]:.0f}); over budget: {over}\n{table}")
-    assert not over, f"over budget: {over}\n{table}"
+        assert tool._grip_group is yard
+    finally:
+        del tools.pick_group
+    return statistics.median(grips)

@@ -432,7 +432,6 @@ pub fn edit_ai_connection(st: &Bound<'_, PyAny>, key: &str, value: &str, detect:
 
 const SECTIONS: &[(&str, &str, &str, &str)] = &[
     ("general", "General", "mac", ""),
-    ("modelling", "Modelling", "mac", "How the modelling tools behave."),
     (
         "navigation",
         "Navigation",
@@ -459,6 +458,7 @@ const SECTIONS: &[(&str, &str, &str, &str)] = &[
     ),
     ("ai", "AI", "mac", "The assistant's provider is kept on this Mac; model access applies to the model in front."),
     ("blender", "Blender", "mac", "Used for the next render."),
+    ("modelling", "Modelling", "mac", "How the modelling tools behave."),
     (
         "units",
         "Units",

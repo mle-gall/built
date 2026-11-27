@@ -101,7 +101,7 @@ def test_sections_in_two_groups(win):
     labels = [(r.get("kind", ""), r["label"]) for r in side]
     assert labels == [("caption", "Built · this Mac"), ("", "General"), ("", "Navigation"),
                       ("", "Display"), ("", "3D mouse"), ("", "Keyboard"), ("", "AI"), ("", "Blender"),
-                      ("caption", "This model"), ("", "Units"),
+                      ("", "Modelling"), ("caption", "This model"), ("", "Units"),
                       ("", "Project registry"), ("", "Appearance"), ("", "Dimension style"), ("", "Location & north")]
     assert [r["id"] for r in side if r.get("on")] == ["general"]
     assert "theme" not in fields(sheet) and "autosave" in fields(sheet)
