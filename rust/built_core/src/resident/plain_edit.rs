@@ -574,10 +574,19 @@ pub(super) fn painted_face_ranges<'p>(
     for f in store.inner.live_slots(Kind::Face) {
         if skip[f as usize] { continue; }
         let r = st.frings.get(f as usize);
-        if r.n_rings != 1 { return Ok(None); }
-        let size = *st.ring_sizes.get(r.ring_start as usize);
-        if !(3..=4).contains(&size) { return Ok(None); }
-        let count = size - 2;
+        // Clipping ears or splitting a loop emits at most n-2 triangles.
+        // Each bridged hole adds its corners plus two bridge endpoints.
+        // Equality with the total draw below proves every bound was reached.
+        if r.n_rings == 0 { return Ok(None); }
+        let mut size = 0u32;
+        for i in 0..r.n_rings {
+            let n = *st.ring_sizes.get((r.ring_start + i) as usize);
+            if n < 3 { return Ok(None); }
+            let Some(total) = size.checked_add(n) else { return Ok(None); };
+            size = total;
+        }
+        let Some(extra) = (r.n_rings - 1).checked_mul(2) else { return Ok(None); };
+        let Some(count) = (size - 2).checked_add(extra) else { return Ok(None); };
         if wanted.contains(&f) { spans.push((first, count)); }
         let Some(end) = first.checked_add(count) else { return Ok(None) };
         first = end;

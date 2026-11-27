@@ -14,6 +14,7 @@ pub(super) struct GeometryMemo {
     triangles: Vec<[u32; 3]>,
     starts: Vec<usize>,
     normals: Vec<V3>,
+    pub material: Option<MaterialMemo>,
     pub soft_edges: Vec<[u32; 2]>,
     pub fans: HashMap<(usize, usize), crate::store::geometry::V3>,
 }
@@ -31,7 +32,7 @@ impl GeometryMemo {
         counts: &[i64],
         offsets: &[(usize, usize)],
         h: Hypot,
-        geometry: &[(Vec<[u32; 3]>, V3)],
+        geometry: &[(std::borrow::Cow<'_, [[u32; 3]]>, V3)],
     ) -> Self {
         let mut offsets = offsets.to_vec();
         offsets.push((sizes.len(), corners.len()));
@@ -53,14 +54,15 @@ impl GeometryMemo {
             triangles,
             starts,
             normals,
+            material: None,
             soft_edges: Vec::new(),
             fans: HashMap::new(),
         }
     }
 
-    pub fn face(&self, f: usize) -> (Vec<[u32; 3]>, V3) {
+    pub fn face(&self, f: usize) -> (std::borrow::Cow<'_, [[u32; 3]]>, V3) {
         (
-            self.triangles[self.starts[f]..self.starts[f + 1]].to_vec(),
+            std::borrow::Cow::Borrowed(&self.triangles[self.starts[f]..self.starts[f + 1]]),
             self.normals[f],
         )
     }
@@ -127,4 +129,20 @@ impl GeometryMemo {
             }
         }
     }
+}
+
+/// A face's material rows depend on its triangulation, positions, both UV
+/// mappings and both paints. Offsets are local to the preceding prototype.
+#[derive(Clone, Copy, Default)]
+pub(super) struct FaceMaterial {
+    pub mapping: [u32; 16],
+    pub paints: [u32; 3],
+    pub start: usize,
+    pub end: usize,
+}
+
+#[derive(Default)]
+pub(super) struct MaterialMemo {
+    pub faces: Vec<FaceMaterial>,
+    pub rows: Vec<u8>,
 }

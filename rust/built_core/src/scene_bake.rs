@@ -8,7 +8,7 @@ use rayon::prelude::*;
 use std::collections::HashMap;
 
 mod edit_geometry;
-use edit_geometry::GeometryMemo;
+use edit_geometry::{FaceMaterial, GeometryMemo, MaterialMemo};
 
 /// One previous large prototype, owned by the resident scene's updater.
 #[pyclass(frozen)]
@@ -18,7 +18,14 @@ impl GeometryCache {
     pub(crate) fn empty() -> Self { Self(Default::default()) }
 }
 
+struct Retained {
+    next: GeometryMemo,
+    dirty: Vec<bool>,
+    material: Option<MaterialMemo>,
+}
+
 struct Prepared {
+    retained: Option<Retained>,
     triangles: Vec<([u32; 3], [V3; 3], [u8; 4])>,
     faces: Vec<usize>,
     visible_triangles: usize,
@@ -124,7 +131,8 @@ fn prepare_with(
         if let (Some(old), Some(changes)) = (&previous, &changes) {
             if !changes.faces[f] { return old.face(f); }
         }
-        geometry(f)
+        let (triangles, normal) = geometry(f);
+        (std::borrow::Cow::Owned(triangles), normal)
     };
     let per_face: Vec<_> = if counts.len() >= 4096 {
         (0..counts.len()).into_par_iter().map(bake_face).collect()
@@ -137,9 +145,10 @@ fn prepare_with(
     for (f, (tris, normal)) in per_face.into_iter().enumerate() {
         normals.push(normal);
         if retain_hidden || !hidden[f] {
-            triangles.extend(tris.into_iter().map(|t| (t, f, colors[f])));
+            triangles.extend(tris.iter().map(|&t| (t, f, colors[f])));
         }
     }
+    let (dirty_faces, dirty_vertices) = changes.map(|c| (c.faces, Some(c.vertices))).unwrap_or_default();
     let fans = if edge_flags.iter().any(|f| f & 1 != 0 && f & 4 == 0) {
         let mut starts = vec![0i64; edge_list.len() + 1];
         for &(edge, _) in &sides {
@@ -163,7 +172,7 @@ fn prepare_with(
         let corners: Vec<_> = c.iter().map(|&v| v as i64).collect();
         let model_vectors = |vs: &[V3]| vs.iter().map(|v|
             crate::store::geometry::V3(v.0 as f64, v.1 as f64, v.2 as f64)).collect::<Vec<_>>();
-        let mut dirty = changes.map(|c| c.vertices);
+        let mut dirty = dirty_vertices;
         if let (Some(old), Some(mask)) = (&previous, &mut dirty) {
             old.changed_edges(&edge_list, &soft, mask);
         }
@@ -189,7 +198,7 @@ fn prepare_with(
         }
         fans
     } else { Default::default() };
-    if let Some(cache) = cache { *cache.0.lock().unwrap_or_else(|e| e.into_inner()) = memo; }
+
     if retain_hidden && hidden.iter().any(|v| *v) {
         triangles.sort_by_key(|t| hidden[t.1]);
     }
@@ -232,6 +241,7 @@ fn prepare_with(
     }
     let edges = edges.into_iter().map(|(e, _)| e).collect();
     Prepared {
+        retained: memo.map(|next| Retained { next, dirty: dirty_faces, material: previous.and_then(|p| p.material) }),
         triangles,
         faces,
         visible_triangles,
@@ -501,6 +511,14 @@ pub fn bake_scene<'py>(
         // One prototype (a rebake) runs here, not on a pool thread: under a
         // busy machine each hand-off cost more than the work it moved.
         let one = offsets.len() == 2;
+        // Prime one large rich prototype at load. A single-prototype edit
+        // naturally selects its own draw, including changes of prototype.
+        let retained_face_start = geometry_cache.and_then(|_| offsets.windows(2).find(|pair| {
+            let (a, b) = (pair[0], pair[1]);
+            b[3] - a[3] >= 32768 && (exact.is_some()
+                || flags[a[4]..b[4]].iter().any(|f| *f != 0)
+                || paints[a[3]..b[3]].iter().any(|p| *p != [0; 3]))
+        }).map(|pair| pair[0][3]));
         let prepare_pair = |pair: &[[usize; 5]]| {
             let (a, b) = (pair[0], pair[1]);
             prepare_with(
@@ -515,10 +533,10 @@ pub fn bake_scene<'py>(
                 h,
                 retain_hidden,
                 exact.map(|e| &e[a[1]..b[1]]),
-                geometry_cache.filter(|_| one && b[3] - a[3] >= 32768),
+                geometry_cache.filter(|_| Some(a[3]) == retained_face_start),
             )
         };
-        let prepared: Vec<_> = if one { vec![prepare_pair(&offsets)] } else {
+        let mut prepared: Vec<_> = if one { vec![prepare_pair(&offsets)] } else {
             offsets.par_windows(2).map(prepare_pair).collect()
         };
         let span = |n: usize| if edit_room && n >= 196608 {
@@ -596,7 +614,7 @@ pub fn bake_scene<'py>(
             }
         }
         let mut materials = vec![0u8; prepared.len() * 16];
-        for (i, mesh) in prepared.iter().enumerate() {
+        for (i, mesh) in prepared.iter_mut().enumerate() {
             let first_face = offsets[i][3];
             let special = mesh.faces.iter().any(|f| paints[first_face + f] != [0; 3]);
             if !special {
@@ -631,19 +649,54 @@ pub fn bake_scene<'py>(
                     .collect::<Vec<_>>(),
             );
             let points = &pts[offsets[i][0]..offsets[i + 1][0]];
-            for (j, ((t, _, _), face)) in mesh.triangles.iter().zip(&mesh.faces).enumerate() {
+            let start = materials.len();
+            let end = start + length * 32;
+            materials.reserve(end - start);
+            let num_faces = offsets[i+1][3] - first_face;
+            // Bound the one retained material stream independently of the
+            // renderer's storage-buffer size limit.
+            let retain = mesh.retained.is_some() && length * 32 +
+                num_faces * std::mem::size_of::<FaceMaterial>() <= 96 * 1024 * 1024;
+            let mut spans = if retain { vec![FaceMaterial::default(); num_faces] } else { Vec::new() };
+            let mut j = 0;
+            while j < mesh.faces.len() {
                 if j == mesh.visible_triangles {
                     materials.resize(materials.len() + mesh.visible_edges * 2 * 32, 0);
                 }
+                let face = mesh.faces[j];
                 let f = first_face + face;
+                let begin = j;
+                while j < mesh.faces.len() && mesh.faces[j] == face { j += 1; }
                 let mapping: [f32; 16] = std::array::from_fn(|k| maps[[f, k]]);
-                for v in t {
-                    materials.extend_from_slice(&material_vertex(
-                        points[*v as usize],
-                        &mapping,
-                        paints[f],
-                    ));
+                let first = materials.len() - start;
+                let signature = FaceMaterial { mapping: mapping.map(f32::to_bits), paints: paints[f],
+                    start: first, end: first + (j - begin) * 96 };
+                let previous = mesh.retained.as_ref()
+                    .filter(|r| r.dirty.get(face) == Some(&false))
+                    .and_then(|r| r.material.as_ref())
+                    .and_then(|old| {
+                        let span = old.faces.get(face)?;
+                        if span.mapping != signature.mapping || span.paints != signature.paints
+                            || span.end - span.start != signature.end - signature.start { return None; }
+                        old.rows.get(span.start..span.end)
+                    });
+                if let Some(rows) = previous {
+                    materials.extend_from_slice(rows);
+                } else {
+                    for (t, _, _) in &mesh.triangles[begin..j] {
+                        for v in t { materials.extend_from_slice(&material_vertex(points[*v as usize], &mapping, paints[f])); }
+                    }
                 }
+                if retain { spans[face] = signature; }
+            }
+            if retain {
+                mesh.retained.as_mut().unwrap().next.material = Some(MaterialMemo { faces: spans,
+                    rows: materials[start..end].to_vec() });
+            }
+        }
+        if let Some(cache) = geometry_cache {
+            if let Some(retained) = prepared.into_iter().find_map(|p| p.retained) {
+                *cache.0.lock().unwrap_or_else(|e| e.into_inner()) = Some(retained.next);
             }
         }
         (bytes, indices, bounds, table, materials)
