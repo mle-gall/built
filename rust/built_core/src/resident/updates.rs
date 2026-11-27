@@ -1187,6 +1187,17 @@ impl InstanceUpdates {
             if store.is_none() {
                 continue;
             }
+            if store.is_exact_instance_of::<crate::store::py::PyMeshStore>() {
+                let bounds: Option<([f64; 3], [f64; 3])> = store.call_method0("position_box")?.extract()?;
+                let Some((low, high)) = bounds else { continue };
+                let frame: [f64; 3] = store.getattr("frame_origin")?.extract()?;
+                // The common in-frame edit needs no dense positions copy.
+                // Confirm potential rebases below with the original reduction,
+                // which propagates NaNs independently on each axis.
+                if (0..3).all(|k| ((low[k] + high[k]) * 0.5 + frame[k]).abs() <= f64::from(REBASE_DISTANCE)) {
+                    continue;
+                }
+            }
             let positions = store.call_method0("positions")?;
             if positions.len()? == 0 {
                 continue;
