@@ -343,6 +343,10 @@ def test_component_definition_without_replacing_selection(win, geometry, groups)
     from built_core.group import Group
     scene = win.viewport.scene
     originals = [Group(name=f"Part {i}") for i in range(groups)]
+    if originals:
+        from built_core import Matrix4
+        originals[0].xform = Matrix4()
+        originals[0].component = False
     scene.groups.extend(originals)
     entities = originals.copy()
     if geometry:
@@ -358,7 +362,10 @@ def test_component_definition_without_replacing_selection(win, geometry, groups)
     template, = scene.kept_components
     assert template.is_component() and template.name == "Spare"
     assert len(template.mesh.faces) == int(geometry)
+    if groups == 1:
+        assert template.mesh is not originals[0].mesh
     if groups > 1:
+        assert all(copy.mesh is not original.mesh for copy in template.children for original in originals)
         assert sorted(g.name for g in template.children) == sorted(g.name for g in originals)
     win.viewport.history.undo()
     assert not scene.kept_components

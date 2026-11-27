@@ -179,6 +179,26 @@ struct ComponentForm {
     groups: Py<PyList>,
     fallback: String,
 }
+// A transformed ordinary group may share its mesh with its copy. A kept
+// definition must remain independent when that original group is edited.
+fn detach_group_meshes(source: &Bound<'_, PyAny>, copy: &Bound<'_, PyAny>) -> PyResult<()> {
+    if source.call_method0("is_component")?.is_truthy()? {
+        return Ok(());
+    }
+    let mesh = source.getattr("mesh")?;
+    if copy.getattr("mesh")?.is(&mesh) {
+        let own_mesh = source.py().import("built_core.group")?.call_method1("_copy_definition_mesh", (mesh,))?;
+        copy.setattr("mesh", own_mesh)?;
+    }
+    let children = source.getattr("children")?;
+    if children.is_truthy()? {
+        for (child, duplicate) in children.try_iter()?.zip(copy.getattr("children")?.try_iter()?) {
+            detach_group_meshes(&child?, &duplicate?)?;
+        }
+    }
+    Ok(())
+}
+
 #[pymethods]
 impl ComponentForm {
     fn __traverse__(&self, visit: PyVisit<'_>) -> Result<(), PyTraverseError> {
@@ -207,7 +227,9 @@ impl ComponentForm {
             let copy = py.import("built_core.group")?.getattr("copy_group")?;
             let copies = PyList::empty(py);
             for source in self.groups.bind(py).iter() {
-                copies.append(copy.call1((source,))?)?;
+                let duplicate = copy.call1((&source,))?;
+                detach_group_meshes(&source, &duplicate)?;
+                copies.append(duplicate)?;
             }
             let template = if matches!(self.mode, Component::Group) {
                 copies.get_item(0)?
