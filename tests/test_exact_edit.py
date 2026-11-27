@@ -408,7 +408,7 @@ def test_make_group_and_explode_keep_bindings_through_the_placement():
 
 # ---- line across a curved face ---------------------------------------------
 
-def test_line_around_a_cylinder_follows_the_surface():
+def test_line_around_a_cylinder_with_line_on_surface_follows_generators():
     scene, h = cylinder(height=2)
     st = store(scene)
     # Two points at one height on facets a quarter turn apart.
@@ -448,15 +448,16 @@ def test_line_around_a_cylinder_follows_the_surface():
     assert st.surface_path([5, 5, 5], [6, 6, 6]) is None
 
 
-def test_chord_mode_line_stays_straight():
+@pytest.mark.parametrize("span", [1, 6])
+def test_chord_mode_of_plain_line_stays_straight_across_facets(span):
     scene, h = cylinder(height=2)
     st = store(scene)
     k = 3
     p = lambda t, z: [math.cos(TAU * t / 24), math.sin(TAU * t / 24), z]  # noqa: E731
-    run(h, "add_edge", a=p(k, 1), b=p(k + 1, 1), chord=True)
+    run(h, "add_edge", a=p(k, 1), b=p(k + span, 1), chord=True)
     chord = [e for e in scene.mesh.edges if abs(e.v0.position.z() - 1) < 1e-12 and abs(e.v1.position.z() - 1) < 1e-12]
     assert chord and not any(st.exact_edge(e.key) for e in chord)
-    # Without chord mode the same line is the circle at that height.
+    # The surface tool uses this parameter section along a wall facet.
     other, h2 = cylinder(height=2)
     run(h2, "add_edge", a=p(k, 1), b=p(k + 1, 1))
     arc = [e for e in other.mesh.edges if abs(e.v0.position.z() - 1) < 1e-12 and abs(e.v1.position.z() - 1) < 1e-12]
