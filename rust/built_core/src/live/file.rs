@@ -101,6 +101,9 @@ pub(crate) fn load(scene: &Obj<'_>, ext: &Bound<'_, PyDict>) -> PyResult<()> {
             t.set_state(&id, "cycle");
         }
     }
+    for uid in t.rows.keys().cloned().collect::<Vec<_>>() {
+        super::reference::bind_frames(&mut t, &uid);
+    }
     put(scene, t)?;
     ext.del_item(EXT)
 }

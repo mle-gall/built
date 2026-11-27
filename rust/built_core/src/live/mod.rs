@@ -137,6 +137,7 @@ fn evaluate(scene: &Obj<'_>, t: &LiveTable, row: &Row) -> PyResult<&'static str>
 }
 fn run(scene: &Obj<'_>, t: &mut LiveTable, seeds: HashSet<String>) -> PyResult<()> {
     for uid in t.schedule(seeds).map_err(PyValueError::new_err)? {
+        reference::bind_frames(t, &uid);
         let row = &t.rows[&uid];
         if row.state == "stale" || row.state == "cycle" {
             continue;
@@ -161,6 +162,7 @@ pub(crate) fn finish(
     let mut structure = false;
     {
         let d = doc::lock();
+        let mut moved = HashSet::new();
         let mut add = |k| {
             if let Some(Data::Placement(p)) = d.node(k).map(|n| &n.data) {
                 if let Some(uid) = &p.uid {
@@ -172,14 +174,27 @@ pub(crate) fn finish(
             match op {
                 Op::Set {
                     k,
-                    f: Field::Definition | Field::Xform,
+                    f: Field::Definition,
                     ..
                 } => add(*k),
                 Op::SetMany {
                     keys,
-                    f: Field::Definition | Field::Xform,
+                    f: Field::Definition,
                     ..
                 } => keys.iter().copied().for_each(&mut add),
+                Op::Set {
+                    k,
+                    f: Field::Xform,
+                    old,
+                    new,
+                } if old != new => {
+                    moved.insert(*k);
+                }
+                Op::SetMany {
+                    keys,
+                    f: Field::Xform,
+                    ..
+                } => moved.extend(keys.iter().copied()),
                 Op::Ins {
                     k,
                     list: doc::ListId::Children,
@@ -204,6 +219,9 @@ pub(crate) fn finish(
                 }
                 _ => (),
             }
+        }
+        for key in moved {
+            seeds.extend(t.frames.get(&key).into_iter().flatten().cloned());
         }
     }
     if structure {
@@ -249,6 +267,13 @@ pub(crate) fn finish(
             if let Some(id) = t.owners.get(&uid).cloned() {
                 t.remove(&id);
                 seeds.extend(t.users(&Key::Row(id)).cloned());
+            }
+        }
+    }
+    if structure {
+        for uid in t.rows.keys().cloned().collect::<Vec<_>>() {
+            if reference::bind_frames(&mut t, &uid) {
+                seeds.insert(uid);
             }
         }
     }

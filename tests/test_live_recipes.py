@@ -220,3 +220,18 @@ def test_copy_release_and_opaque_inverse():
     assert g.mesh is before
     apply(h, "redo")
     assert g.mesh is after and copied.mesh is baked
+
+
+def test_anchors_dirty_only_when_relative_frames_move():
+    scene, h, (assembly, external) = setup_groups(2)
+    host, member = Group(name="Host"), Group(name="Member")
+    for child in (host, member):
+        child.xform = Matrix4()
+    assembly.adopt([host, member])
+    apply(h, "live_set", row=box(member, inputs=[dict(placement=host.uid)]))
+    apply(h, "live_set", row=box(external, 2, inputs=[dict(placement=host.uid)]))
+    same_frame, outside = member.mesh, external.mesh
+    apply(h, "move_placements", placements=[assembly.uid], delta=[4, 0, 0])
+    assert member.mesh is same_frame
+    assert external.mesh is not outside
+    assert min(v.position_tuple()[0] for v in external.mesh.vertices) == 4.

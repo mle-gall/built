@@ -101,6 +101,8 @@ pub struct LiveTable {
     pub rows: HashMap<String, Arc<Row>>,
     pub owners: HashMap<String, String>,
     pub pending: OrdSet<String>,
+    pub(super) frames: HashMap<u64, OrdSet<String>>,
+    pub(super) row_frames: HashMap<String, Vec<u64>>,
     pub(super) users: HashMap<Key, OrdSet<String>>,
     pub(super) order: HashMap<String, u64>,
     pub(super) serial: u64,
@@ -111,8 +113,40 @@ impl LiveTable {
         rows.sort_by_key(|r| self.order[&r.uid]);
         rows
     }
+    fn clear_frames(&mut self, uid: &str) {
+        for frame in self.row_frames.remove(uid).into_iter().flatten() {
+            if let Some(users) = self.frames.get_mut(&frame) {
+                users.remove(uid);
+                if users.is_empty() {
+                    self.frames.remove(&frame);
+                }
+            }
+        }
+    }
+
+    pub(super) fn bind_frames(&mut self, uid: &str, mut frames: Vec<u64>) -> bool {
+        frames.sort_unstable();
+        if self
+            .row_frames
+            .get(uid)
+            .map(Vec::as_slice)
+            .unwrap_or_default()
+            == frames
+        {
+            return false;
+        }
+        self.clear_frames(uid);
+        if !frames.is_empty() {
+            for k in &frames {
+                self.frames.entry(*k).or_default().insert(uid.into());
+            }
+            self.row_frames.insert(uid.into(), frames);
+        }
+        true
+    }
     pub fn remove(&mut self, uid: &str) -> Option<Arc<Row>> {
         let row = self.rows.remove(uid)?;
+        self.clear_frames(uid);
         self.owners.remove(&row.owner);
         for k in row.keys() {
             if let Some(users) = self.users.get_mut(&k) {

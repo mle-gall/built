@@ -148,3 +148,64 @@ pub(super) fn origin(
             .transform_point3(frame(k).transform_point3(local)),
     ))
 }
+
+/// Only transforms between the two frames affect an anchor. Moving their
+/// common assembly preserves the relation and schedules no work.
+pub(super) fn bind_frames(t: &mut LiveTable, uid: &str) -> bool {
+    let row = &t.rows[uid];
+    let mut result = HashSet::new();
+    if !row.inputs.is_empty() {
+        let d = doc::lock();
+        let chain = |mut key: Option<doc::Key>| {
+            let mut keys = HashSet::new();
+            while let Some(k) = key {
+                let Some(n) = d.node(k) else { break };
+                if !matches!(&n.data, Data::Placement(_)) {
+                    break;
+                }
+                keys.insert(k);
+                key = n.owners.first().copied();
+            }
+            keys
+        };
+        let owner = t.groups.get(&row.owner).copied();
+        let local = chain(owner);
+        let root = owner.and_then(|mut k| loop {
+            let node = d.node(k)?;
+            if matches!(node.data, Data::Root { .. }) {
+                break Some(k);
+            }
+            k = *node.owners.first()?;
+        });
+        let resolve_path = |path: &[String]| {
+            let mut key = root?;
+            for uid in path {
+                let mut children=d.node(key)?.children.iter().filter(|&&child|
+                    matches!(d.node(child).map(|n|&n.data),Some(Data::Placement(p)) if p.uid.as_ref()==Some(uid)));
+                key = *children.next()?;
+                if children.next().is_some() {
+                    return None;
+                }
+            }
+            Some(key)
+        };
+        for input in row.inputs.iter().chain(row.slots.values()) {
+            let target = match input {
+                Reference::Point(_) => {
+                    result.extend(owner);
+                    continue;
+                }
+                Reference::Slot { .. } => continue,
+                Reference::Placement { placement } => t.groups.get(placement).copied(),
+                Reference::Element { path, .. } => resolve_path(path),
+                Reference::Axis { sweep, .. } | Reference::Row { row: sweep } => t
+                    .rows
+                    .get(sweep)
+                    .and_then(|r| t.groups.get(&r.owner))
+                    .copied(),
+            };
+            result.extend(local.symmetric_difference(&chain(target)).copied());
+        }
+    }
+    t.bind_frames(uid, result.into_iter().collect())
+}
