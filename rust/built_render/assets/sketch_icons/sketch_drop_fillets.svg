@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+  <!-- Drop small fillets: a tiny round corner made sharp -->
+  <path d="M8 40 V10 H38"/>
+  <path d="M16 40 V22 A4 4 0 0 1 20 18 H38" stroke-width="2.4" stroke-dasharray="3 4"/>
+  <circle cx="8" cy="10" r="3.4" fill="#fff" stroke="none"/>
+</svg>

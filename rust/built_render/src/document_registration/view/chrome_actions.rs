@@ -167,6 +167,7 @@ fn run_one<'py>(win: &Obj<'py>, action: &Obj<'py>, source_view: &Obj<'py>) -> Py
         "lsheet" => return glue.getattr("chrome_sheet")?.call_method1("action", (win, arg)).map(drop),
         "start" => return glue.getattr("wgpu_start")?.call_method1("action", (win, arg)).map(drop),
         "sheets" => return py.import("built_render.sheet_workspace")?.call_method1("action", (win, arg)).map(drop),
+        "sketch" => return crate::sketch_workspace::action(win, arg),
         "tab" if arg == "scene:editcamera" => {
             return win.call_method1("edit_scene_camera", (glue.call_method1("marked_view", (win,))?,)).map(drop);
         }

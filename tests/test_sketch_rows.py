@@ -28,7 +28,7 @@ def rect(w, h, first_id=1):
 
 
 def sketch(curves, uid="5ce7c40000000001", **extra):
-    return dict(uid=uid, use="profile", name="Plate", curves=curves, **extra)
+    return {"uid": uid, "use": "profile", "name": "Plate", "curves": curves, **extra}
 
 
 def rows_of(scene, kind):

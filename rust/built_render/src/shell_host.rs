@@ -1143,6 +1143,14 @@ impl Host {
         }
         let (kind, arg) = action.split_once(':').unwrap_or((action, ""));
         let mut out = none(py);
+        // The Sketch workspace keeps its own history and tools while it is up.
+        if matches!(kind, "undo" | "redo" | "tool") {
+            let took = guarded(h, "sketch", crate::sketch_workspace::command(&w, kind).map(|t| pyo3::types::PyBool::new(py, t).to_owned().into_any()))?;
+            if took.is_truthy()? {
+                slf.borrow_mut().request_frame();
+                return Ok(out);
+            }
+        }
         match kind {
             "tool" => {
                 guarded(h, "tool", w.call_method1("_activate_tool", (arg,)))?;

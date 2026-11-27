@@ -810,6 +810,9 @@ fn glue(
             vp.call_method1("flash_status", (msg,))?;
         }
         "selectiontag" => crate::tree_grouping::tag_visibility::viewport_tag_menu(win, PyList::new(py, sel)?.as_any())?,
+        "sketch" => {
+            crate::sketch_workspace::enter(win, arg, "")?;
+        }
         "intersect" => {
             let intersect = py.import("built_core.intersect")?;
             let mode = match arg {

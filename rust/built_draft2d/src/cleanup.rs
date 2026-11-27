@@ -229,6 +229,19 @@ pub fn unit_doubt(s: &Sketch, declared: Option<&str>) -> Option<Issue> {
 
 /// Everything wrong, in the order the list shows it.
 pub fn issues(s: &Sketch, tol: f64, declared_unit: Option<&str>) -> Vec<Issue> {
+    let doubt = unit_doubt(s, declared_unit);
+    // The tolerance is in millimetres: measure a doubtful drawing as it
+    // will be once its unit is fixed (ids do not change with scale).
+    let probe;
+    let s = match &doubt {
+        Some(Issue::Units { factor, .. }) => {
+            let mut scaled = s.clone();
+            scaled.scale(*factor);
+            probe = scaled;
+            &probe
+        }
+        _ => s,
+    };
     let mut out = Vec::new();
     let runs = segmented_runs(s, tol);
     if !runs.is_empty() {
@@ -247,7 +260,7 @@ pub fn issues(s: &Sketch, tol: f64, declared_unit: Option<&str>) -> Vec<Issue> {
     if !dups.is_empty() {
         out.push(Issue::Duplicates { curves: dups });
     }
-    if let Some(u) = unit_doubt(s, declared_unit) {
+    if let Some(u) = doubt {
         out.push(u);
     }
     out
@@ -352,6 +365,11 @@ pub fn fix(s: &mut Sketch, issue: &Issue) -> usize {
 /// can remove another issue's curves). One local step for the workspace.
 pub fn fix_all(s: &mut Sketch, tol: f64, declared_unit: Option<&str>) -> usize {
     let mut n = 0;
+    // Units first: the tolerance is in millimetres.
+    if let Some(u) = unit_doubt(s, declared_unit) {
+        n += fix(s, &u);
+    }
+    let declared_unit = Some("mm");
     for _ in 0..8 {
         let list = issues(s, tol, declared_unit);
         let Some(first) = list.into_iter().find(|i| !matches!(i, Issue::Units { .. })) else { break };
@@ -360,10 +378,6 @@ pub fn fix_all(s: &mut Sketch, tol: f64, declared_unit: Option<&str>) -> usize {
             break;
         }
         n += done;
-    }
-    // Units last: the other fixes measure with the tolerance in file units.
-    if let Some(u) = unit_doubt(s, declared_unit) {
-        n += fix(s, &u);
     }
     n
 }

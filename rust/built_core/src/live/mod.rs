@@ -9,6 +9,7 @@ mod presets;
 pub(crate) mod profile;
 mod reference;
 pub mod sketch;
+mod sketch_scene;
 mod sweep;
 pub(crate) use file::{load, save};
 mod table;
@@ -932,6 +933,8 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(live_set, m)?)?;
     m.add_function(wrap_pyfunction!(sketch_commit, m)?)?;
     m.add_function(wrap_pyfunction!(sketch_profile, m)?)?;
+    m.add_function(wrap_pyfunction!(sketch_scene::sketch_plane, m)?)?;
+    m.add_function(wrap_pyfunction!(sketch_scene::sketch_context, m)?)?;
     m.add_function(wrap_pyfunction!(live_release, m)?)?;
     m.add_function(wrap_pyfunction!(live_reevaluate, m)?)?;
     m.add_function(wrap_pyfunction!(live_rows, m)?)
