@@ -986,7 +986,7 @@ fn inspector_verbs<'py>(
         }
     };
     let kind = verbs::kind(&f);
-    let shared = std::sync::Arc::new(sel.iter().map(|e| e.clone().unbind()).collect::<Vec<_>>());
+    let shared = std::sync::Arc::new(sel.into_iter().map(Bound::unbind).collect::<Vec<_>>());
     verbs::inspector(&f)
         .into_iter()
         .map(|(vid, label, key, enabled, more)| {

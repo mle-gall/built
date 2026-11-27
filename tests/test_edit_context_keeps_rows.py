@@ -284,7 +284,7 @@ def test_the_browser_reads_only_the_rows_a_group_opened_or_closed_changes(native
         assert got == browser.read(fresh=True)
         assert browser.model is model
         if vp.scene.edit_group is not None:
-            assert any(t[0] == "context:fold" for t, _ in got)
+            assert all(t[0].startswith(("geometry:", "i:")) for t, _ in got)
     vp.begin_group_edit(lamp)
     vp.history.execute(SetFaceColorCommand(list(vp.scene.mesh.faces), (.9, .1, .1)))
     assert browser.read() == browser.read(fresh=True)

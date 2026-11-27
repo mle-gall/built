@@ -570,6 +570,15 @@ pub fn menu_rows(f: &Facts, kind: &str) -> Vec<Row> {
             row.push(tag);
         } else { r.one(vec![tag]); }
     }
+    if f.total > 0 && !read_only && !f.all_locked && !f.image_locked && kind != "guide" {
+        let erase = e("erase", "Erase");
+        if let Some((_, entries)) = r.0.iter_mut().find(|(family, row)| family.is_empty()
+            && row.len() == 1 && matches!(row[0].0.as_str(), "lock" | "hide")) {
+            entries.push(erase);
+        } else {
+            r.one(vec![erase]);
+        }
+    }
     r.0
 }
 
@@ -594,21 +603,6 @@ fn inspector_order(kind: &str) -> &'static [&'static str] {
     }
 }
 
-/// Inspector verbs that live under More ▾ rather than as a chip.
-const MORE: [&str; 12] = ["intersect", "soften", "reverse", "orient", "heal", "rebuild", "simplify", "split",
-    "join", "makefaces", "bridge", "merge"];
-/// Verbs the inspector draws itself from the record (no menu row).
-const RECORD_VERBS: [&str; 2] = ["status", "repair"];
-/// The inspector's own shorter names, where the menu's would crowd a chip.
-fn chip_label(id: &str) -> Option<&'static str> {
-    match id {
-        "open" => Some("Edit"),
-        "makegroup" => Some("Group"),
-        "makecomp" => Some("Component"),
-        _ => None,
-    }
-}
-
 /// Whether a verb of `kind`'s inspector table may be offered at all.
 pub fn offered(kind: &str, verb: &str) -> bool {
     if READ_ONLY.contains(&kind) && EDITING.contains(&verb) {
@@ -623,26 +617,14 @@ pub fn offered(kind: &str, verb: &str) -> bool {
 /// ("intersect") brings its segments, named "Intersect ▸ Model".
 pub fn inspector(f: &Facts) -> Vec<(String, String, String, bool, bool)> {
     let kind = kind(f);
-    let rows = menu_rows(f, kind);
     let mut out = Vec::new();
-    for &verb in inspector_order(kind) {
-        if !offered(kind, verb) || RECORD_VERBS.contains(&verb) {
-            continue;
-        }
-        let more = MORE.contains(&verb);
-        for (family, entries) in &rows {
-            for (id, label, key, enabled, _) in entries {
-                let base = id.split(':').next().unwrap_or(id);
-                if base != verb {
-                    continue;
-                }
-                let label = if id.contains(':') && !family.is_empty() {
-                    format!("{family} ▸ {label}")
-                } else {
-                    chip_label(id).map(str::to_owned).unwrap_or_else(|| label.clone())
-                };
-                out.push((id.clone(), label, key.clone(), *enabled, more));
-            }
+    for (family, entries) in menu_rows(f, kind) {
+        for (id, label, key, enabled, _) in entries {
+            // These verbs need the locked entity under the pointer.
+            if matches!(id.as_str(), "unlockgroup" | "unlockimage" | "deleteimage") { continue; }
+            let label = if family.is_empty() { label } else { format!("{family} ▸ {label}") };
+            let more = !matches!(id.as_str(), "fileto" | "isolate" | "hide" | "open");
+            out.push((id, label, key, enabled, more));
         }
     }
     out
@@ -695,6 +677,7 @@ pub fn dispatch(kind: &str, id: &str) -> (&'static str, String, String) {
         return slot("_on_set_surface", surface);
     }
     match id {
+        "erase" => slot("_on_delete_selection", ""),
         "repeat" => slot("repeat_last_command", ""),
         "unlockgroup" => slot("_unlock_group", "locked_group"),
         "unlockimage" => slot("_unlock_image", "locked_image"),
@@ -903,7 +886,7 @@ mod tests {
             let menu: Vec<(String, String)> = rows.iter().flat_map(|(_, es)| es.iter().map(|e| (e.0.clone(), e.1.clone()))).collect();
             for (id, label, _, _, _) in inspector(&f) {
                 let (_, menu_label) = menu.iter().find(|(m, _)| *m == id).unwrap_or_else(|| panic!("{k}: {id} not in the menu"));
-                assert!(label.ends_with(menu_label.as_str()) || chip_label(&id) == Some(label.as_str()), "{k}: {id} «{label}» vs «{menu_label}»");
+                assert!(label.ends_with(menu_label.as_str()), "{k}: {id} «{label}» vs «{menu_label}»");
             }
         }
         // Loose geometry cannot be isolated (council B5).

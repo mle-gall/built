@@ -71,7 +71,7 @@ def test_opening_a_group_leaves_the_folded_branches_folded(native_host):
     assert open_to(vp, [first, walls])
     vp.scene.select([walls.children[0]])
     assert vp.scene.content_version != cv
-    assert "context:fold" in rows(view, win)
+    assert "i:" + second.uid not in rows(view, win)
     assert open_to(vp, [])
     restored = rows(view, win)
     assert restored["i:" + first.uid][8]

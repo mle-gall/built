@@ -66,11 +66,12 @@ pub(crate) struct ProjectSheets {
 }
 
 fn entry(key: String, name: &str, detail: &str, depth: usize, children: usize, open: bool) -> Row {
+    let glyph = if key.starts_with("saved-scene") { "scene" } else { "sheet" };
     let mut r = row(
         key,
         name.into(),
         detail,
-        if children > 0 { "folder" } else { "sheet" },
+        glyph,
         depth,
         8,
         children,

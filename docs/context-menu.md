@@ -41,11 +41,11 @@ The native shell draws this menu with egui. The Select row grows the selection i
    a part inside one, never get Explode, Open for editing, Rename, File to,
    Make unique, Intersect, Soften or Flip. Repeat on them is greyed.
 
-Cut, Copy, Paste, Delete, Select all and Undo are shortcuts every app shares,
+Cut, Copy, Paste, Select all and Undo are shortcuts every app shares,
 so they stay on the keyboard and the Edit menu. The exception is empty
 space, where **Paste here** is spatial. Camera items are left out, because
 the top bar's navigation cluster shows them all. The exception, again, is
-**Zoom extents** on empty space.
+**Zoom extents** on empty space. Editable selections also offer **Erase**, which runs the same command as Delete in the Edit menu.
 
 Reveal selection shares a row with Zoom to. Editable selections that can take a tag also show Tag… in that row. It opens the selection’s assignment and visibility choices. It opens the branches needed to show the selected occurrence in the Project tree. Its shortcut is ⇧⌘J on macOS and Ctrl+Shift+J elsewhere.
 
@@ -63,7 +63,7 @@ Isolate is left out: it shows placements, and loose geometry has none.
 |---|---|---|---|
 | header | `Face` · `12.00 m²` · loose geometry · Model *(or the group being edited)*; with several: `n faces` | `Edge` · `4.00 m` · loose geometry · …; with several: `n edges` | `n items` · `a faces, b edges` |
 | 1 | Repeat … | Repeat … | Repeat … |
-| 2 | Hide | Hide | Hide |
+| 2 | Hide \| Erase | Hide \| Erase | Hide \| Erase |
 | 3 | Zoom to \| Reveal selection \| Tag… | Zoom to \| Reveal selection \| Tag… | Zoom to \| Reveal selection \| Tag… |
 | 4 | Make group \| Make component… | Make group \| Make component… | Make group \| Make component… |
 | 5 | Reverse faces \| Orient faces | Make faces *(if they close a loop)* | Reverse faces \| Orient faces |
@@ -83,10 +83,10 @@ Isolate is left out: it shows placements, and loose geometry has none.
 |---|---|---|---|
 | header | `Box A` · Group · `Building A › Level 2 › Catwalk` *(its node path, or Unfiled)* | `Door` · Component · `n instances` · path | `n items` · `g groups, c components` |
 | 1 | Repeat … | Repeat … | Repeat … |
-| 2 | Open for editing | Open for editing | Hide |
+| 2 | Open for editing | Open for editing | Hide \| Erase |
 | 3 | Rename… | Rename… | Isolate |
 | 4 | Hide \| Isolate | Hide \| Isolate | Lock *(Unlock when all are locked)* |
-| 5 | Lock *(Unlock when locked)* | Lock *(Unlock when locked)* | Zoom to \| Reveal selection \| Tag… |
+| 5 | Lock \| Erase *(Unlock when locked)* | Lock \| Erase *(Unlock when locked)* | Zoom to \| Reveal selection \| Tag… |
 | 6 | Zoom to \| Reveal selection \| Tag… | Zoom to \| Reveal selection \| Tag… | File to… |
 | 7 | File to… | File to… | Make group \| Make component… |
 | 8 | Explode \| Make component… | Select instances \| Make unique | Merge groups \| Explode |
@@ -101,11 +101,11 @@ Isolate is left out: it shows placements, and loose geometry has none.
 
 | # | Geometry and groups | Linked file's placement *(read-only)* | Part inside a linked file *(read-only)* | Dimension or text | Guide | Empty space |
 |---|---|---|---|---|---|---|
-| header | `n items` · `g groups, f faces, e edges` | `leaf.built ↗` · Linked file · read-only · path | `Stringer-02` · in leaf.built ↗ · read-only | `Dimension` · `4.00 m` / `Text` · “first words” | `Guide line` / `Guide point` | `Nothing here` · Model *(or the group being edited)* |
+| header | `n items` · `g groups, f faces, e edges` | `leaf.built ↗` · Linked file · read-only · path | `Stringer-02` · in leaf.built ↗ · read-only | `Dimension` · `4.00 m` / `Text` · “first words” | `Guide line` / `Guide point` | `Model` *(or the group being edited)* |
 | 1 | Repeat … | Repeat … *(greyed)* | Repeat … *(greyed)* | Repeat … | Repeat … | Repeat … |
-| 2 | Hide | Select contents | Select its linked file | Edit text… | Delete guide | Paste here *(if something is copied)* |
+| 2 | Hide \| Erase | Select contents | Select its linked file | Edit text… | Delete guide | Paste here *(if something is copied)* |
 | 3 | Isolate | Hide | Hide | Zoom to \| Reveal selection \| Tag… | Delete all guides | Select all |
-| 4 | Zoom to \| Reveal selection \| Tag… | Isolate | Isolate | | Zoom to \| Reveal selection \| Tag… | Unhide all |
+| 4 | Zoom to \| Reveal selection \| Tag… | Isolate | Isolate | Erase | Zoom to \| Reveal selection \| Tag… | Unhide all |
 | 5 | File to… | Lock *(the placement's own padlock)* | Zoom to \| Reveal selection | | | Show all *(if isolated)* |
 | 6 | Make group \| Make component… | Zoom to \| Reveal selection | Edit source | | | Zoom extents |
 | 7 | Reverse faces \| Orient faces *(if faces)* | Edit source | Reload | | | Delete all guides *(if any)* |

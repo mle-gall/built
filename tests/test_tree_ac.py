@@ -370,21 +370,21 @@ def test_inspector_verbs_follow_the_selection_kind(ui):
     link = tree.links["link:Ride"][0]
     own = tree.direct[_key(view, "Paths")][0]
     assert selection_kind(scene, [part]) == "linked_part" and selection_kind(scene, [link]) == "link"
-    editing = {"Edit", "Explode", "Component", "File to…", "Group"}
+    editing = {"Open for editing", "Explode", "Make component…", "File to…", "Make group", "Erase"}
     # A part inside a linked file, and the link placement: nothing that edits.
     for sel in ([part], [link]):
         got = _verbs(win, sel)
         assert {"Isolate", "Hide"} <= got and not got & editing, got
         assert not got & {"Reverse faces", "Soften / Smooth edges…"}, got
     # This document's own group: the full set.
-    assert {"File to…", "Isolate", "Hide", "Edit", "Explode", "Component"} <= _verbs(win, [own])
-    # Raw geometry: a group can be made, never a component, never filed.
+    assert {"File to…", "Isolate", "Hide", "Open for editing", "Explode", "Make component…", "Erase"} <= _verbs(win, [own])
+    # Raw geometry offers the same creation commands as the viewport.
     m = Mesh()
     m.add_face([QVector3D(0, 0, 0), QVector3D(1, 0, 0), QVector3D(1, 1, 0), QVector3D(0, 1, 0)])
     faces = list(m.faces)
     assert selection_kind(scene, faces) == "faces"
     got = _verbs(win, faces)
-    assert "Group" in got and "Component" not in got and "File to…" not in got
+    assert {"Make group", "Make component…", "Erase"} <= got and "File to…" not in got
     assert isinstance(own, Group) and built_core.link_linked_ancestor(own) is None
 
 
@@ -727,12 +727,8 @@ def test_open_occurrence_scopes_tree_and_exports_keep_the_inspector(ui):
     assert "Node" in dict(view.renderer.calls["ui_set_inspector"][1])
     scene.begin_group_edit(g)
     scoped = rows()
-    assert scoped[0]["key"] == "context:fold" and g.name in scoped[0]["name"]
-    assert [r["key"] for r in scoped[1:]] == ["geometry:loose", *filing]
+    assert [r["key"] for r in scoped] == ["geometry:loose"]
     assert view.renderer.calls["ui_set_edit_path"][0][-1][0] == g.name
-    assert [r["key"] for r in act("toggle", "context:fold")] == ["context:fold", *filing]
-    ride = next(n for t, n in view.renderer.calls["ui_set_tree"][0] if t[0] == "n:link:Ride")
-    assert ride[11] == 1
     assert scene.edit_group is g
     scene.end_group_edit()
     assert [r["key"] for r in rows()] == filing

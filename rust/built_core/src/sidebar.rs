@@ -7,38 +7,6 @@ use std::path::Path;
 
 type PathBar = Vec<(String, String)>;
 
-fn context_keys(group: &Bound<'_, PyAny>, tree: &Bound<'_, PyAny>) -> PyResult<HashSet<String>> {
-    let member = tree.getattr("member")?;
-    let nodes = tree.getattr("nodes")?;
-    let mut inside = HashSet::new();
-    let mut stack = vec![group.clone()];
-    while let Some(g) = stack.pop() {
-        let id: String = tree.call_method1("row_id", (&g,))?.extract()?;
-        for prefix in ["i:", "g:", "c:"] {
-            inside.insert(format!("{prefix}{id}"));
-        }
-        if let Some(tag) = g.getattr("layer")?.extract::<Option<String>>()? {
-            inside.insert(format!("preview-tag:{tag}"));
-        }
-        let mut key: Option<String> = member
-            .call_method1("get", (g.as_ptr() as usize,))?
-            .extract()?;
-        if key.is_none() {
-            inside.insert("n:".into());
-        }
-        while let Some(k) = key {
-            if !inside.insert(format!("n:{k}")) {
-                break;
-            }
-            key = nodes.get_item(k)?.get_item("parent")?.extract()?;
-        }
-        for c in g.getattr("children")?.try_iter()? {
-            stack.push(c?);
-        }
-    }
-    Ok(inside)
-}
-
 // Families are stored as [angle, x, y, shift, spacing, dashes] in a .built file.
 fn imported_families(scene: &Bound<'_, PyAny>, name: &str) -> Option<String> {
     let entries = scene
@@ -96,7 +64,7 @@ pub(crate) fn project_sidebar(
 ) -> PyResult<(Vec<Row>, PathBar)> {
     let group = scene.getattr("edit_group")?;
     let tags_only = tree.getattr("_host_roots")?.extract::<i64>()? < 0;
-    if tags_only {
+    if tags_only && group.is_none() {
         let root = scene.getattr("_root")?;
         let mut counts = HashMap::<String, i64>::new();
         for g in tree.getattr("unfiled")?.try_iter()? {
@@ -196,23 +164,6 @@ pub(crate) fn project_sidebar(
             let id: String = tree.call_method1("row_id", (&g,))?.extract()?;
             path.push((g.getattr("name")?.extract()?, format!("open\x1fi:{id}")));
         }
-        // The filing projection is revision-scoped. Reuse the subtree walk
-        // across filter changes, selection changes and disclosure clicks.
-        let cached = tree.getattr("_sidebar_scope").ok();
-        let inside =
-            if let Some(entry) = cached.filter(|v| v.get_item(0).is_ok_and(|g| g.is(&group))) {
-                entry.get_item(1)?
-            } else {
-                let keys = context_keys(&group, tree)?.into_pyobject(tree.py())?;
-                tree.setattr("_sidebar_scope", (&group, &keys))?;
-                keys.into_any()
-            };
-
-        for (t, f) in &mut rows {
-            f.resize(12, 0);
-            f[11] = i64::from(!inside.contains(&t[0])?);
-        }
-        context.append(&mut rows);
         rows = context;
     }
     Ok((rows, path))

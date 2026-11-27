@@ -285,13 +285,7 @@ pub(crate) fn project_context_rows(
         return Ok(rows);
     }
 
-    let open = !expanded.contains("context:fold") || !query.is_empty();
-    let mut fold = row("context:fold".into(), format!("In {}", group.getattr("name")?.extract::<String>()?), "", "", 0, 7, 0, 0);
-    fold.1[7] = 1;
-    fold.1[8] = i64::from(open);
-    rows.push(fold);
-    if !open { return Ok(rows); }
-    rows.extend(loose(scene, 1, query)?);
+    rows.extend(loose(scene, 0, query)?);
     let mut stack = vec![(group, 0usize)];
     while let Some((g, depth)) = stack.pop() {
         let children = g.getattr("children")?;
@@ -319,7 +313,7 @@ pub(crate) fn project_context_rows(
                     name,
                     "",
                     kind,
-                    depth,
+                    depth - 1,
                     1,
                     0,
                     usize::from(match &browser_selected {

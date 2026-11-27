@@ -2093,12 +2093,12 @@ impl Ui {
                             self.destination = Destination::Deliveries;
                         }
                         ui.add_space(SPACE_XS);
-                    } else if col.proposal_available && !col.proposal_dismissed {
+                    } else if col.path.len() <= 1 && col.proposal_available && !col.proposal_dismissed {
                         ui.horizontal(|ui| {
                             ui.set_height(CONTROL_H);
                             let overview = &col.overview;
                             let has_source = overview.tags > 1 || overview.folders > 0 || overview.links > 0;
-                            if !has_source || col.path.len() > 1 {
+                            if !has_source {
                                 if kit::quiet(ui, "New node").clicked() { actions.push("new\u{1f}".into()); }
                                 return;
                             }
@@ -2110,7 +2110,7 @@ impl Ui {
                             }
                         });
                         ui.add_space(SPACE_XS);
-                    } else if !col.proposal_available {
+                    } else if col.path.len() <= 1 && !col.proposal_available {
                         if let Some((target,_,_)) = &delivery {
                             ui.horizontal(|ui| {
                                 ui.set_height(CONTROL_H);
@@ -2655,12 +2655,15 @@ impl Ui {
                         });
                         kit::inspector_title(ui, &col.inspector_title, col.inspector_subtitle.as_deref().or(subtitle).unwrap_or(""));
                         ui.add_space(SPACE_XS);
+                    } else if col.path.len() > 1 {
+                        return;
                     } else {
                         kit::inspector_title(ui, if col.overview.file.is_empty() { "Untitled" } else { &col.overview.file }, "Model");
                         ui.add_space(SPACE_XS);
                     }
                     if !tag_focus && !col.inspector_title.is_empty() {
-                        let inline = |id: &str| matches!(id, "file" | "file_to" | "hide" | "edit" | "linkopen");
+                        let inline = |id: &str| matches!(id, "fileto" | "isolate" | "hide" | "open" | "linkopen");
+                        let material_inline = |id: &str| id.starts_with("lib:select:") || id == "lib:browse:materials";
                         let curated: Vec<_> = col.inspector.iter().filter(|(title,_)|title=="Actions").flat_map(|(_,rows)| rows).collect();
                         if let Some((_, verbs)) = col.inspector.iter().find(|(title, _)| title == "Component actions") {
                             ui.horizontal_wrapped(|ui| {
@@ -2675,9 +2678,12 @@ impl Ui {
                                     if *enabled && kit::quiet(ui,label).clicked() { cmds.push(format!("cmd:{id}")); }
                                 }
                             }
-                            if selection.is_some() || !curated.is_empty() {
+                            for (id, label) in curated.iter().copied().filter(|(id, _)| material_inline(id)) {
+                                if kit::quiet(ui, label).clicked() { actions.push(format!("insp:{id}")); }
+                            }
+                            if selection.is_some() || curated.iter().any(|(id, _)| !material_inline(id)) {
                                 egui::ComboBox::from_id_salt("inspector actions").selected_text("Actions").show_ui(ui, |ui| {
-                                    for (id,label) in &curated {
+                                    for (id,label) in curated.iter().copied().filter(|(id, _)| !material_inline(id)) {
                                         if ui.selectable_label(false,label.as_str()).clicked() {
                                             if let Some(key) = id.strip_prefix("kindmenu:") { col.kind_menu = Some((key.into(),ui.cursor().min)); }
                                             else { actions.push(format!("insp:{id}")); }

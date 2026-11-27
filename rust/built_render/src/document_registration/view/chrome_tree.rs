@@ -362,13 +362,14 @@ fn tree<'py>(a: &Args<'py>) -> Reply<'py> {
     let [rows, path_bar] = unpack::<2>(
         &py.import("plugins._browser")?.call_method1("project_sidebar", (&scene, &tree, rows, &flt, &exp, &path, false, &sel_ids))?,
     )?;
-    rows.call_method1("extend", (catalog.call_method1("rows", (&flt, &exp))?,))?;
+    let at_root = path_bar.len()? == 0;
+    if at_root { rows.call_method1("extend", (catalog.call_method1("rows", (&flt, &exp))?,))?; }
     let in_project = match win.getattr_opt("__dict__")? {
         Some(own) => own.contains("_project")?,
         None => false,
     };
     let project = || render(py)?.getattr("shell_project");
-    if in_project {
+    if in_project && at_root {
         rows.call_method1("extend", (project()?.call_method1("tree_rows", (&win, &flt, &exp))?,))?;
     }
     if discover {
