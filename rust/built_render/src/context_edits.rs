@@ -165,24 +165,6 @@ pub fn can_weld(scene: &Bound<'_, PyAny>) -> PyResult<bool> {
 }
 
 #[pyfunction]
-fn weld_edges(win: &Bound<'_, PyAny>) -> PyResult<()> {
-    let vp = win.getattr("viewport")?;
-    let scene = vp.getattr("scene")?;
-    if can_weld(&scene)? {
-        let keys = scene
-            .getattr("selection")?
-            .call_method1("element_keys", ("edge",))?;
-        let cmd = win
-            .py()
-            .import("built_core.history")?
-            .call_method1("WeldEdgesCommand", (keys,))?;
-        execute(&vp, &cmd)?;
-        vp.call_method0("update")?;
-    }
-    Ok(())
-}
-
-#[pyfunction]
 fn explode_curves(win: &Bound<'_, PyAny>) -> PyResult<()> {
     let py = win.py();
     let vp = win.getattr("viewport")?;
@@ -235,11 +217,167 @@ fn face_camera(
     Ok(())
 }
 
+/// The camera's (yaw, pitch) looking straight at a face with `normal`
+/// (world, unit or not) and outline `points`: from the side the normal
+/// points to. The screen's up is the world's up, so a wall's or a roof's
+/// horizontal edges run across the screen; a horizontal face turns the
+/// least from `yaw_now` that lays its longest edge across. None for a
+/// degenerate normal.
+pub(crate) fn look_angles(normal: glam::DVec3, points: &[glam::DVec3], yaw_now: f64) -> Option<(f64, f64)> {
+    use std::f64::consts::{FRAC_PI_2, PI, TAU};
+    let n = normal.try_normalize()?;
+    let pitch = n.z.clamp(-1., 1.).asin();
+    if n.truncate().length() > 1e-3 {
+        return Some((n.y.atan2(n.x), pitch));
+    }
+    // Looking down (or up): the screen's up is -(cos yaw, sin yaw), so an
+    // edge runs across when it is square to (cos yaw, sin yaw).
+    let longest = points
+        .iter()
+        .zip(points.iter().cycle().skip(1))
+        .map(|(a, b)| (*b - *a).truncate())
+        .max_by(|a, b| a.length_squared().total_cmp(&b.length_squared()))
+        .filter(|e| e.length() > 1e-12);
+    let Some(e) = longest else { return Some((yaw_now, pitch)) };
+    let base = e.y.atan2(e.x);
+    let turn = |yaw: f64| ((yaw - yaw_now + PI).rem_euclid(TAU) - PI).abs();
+    let yaw = [base + FRAC_PI_2, base - FRAC_PI_2, base + 3. * FRAC_PI_2]
+        .into_iter()
+        .min_by(|a, b| turn(*a).total_cmp(&turn(*b)))?;
+    let yaw = yaw_now + ((yaw - yaw_now + PI).rem_euclid(TAU) - PI);
+    Some((yaw, pitch))
+}
+
+/// The world matrix of what the face hangs in: a picked placement's, or
+/// the open group's when the face comes from the selection.
+fn face_matrix(scene: &Bound<'_, PyAny>, placement: Option<&Bound<'_, PyAny>>) -> PyResult<glam::DMat4> {
+    let matrix = match placement.filter(|p| !p.is_none()) {
+        Some(p) => p.getattr_opt("xform")?.filter(|m| !m.is_none()),
+        None => crate::edge_commands::placement(scene)?,
+    };
+    Ok(match matrix {
+        Some(m) => glam::DMat4::from_cols_array(&m.call_method0("data")?.extract()?),
+        None => glam::DMat4::IDENTITY,
+    })
+}
+
+/// Look at Face (V; View menu; right-click on a face): the camera turns
+/// to look straight at the face from the side it sees, in parallel
+/// projection until the next orbit (Auto perspective), its horizontal
+/// edges (a floor's longest edge) across the screen, at the same scale.
+/// `face` is the right-clicked face; without it, the face under the
+/// cursor. The move glides like a standard view.
 #[pyfunction]
-fn align_face(vp: &Bound<'_, PyAny>, face: &Bound<'_, PyAny>) -> PyResult<()> {
-    face_camera(vp, None, &face.call_method0("normal")?)?;
+#[pyo3(signature=(win, face=None))]
+pub(crate) fn look_at_face(win: &Bound<'_, PyAny>, face: Option<Bound<'_, PyAny>>) -> PyResult<bool> {
+    use crate::document_host::{vec3, xyz};
+    let vp = win.call_method0("_active_view")?;
+    let scene = vp.getattr("scene")?;
+    let mut cursor = None;
+    let (face, placement) = match face.filter(|f| !f.is_none()) {
+        Some(f) => (f, None),
+        None => {
+            // The window's drawing view takes the pointer (`_cursor_pos`)
+            // and picks through its tools; a view without one (tests)
+            // keeps its own hover position and picks itself.
+            let display = vp.getattr_opt("keys_stand_in")?.filter(|v| !v.is_none());
+            let shown = display.as_ref()
+                .and_then(|v| v.getattr_opt("_cursor_pos").ok().flatten())
+                .filter(|p| !p.is_none());
+            let (picker, at) = match (shown, &display) {
+                (Some(at), Some(view)) => {
+                    let tools = view.getattr_opt("tools")?.filter(|t| t.hasattr("pick_face_placement").unwrap_or(false));
+                    (tools.unwrap_or_else(|| vp.clone()), Some(at))
+                }
+                _ => (vp.clone(), vp.getattr_opt("_last_mouse_pos")?.filter(|p| !p.is_none())),
+            };
+            let picked = match at {
+                Some(at) => {
+                    let (x, y): (f64, f64) = (at.call_method0("x")?.extract()?, at.call_method0("y")?.extract()?);
+                    cursor = Some((x, y));
+                    let (f, p): (Bound<'_, PyAny>, Bound<'_, PyAny>) =
+                        picker.call_method1("pick_face_placement", (x, y))?.extract()?;
+                    (!f.is_none()).then_some((f, Some(p)))
+                }
+                None => None,
+            };
+            match picked {
+                Some(hit) => hit,
+                None => {
+                    status(win, "Point at a face, then press V to look at it.", None, 3000)?;
+                    return Ok(false);
+                }
+            }
+        }
+    };
+    let m = face_matrix(&scene, placement.as_ref())?;
+    let mut points = Vec::new();
+    if let Some(vertices) = face.getattr_opt("vertices")? {
+        for p in vertices.try_iter()? {
+            points.push(m.transform_point3(xyz(&p?)?));
+        }
+    }
+    let mut normal = m.transform_vector3(xyz(&face.call_method0("normal")?)?);
+    // The point of the face under the cursor: where its ray meets the plane.
+    let hovered = match (cursor, points.first()) {
+        (Some((x, y)), Some(on)) => {
+            let ray = vp.call_method1("_pixel_to_ray", (x, y)).ok().filter(|r| !r.is_none());
+            match ray {
+                Some(ray) => {
+                    let (o, d) = (xyz(&ray.get_item(0)?)?, xyz(&ray.get_item(1)?)?);
+                    let n = normal.normalize_or_zero();
+                    let t = (*on - o).dot(n) / d.dot(n);
+                    (t.is_finite() && t > 0.).then(|| o + d * t)
+                }
+                None => None,
+            }
+        }
+        _ => None,
+    };
+    let cam = vp.getattr("camera")?;
+    // From the side the camera sees: a floor drawn face down is still
+    // looked at from above.
+    let centre = points.iter().copied().sum::<glam::DVec3>() / points.len().max(1) as f64;
+    if !points.is_empty() && (xyz(&cam.call_method0("eye")?)? - centre).dot(normal) < 0. {
+        normal = -normal;
+    }
+    let before: (f64, f64) = (cam.getattr("yaw")?.extract()?, cam.getattr("pitch")?.extract()?);
+    let Some((yaw, pitch)) = look_angles(normal, &points, before.0) else {
+        return Ok(false);
+    };
+    let py = win.py();
+    let auto = crate::native_view_actions::auto_perspective(py)?;
+    crate::native_view_actions::glide_after(win, |vp| {
+        // The point looked at comes to the centre at the scale it had: the
+        // face's point under the cursor (V), else what is under the centre
+        // of the view, as a standard view keeps it.
+        match hovered {
+            Some(point) => {
+                let cam = vp.getattr("camera")?;
+                if cam.getattr("perspective")?.is_truthy()? {
+                    let eye = xyz(&cam.call_method0("eye")?)?;
+                    let depth = (point - eye).dot(xyz(&cam.call_method0("forward")?)?);
+                    if depth.is_finite() && depth > 0. {
+                        cam.setattr("distance", depth)?;
+                    }
+                }
+                cam.setattr("target", vec3(py, point)?)?;
+            }
+            None => crate::native_view_actions::alignment_focus(vp)?,
+        }
+        let cam = vp.getattr("camera")?;
+        cam.setattr("yaw", yaw)?;
+        cam.setattr("pitch", pitch)?;
+        // Square to a face is an aligned view: parallel until the next
+        // orbit (Settings › Navigation › Auto perspective).
+        cam.call_method1("align_current", (before.0, before.1, auto))?;
+        Ok(())
+    })?;
+    if vp.hasattr("_sync_projection")? {
+        vp.call_method0("_sync_projection")?;
+    }
     vp.call_method0("update")?;
-    Ok(())
+    Ok(true)
 }
 
 #[pyfunction]
@@ -512,8 +650,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(unique_components, m)?)?;
     m.add_function(wrap_pyfunction!(merge_groups, m)?)?;
     m.add_function(wrap_pyfunction!(explode_curves, m)?)?;
-    m.add_function(wrap_pyfunction!(weld_edges, m)?)?;
-    m.add_function(wrap_pyfunction!(align_face, m)?)?;
+    m.add_function(wrap_pyfunction!(look_at_face, m)?)?;
     m.add_function(wrap_pyfunction!(section_action, m)?)?;
     m.add_function(wrap_pyfunction!(context_lock, m)?)?;
     m.add_function(wrap_pyfunction!(unlock_group, m)?)?;
@@ -523,4 +660,43 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(set_path_surface, m)?)?;
     m.add_function(wrap_pyfunction!(rebuild_path_surfaces, m)?)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod look_tests {
+    use super::look_angles;
+    use glam::DVec3;
+    use std::f64::consts::FRAC_PI_2;
+
+    fn near(a: f64, b: f64) -> bool { (a - b).abs() < 1e-9 }
+
+    #[test]
+    fn a_wall_is_seen_from_its_front_with_the_world_up() {
+        // A wall facing -Y (the Front view's direction).
+        let (yaw, pitch) = look_angles(DVec3::NEG_Y, &[], 0.3).unwrap();
+        assert!(near(yaw, -FRAC_PI_2) && near(pitch, 0.));
+        // A roof sloping up to +X: seen square, from above.
+        let n = DVec3::new(-1., 0., 1.);
+        let (yaw, pitch) = look_angles(n, &[], 0.).unwrap();
+        assert!(near(yaw, std::f64::consts::PI) && near(pitch, FRAC_PI_2 / 2.));
+    }
+
+    #[test]
+    fn a_floor_turns_the_least_to_lay_its_longest_edge_across() {
+        // 4 x 1 along X: from the top, X across is yaw -90° (the Top view).
+        let floor = [DVec3::ZERO, DVec3::new(4., 0., 0.), DVec3::new(4., 1., 0.), DVec3::new(0., 1., 0.)];
+        let (yaw, pitch) = look_angles(DVec3::Z, &floor, -1.4).unwrap();
+        assert!(near(yaw, -FRAC_PI_2) && near(pitch, FRAC_PI_2));
+        // From a yaw near +90° the other way round is the shorter turn.
+        let (yaw, _) = look_angles(DVec3::Z, &floor, 1.4).unwrap();
+        assert!(near(yaw, FRAC_PI_2));
+        // Longest along Y: Y across, so yaw 0 or 180°.
+        let tall = floor.map(|p| DVec3::new(p.y, p.x, 0.));
+        let (yaw, _) = look_angles(DVec3::Z, &tall, 0.2).unwrap();
+        assert!(near(yaw, 0.));
+        // The eye stays on the face's front: a ceiling is seen from below.
+        let (_, pitch) = look_angles(DVec3::NEG_Z, &floor, 0.).unwrap();
+        assert!(near(pitch, -FRAC_PI_2));
+        assert!(look_angles(DVec3::ZERO, &floor, 0.).is_none());
+    }
 }
