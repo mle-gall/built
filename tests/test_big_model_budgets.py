@@ -4,14 +4,14 @@ root, another inside a group, nested assemblies, a yard of 3,000 parts and
 parts kilometres away (the extent of a site model).
 
 The shell's own Host draws offscreen in this process. Push/Pull uses the
-median of three neighbouring pushes. Other edit figures use the best of
+median of three neighbouring pushes. Other edit figures use the median of
 three tries so one hiccup of the machine does not decide them. On a
 machine already busy (the full suite on every core) a miss is reported and
 skipped, with the figures, rather than failed: the quiet single-worker pass
 (``-m perf -p no:xdist``) is the one that holds them.
 
 Commit timings include the tool action, idle processing and the next frame.
-The interactive edit targets are 50 ms (120 ms for Push/Pull), with a
+The interactive edit targets are 50 ms (100 ms for Push/Pull), with a
 20 percent allowance in the budget assertions.
 """
 import math
@@ -31,7 +31,7 @@ BUDGET_MS = {
     "line_commit_200k": 60,     # release to the next frame, on the 200k mesh
     "erase_commit_200k": 60,
     "move_commit_200k": 60,
-    "push_commit_200k": 144,
+    "push_commit_200k": 120,
     "select_hover_200k": 3,      # median of a Select hover over the 200k mesh
     "move_grip_hover": 3,        # median of a Move hover over groups: box grips, handles
     "select_all_view_frame": 100,  # the frame that shows a select-all's highlight
@@ -287,8 +287,8 @@ def test_big_model_interaction_budgets(tmp_path, model, x0):
             erasures.append(timed(lambda: host.pointer("release", x, yy, 1, 0, 0)))
             assert len(vp.scene.mesh.edges) < edges          # a piece of it went
             _settle(host)
-        ms["line_commit_200k"] = min(lines)
-        ms["erase_commit_200k"] = min(erasures)
+        ms["line_commit_200k"] = statistics.median(lines)
+        ms["erase_commit_200k"] = statistics.median(erasures)
 
         # Select All: the viewport first, then the panels catch up.
         host.menu("tool:select")
@@ -343,7 +343,7 @@ def test_big_model_interaction_budgets(tmp_path, model, x0):
             pushes.append(timed(lambda: click(q)))
             assert len(vp.scene.mesh.faces) > faces
             _key(host, Qt.Key_Escape.value)
-        ms["move_commit_200k"] = min(moves)
+        ms["move_commit_200k"] = statistics.median(moves)
         ms["push_commit_200k"] = statistics.median(pushes)
 
         # Move's hover over the yard of 3,000 parts and the nested blocks:
@@ -355,7 +355,11 @@ def test_big_model_interaction_budgets(tmp_path, model, x0):
     print("\nbig model budgets:\n" + table)
     over = {k: round(ms[k], 1) for k, v in BUDGET_MS.items() if k in ms and ms[k] >= v}
     if over and _busy():
-        pytest.skip(f"machine busy (load {os.getloadavg()[0]:.0f}); over budget: {over}\n{table}")
+        reason = (f"edit budgets skipped under load ({os.getloadavg()[0]:.1f} on "
+                  f"{os.cpu_count()} CPUs), exceeded limits in ms {over}")
+        import warnings
+        warnings.warn(reason, pytest.PytestWarning, stacklevel=1)
+        pytest.skip(reason)
     assert not over, f"over budget: {over}\n{table}"
 
 
