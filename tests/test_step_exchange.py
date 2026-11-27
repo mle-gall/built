@@ -94,6 +94,7 @@ def test_open_sheet_and_two_placements(tmp_path):
     step.save_step(scene, path)
     doc = step.prepare_step(path)
     assert not doc["problems"] and doc["exact"] == 1
+    assert path.read_text().count("= SHAPE_DEFINITION_REPRESENTATION(") == 2
     root, = doc["groups"]
     a, b = root.children
     assert a.mesh is b.mesh
@@ -321,3 +322,19 @@ def test_real_partial_report_names_source_record_and_preserves_scene(tmp_path):
         step.apply_step(scene,doc)
     step.apply_step(scene,doc,accept_partial=True)
     assert len(scene.groups)==1
+
+@pytest.mark.parametrize("soft, expected", [(True, 1), (False, 2)])
+def test_step_preserves_hard_planar_divisions(tmp_path, soft, expected):
+    from built_core import Vec3
+
+    scene = Scene()
+    a, b, c, d = [Vec3(x, y, 0) for x, y in [(0, 0), (1, 0), (1, 1), (0, 1)]]
+    scene.mesh.add_face([a, b, c])
+    scene.mesh.add_face([a, c, d])
+    edge = next(e for e in scene.mesh.edges if len(e.faces) == 2)
+    edge.soft = soft
+    path = tmp_path / "planar.step"
+    step.save_step(scene, path)
+    assert path.read_text().count("= ADVANCED_FACE(") == expected
+    assert len(scene.mesh.faces) == 2
+    assert step.prepare_step(path)["exact"] == 1

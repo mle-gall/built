@@ -77,7 +77,7 @@ impl Body {
         b: &mut StepBuilder,
         part: Part,
         name: &str,
-    ) -> Result<crate::Measure, String> {
+    ) -> Result<crate::Authored, String> {
         let mut vertices = Vec::with_capacity(self.points.len());
         for p in &self.points {
             vertices.push(
@@ -147,11 +147,17 @@ impl Body {
             return Err("multiple shells in one planar body".into());
         }
         if closed {
-            b.solid(part, name, faces).map_err(|e| e.to_string())?;
-            Ok(crate::Measure::Volume(volume))
+            let solid = b.solid(part, name, faces).map_err(|e| e.to_string())?;
+            Ok(crate::Authored(
+                crate::Measure::Volume(volume),
+                step_io::model::RepresentationItemRef::ManifoldSolidBrep(solid),
+            ))
         } else {
-            crate::sheet::add(b, part, name, faces, 1e-7).map_err(|e| e.to_string())?;
-            Ok(crate::Measure::Area(self.area()?))
+            let sheet = crate::sheet::item(b.author(), name, faces).map_err(|e| e.to_string())?;
+            Ok(crate::Authored(
+                crate::Measure::Area(self.area()?),
+                step_io::model::RepresentationItemRef::ShellBasedSurfaceModel(sheet),
+            ))
         }
     }
     pub fn area(&self) -> Result<f64, String> {

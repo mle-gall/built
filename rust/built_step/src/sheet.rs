@@ -10,9 +10,27 @@ pub fn add(
     faces: Vec<m::AdvancedFaceId>,
     uncertainty_mm: f64,
 ) -> Result<(), AuthorError> {
-    use m::PartialEntity as P;
     let product = b.part_ids(part).shape;
     let a = b.author();
+    let context = context(a, uncertainty_mm)?;
+    let sheet = item(a, name, faces)?;
+    let rep = a.add_manifold_surface_shape_representation(
+        name,
+        vec![m::Ap242ManifoldSurfaceShapeRepresentationSelectRef::ShellBasedSurfaceModel(sheet)],
+        m::RepresentationContextRef::Complex(context),
+    )?;
+    a.add_shape_definition_representation(
+        m::PropertyDefinitionRef::ProductDefinitionShape(product),
+        m::ShapeRepresentationRef::ManifoldSurfaceShapeRepresentation(rep),
+    )?;
+    Ok(())
+}
+
+pub(crate) fn context(
+    a: &mut step_io::Ap242Author,
+    uncertainty_mm: f64,
+) -> Result<m::ComplexEntityId, AuthorError> {
+    use m::PartialEntity as P;
     let mut units = Vec::new();
     for (kind, prefix, unit) in [
         (
@@ -42,7 +60,7 @@ pub fn add(
         "distance_accuracy_value",
         None,
     )?;
-    let context = a.add_complex(vec![
+    a.add_complex(vec![
         P::GeometricRepresentationContext {
             coordinate_space_dimension: 3,
         },
@@ -56,20 +74,17 @@ pub fn add(
             context_identifier: text,
             context_type: kind,
         },
-    ])?;
+    ])
+}
+
+pub fn item(
+    a: &mut step_io::Ap242Author,
+    name: &str,
+    faces: Vec<m::AdvancedFaceId>,
+) -> Result<m::ShellBasedSurfaceModelId, AuthorError> {
     let shell = a.add_open_shell(
         name,
         faces.into_iter().map(m::FaceRef::AdvancedFace).collect(),
     )?;
-    let sheet = a.add_shell_based_surface_model(name, vec![m::ShellRef::OpenShell(shell)])?;
-    let rep = a.add_manifold_surface_shape_representation(
-        name,
-        vec![m::Ap242ManifoldSurfaceShapeRepresentationSelectRef::ShellBasedSurfaceModel(sheet)],
-        m::RepresentationContextRef::Complex(context),
-    )?;
-    a.add_shape_definition_representation(
-        m::PropertyDefinitionRef::ProductDefinitionShape(product),
-        m::ShapeRepresentationRef::ManifoldSurfaceShapeRepresentation(rep),
-    )?;
-    Ok(())
+    a.add_shell_based_surface_model(name, vec![m::ShellRef::OpenShell(shell)])
 }

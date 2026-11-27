@@ -55,6 +55,8 @@ fn missing_name_offset(source: &[u8]) -> Option<usize> {
     Some(text.len() - after_description.len())
 }
 
+mod representation;
+pub use representation::Authored;
 pub mod planar;
 pub mod sheet;
 #[derive(Clone, Copy, Debug)]
@@ -103,7 +105,7 @@ pub fn write_checked<B>(
     definitions: &[Definition<B>],
     path: &Path,
     uncertainty_mm: f64,
-    add: impl Fn(&B, &mut step_io::StepBuilder, step_io::build::Part, &str) -> Result<Measure, String>,
+    add: impl Fn(&B, &mut step_io::StepBuilder, step_io::build::Part, &str) -> Result<Authored, String>,
     measure: impl Fn(&StepModel, step_io::scene::Solid<'_>, f64) -> Result<Measure, String>,
     measure_sheet: impl Fn(
         &StepModel,
@@ -119,11 +121,19 @@ pub fn write_checked<B>(
     .map_err(|e| e.to_string())?;
     let parts: Vec<_> = definitions.iter().map(|d| builder.part(&d.name)).collect();
     let mut volumes = Vec::new();
+    let mut items = Vec::new();
+    let mut placements = Vec::new();
     for (definition, &part) in definitions.iter().zip(&parts) {
+        let mut row = Vec::new();
         for body in &definition.bodies {
-            volumes.push(add(body, &mut builder, part, &definition.name)?);
+            let Authored(metric, item) = add(body, &mut builder, part, &definition.name)?;
+            volumes.push(metric);
+            row.push(item);
         }
+        items.push(row);
+        let mut occurrences = Vec::new();
         for (child, at) in &definition.children {
+            let child_index = *child;
             let &child = parts.get(*child).ok_or("invalid occurrence target")?;
             let rigid = |a: [f64; 3]| glam::DVec3::from(a);
             if (rigid(at.axis).length_squared() - 1.).abs() > 1e-12
@@ -136,18 +146,14 @@ pub fn write_checked<B>(
             {
                 return Err("invalid rigid placement".into());
             }
-            builder
-                .place(
-                    part,
-                    child,
-                    Frame {
-                        origin: at.origin.map(|v| v * 1000.),
-                        axis: at.axis,
-                        ref_dir: at.ref_dir,
-                    },
-                )
-                .map_err(|e| e.to_string())?;
+            let at = Frame {
+                origin: at.origin.map(|v| v * 1000.),
+                ..*at
+            };
+            let link = builder.place(part, child, at).map_err(|e| e.to_string())?;
+            occurrences.push((child_index, at, link));
         }
+        placements.push(occurrences);
     }
     if volumes.is_empty() {
         return Err("no STEP bodies".into());
@@ -160,7 +166,13 @@ pub fn write_checked<B>(
     .map_err(|e| e.to_string())?;
     {
         let mut out = std::io::BufWriter::new(tmp.as_file_mut());
-        step_io::write(&builder.finish(), &mut out).map_err(|e| e.to_string())?;
+        let model = if volumes.iter().any(|v| matches!(v, Measure::Area(_))) {
+            representation::finish(builder, &parts, items, placements, uncertainty_mm)
+                .map_err(|e| e.to_string())?
+        } else {
+            builder.finish()
+        };
+        step_io::write(&model, &mut out).map_err(|e| e.to_string())?;
         out.flush().map_err(|e| e.to_string())?;
     }
     let check =

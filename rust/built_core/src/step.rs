@@ -7,6 +7,7 @@ mod exact_write;
 use exact_write::Geometry;
 mod import;
 mod pcurve;
+mod planar_merge;
 mod rim_solid;
 mod splines;
 mod swept;
@@ -72,6 +73,12 @@ fn bodies(mesh: &Bound<'_, PyAny>) -> PyResult<Vec<Geometry>> {
             adjacent[*b as usize].push(*a as usize);
         }
     }
+    let mut soft = vec![Vec::new(); faces.len()];
+    for (i, &flags) in d.flags.iter().enumerate() {
+        if flags & crate::store::SOFT != 0 && d.ef_start[i + 1] - d.ef_start[i] == 2 {
+            soft[d.ef_face[d.ef_start[i] as usize] as usize].push(d.edges[i]);
+        }
+    }
     let mut seen = vec![false; faces.len()];
     let mut bodies = Vec::new();
     for root in 0..faces.len() {
@@ -81,11 +88,13 @@ fn bodies(mesh: &Bound<'_, PyAny>) -> PyResult<Vec<Geometry>> {
         let mut body = Body::default();
         let mut stack = vec![root];
         let mut vertices = HashMap::new();
+        let mut soft_edges = Vec::new();
         while let Some(f) = stack.pop() {
             if std::mem::replace(&mut seen[f], true) {
                 continue;
             }
             stack.extend(&adjacent[f]);
+            soft_edges.extend_from_slice(&soft[f]);
             body.faces.push(
                 faces[f]
                     .iter()
@@ -103,6 +112,17 @@ fn bodies(mesh: &Bound<'_, PyAny>) -> PyResult<Vec<Geometry>> {
                     })
                     .collect(),
             );
+        }
+        if !soft_edges.is_empty() {
+            let soft = soft_edges
+                .into_iter()
+                .map(|[a, b]| {
+                    let a = vertices[&(a as usize)];
+                    let b = vertices[&(b as usize)];
+                    (a.min(b), a.max(b))
+                })
+                .collect();
+            planar_merge::merge(&mut body, &soft);
         }
         bodies.push(Geometry::Facets(body));
     }

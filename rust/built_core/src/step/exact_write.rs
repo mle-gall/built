@@ -3,6 +3,7 @@ use crate::{
     exact::{Curve, Frame, Rows, Surface},
     store::native::NativePatch,
 };
+use built_step::step_io::model::RepresentationItemRef as Item;
 use built_step::{
     planar::Body,
     step_io::{
@@ -79,7 +80,7 @@ impl Geometry {
         part: Part,
         name: &str,
         tol: f64,
-    ) -> Result<built_step::Measure, String> {
+    ) -> Result<built_step::Authored, String> {
         let Self::Exact(p) = self else {
             let Self::Facets(body) = self else {
                 unreachable!()
@@ -200,28 +201,36 @@ impl Geometry {
             if !t.void_starts.is_empty() {
                 return Err("open boundary in a void solid".into());
             }
-            built_step::sheet::add(b, part, name, faces, p.topology().tolerance * 1000.)
-                .map_err(|e| e.to_string())?;
-            return Ok(built_step::Measure::Area(area(p, tol)?));
+            let item =
+                built_step::sheet::item(b.author(), name, faces).map_err(|e| e.to_string())?;
+            return Ok(built_step::Authored(
+                built_step::Measure::Area(area(p, tol)?),
+                Item::ShellBasedSurfaceModel(item),
+            ));
         }
-        if t.void_starts.is_empty() {
-            b.solid(part, name, faces).map_err(|e| e.to_string())?;
+        let item = if t.void_starts.is_empty() {
+            Item::ManifoldSolidBrep(b.solid(part, name, faces).map_err(|e| e.to_string())?)
         } else {
             let mut cavities = Vec::new();
             for &first in t.void_starts.iter().rev() {
                 cavities.push(faces.split_off(first));
             }
             cavities.reverse();
-            b.solid_with_voids(
-                part,
-                name,
-                faces,
-                cavities,
-                built_step::step_io::build::VoidShellNormals::AwayFromMaterial,
+            Item::BrepWithVoids(
+                b.solid_with_voids(
+                    part,
+                    name,
+                    faces,
+                    cavities,
+                    built_step::step_io::build::VoidShellNormals::AwayFromMaterial,
+                )
+                .map_err(|e| e.to_string())?,
             )
-            .map_err(|e| e.to_string())?;
-        }
-        Ok(built_step::Measure::Volume(volume(&p.rows, tol)?))
+        };
+        Ok(built_step::Authored(
+            built_step::Measure::Volume(volume(&p.rows, tol)?),
+            item,
+        ))
     }
 }
 pub(super) fn reopened(model: &StepModel, s: Solid<'_>, m: f64, tol: f64) -> Result<f64, String> {
