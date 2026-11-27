@@ -63,23 +63,26 @@ pub(super) fn surface_hit<'p>(
         direction.call_method0("toTuple")?.extract()?,
         limit,
     )?;
-    hit.map(|(i, t, n)| {
-        let packed = index.getattr("packed")?;
-        let (t, n) = if packed.hasattr("_exact_prototypes")? {
-            super::exact::ray(
-                &packed,
-                placements.get_item(i)?.extract()?,
-                crate::math::xyz(origin)?,
-                crate::math::xyz(direction)?,
-            )?
-            .map_or((t, n), |(t, n)| (t, Some(n.to_array())))
-        } else {
-            (t, n)
-        };
-
+    let Some((i, t, n)) = hit else {
+        return Ok(None);
+    };
+    let packed = index.getattr("packed")?;
+    let hit = if packed.hasattr("_exact_prototypes")? {
+        super::exact::surface_distance(
+            &packed,
+            placements.get_item(i)?.extract()?,
+            crate::math::xyz(origin)?,
+            crate::math::xyz(direction)?,
+            (t, n),
+            limit,
+        )?
+    } else {
+        Some((t, n))
+    };
+    hit.map(|(t, n)| {
         Ok((
             origin.add(direction.mul(t)?)?,
-            n.map(|n| Vec3::from(glam::DVec3::from_array(n))),
+            n.map(|v| Vec3::from(glam::DVec3::from_array(v))),
         ))
     })
     .transpose()

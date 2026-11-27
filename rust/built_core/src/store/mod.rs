@@ -54,7 +54,7 @@ pub(crate) mod drawing_edges;
 pub mod edit;
 pub(crate) mod edge_index;
 pub(crate) mod geometry;
-mod frame;
+pub(crate) mod frame;
 pub mod explode;
 pub mod keys;
 pub mod ids;

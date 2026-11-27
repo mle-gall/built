@@ -61,14 +61,16 @@ fn placement<'p>(packed: &Obj<'p>, row: usize) -> PyResult<Option<(Bound<'p, Pro
     let world = DMat4::from_cols_array(&world) * DMat4::from_translation(-DVec3::from(origin));
     Ok(Some((proto.cast_into::<Prototype>()?, world)))
 }
-pub(super) fn ray(
+pub(super) fn surface_distance(
     packed: &Obj<'_>,
     row: usize,
     origin: DVec3,
     dir: DVec3,
-) -> PyResult<Option<(f64, DVec3)>> {
+    broad: (f64, Option<[f64; 3]>),
+    limit: f64,
+) -> PyResult<Option<(f64, Option<[f64; 3]>)>> {
     let Some((proto, world)) = placement(packed, row)? else {
-        return Ok(None);
+        return Ok(Some(broad));
     };
     let inv = world.inverse();
     if !inv.is_finite() {
@@ -77,8 +79,23 @@ pub(super) fn ray(
     Ok(proto
         .get()
         .patch
-        .ray(inv.transform_point3(origin), inv.transform_vector3(dir))
-        .map(|(_, t, n)| (t, inv.transpose().transform_vector3(n).normalize_or_zero())))
+        .ray(
+            inv.transform_point3(origin),
+            inv.transform_vector3(dir),
+            None,
+        )
+        .filter(|(_, t, _)| *t <= limit)
+        .map(|(_, t, n)| {
+            (
+                t,
+                Some(
+                    inv.transpose()
+                        .transform_vector3(n)
+                        .normalize_or_zero()
+                        .to_array(),
+                ),
+            )
+        }))
 }
 pub(super) fn refine_edge(
     packed: &Obj<'_>,

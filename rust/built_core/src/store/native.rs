@@ -335,11 +335,20 @@ impl NativePatch {
 
     /// Intersect the analytic support using a hit on a model-tolerance triangle
     /// as the initial UV estimate. Accept solutions only in the trimmed UV mesh.
-    pub(crate) fn ray(&self, o: glam::DVec3, d: glam::DVec3) -> Option<(usize, f64, glam::DVec3)> {
+    pub(crate) fn ray(
+        &self,
+        o: glam::DVec3,
+        d: glam::DVec3,
+        face: Option<usize>,
+    ) -> Option<(usize, f64, glam::DVec3)> {
         use glam::{DMat3, DVec2, DVec3};
         let mesh = self.mesh().ok()?;
         let mut best = None;
         for (i, tri) in mesh.triangles.iter().enumerate() {
+            let f = mesh.face_ids[i] as usize;
+            if face.is_some_and(|wanted| f != wanted) {
+                continue;
+            }
             let [a, b, c] = tri.map(|v| DVec3::from(mesh.points[v]));
             let t = crate::pick::ray_triangle(
                 o.to_array(),
@@ -349,7 +358,6 @@ impl NativePatch {
                 (c - a).to_array(),
             );
             let Some(mut t) = t else { continue };
-            let f = mesh.face_ids[i] as usize;
             let face = &self.topology().faces[f];
             let surface = &self.rows.surfaces[face.surface as usize];
             let eval = |uv: DVec2| surface.point(&self.rows.curves, uv.x, uv.y).ok();

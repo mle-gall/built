@@ -488,22 +488,61 @@ mod tests {
 /// only the winning ordinal across the bridge, including while faces move.
 #[pyclass(module = "built_core")]
 pub struct FacePicker {
+    exact: Option<(
+        std::sync::Arc<crate::store::native::NativePatch>,
+        crate::store::frame::Frame,
+    )>,
     triangles: Vec<[P; 3]>,
     faces: Vec<(i128, usize, std::ops::Range<usize>)>,
 }
 
 impl FacePicker {
-    fn empty() -> Self { Self { triangles: Vec::new(), faces: Vec::new() } }
-    fn append(&mut self, key:i128, ordinal:usize, triangles: impl IntoIterator<Item=[P;3]>) {
+    fn empty() -> Self {
+        Self {
+            exact: None,
+            triangles: Vec::new(),
+            faces: Vec::new(),
+        }
+    }
+    fn append(&mut self, key: i128, ordinal: usize, triangles: impl IntoIterator<Item = [P; 3]>) {
         let start = self.triangles.len();
         self.triangles.extend(triangles.into_iter().map(|[a,b,c]| [a,sub(b,a),sub(c,a)]));
         self.faces.push((key,ordinal,start..self.triangles.len()));
+    }
+    fn exact_hits(
+        &self,
+        origin: P,
+        direction: P,
+        excluded: &std::collections::HashSet<i128>,
+    ) -> Option<Vec<(usize, f64)>> {
+        let (patch, frame) = self.exact.as_ref()?;
+        let o = glam::DVec3::from(frame.definition_point(origin));
+        let d = frame.definition_delta(direction.into());
+        let mut hits = Vec::new();
+        for (key, face, _) in &self.faces {
+            if !excluded.contains(key) {
+                if let Some((_, t, _)) = patch.ray(o, d, Some(*face)) {
+                    hits.push((*face, t));
+                }
+            }
+        }
+        hits.sort_by(|a, b| a.1.total_cmp(&b.1));
+        Some(hits)
     }
     pub(crate) fn from_store(store:&crate::store::Store, hypot:crate::store::geometry::Hypot) -> Self {
         use crate::store::keys::Kind;
         use rayon::prelude::*;
         let mut picker = Self::empty();
         let slots = store.live_slots(Kind::Face);
+        if let Some(patch) = &store.state.exact.native {
+            picker.exact = Some((patch.clone(), store.state.frame.clone()));
+            for (i, f) in slots.into_iter().enumerate() {
+                picker
+                    .faces
+                    .push((store.key(Kind::Face, f) as i128, i, 0..0));
+            }
+            return picker;
+        }
         // Triangulated in parallel, appended in list order (the same picker).
         let triangles: Vec<_> = slots.par_iter().with_min_len(1024)
             .map(|&slot| store.face_triangles(slot, None, hypot)).collect();
@@ -538,6 +577,9 @@ impl FacePicker {
     /// The view applies visibility and section rules to this short list.
     fn hits(&self, py: Python<'_>, origin: P, direction: P, excluded: std::collections::HashSet<i128>) -> Vec<(usize, f64)> {
         py.detach(|| {
+            if let Some(hits) = self.exact_hits(origin, direction, &excluded) {
+                return hits;
+            }
             let mut hits = Vec::new();
             for (key, ordinal, range) in &self.faces {
                 if excluded.contains(key) { continue; }
@@ -552,6 +594,9 @@ impl FacePicker {
     }
     fn first(&self, py:Python<'_>, origin:P, direction:P, excluded:std::collections::HashSet<i128>) -> Option<usize> {
         py.detach(|| {
+            if let Some(hits) = self.exact_hits(origin, direction, &excluded) {
+                return hits.first().map(|h| h.0);
+            }
             let mut best = None;
             let mut distance = f64::INFINITY;
             for (key,ordinal,range) in &self.faces {

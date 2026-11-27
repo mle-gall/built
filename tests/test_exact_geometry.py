@@ -685,3 +685,16 @@ def test_native_identity_context_without_placement_and_singular_refusal():
     assert scene.edit_group is None
     assert group.mesh.capture_state() == before
     assert group.mesh._store.native_exact
+
+
+def test_store_face_picker_returns_exact_ray_parameter():
+    _, _, group = native_cylinder()
+    st = group.mesh._store
+    from core import _native
+    picker = st.tool_face_picker(_native.qt_hypot())
+    origin = [2, .43, .75]
+    direction = [-1, 0, 0]
+    hit, = picker.hits(origin, direction, set())
+    assert hit[0] == 0
+    assert hit[1] == pytest.approx(2 - math.sqrt(1 - .43**2), abs=1e-10)
+    assert picker.first(origin, direction, {group.mesh.faces[0].key}) is None
