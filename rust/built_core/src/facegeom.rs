@@ -692,6 +692,38 @@ pub(crate) fn triangles(pos: &[V3], rings: &[&[u32]], normal: V3, h: Hypot) -> V
     triangles_impl(pos, rings, normal, h, false)
 }
 
+/// Reinsert subdivided sides into the convex fan. A zero-area fan
+/// triangle would give a soft segment a single incident normal, making
+/// the renderer draw it as a boundary silhouette.
+fn conforming_convex_fan(ring: &[u32], xy: &[(f64, f64)]) -> Option<Vec<[u32;3]>> {
+    let n = ring.len();
+    let straight = |a: usize, b: usize, c: usize| {
+        let (x,y) = (xy[b].0-xy[a].0, xy[b].1-xy[a].1);
+        let (u,v) = (xy[c].0-xy[b].0, xy[c].1-xy[b].1);
+        x*u + y*v >= 0. && (x*v-y*u).abs() <= f32::EPSILON as f64 * (x*x+y*y).sqrt() * (u*u+v*v).sqrt()
+    };
+    if !straight(0,1,2) && !straight(n-2,n-1,0) {
+        return None;
+    }
+    let turns: Vec<_> = (0..n).filter(|&i| !straight((i+n-1)%n,i,(i+1)%n)).collect();
+    if turns.len() < 3 { return None; }
+    let mut triangles: Vec<_> = turns[1..].windows(2).map(|w| [turns[0],w[0],w[1]]).collect();
+    for (&a,&b) in turns.iter().zip(turns.iter().cycle().skip(1)) {
+        if (a+1)%n == b { continue; }
+        let (at,k) = triangles.iter().enumerate().find_map(|(i,t)| {
+            (0..3).find(|&j| t[j]==a && t[(j+1)%3]==b).map(|j| (i,j))
+        })?;
+        let tip = triangles.swap_remove(at)[(k+2)%3];
+        let mut i = a;
+        while i != b {
+            let next = (i+1)%n;
+            triangles.push([i,next,tip]);
+            i = next;
+        }
+    }
+    Some(triangles.into_iter().map(|t| t.map(|i| ring[i])).collect())
+}
+
 fn triangles_impl(pos: &[V3], rings: &[&[u32]], normal: V3, h: Hypot, spatial: bool) -> Vec<[u32; 3]> {
     let outer = rings[0];
     let m = outer.len();
@@ -706,6 +738,11 @@ fn triangles_impl(pos: &[V3], rings: &[&[u32]], normal: V3, h: Hypot, spatial: b
     if holes.is_empty() {
         let poly: Vec<(f64, f64)> = outer.iter().map(|&i| proj(i)).collect();
         if is_convex(&poly) {
+            if spatial && m > 3 {
+                if let Some(conforming) = conforming_convex_fan(outer, &poly) {
+                    return conforming;
+                }
+            }
             for k in 1..m - 1 {
                 tris.push([outer[0], outer[k], outer[k + 1]]);
             }
@@ -793,6 +830,22 @@ pub fn resident_geometry(pos: &[V3], rings: &[&[u32]], h: Hypot) -> (Vec<[u32; 3
 #[cfg(test)]
 mod resident_tests {
     use super::*;
+
+    #[test]
+    fn subdivided_convex_sides_have_one_triangle_per_boundary_segment() {
+        let xy = [(0.,0.),(1.,0.),(2.,0.),(2.,1.),(2.,2.),(0.,2.),(0.,1.)];
+        let ids: Vec<_> = (0..xy.len() as u32).collect();
+        let triangles = conforming_convex_fan(&ids,&xy).unwrap();
+        assert_eq!(triangles.len(),xy.len()-2);
+        for (&a,&b) in ids.iter().zip(ids.iter().cycle().skip(1)) {
+            assert_eq!(triangles.iter().filter(|t| (0..3).any(|i| t[i]==a && t[(i+1)%3]==b)).count(),1);
+        }
+        for t in triangles {
+            let [a,b,c] = t.map(|i| xy[i as usize]);
+            assert!((b.0-a.0)*(c.1-a.1) > (b.1-a.1)*(c.0-a.0));
+        }
+    }
+
 
     #[test]
     fn indexed_ears_preserve_triangle_order_with_concavity_and_holes() {

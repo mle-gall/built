@@ -209,11 +209,12 @@ impl Store {
                 continue;
             };
             out.edges.push(self.key(Kind::Edge, e));
-            endpoints.extend(*self.state.ends.get(e as usize));
+            let ends = *self.state.ends.get(e as usize);
             let faces = self.edge_faces(e).to_vec();
             if faces.len() == 2 && faces[0] == faces[1] {
                 let f = faces[0];
                 let origin = *self.state.vpos.get(self.outer_ring(f)[0] as usize);
+                endpoints.extend(ends);
                 out.slits.push((origin, self.face_normal(f, h).into()));
                 self.erase_edge(e);
                 out.dirty += 1;
@@ -236,7 +237,10 @@ impl Store {
                     continue;
                 }
             }
-            let [a, b] = *self.state.ends.get(e as usize);
+            // A successfully dissolved coplanar seam is already simplified
+            // by the normal face-healing pass, in its original store order.
+            endpoints.extend(ends);
+            let [a, b] = ends;
             let key = segment(
                 *self.state.vpos.get(a as usize),
                 *self.state.vpos.get(b as usize),
@@ -275,37 +279,94 @@ impl Store {
         Ok(out)
     }
 
+    fn curve_corner_can_heal(&self, v: u32, e: u32, f: u32) -> bool {
+        let faces = self.edge_faces(e);
+        let other = self.edge_faces(f);
+        faces.len() == other.len()
+            && faces.iter().all(|face| {
+                other.contains(face)
+                    && self
+                        .face_rings(*face)
+                        .iter()
+                        .all(|ring| !ring.contains(&v) || ring.len() > 3)
+            })
+    }
+
     /// Inspect only junctions at the ends of erased edges. A segment of
     /// an authored polygon or arc keeps both its original corner vertices.
-    pub(super) fn heal_erased_endpoints(&mut self, endpoints: std::collections::BTreeSet<u32>, h: Hypot) -> Result<(), OpError> {
+    pub(super) fn heal_erased_endpoints(
+        &mut self,
+        endpoints: std::collections::BTreeSet<u32>,
+        h: Hypot,
+    ) -> Result<(), OpError> {
         let mut counts = None;
         for v in endpoints {
-            if !self.collapsible(v, h) { continue; }
+            if !self.alive(Kind::Vertex, v) {
+                continue;
+            }
             let pair: Vec<_> = self.edges_at(v).collect();
-            let [e,f] = pair[..] else { continue };
-            let [a,b] = [e,f].map(|s| self.other_end(s,v));
-            if self.find_edge(a,b).is_some() { continue; }
-            let mut tags = [e,f].map(|s| *self.state.ecurve.get(s as usize));
+            let [e, f] = pair[..] else { continue };
+            let [a, b] = [e, f].map(|s| self.other_end(s, v));
+            if self.find_edge(a, b).is_some() {
+                continue;
+            }
+            let mut tags = [e, f].map(|s| *self.state.ecurve.get(s as usize));
             tags.sort();
             let vk = self.key(Kind::Vertex, v);
-            if tags[0] != tags[1] && self.state.split_runs.get(&vk) != Some(&tags) { continue; }
+            let split = self.state.split_runs.get(&vk) == Some(&tags);
+            if tags[0] != tags[1] && !split {
+                continue;
+            }
             let flags = *self.state.eflags.get(e as usize);
             let layer = *self.state.elayer.get(e as usize);
-            if flags != *self.state.eflags.get(f as usize) || layer != *self.state.elayer.get(f as usize) { continue; }
+            if flags != *self.state.eflags.get(f as usize)
+                || layer != *self.state.elayer.get(f as usize)
+            {
+                continue;
+            }
             let p = self.def_point(v);
-            let (u,w) = (self.def_point(a)-p, self.def_point(b)-p);
-            if u.cross(w).length() > crate::exact::bound::tolerance(p.abs().max_element()) * (u-w).length() { continue; }
-            let id = self.pid(Kind::Edge, if u.length_squared() >= w.length_squared() { e } else { f });
+            let (u, w) = (self.def_point(a) - p, self.def_point(b) - p);
+            let straight = u.dot(w) < 0.
+                && u.cross(w).length()
+                    <= crate::exact::bound::tolerance(p.abs().max_element()) * (u - w).length();
+            if straight {
+                if !self.collapsible(v, h) {
+                    continue;
+                }
+            } else if !split || !self.curve_corner_can_heal(v, e, f) {
+                continue;
+            }
+            let id = self.pid(
+                Kind::Edge,
+                if u.length_squared() >= w.length_squared() {
+                    e
+                } else {
+                    f
+                },
+            );
             // A stroke splits the displayed chord. Its middle point can
             // be off the support, so recover the circle from a neighbour
             // of the same curve when both temporary intervals fell away.
-            let curve = [e,f].into_iter().chain(self.edges_at(a)).chain(self.edges_at(b))
-                .filter(|&s| (s==e || s==f) || (tags[0]>=0 && tags.contains(self.state.ecurve.get(s as usize))))
+            let curve = [e, f]
+                .into_iter()
+                .chain(self.edges_at(a))
+                .chain(self.edges_at(b))
+                .filter(|&s| {
+                    (s == e || s == f)
+                        || (tags[0] >= 0 && tags.contains(self.state.ecurve.get(s as usize)))
+                })
                 .filter_map(|s| self.curved_edge(s))
-                .find(|bind| [a,b].iter().all(|&v| {
-                    let p = self.def_point(v);
-                    bind.curve.contains(p, crate::exact::bound::tolerance(p.abs().max_element()))
-                })).map(|b| b.curve.clone());
+                .find(|bind| {
+                    [a, b].iter().all(|&v| {
+                        let p = self.def_point(v);
+                        bind.curve
+                            .contains(p, crate::exact::bound::tolerance(p.abs().max_element()))
+                    })
+                })
+                .map(|b| b.curve.clone());
+            if !straight && curve.is_none() {
+                continue;
+            }
             let mut change = Change::default();
             let occurrences = counts.get_or_insert_with(|| self.corner_counts());
             let joined = match self.collapse_vertex(v, occurrences, &mut change) {
@@ -313,17 +374,23 @@ impl Store {
                 Err(OpError::Fallback(_)) => continue,
                 Err(e) => return Err(e),
             };
-            self.state.eflags.set(joined as usize,flags);
-            self.state.elayer.set(joined as usize,layer);
-            self.set_edge_curve(joined,tags[0]);
-            self.set_pid(Kind::Edge,joined,id);
-            if let Some(curve) = curve { let _ = self.bind_circle(&[joined],curve); }
+            self.state.eflags.set(joined as usize, flags);
+            self.state.elayer.set(joined as usize, layer);
+            self.set_edge_curve(joined, tags[0]);
+            self.set_pid(Kind::Edge, joined, id);
+            if let Some(curve) = curve {
+                let _ = self.bind_circle(&[joined], curve);
+            }
             if tags[0] != tags[1] {
                 for s in self.live_slots(Kind::Edge) {
-                    if *self.state.ecurve.get(s as usize) == tags[1] { self.set_edge_curve(s,tags[0]); }
+                    if *self.state.ecurve.get(s as usize) == tags[1] {
+                        self.set_edge_curve(s, tags[0]);
+                    }
                 }
             }
-            if self.state.split_runs.contains_key(&vk) { std::sync::Arc::make_mut(&mut self.state.split_runs).remove(&vk); }
+            if self.state.split_runs.contains_key(&vk) {
+                std::sync::Arc::make_mut(&mut self.state.split_runs).remove(&vk);
+            }
             self.finish(change);
         }
         Ok(())

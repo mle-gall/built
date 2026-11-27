@@ -598,12 +598,19 @@ def test_erase_branch_rejoins_straight_line_and_keeps_longer_id():
     assert len(scene.mesh.edges) == 1
 
 
-def test_erasing_an_arc_branch_restores_its_authored_segments():
+@pytest.mark.parametrize("reopen", [False, True])
+def test_erasing_an_arc_branch_restores_its_authored_segments(tmp_path, reopen):
     scene, h = doc()
     run(h, "add_arc", points=ring(n=12)[:5])
     e = scene.mesh.edges[1]
     p = (e.a + e.b) * 0.5
     run(h, "add_edge", a=[p.x(), p.y(), 0], b=[p.x(), p.y(), 1])
+    if reopen:
+        from formats import igz
+        path = tmp_path / "branched-arc.built"
+        igz.save_scene(scene, path)
+        scene, h = doc()
+        igz.load_into(scene, path)
     branch = next(e for e in scene.mesh.edges if e.a.z() or e.b.z())
     run(h, "erase", edges=[branch.key])
     assert len(scene.mesh.edges) == len(curves(scene)) == 4
@@ -637,3 +644,33 @@ def test_make_group_keeps_element_ids():
     h.redo()
     g = scene.groups[0].mesh._store
     assert sorted(int(i) for i in g.ids("face")) == ids["face"]
+
+
+def test_dividing_a_soft_generator_keeps_every_piece_soft_through_save(tmp_path):
+    from formats import igz
+
+    scene, h = cylinder(n=12)
+    generator = next(e for e in scene.mesh.edges if e.soft)
+    x, y, _ = generator.a.toTuple()
+    run(h, "divide_edges", edges=[generator.key], n=3)
+    path = tmp_path / "split.built"
+    igz.save_scene(scene, path)
+    reopened = Scene()
+    igz.load_into(reopened, path)
+    pieces = [e for e in reopened.mesh.edges if e.a.x() == e.b.x() == x and e.a.y() == e.b.y() == y]
+    assert len(pieces) == 3 and all(e.soft and not e.flat and len(e.faces) == 2 for e in pieces)
+
+
+def test_welding_a_non_circular_chain_drops_partial_circle_bindings():
+    from built_core.history import WeldEdgesCommand
+
+    scene, hist = doc()
+    points = ring(n=12)[:4]
+    run(hist, "add_arc", points=points)
+    run(hist, "add_edge", a=points[-1], b=[0, 2, 1])
+    previous = bindings(scene)
+    hist.execute(WeldEdgesCommand([e.key for e in scene.mesh.edges]))
+    assert len({e.curve for e in scene.mesh.edges}) == 1
+    assert not curves(scene)
+    hist.undo()
+    assert bindings(scene) == previous

@@ -707,8 +707,32 @@ impl Store {
     pub(crate) fn weld_edges(&mut self, run: &[u32], id: i128) -> Result<(), &'static str> {
         let chain = self.weld_chain(run).ok_or("Select one connected edge chain")?;
         let points: Vec<_> = chain.into_iter().map(|v| self.def_point(v)).collect();
-        if let Some(circle) = bound::fit_circle(&points, self.tol_for(points.iter().copied())) {
+        let tol = self.tol_for(points.iter().copied());
+        let circle = bound::fit_circle(&points, tol).filter(|c| {
+            let mut sweep: f64 = 0.;
+            for (a,b) in points.iter().zip(points.iter().cycle().skip(1)).take(run.len()) {
+                let Some([u,v]) = c.interval(*a,*b,None) else { return false };
+                if sweep * (v-u) < 0. { return false; }
+                sweep += v-u;
+            }
+            sweep.abs() <= std::f64::consts::TAU + 1e-10
+        });
+        if let Some(circle) = circle {
             self.bind_circle(run, circle)?;
+        } else if let Some(curved) = self.state.exact.curved.as_mut() {
+            let curved = Arc::make_mut(curved);
+            for e in run { curved.edges.remove(e); }
+        }
+        // Changing the boundary can also invalidate a previously bound wall.
+        if let Some(current) = self.state.exact.curved.clone() {
+            let incident: HashSet<_> = run.iter().flat_map(|&e| self.edge_faces(e).iter().copied()).collect();
+            let invalid: Vec<_> = incident.into_iter().filter(|f| {
+                current.face(*f).is_some_and(|s| !self.face_holds(*f,s,&current.edges))
+            }).collect();
+            if !invalid.is_empty() {
+                let curved = Arc::make_mut(self.state.exact.curved.as_mut().unwrap());
+                for f in invalid { curved.faces.remove(&f); }
+            }
         }
         for &e in run { self.set_edge_curve(e, id); }
         Ok(())
@@ -792,7 +816,7 @@ impl Store {
     /// the plane of the other face they bound (intersect, push through), or
     /// the plane normal to the axis through both ends (a line around the
     /// surface at one height).
-    fn sections(&self, created: &[u32], faces: &FaceMap, edges: &mut EdgeMap) -> usize {
+    pub(crate) fn sections(&self, created: &[u32], faces: &FaceMap, edges: &mut EdgeMap) -> usize {
         let mut count = 0;
         for &e in created {
             if edges.contains_key(&e) {
@@ -1098,6 +1122,7 @@ impl Store {
             .iter()
             .filter_map(|(id, s)| Some((self.slot_of_pid(Kind::Face, *id)?, s.clone())))
             .collect();
+        self.restore_split_runs(&rows.split_runs);
         self.install_curved_slots(edges, faces);
     }
 

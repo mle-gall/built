@@ -1049,7 +1049,7 @@ impl PyMeshStore {
             .map_err(|err| PyValueError::new_err(err.to_string()))?;
         // Persistent ids after the store (older archives end before them).
         bytes.extend(bincode::serialize(&self.inner.state.ids).map_err(|err| PyValueError::new_err(err.to_string()))?);
-        if !self.inner.state.exact.is_faceted() {
+        if !self.inner.state.exact.is_faceted() || !self.inner.state.split_runs.is_empty() {
             let planes: Vec<_> = self.inner.bound_planes().collect();
             bytes.extend(
                 bincode::serialize(&planes)
@@ -1059,8 +1059,11 @@ impl PyMeshStore {
         if let Some(patch) = &self.inner.state.exact.native {
             serde_json::to_writer(&mut bytes, &patch.rows)
                 .map_err(|err| PyValueError::new_err(err.to_string()))?;
-        } else if let Some(c) = self.inner.state.exact.curved.as_deref() {
+        } else if self.inner.state.exact.curved.is_some() || !self.inner.state.split_runs.is_empty() {
+            let empty = super::exact::Curved::default();
+            let c = self.inner.state.exact.curved.as_deref().unwrap_or(&empty);
             let rows = crate::exact::file::CurvedRows {
+                split_runs: self.inner.split_run_ids(),
                 edges: c.edges.iter().map(|(s, b)| (*s as u64, b.clone())).collect(),
                 faces: c.faces.iter().map(|(s, b)| (*s as u64, b.clone())).collect(),
             };
@@ -1102,6 +1105,7 @@ impl PyMeshStore {
                     }
                     let t: Tail = serde_json::from_slice(tail)
                         .map_err(|err| PyValueError::new_err(format!("invalid exact archive: {err}")))?;
+                    store.restore_split_runs(&t.curved_slots.split_runs);
                     store.install_curved_slots(
                         t.curved_slots.edges.into_iter().map(|(s, b)| (s as u32, b)).collect(),
                         t.curved_slots.faces.into_iter().map(|(s, b)| (s as u32, b)).collect(),

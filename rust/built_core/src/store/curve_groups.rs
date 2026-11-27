@@ -62,6 +62,54 @@ pub(crate) fn chains<V: Copy + Eq + Hash>(ends: &[[V; 2]], breaks: &HashSet<V>) 
 }
 
 impl Store {
+    /// File ids survive group renumbering at import. Store the two edge
+    /// references so an unrelated curve touching the same vertex can never
+    /// acquire a sibling relationship.
+    pub(crate) fn split_run_ids(&self) -> Vec<[u64; 3]> {
+        let mut rows = Vec::new();
+        for (&key, tags) in self.state.split_runs.iter() {
+            let Some(v) = self.slot(Kind::Vertex, key) else {
+                continue;
+            };
+            let mut pair = self
+                .edges_at(v)
+                .filter(|&e| tags.contains(self.state.ecurve.get(e as usize)));
+            if let (Some(a), Some(b), None) = (pair.next(), pair.next(), pair.next()) {
+                let mut ends = [a, b].map(|e| self.pid(Kind::Edge, e));
+                ends.sort();
+                rows.push([self.pid(Kind::Vertex, v), ends[0], ends[1]]);
+            }
+        }
+        rows.sort();
+        rows
+    }
+
+    pub(crate) fn restore_split_runs(&mut self, rows: &[[u64; 3]]) {
+        for &[vertex, first, second] in rows {
+            let Some(v) = self.slot_of_pid(Kind::Vertex, vertex) else {
+                continue;
+            };
+            let [Some(a), Some(b)] = [first, second].map(|id| self.slot_of_pid(Kind::Edge, id))
+            else {
+                continue;
+            };
+            if a == b
+                || ![a, b]
+                    .iter()
+                    .all(|&e| self.state.ends.get(e as usize).contains(&v))
+            {
+                continue;
+            }
+            let mut tags = [a, b].map(|e| *self.state.ecurve.get(e as usize));
+            if tags.iter().any(|&id| id < 0) {
+                continue;
+            }
+            tags.sort();
+            let key = self.key(Kind::Vertex, v);
+            std::sync::Arc::make_mut(&mut self.state.split_runs).insert(key, tags);
+        }
+    }
+
     fn curve_break(&self, v: u32, group: &HashSet<u32>) -> bool {
         let (mine, other): (Vec<_>, Vec<_>) = self.edges_at(v).partition(|e| group.contains(e));
         let [a, b] = mine.as_slice() else { return true };
@@ -103,17 +151,28 @@ impl Store {
                 .filter(|&v| self.curve_break(v, &group))
                 .collect();
             let chains = chains(&ends, &breaks);
-            if chains.len() > 1 {
+            if !breaks.is_empty() {
                 // Remember only straight subdivisions. Original curve corners
                 // remain vertices when their attached branch is erased.
-                let splits: Vec<_> = breaks.iter().filter_map(|&v| {
-                    let pair: Vec<_> = self.edges_at(v).filter(|e| group.contains(e)).collect();
-                    let [a, b] = *pair.as_slice() else { return None };
-                    let p = self.def_point(v);
-                    let u = self.def_point(self.other_end(a, v)) - p;
-                    let w = self.def_point(self.other_end(b, v)) - p;
-                    (u.dot(w) < 0. && u.cross(w).length() < 1e-8*u.length()*w.length()).then_some((v,a,b))
-                }).collect();
+                let splits: Vec<_> = breaks
+                    .iter()
+                    .filter_map(|&v| {
+                        let pair: Vec<_> = self.edges_at(v).filter(|e| group.contains(e)).collect();
+                        let [a, b] = *pair.as_slice() else {
+                            return None;
+                        };
+                        let p = self.def_point(v);
+                        let u = self.def_point(self.other_end(a, v)) - p;
+                        let w = self.def_point(self.other_end(b, v)) - p;
+                        (self
+                            .state
+                            .split_runs
+                            .contains_key(&self.key(Kind::Vertex, v))
+                            || (u.dot(w) < 0.
+                                && u.cross(w).length() < 1e-8 * u.length() * w.length()))
+                        .then_some((v, a, b))
+                    })
+                    .collect();
                 for (i, chain) in chains.into_iter().enumerate() {
                     let tag = if i == 0 {
                         id
@@ -127,7 +186,7 @@ impl Store {
                     }
                 }
                 for (v, a, b) in splits {
-                    let mut tags = [a,b].map(|e| *self.state.ecurve.get(e as usize));
+                    let mut tags = [a, b].map(|e| *self.state.ecurve.get(e as usize));
                     tags.sort();
                     let key = self.key(Kind::Vertex, v);
                     std::sync::Arc::make_mut(&mut self.state.split_runs).insert(key, tags);
