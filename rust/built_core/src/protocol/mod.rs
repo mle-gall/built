@@ -16,6 +16,7 @@ mod paste;
 mod profile_tools;
 mod mesh_tools;
 mod recovery;
+mod recover_round;
 mod document;
 mod drawing;
 mod materials;

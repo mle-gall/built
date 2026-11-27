@@ -121,6 +121,7 @@ fn fit(st: &Store, slots: &[u32], tolerance: f64) -> PyResult<Fit> {
 
 #[pyclass(frozen)]
 struct Edit {
+    arcs: Vec<Vec<(u32, crate::store::source_arcs::ArcBinding)>>,
     revision: u64,
     slots: Vec<u32>,
     planes: Option<Vec<(u32, Frame)>>,
@@ -137,6 +138,14 @@ impl Edit {
             ));
         }
         let mut st = held.inner.clone();
+        for ring in &self.arcs {
+            let group = mesh.call_method0("next_curve_id")?.extract()?;
+            for (e, arc) in ring {
+                st.bind_source_arc(*e, arc.clone())
+                    .map_err(PyValueError::new_err)?;
+                st.set_edge_curve(*e, group);
+            }
+        }
         if let Some(planes) = &self.planes {
             for (f, plane) in planes {
                 st.bind_plane(*f, plane.clone())
@@ -151,6 +160,9 @@ impl Edit {
             st = st.facet_view().map_err(PyValueError::new_err)?;
         } else {
             for &f in &self.slots {
+                for (e, _) in st.boundary_edges(f).into_iter().flatten().flatten() {
+                    st.state.exact.alloc(Kind::Edge, e)
+                }
                 st.state.exact.inherit(Kind::Face, f, NONE)
             }
             st.revision += 1;
@@ -177,9 +189,24 @@ fn recover_exact_geometry<'p>(
         .cast_into::<PyMeshStore>()?;
     let st = h.try_borrow()?;
     let slots = slots(&st.inner, faces)?;
-    let fit = fit(&st.inner, &slots, tolerance)?;
+    let mut fit = fit(&st.inner, &slots, tolerance)?;
+    let mut arcs = Vec::new();
+    let mut method = "Planar supports";
+    let mut output = fit.volume;
+    let count = fit.faces.len();
+    if let Some(round) = fit
+        .volume
+        .and_then(|v| super::recover_round::cylinder(&st.inner, &slots, tolerance, v))
+    {
+        fit.faces.retain(|(f, _)| round.caps.contains(f));
+        method = "Coaxial circular rims and planar end cuts";
+        output = Some(round.volume);
+        fit.max_residual = round.residual;
+        arcs = round.rings;
+    }
     let edit = Edit {
         slots,
+        arcs,
         revision: st.inner.revision,
         planes: Some(fit.faces.clone()),
     };
@@ -195,11 +222,11 @@ fn recover_exact_geometry<'p>(
             &history_command(py, "SnapshotMutation", (Bound::new(py, edit)?,))?,
         )?
     };
-    report.set_item("method", "Planar supports")?;
-    report.set_item("faces", fit.faces.len())?;
+    report.set_item("method", method)?;
+    report.set_item("faces", count)?;
     report.set_item("max_residual_m", fit.max_residual)?;
     report.set_item("input_volume_m3", fit.volume)?;
-    report.set_item("output_volume_m3", fit.volume)?;
+    report.set_item("output_volume_m3", output)?;
     report.set_item("untouched", fit.reasons)?;
     Ok(report)
 }
@@ -216,6 +243,7 @@ fn make_faceted<'p>(history: &Obj<'p>, faces: &Obj<'p>) -> Reply<'p> {
         revision: st.inner.revision,
         slots: slots(&st.inner, faces)?,
         planes: None,
+        arcs: vec![],
     };
     drop(st);
     execute(

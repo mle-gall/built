@@ -484,11 +484,11 @@ fn recover_selection(win:&Bound<'_,PyAny>,faceted:bool)->PyResult<()>{
             Ok(p)=>p,Err(e)=>{dialogs.call_method1("information",(win,title,e.value(py).str()?))?;return Ok(())}
         };
         let vars=PyDict::new(py);
-        for k in ["faces","max_residual_m","input_volume_m3","output_volume_m3"]{
+        for k in ["method","faces","max_residual_m","input_volume_m3","output_volume_m3"]{
             let v=report.get_item(k)?;
             vars.set_item(k,if v.is_none(){translated(py,"Open selection",None)?}else{v})?;
         }
-        let mut detail=message(py,"Planar supports · {faces} faces\nMaximum residual: {max_residual_m} m\nInput volume (m³): {input_volume_m3}\nOutput volume (m³): {output_volume_m3}",&vars)?;
+        let mut detail=message(py,"{method} · {faces} faces\nMaximum residual: {max_residual_m} m\nInput volume (m³): {input_volume_m3}\nOutput volume (m³): {output_volume_m3}",&vars)?;
         for reason in report.get_item("untouched")?.extract::<Vec<String>>()?{detail.push('\n');detail.push_str(&reason);}
         let buttons=PyList::new(py,[("cancel",translated(py,"Cancel",None)?),("apply",translated(py,"Apply",None)?)])?;
         let kw=PyDict::new(py);kw.set_item("cancel","cancel")?;kw.set_item("default","cancel")?;
