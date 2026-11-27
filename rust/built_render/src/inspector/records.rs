@@ -86,11 +86,10 @@ impl Records {
         layers: &mut Vec<egui::Id>,
         measured: &[(String, String)],
     ) {
-        kit::disclosure(ui, "record identity", "Identity", true, |ui| {
-            self.editor.identity(ui, out, layers)
-        });
         if let Some(row)=self.sweep.as_object(){
             kit::disclosure(ui,"sweep record","Sweep",true,|ui|{
+                let visible=(ui.clip_rect().right()-ui.cursor().min.x-8.).max(1.);
+                ui.set_width(ui.available_width().min(visible));
                 for (key,title) in [("profile_name","Profile"),("preset","Preset"),("attachment","Attachment"),("state","State")]{
                     if let Some(value)=row.get(key).and_then(Value::as_str){kit::prop_row(ui,title,value);}
                 }
@@ -116,6 +115,9 @@ impl Records {
                 }));
             });
         }
+        kit::disclosure(ui, "record identity", "Identity", true, |ui| {
+            self.editor.identity(ui, out, layers)
+        });
         let ready = self.editor.ready();
         kit::disclosure(ui, "record psets", "Property sets", false, |ui| {
             ui.add_enabled_ui(ready, |ui| self.properties(ui, out))

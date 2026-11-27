@@ -289,3 +289,24 @@ def test_end_zone_depth_is_independent_of_the_middle_length():
     assert changed_a == a
     assert changed_b[0] == b[0]
     assert changed_b[1][1] - b[1][1] == pytest.approx(4)
+
+
+def test_library_lists_saved_profiles_and_filters_cutter_sections(tmp_path, monkeypatch):
+    from built_render.wgpu_library import ProfilesProvider
+
+    monkeypatch.setenv("BUILT_SETTINGS_DIR", str(tmp_path))
+    provider = ProfilesProvider()
+    directory = Path(provider.saved_directory())
+    directory.mkdir(parents=True)
+    drawing = {"curves": [{"id": 1, "kind": "circle", "c": [0, 0], "r": 125.5}]}
+    for name, usage in [("Round section", "profile"), ("Pocket", "section")]:
+        (directory / (name + ".builtprofile")).write_text(json.dumps({
+            "format": "built.profile", "v": 1, "name": name, "use": usage, "sketch": drawing,
+        }))
+    items = provider.items(None)
+    local, = [entry for entry in items if entry["source"] == "local"]
+    assert local["name"] == "Round section"
+    s = Scene()
+    apply(History(s), "create_sweeps", sweeps=[dict(spec(""), profile={"drawing": local["sketch"]})])
+    sketch, member = queries.live_rows(s)
+    assert sketch["name"] == "Round section" and member["state"] == "ok"
