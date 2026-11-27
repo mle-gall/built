@@ -76,32 +76,60 @@ fn edit(ctx: &Bound<'_, PyAny>, preset: Value, title: &str) -> PyResult<()> {
     let forms = py.import("built_render.chrome_forms")?;
     let field = forms.getattr("Field")?;
     let fields = PyList::empty(py);
+    let capture = title == "Save as preset";
     for (key, label) in [
         ("name", "Name"),
         ("pack", "Pack"),
         ("naming", "Naming pattern"),
         ("node", "Filing node"),
     ] {
-        fields.append(field.call1((key, "edit", label, shown(&preset[key])))?)?;
-    }
-    for section in ["values", "record"] {
-        for (key, v) in preset[section].as_object().into_iter().flatten() {
-            fields.append(field.call1((format!("{section}.{key}"), "edit", key, shown(v)))?)?;
-            fields.append(field.call1((
-                format!("lock.{key}"),
-                "check",
-                format!("Fix {key}"),
-                preset["locks"][key] == "fixed",
-            ))?)?;
+        if !capture || matches!(key, "name" | "pack") {
+            fields.append(field.call1((key, "edit", label, shown(&preset[key])))?)?;
         }
     }
-    let capture = title == "Save as preset";
+    if !capture {
+        for section in ["values", "record"] {
+            for (key, v) in preset[section].as_object().into_iter().flatten() {
+                fields.append(field.call1((
+                    format!("{section}.{key}"),
+                    "edit",
+                    key,
+                    shown(v),
+                ))?)?;
+                fields.append(field.call1((
+                    format!("lock.{key}"),
+                    "check",
+                    format!("Fix {key}"),
+                    preset["locks"][key] == "fixed",
+                ))?)?;
+            }
+        }
+    }
+    let summary = format!(
+        "{} · {} · {}",
+        preset["values"]["profile"]["library"]
+            .as_str()
+            .unwrap_or("Drawn profile"),
+        preset["record"]["material"].as_str().unwrap_or(""),
+        preset["record"]["class"].as_str().unwrap_or("")
+    );
     if capture {
         fields.append(field.call(
             ("destination", "choice", "Save to", 0),
             Some(&[("options", ["This project", "My presets", "Shared folder"])].into_py_dict(py)?),
         )?)?;
-        fields.append(field.call1(("folder", "edit", "Shared folder", ""))?)?;
+        let shared = func(py, |py, args| {
+            obj(
+                py,
+                args.get_item(0)?
+                    .call_method1("value", ("destination",))?
+                    .eq(2)?,
+            )
+        })?;
+        fields.append(field.call(
+            ("folder", "edit", "Shared folder", ""),
+            Some(&[("visible", shared)].into_py_dict(py)?),
+        )?)?;
         fields.append(field.call1((
             "record_defaults",
             "check",
@@ -115,23 +143,27 @@ fn edit(ctx: &Bound<'_, PyAny>, preset: Value, title: &str) -> PyResult<()> {
             let vals = args.get_item(1)?;
             let mut p = preset.clone();
             for key in ["name", "pack", "naming", "node"] {
-                p[key] = json!(vals.get_item(key)?.extract::<String>()?);
+                if vals.contains(key)? {
+                    p[key] = json!(vals.get_item(key)?.extract::<String>()?);
+                }
             }
-            for section in ["values", "record"] {
-                for (key, old) in preset[section].as_object().into_iter().flatten() {
-                    let raw: String = vals.get_item(format!("{section}.{key}"))?.extract()?;
-                    p[section][key] = if old.is_string() {
-                        json!(raw)
-                    } else {
-                        serde_json::from_str(&raw)
-                            .map_err(|e| PyValueError::new_err(e.to_string()))?
-                    };
-                    p["locks"][key] =
-                        json!(if vals.get_item(format!("lock.{key}"))?.is_truthy()? {
-                            "fixed"
+            if !capture {
+                for section in ["values", "record"] {
+                    for (key, old) in preset[section].as_object().into_iter().flatten() {
+                        let raw: String = vals.get_item(format!("{section}.{key}"))?.extract()?;
+                        p[section][key] = if old.is_string() {
+                            json!(raw)
                         } else {
-                            "free"
-                        });
+                            serde_json::from_str(&raw)
+                                .map_err(|e| PyValueError::new_err(e.to_string()))?
+                        };
+                        p["locks"][key] =
+                            json!(if vals.get_item(format!("lock.{key}"))?.is_truthy()? {
+                                "fixed"
+                            } else {
+                                "free"
+                            });
+                    }
                 }
             }
             if capture && !vals.get_item("record_defaults")?.is_truthy()? {
@@ -168,9 +200,15 @@ fn edit(ctx: &Bound<'_, PyAny>, preset: Value, title: &str) -> PyResult<()> {
         Ok(none(py))
     })?;
     let kw = PyDict::new(py);
+    if capture {
+        kw.set_item("note", summary)?;
+    }
     kw.set_item("on_done", done)?;
     kw.set_item("buttons", [("cancel", "Cancel"), ("ok", "Save")])?;
     let form = forms.getattr("Form")?.call((title, fields), Some(&kw))?;
+    if capture {
+        form.setattr("placement", "cursor")?;
+    }
     forms.call_method1("show", (ctx.getattr("win")?, form))?;
     Ok(())
 }
@@ -251,7 +289,25 @@ impl PresetsProvider {
             for section in ["values", "record"] {
                 for (key, v) in p[section].as_object().into_iter().flatten() {
                     details.push((
-                        key,
+                        format!(
+                            "{} · {}",
+                            match key.as_str() {
+                                "class" => "IFC class",
+                                "predefined_type" => "Predefined type",
+                                "object_type" => "Object type",
+                                "material" => "Material",
+                                "profile" => "Profile",
+                                "mirror" => "Mirror",
+                                "rotation" => "Rotation",
+                                "attachment" => "Attachment",
+                                _ => key,
+                            },
+                            if p["locks"][key] == "fixed" {
+                                "Fixed"
+                            } else {
+                                "Free"
+                            }
+                        ),
                         shown(if key == "profile" && v["library"].is_string() {
                             &v["library"]
                         } else {
@@ -265,9 +321,6 @@ impl PresetsProvider {
                 "thumb":p["values"]["profile"]["library"].as_str().map(|k|format!("profile:{k}"))}));
         }
         json(py)?.call_method1("loads", (json!(items).to_string(),))
-    }
-    fn type_actions(&self, _ctx: &Bound<'_, PyAny>) -> Vec<(&str, &str)> {
-        vec![("import", "Import pack…")]
     }
     fn type_action(&self, ctx: &Bound<'_, PyAny>, action: &str) -> PyResult<()> {
         if action == "import" {

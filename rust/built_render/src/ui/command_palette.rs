@@ -128,7 +128,7 @@ impl Ui {
                                     };
                                     let preset=self.cmd_scope=="Sweep presets";
                                     if preset && (i==0 || self.cmd_results[i-1].1!=*path){kit::caption(ui,path);}
-                                    let row = command_row(
+                                    let draw=|ui:&mut egui::Ui|command_row(
                                         ui,
                                         &text,
                                         if preset {""}else{path},
@@ -136,6 +136,17 @@ impl Ui {
                                         *enabled,
                                         self.cmd_at == i,
                                     );
+                                    let row=if preset && key.contains(" · "){
+                                        ui.horizontal(|ui|{
+                                            let material=key.split(" · ").nth(1).unwrap_or("");
+                                            let color=match material{"C24"|"C16"|"Timber"=>egui::Color32::from_rgb(185,144,95),
+                                                "Concrete"=>egui::Color32::from_gray(153),"Aluminium"|"Stainless steel"=>egui::Color32::from_gray(194),
+                                                _=>INK_2};
+                                            let (rect,_)=ui.allocate_exact_size(vec2(11.,11.),egui::Sense::hover());
+                                            kit::tag_swatch(ui,rect,Some(color));
+                                            draw(ui)
+                                        }).inner
+                                    }else{draw(ui)};
                                     let row = row.on_hover_ui(|ui| {
                                         ui.set_max_width(300.);
                                         ui.label(

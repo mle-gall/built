@@ -23,7 +23,7 @@
         "object_type": "Steel member"
       },
       "naming": "M-{n}",
-      "node": "",
+      "node": "Members",
       "locks": {
         "profile": "fixed",
         "attachment": "free",
@@ -56,7 +56,7 @@
         "object_type": "Steel column"
       },
       "naming": "C-{n}",
-      "node": "",
+      "node": "Columns",
       "locks": {
         "profile": "fixed",
         "attachment": "free",
@@ -84,12 +84,12 @@
       },
       "record": {
         "class": "IfcBeam",
-        "predefined_type": "RAFTER",
+        "predefined_type": "BEAM",
         "material": "S355",
         "object_type": "Steel rafter"
       },
       "naming": "R-{n}",
-      "node": "",
+      "node": "Rafters",
       "locks": {
         "profile": "fixed",
         "attachment": "free",
@@ -122,7 +122,7 @@
         "object_type": "Wide flange beam"
       },
       "naming": "B-{n}",
-      "node": "",
+      "node": "Beams",
       "locks": {
         "profile": "fixed",
         "attachment": "free",
@@ -155,7 +155,7 @@
         "object_type": "Timber joist"
       },
       "naming": "J-{n}",
-      "node": "",
+      "node": "Joists",
       "locks": {
         "profile": "fixed",
         "attachment": "free",
@@ -188,7 +188,7 @@
         "object_type": "Timber stud"
       },
       "naming": "S-{n}",
-      "node": "",
+      "node": "Studs",
       "locks": {
         "profile": "fixed",
         "attachment": "free",
@@ -221,7 +221,7 @@
         "object_type": "Wall"
       },
       "naming": "W-{n}",
-      "node": "",
+      "node": "Walls",
       "locks": {
         "profile": "fixed",
         "attachment": "free",
@@ -254,7 +254,7 @@
         "object_type": "Handrail"
       },
       "naming": "HR-{n}",
-      "node": "",
+      "node": "Railings",
       "locks": {
         "profile": "fixed",
         "attachment": "free",
@@ -281,13 +281,13 @@
         "mirror": false
       },
       "record": {
-        "class": "IfcDiscreteAccessory",
-        "predefined_type": "USERDEFINED",
+        "class": "IfcPipeSegment",
+        "predefined_type": "GUTTER",
         "material": "Aluminium",
         "object_type": "Gutter"
       },
       "naming": "G-{n}",
-      "node": "",
+      "node": "Gutters",
       "locks": {
         "profile": "fixed",
         "attachment": "free",
@@ -320,7 +320,7 @@
         "object_type": "Moulding"
       },
       "naming": "T-{n}",
-      "node": "",
+      "node": "Trim",
       "locks": {
         "profile": "fixed",
         "attachment": "free",
@@ -353,7 +353,7 @@
         "object_type": "Duct"
       },
       "naming": "D-{n}",
-      "node": "",
+      "node": "Ducts",
       "locks": {
         "profile": "fixed",
         "attachment": "free",
@@ -386,7 +386,7 @@
         "object_type": "Pipe"
       },
       "naming": "P-{n}",
-      "node": "",
+      "node": "Pipes",
       "locks": {
         "profile": "fixed",
         "attachment": "free",
@@ -397,6 +397,52 @@
         "predefined_type": "fixed",
         "object_type": "fixed"
       }
+    },
+    {
+      "uid": "81f3c1507efa12f3",
+      "name": "Mitre",
+      "pack": "Steel EN 10365",
+      "primitive": "cut",
+      "rev": 1,
+      "values": {
+        "operation": "trim",
+        "role": "end",
+        "cutter_kind": "bisector",
+        "on": true
+      },
+      "record": {},
+      "locks": {
+        "operation": "fixed",
+        "role": "fixed",
+        "cutter_kind": "free",
+        "on": "free"
+      },
+      "naming": "",
+      "node": ""
+    },
+    {
+      "uid": "d514908360f1b4c2",
+      "name": "Purlins at 1200 mm maximum",
+      "pack": "Steel EN 10365",
+      "primitive": "repeat",
+      "rev": 1,
+      "values": {
+        "rule": {
+          "fit_max": 1200
+        },
+        "measure": "pitch",
+        "orientation": "follow",
+        "adapt": "auto"
+      },
+      "record": {},
+      "locks": {
+        "rule": "free",
+        "measure": "fixed",
+        "orientation": "free",
+        "adapt": "free"
+      },
+      "naming": "",
+      "node": ""
     }
   ]
 }

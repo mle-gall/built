@@ -799,7 +799,10 @@ impl Ui {
             self.destination = Destination::Project;
             self.plugins.showing = false;
         }
-        if let Some(d) = &mut self.dialog { d.placement = placement.into(); }
+        if let Some(d) = &mut self.dialog {
+            if placement=="cursor" && d.cursor_anchor.is_none(){d.cursor_anchor=self.ctx.pointer_latest_pos();}
+            d.placement = placement.into();
+        }
     }
     pub fn organise_scenes(&mut self) {
         self.menu = None;

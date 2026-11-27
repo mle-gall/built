@@ -43,13 +43,21 @@ impl Preset {
             return Err(error("Invalid preset"));
         }
         if self.primitive == "sweep" {
+            if self
+                .record
+                .get("class")
+                .and_then(Value::as_str)
+                .is_none_or(|class| !class.starts_with("Ifc"))
+            {
+                return Err(error("Choose an IFC class"));
+            }
             let probe = self.apply_values(json!({"path":{"points":[]}}), false)?;
             let section = probe.profile.outline(probe.segments).map_err(error)?;
             section.attachment(&probe.attachment).map_err(error)?;
         }
         Ok(())
     }
-    fn apply_values(&self, mut spec: Value, fixed_only: bool) -> PyResult<sweep::Sweep> {
+    pub(super) fn apply_values(&self, mut spec: Value, fixed_only: bool) -> PyResult<sweep::Sweep> {
         for (key, val) in &self.values {
             if !matches!(
                 key.as_str(),
@@ -142,12 +150,24 @@ pub fn update(scene: &Obj<'_>, t: &mut LiveTable, presets: &[Preset]) -> PyResul
             })
             .cloned()
             .collect();
+        let mut shared_profile = None;
         for row in followers {
             if p.primitive != "sweep" || row.state == "stale" {
                 return Err(error("Preset has an incompatible or stale follower"));
             }
             let mut row = (*row).clone();
-            row.sweep = Some(Box::new(p.apply_values(json!(row.sweep), true)?));
+            let mut sweep = p.apply_values(json!(row.sweep), true)?;
+            if p.locks.get("profile").is_some_and(|lock| lock == "fixed")
+                && sweep.profile.drawing.is_some()
+            {
+                if let Some(profile) = &shared_profile {
+                    sweep.profile = profile::Profile::clone(profile);
+                } else {
+                    bind_drawing(t, &mut sweep.profile)?;
+                    shared_profile = Some(sweep.profile.clone());
+                }
+            }
+            row.sweep = Some(Box::new(sweep));
             if let Some(g) = group(scene.py(), t, &row.owner) {
                 p.record(&g, true)?;
             }

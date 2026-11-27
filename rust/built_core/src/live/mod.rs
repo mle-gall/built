@@ -474,6 +474,21 @@ impl Mutation {
     }
 }
 
+fn bind_drawing(t: &mut LiveTable, profile: &mut profile::Profile) -> PyResult<()> {
+    if let Some(mut drawing) = profile.drawing.take() {
+        if profile.sketch.is_none() {
+            let uid = eid::new_uid();
+            drawing["uid"] = serde_json::json!(uid);
+            drawing["kind"] = serde_json::json!("sketch");
+            let source = serde_json::from_value(drawing)
+                .map_err(|e| PyValueError::new_err(e.to_string()))?;
+            t.insert(source).map_err(PyValueError::new_err)?;
+            t.pending.insert(uid.clone());
+            profile.sketch = Some(uid);
+        }
+    }
+    Ok(())
+}
 impl Mutation {
     fn apply_edit(&self, scene: &Obj<'_>) -> PyResult<()> {
         let py = scene.py();
@@ -539,6 +554,11 @@ impl Mutation {
                         destination = p.node.clone();
                         crate::structure::sweep_default(scene, Some(&p.uid))?;
                         p.record(&g, false)?;
+                        let expected = p.apply_values(serde_json::json!(spec), true)?;
+                        if let Some(note) = presets::detach(&expected, &mut spec, &p) {
+                            g.getattr("ifc")?.set_item("preset_note", note)?;
+                        }
+
                         let name = if p.naming.contains("{n}") {
                             p.naming.replace("{n}", &(t.serial + 1).to_string())
                         } else {
@@ -547,18 +567,7 @@ impl Mutation {
                         g.setattr("name", &name)?;
                         g.getattr("ifc")?.set_item("name", name)?;
                     }
-                    if let Some(mut drawing) = spec.profile.drawing.take() {
-                        if spec.profile.sketch.is_none() {
-                            let uid = eid::new_uid();
-                            drawing["uid"] = serde_json::json!(uid);
-                            drawing["kind"] = serde_json::json!("sketch");
-                            let source = serde_json::from_value(drawing)
-                                .map_err(|e| PyValueError::new_err(e.to_string()))?;
-                            t.insert(source).map_err(PyValueError::new_err)?;
-                            t.pending.insert(uid.clone());
-                            spec.profile.sketch = Some(uid);
-                        }
-                    }
+                    bind_drawing(&mut t, &mut spec.profile)?;
                     if parent.is_none() {
                         scene.getattr("groups")?.call_method1("append", (&g,))?;
                     } else {
@@ -626,6 +635,10 @@ impl Mutation {
                             }
                         }
                     }
+                }
+                if let Some(spec) = row.sweep.as_mut() {
+                    spec.preset_definition = None;
+                    bind_drawing(&mut t, &mut spec.profile)?;
                 }
                 row.state.clear();
                 t.insert(row.clone()).map_err(PyValueError::new_err)?;

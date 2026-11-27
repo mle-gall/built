@@ -121,3 +121,56 @@ def test_library_browse_and_duplicate(tmp_path, monkeypatch):
     assert copy["key"] != pipe["key"] and copy["name"] == "Pipe copy"
     provider.confirmed(ctx, "delete", copy["key"], "")
     assert not [p for p in provider.items(ctx) if p["source"] == "model"]
+
+
+def test_pack_export_import_uses_one_step(tmp_path, monkeypatch):
+    import json
+    from types import SimpleNamespace
+
+    from built_render import chrome_forms
+    from built_render.wgpu_library import PresetsProvider
+
+    monkeypatch.setenv("BUILT_SETTINGS_DIR", str(tmp_path))
+    scene = Scene()
+    history = History(scene)
+    provider = PresetsProvider()
+    ctx = SimpleNamespace(win=None, scene=scene,
+                          vp=SimpleNamespace(notify_scene_changed=lambda: None),
+                          core=lambda verb, **kw: commands.run(history, verb, **kw))
+    path = tmp_path / "mep.builtpreset"
+    monkeypatch.setattr(chrome_forms, "ask_text", lambda *args, done: done(str(path)))
+    pipe = next(p for p in provider.items(ctx) if p["name"] == "Pipe")
+    provider.run(ctx, "export", pipe)
+    pack = json.loads(path.read_text())
+    assert {p["name"] for p in pack["rows"]} == {"Duct", "Pipe"}
+    provider.type_action(ctx, "import")
+    assert len([p for p in provider.items(ctx) if p["source"] == "model"]) == 2
+    apply(history, "undo")
+    assert not [p for p in provider.items(ctx) if p["source"] == "model"]
+
+
+def test_changed_record_default_detaches_in_same_edit():
+    scene = Scene()
+    h = History(scene)
+    p = steel()
+    apply(h, "create_sweeps", sweeps=[dict(preset_uid=p["uid"], path={"points": [[0, 0, 0], [3, 0, 0]]})])
+    g, = scene.groups
+    apply(h, "patch_record_field", placements=[g.uid], path=["predefined_type"], value="JOIST")
+    assert "predefined_type" in g.ifc["preset_note"]
+    assert live.live_sweep(scene, g.uid).get("preset_uid") is None
+    apply(h, "undo")
+    assert live.live_sweep(scene, g.uid)["preset_uid"] == p["uid"]
+
+
+def test_starter_presets_file_into_a_new_node():
+    from core import bim_registry
+
+    scene = Scene()
+    history = History(scene)
+    preset = steel()
+    apply(history, "create_sweeps", sweeps=[{"preset_uid": preset["uid"], "path": {"points": [[0, 0, 0], [1, 0, 0]]}}])
+    assert "structure" in scene.groups[0].ext
+    assert preset["node"] in bim_registry.get(scene)["structure"]["nodes"]
+    apply(history, "undo")
+    assert not scene.groups
+    assert preset["node"] not in bim_registry.get(scene).get("structure", {}).get("nodes", {})

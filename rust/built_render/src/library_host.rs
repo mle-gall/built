@@ -2078,7 +2078,7 @@ impl LibrarySheet {
         } else {
             loads(py, &render(py)?.call_method1("library_sheet", (dumps(py, spec.as_any())?,))?)?
         };
-        if !native {
+        if !native || matches!(prov_id.as_str(),"profiles"|"presets") {
             if prov_id != "families" {
                 for path in out.get_item("thumbs")?.try_iter()? { thumb(&view, &path?)?; }
             } else if let Some(key) = out.get_item("cursor")?.extract::<Option<String>>()? {
@@ -2107,7 +2107,9 @@ impl LibrarySheet {
         let manifests = if prov_id == "families" { view.getattr_opt("_library_collections")? } else { None };
         let manifests = manifests.as_ref().map(|v| v.extract::<PyRef<FamilyCollections>>()).transpose()?;
         let collections = manifests.as_ref().map_or(&[][..], |m| m.0.as_slice());
-        if !has_target {
+        if prov_id=="presets" {
+            sheet.call_method1("verb",("typeact:import","Import pack…"))?;
+        }else if !has_target {
             sheet.call_method1("verb", ("import-collection", "Import collection…"))?;
         }
         if prov_id == "families" {

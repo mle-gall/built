@@ -790,7 +790,9 @@ pub(super) fn command_query<'py>(a: &Args<'py>) -> Reply<'py> {
             let pack=entry.get_item("category")?.str()?.to_string();
             let record=p.get_item("record")?;
             let profile=p.get_item("values")?.get_item("profile")?.call_method1("get",("library","Drawn profile"))?.str()?.to_string();
-            let detail=format!("{} · {} · {}",profile,record.call_method1("get",("material",""))?.str()?,record.call_method1("get",("class",""))?.str()?);
+            let class=record.call_method1("get",("class",""))?.str()?.to_string();
+            let subtype=record.call_method1("get",("predefined_type",""))?.str()?.to_string();
+            let detail=format!("{} · {} · {} {}",profile,record.call_method1("get",("material",""))?.str()?,class,subtype);
             if format!("{name} {pack} {detail}").to_lowercase().contains(&needle){
                 let id:String=p.get_item("uid")?.extract()?;
                 let source:String=entry.get_item("source")?.extract()?;

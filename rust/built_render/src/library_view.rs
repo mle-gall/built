@@ -455,6 +455,8 @@ fn tile(t: &str, e: &Item, current: Option<&str>, thumbs: &mut Vec<String>, labe
             s += &format!(" · used by {}", e.uses);
         }
         s
+    } else if t == "presets" {
+        e.defaults.iter().find(|d|d.0.starts_with("IFC class")).map(|d|d.1.clone()).unwrap_or_default()
     } else if t == "families" {
         e.category.clone()
     } else if e.uses != 0 {
