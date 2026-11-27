@@ -155,7 +155,7 @@ def mapped_body(w, group, base, excluded, context_id, geometry, cache, axis):
                  "'MappedRepresentation'", '(' + ','.join(f'#{i}' for i in items) + ')')
 
 
-def sweep_body(w, group, base, row, context_id):
+def sweep_body(w, group, base, row, context_id, *, uncut=False):
     """Write the extrusion spans of a member, clipping each at its mitre planes."""
     import numpy as np
     from built_core import group_np_affine
@@ -164,6 +164,8 @@ def sweep_body(w, group, base, row, context_id):
     from .step import _s
 
     points = group.ext['built.live'].get('path', [])
+    if group.ext['built.live'].get('body_cut') and not uncut:
+        return None
     if len(points) < 2 or group.children or row['state'] != 'ok':
         return None
     matrix = _compose(base, group.xform)
@@ -284,3 +286,38 @@ def sweep_body(w, group, base, row, context_id):
                 '(' + ','.join(items) + ')')
     vertices = [add('IFCCARTESIANPOINT', coords(rot @ p + trans)) for p in points]
     return rep, add('IFCPOLYLINE', '(' + ','.join(vertices) + ')')
+
+def live_cut_body(w, group, base, target, tools, cuts, source, ctx):
+    """Compose single-span analytic members and planar solids as IFC4 CSG."""
+    from built_core.geometry_arrays import merged, world_arrays
+    from core.bim import _compose
+
+    body_ops = {'subtract': 'DIFFERENCE', 'trim': 'DIFFERENCE',
+                'intersect': 'INTERSECTION', 'union': 'UNION'}
+    frame = _compose(base, group.xform)
+    if not tools or target['state'] != 'ok':
+        return None, 'Cut references could not be evaluated'
+    if any(cuts[uid].get('clearance', 0) for uid, _, _ in tools):
+        return None, 'Rounded clearance has no exact IFC offset solid'
+    if any(any(tool.mesh._store.exact_counts()) for _, tool, _ in tools):
+        return None, 'Curved cutter needs an analytic IFC operand'
+    line = None
+    if target['kind'] == 'sweep':
+        if len(group.ext['built.live'].get('path', [])) != 2:
+            return None, 'Cut crosses a member with multiple extrusion spans'
+        original = sweep_body(w, group, base, target, ctx, uncut=True)
+        if original is None:
+            return None, 'The member placement cannot represent an exact extrusion'
+        _, line = original
+    else:
+        if source is None or any(source.mesh._store.exact_counts()):
+            return None, 'Cut source has no exact planar IFC operand'
+        array_body(w, merged(world_arrays(source, frame)), ctx, 'brep')
+    result = w.last_shape_item
+    for uid, tool, _ in tools:
+        array_body(w, merged(world_arrays(tool, frame)), ctx, 'brep')
+        op = body_ops[cuts[uid].get('operation', 'subtract')]
+        result = w.add('IFCBOOLEANRESULT', f'.{op}.', f'#{result}', f'#{w.last_shape_item}')
+    w.last_shape_item = result
+    rep = w.add('IFCSHAPEREPRESENTATION', f'#{ctx}', "'Body'", "'CSG'", f'(#{result})')
+    return (rep, line), None

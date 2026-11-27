@@ -25,6 +25,7 @@ mod north;
 mod image;
 mod scale_manager;
 mod solid;
+mod cut;
 mod paste;
 mod paste_host;
 mod flip;
@@ -431,6 +432,7 @@ pub fn new_tool(kind: &str) -> Option<Box<dyn Tool>> {
         "offset" => Some(Box::new(offset_tool::Offset::default())),
         "position_camera" | "look_around" | "walk" | "first_person" => Some(Box::new(walkthrough::Walkthrough::new(kind))),
         "select" => Some(Box::new(select::SelectTool::default())),
+        "cut" => Some(Box::new(cut::CutTool::default())),
         "sweep" => Some(Box::new(sweep::SweepTool::default())),
         "line" => Some(Box::new(line::LineTool::default())),
         "line_on_surface" => Some(Box::new(line::LineTool::on_surface())),

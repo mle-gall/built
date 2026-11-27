@@ -245,7 +245,7 @@ pub(super) fn bind_frames(t: &mut LiveTable, uid: &str) -> bool {
 }
 
 /// Resolve an occurrence's edge or face vertices in the generated definition.
-fn element_points(
+pub(super) fn element_points(
     scene: &Obj<'_>,
     t: &LiveTable,
     row: &Row,
@@ -341,7 +341,11 @@ pub(super) fn sweep_path(
         }
     } else {
         for p in &path.points {
-            let Some(p) = origin(scene, t, &Reference::Point(*p), row)? else {
+            let Some(p) = (if path.definition_space {
+                Some(DVec3::from(*p))
+            } else {
+                origin(scene, t, &Reference::Point(*p), row)?
+            }) else {
                 return Ok(None);
             };
             points.push(p);
@@ -354,7 +358,10 @@ pub(super) fn sweep_path(
                     sweep::End::Point(p) => Reference::Point(*p),
                     sweep::End::Anchored { to, .. } => to.clone(),
                 };
-                let Some(p) = origin(scene, t, &r, row)? else {
+                let Some(p) = (match &r {
+                    Reference::Point(p) if path.definition_space => Some(DVec3::from(*p)),
+                    _ => origin(scene, t, &r, row)?,
+                }) else {
                     return Ok(None);
                 };
                 points.push(p);
@@ -362,7 +369,11 @@ pub(super) fn sweep_path(
         } else if points.len() == 2 {
             for (i, end) in ends.iter().enumerate() {
                 if let sweep::End::Point(p) = end {
-                    let Some(p) = origin(scene, t, &Reference::Point(*p), row)? else {
+                    let Some(p) = (if path.definition_space {
+                        Some(DVec3::from(*p))
+                    } else {
+                        origin(scene, t, &Reference::Point(*p), row)?
+                    }) else {
                         return Ok(None);
                     };
                     points[i] = p;

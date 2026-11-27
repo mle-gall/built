@@ -153,6 +153,8 @@ fn selection(view: &Bound<'_, PyAny>, win: &Bound<'_, PyAny>) -> PyResult<()> {
             }
             record.set_item("uid", record_address(&scene, g)?)?;
             if groups.len()==1 && g.getattr("ext")?.is_truthy()? && g.getattr("ext")?.contains("built.live")?{
+                let cuts=py.import("built_core.command_protocol")?.call_method1("live_cuts",(&scene,g.getattr("uid")?))?;
+                record.set_item("cut_rows",cuts)?;
                 let sweep=py.import("built_core.command_protocol")?.call_method1("live_sweep",(&scene,g.getattr("uid")?))?;
                 if !sweep.is_none(){
                     let lib=py.import("built_render.wgpu_library")?;
@@ -678,6 +680,14 @@ fn inspector_action(win: &Bound<'_, PyAny>, view: &Bound<'_, PyAny>, payload: &s
     let (surface, verb) = key.split_once('.').ok_or_else(|| pyo3::exceptions::PyValueError::new_err(key.clone()))?;
     let vp = win.getattr("viewport")?;
     let result = match surface {
+        "cut" if matches!(verb,"edit"|"release") => {
+            let kw=PyDict::new(py);
+            let (command,key)=if verb=="release"{("live_release","uid")}else{("live_set","row")};
+            kw.set_item(key,&v)?;
+            commands(py)?.call((vp.getattr("history")?,command),Some(&kw))?;
+            vp.call_method0("notify_scene_changed")?;
+            Ok(())
+        }
         "sweep" => {
             let owner=if verb=="field"{v.get_item(0)?}else{v.clone()};
             let row=py.import("built_core.command_protocol")?.call_method1("live_sweep",(vp.getattr("scene")?,owner))?;

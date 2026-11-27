@@ -24,6 +24,7 @@ struct Quad {
 }
 struct Builder<'a> {
     st: &'a Store,
+    project_ellipses: bool,
     rows: Rows,
     t: Topology,
     edges: HashMap<u32, (u64, bool)>,
@@ -174,7 +175,11 @@ impl Builder<'_> {
                     edge: Some(id),
                     pole: None,
                     reversed,
-                    projected: false,
+                    // An oblique end traces an ellipse on a cylinder. Its
+                    // height varies along the arc in the unwrapped chart.
+                    projected: self.project_ellipses
+                        && matches!(support.surface, Surface::Cylinder { .. })
+                        && self.st.curved_edge(e).is_some_and(|b| matches!(b.curve, Curve::Ellipse{..})),
                     uv: [uv[i], uv[j]],
                     tolerance: TOL,
                 });
@@ -342,14 +347,23 @@ pub(super) fn recover(st: &Store) -> Result<Vec<NativePatch>> {
             }
             i += 1;
         }
-        patches.push(component(st, faces)?);
+        let patch = component(st, &faces, false).or_else(|_| {
+            let patch = component(st, &faces, true)?;
+            // Projected trims can certify on the support while their display
+            // mesh still cannot be integrated for the STEP volume check.
+            super::exact_write::volume(&patch.rows, TOL)
+                .map_err(|_| "uncertified projected shell volume")?;
+            Ok::<_, &'static str>(patch)
+        })?;
+        patches.push(patch);
     }
     Ok(patches)
 }
 
-fn component(st: &Store, faces: Vec<u32>) -> Result<NativePatch> {
+fn component(st: &Store, faces: &[u32], project_ellipses: bool) -> Result<NativePatch> {
     let mut b = Builder {
         st,
+        project_ellipses,
         rows: Rows::default(),
         t: Topology::default(),
         edges: HashMap::new(),
@@ -357,7 +371,7 @@ fn component(st: &Store, faces: Vec<u32>) -> Result<NativePatch> {
     b.t.tolerance = TOL;
     b.t.display_tolerance = Some(super::DISPLAY_DEFLECTION);
     let mut quads = HashMap::new();
-    for &f in &faces {
+    for &f in faces {
         if let Some(strip) = st.source_strip(f) {
             let v: [u32; 4] = st.face_rings(f)[0]
                 .as_slice()
@@ -373,7 +387,7 @@ fn component(st: &Store, faces: Vec<u32>) -> Result<NativePatch> {
         }
     }
     let mut visited = HashSet::new();
-    for f in faces {
+    for &f in faces {
         if let Some(support) = st.curved_face(f) {
             b.bound_face(f, support)?;
         } else if quads.contains_key(&f) {

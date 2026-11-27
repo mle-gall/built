@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! The root's journalled attribute holds a frozen, structurally shared table.
 //! Definition replacements and placement markers are ordinary document ops.
+mod cut;
+pub(crate) use cut::{assign_cut_roles, hosted, migrate_wall, pushed_row};
 mod drawn_profile;
 mod file;
 mod geometry;
@@ -104,8 +106,17 @@ fn metadata<'p>(g: &Obj<'p>) -> PyResult<Bound<'p, PyDict>> {
         ext.cast::<PyDict>()?.copy()
     }
 }
-fn evaluate(scene: &Obj<'_>, t: &LiveTable, row: &Row) -> PyResult<&'static str> {
+fn evaluate(
+    scene: &Obj<'_>,
+    t: &LiveTable,
+    row: &Row,
+    active: &mut Option<String>,
+    skipped: &mut Vec<(String, &'static str)>,
+) -> PyResult<&'static str> {
     let py = scene.py();
+    if row.kind == "cut" {
+        return Ok("ok");
+    }
     if row.kind == "sketch" {
         // Open ends and crossings first (the Sketch workspace shows them);
         // then what a sweep needs from the drawing (one region).
@@ -119,7 +130,11 @@ fn evaluate(scene: &Obj<'_>, t: &LiveTable, row: &Row) -> PyResult<&'static str>
     let Some(g) = group(py, t, &row.owner) else {
         return Ok("ref_lost");
     };
-    if !matches!(row.kind.as_str(), "test_box" | "sweep" | "sketch") || row.v != 1 {
+    if !matches!(
+        row.kind.as_str(),
+        "test_box" | "sweep" | "sketch" | "cut" | "cut_stack"
+    ) || row.v != 1
+    {
         return Ok("unsupported");
     }
     let mut origin = DVec3::ZERO;
@@ -129,13 +144,22 @@ fn evaluate(scene: &Obj<'_>, t: &LiveTable, row: &Row) -> PyResult<&'static str>
         };
         origin += point;
     }
-    let mesh = py.import("built_core.mesh")?.call_method0("Mesh")?;
+    let mesh = if row.kind == "cut_stack" {
+        let Some(source) = cut::source(scene, row.source.as_deref().unwrap_or(""))? else {
+            return Ok("ref_lost");
+        };
+        source.getattr("mesh")?
+    } else {
+        py.import("built_core.mesh")?.call_method0("Mesh")?
+    };
     let store = mesh.getattr("_store")?.cast_into::<PyMeshStore>()?;
     let mut resolved_path = None;
     let mut span_geometry = None;
     let stamp = {
         let mut s = store.try_borrow_mut()?;
-        let result = if row.kind == "sweep" {
+        let result = if row.kind == "cut_stack" {
+            Ok(())
+        } else if row.kind == "sweep" {
             let Some(spec) = &row.sweep else {
                 return Ok("invalid_profile");
             };
@@ -152,7 +176,11 @@ fn evaluate(scene: &Obj<'_>, t: &LiveTable, row: &Row) -> PyResult<&'static str>
                 }
                 spec.profile.drawing = Some(serde_json::json!(source));
             }
-            let result = sweep::generate(&mut s.inner, &spec, &points)
+            let planes = match cut::end_planes(scene, t, row, &points, active)? {
+                Ok(planes) => planes,
+                Err(state) => return Ok(state),
+            };
+            let result = sweep::generate(&mut s.inner, &spec, &points, &planes)
                 .map(|geometry| span_geometry = Some(geometry));
             resolved_path = Some(points);
             result
@@ -164,8 +192,37 @@ fn evaluate(scene: &Obj<'_>, t: &LiveTable, row: &Row) -> PyResult<&'static str>
         }
         geometry::stamp(&s.inner)
     };
+    let body_cut = row.cuts.iter().any(|id| {
+        t.rows.get(id).is_some_and(|r| {
+            r.on != Some(false)
+                && ((row.kind == "cut_stack" && matches!(r.cutter, Some(cut::Cutter::Plane(_))))
+                    || matches!(
+                        r.cutter,
+                        Some(
+                            cut::Cutter::Body(_)
+                                | cut::Cutter::Section(_)
+                                | cut::Cutter::Opening(_)
+                        )
+                    ))
+        })
+    });
+    let (mesh, stamp) = if body_cut {
+        match cut::bodies(scene, t, row, mesh, active, skipped)? {
+            Ok(mesh) => {
+                let store = mesh.getattr("_store")?.cast_into::<PyMeshStore>()?;
+                let stamp = geometry::stamp(&store.try_borrow()?.inner);
+                (mesh, stamp)
+            }
+            Err(state) => return Ok(state),
+        }
+    } else {
+        (mesh, stamp)
+    };
     let marker = PyDict::new(py);
     marker.set_item("row", &row.uid)?;
+    if body_cut {
+        marker.set_item("body_cut", true)?;
+    }
     if let Some(points) = resolved_path {
         marker.set_item("path", points)?;
     }
@@ -179,10 +236,12 @@ fn evaluate(scene: &Obj<'_>, t: &LiveTable, row: &Row) -> PyResult<&'static str>
     marker.set_item("stamp", &stamp)?;
     let ext = metadata(&g)?;
     ext.set_item(EXT, marker)?;
-    eid::set_definition_uid(
-        &mesh,
-        &eid::derived_uid(&format!("built:live:v1:{}", row.uid)),
-    )?;
+    if row.kind != "cut_stack" || body_cut {
+        eid::set_definition_uid(
+            &mesh,
+            &eid::derived_uid(&format!("built:live:v1:{}", row.uid)),
+        )?;
+    }
     g.setattr("mesh", mesh)?;
     g.setattr("ext", ext)?;
     Ok("ok")
@@ -194,10 +253,27 @@ fn run(scene: &Obj<'_>, t: &mut LiveTable, seeds: HashSet<String>) -> PyResult<(
         if row.state == "stale" || row.state == "cycle" {
             continue;
         }
-        let state = evaluate(scene, t, row)?;
+        let mut active = None;
+        let mut skipped = Vec::new();
+        let state = evaluate(scene, t, row, &mut active, &mut skipped)?;
+        let cut_ids = row.cuts.clone();
+        let initial = row.state.is_empty();
+        if state == "ok" {
+            for id in cut_ids {
+                if t.rows.contains_key(&id) {
+                    t.set_state(&id, "ok");
+                }
+            }
+        }
+        for (id, state) in skipped {
+            t.set_state(&id, state);
+        }
+        if let Some(id) = active.filter(|_| state != "ok") {
+            t.set_state(&id, state);
+        }
         if state != sketch::UNCHANGED {
             t.set_state(&uid, state);
-        } else if row.state.is_empty() {
+        } else if initial {
             // A user of an open sketch with nothing good to keep yet.
             t.set_state(&uid, "profile_open");
         }
@@ -327,6 +403,19 @@ pub(crate) fn finish(
                     let mut copy = (*source).clone();
                     copy.uid = eid::new_uid();
                     copy.owner = uid.clone();
+                    for cut_id in &mut copy.cuts {
+                        let mut cut = (*t
+                            .rows
+                            .get(cut_id)
+                            .ok_or_else(|| PyValueError::new_err("Missing cut"))?)
+                        .as_ref()
+                        .clone();
+                        cut.uid = eid::new_uid();
+                        cut.owner = uid.clone();
+                        *cut_id = cut.uid.clone();
+                        seeds.insert(cut.uid.clone());
+                        t.insert(cut).map_err(PyValueError::new_err)?;
+                    }
                     let marker = ext.get_item(EXT)?.unwrap().cast_into::<PyDict>()?.copy()?;
                     marker.set_item("row", &copy.uid)?;
                     ext.set_item(EXT, marker)?;
@@ -339,7 +428,11 @@ pub(crate) fn finish(
         for uid in removed {
             seeds.extend(t.users(&Key::Placement(uid.clone())).cloned());
             if let Some(id) = t.owners.get(&uid).cloned() {
-                t.remove(&id);
+                if let Some(row) = t.remove(&id) {
+                    for cut in &row.cuts {
+                        t.remove(cut);
+                    }
+                }
                 seeds.extend(t.users(&Key::Row(id)).cloned());
             }
         }
@@ -563,6 +656,14 @@ impl Mutation {
                     let mut spec = spec.clone();
                     let mut destination = String::new();
                     if let Some(p) = presets::link(&mut t, &mut spec)? {
+                        if spec.cut_definitions.is_empty() {
+                            spec.cut_definitions = p
+                                .values
+                                .get("cut_definitions")
+                                .and_then(|cuts| cuts.as_array())
+                                .cloned()
+                                .unwrap_or_default();
+                        }
                         destination = p.node.clone();
                         crate::structure::sweep_default(scene, Some(&p.uid))?;
                         p.record(&g, false)?;
@@ -600,6 +701,8 @@ impl Mutation {
                     let uid = eid::new_uid();
                     Arc::make_mut(&mut t.groups)
                         .insert(owner.clone(), g.getattr("_doc_key")?.extract()?);
+                    let definitions = std::mem::take(&mut spec.cut_definitions);
+                    let target_uid = owner.clone();
                     t.insert(Row {
                         kind: "sweep".into(),
                         uid: uid.clone(),
@@ -612,9 +715,26 @@ impl Mutation {
                         state: String::new(),
                         curves: None,
                         sketch_fields: Default::default(),
+                        cuts: vec![],
+                        source: None,
+                        clearance: None,
+                        cutter: None,
+                        anchor: None,
+                        operation: None,
+                        end: None,
+                        on: None,
                         sweep: Some(Box::new(spec)),
                     })
                     .map_err(PyValueError::new_err)?;
+                    for mut definition in definitions {
+                        definition["uid"] = serde_json::json!(eid::new_uid());
+                        definition["owner"] = serde_json::json!(target_uid);
+                        let mut cut: Row = serde_json::from_value(definition)
+                            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+                        cut::attach(scene, &mut t, &mut cut)?;
+                        t.pending.insert(cut.uid.clone());
+                        t.insert(cut).map_err(PyValueError::new_err)?;
+                    }
                     t.pending.insert(uid);
                 }
             }
@@ -648,6 +768,13 @@ impl Mutation {
                         }
                     }
                 }
+                if row.kind == "cut" {
+                    cut::attach(scene, &mut t, &mut row)?;
+                } else if let Some(old) = t.rows.get(&row.uid) {
+                    row.cuts.clone_from(&old.cuts);
+                } else {
+                    row.cuts.clear();
+                }
                 if let Some(spec) = row.sweep.as_mut() {
                     spec.preset_definition = None;
                     bind_drawing(&mut t, &mut spec.profile)?;
@@ -659,9 +786,55 @@ impl Mutation {
                 t.pending.insert(row.uid);
             }
             Edit::Release(id) => {
-                let row = t
+                let mut row = t
                     .remove(id)
                     .ok_or_else(|| PyValueError::new_err("unknown recipe"))?;
+                if row.kind == "cut" {
+                    let target_uid = t.owners[&row.owner].clone();
+                    let mut target = (*t.rows[&target_uid]).clone();
+                    let at = target
+                        .cuts
+                        .iter()
+                        .position(|u| u == id)
+                        .ok_or_else(|| PyValueError::new_err("Detached cut"))?;
+                    // Bake the prefix through the selected cut. Later operations
+                    // continue to use the baked result as their editable source.
+                    t.insert((*row).clone()).map_err(PyValueError::new_err)?;
+                    let later = target.cuts.split_off(at + 1);
+                    if evaluate(scene, &t, &target, &mut None, &mut Vec::new())? != "ok" {
+                        return Err(PyValueError::new_err("Could not bake the cut"));
+                    }
+                    for uid in &target.cuts {
+                        t.remove(uid);
+                    }
+                    if !later.is_empty() {
+                        let g = group(py, &t, &target.owner).unwrap();
+                        let source = cut::keep_source(scene, &g.getattr("mesh")?)?;
+                        target.kind = "cut_stack".into();
+                        target.source = Some(source);
+                        target.cuts = later;
+                        target.sweep = None;
+                        target.inputs.clear();
+                        target.slots.clear();
+                        t.remove(&target_uid);
+                        t.insert(target).map_err(PyValueError::new_err)?;
+                        t.pending.insert(target_uid);
+                        return put(scene, t);
+                    }
+                    row = t.remove(&target_uid).unwrap();
+                }
+                if let Some(uid) = &row.source {
+                    if !t.rows.values().any(|r| r.source.as_ref() == Some(uid)) {
+                        if let Some(source) = cut::source(scene, uid)? {
+                            scene
+                                .getattr("kept_components")?
+                                .call_method1("remove", (source,))?;
+                        }
+                    }
+                }
+                for uid in &row.cuts {
+                    t.remove(uid);
+                }
                 if let Some(g) = group(py, &t, &row.owner) {
                     let ext = metadata(&g)?;
                     if ext.contains(EXT)? {
@@ -715,6 +888,8 @@ fn live_sweep<'p>(scene: &Obj<'p>, owner: &str) -> PyResult<Obj<'p>> {
         return Ok(scene.py().None().into_bound(scene.py()));
     };
     let value = to_py(scene.py(), row)?;
+    let cuts: Vec<_> = row.cuts.iter().filter_map(|id| t.rows.get(id)).collect();
+    value.set_item("cut_rows", to_py(scene.py(), &cuts)?)?;
     let k = t.groups[owner];
     let parent = doc::lock().node(k).and_then(|n| n.owners.first().copied());
     value.set_item(
@@ -864,7 +1039,7 @@ fn live_set<'p>(history: &Obj<'p>, row: &Obj<'p>) -> PyResult<Bound<'p, PyDict>>
             return Err(PyValueError::new_err("expected 16-hex uid"));
         }
     }
-    if !matches!(row.kind.as_str(), "test_box" | "sweep" | "sketch") || row.v != 1 {
+    if !matches!(row.kind.as_str(), "test_box" | "sweep" | "sketch" | "cut") || row.v != 1 {
         return Err(PyValueError::new_err("unsupported recipe"));
     }
     if row.kind == "sketch" {
@@ -926,6 +1101,8 @@ fn live_rows<'p>(scene: &Obj<'p>) -> PyResult<Obj<'p>> {
 }
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     presets::register(m)?;
+    m.add_function(wrap_pyfunction!(live_cuts, m)?)?;
+    m.add_function(wrap_pyfunction!(cut::live_openings, m)?)?;
     m.add_function(wrap_pyfunction!(sweep_thumbnail, m)?)?;
     m.add_function(wrap_pyfunction!(live_sweep, m)?)?;
     m.add_function(wrap_pyfunction!(sweep_profile, m)?)?;
@@ -954,4 +1131,74 @@ pub(crate) fn clear(scene: &Obj<'_>) -> PyResult<()> {
         root.call_method1("_set_attr", (TABLE, scene.py().None()))?;
     }
     Ok(())
+}
+
+pub(crate) fn cut_labels(
+    scene: &Obj<'_>,
+) -> PyResult<HashMap<String, Vec<(String, String, bool)>>> {
+    let mut labels = HashMap::new();
+    let Some(r) = scene
+        .getattr_opt("_root")?
+        .and_then(|g| g.getattr("_doc_key").ok())
+        .and_then(|k| k.extract().ok())
+    else {
+        return Ok(labels);
+    };
+    let Some(t) = current(scene.py(), r) else {
+        return Ok(labels);
+    };
+    for id in &t.cut_targets {
+        let row = &t.rows[id];
+        let items = row
+            .cuts
+            .iter()
+            .filter_map(|id| {
+                let c = t.rows.get(id)?;
+                let kind = match c.cutter.as_ref()? {
+                    cut::Cutter::Plane(_) => "plane",
+                    cut::Cutter::Bisector(_) => "joint bisector",
+                    cut::Cutter::Body(_) => "body",
+                    cut::Cutter::Section(_) => "section",
+                    cut::Cutter::Opening(_) => "Opening",
+                };
+                Some((
+                    id.clone(),
+                    format!(
+                        "{} · {kind}",
+                        c.sketch_fields
+                            .name
+                            .as_str()
+                            .or(c.operation.as_deref())
+                            .unwrap_or("subtract")
+                    ),
+                    c.on != Some(false),
+                ))
+            })
+            .collect();
+        labels.insert(row.owner.clone(), items);
+    }
+    Ok(labels)
+}
+
+pub(crate) fn finish_migration(scene: &Obj<'_>) -> PyResult<()> {
+    if let Some(mut t) = current(scene.py(), root(scene)?) {
+        let dirty = std::mem::take(&mut t.pending).into_iter().collect();
+        run(scene, &mut t, dirty)?;
+        put(scene, t)?;
+    }
+    Ok(())
+}
+
+#[pyfunction]
+fn live_cuts<'p>(scene: &Obj<'p>, owner: &str) -> PyResult<Obj<'p>> {
+    let t = current(scene.py(), root(scene)?).unwrap_or_default();
+    let cuts: Vec<_> = t
+        .owners
+        .get(owner)
+        .and_then(|uid| t.rows.get(uid))
+        .into_iter()
+        .flat_map(|r| &r.cuts)
+        .filter_map(|id| t.rows.get(id))
+        .collect();
+    to_py(scene.py(), &cuts)
 }

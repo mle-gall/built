@@ -106,6 +106,22 @@ pub struct Row {
     #[serde(flatten)]
     pub sketch_fields: SketchFields,
     pub kind: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cuts: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub clearance: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cutter: Option<super::cut::Cutter>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub anchor: Option<super::cut::Anchor>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub operation: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub on: Option<bool>,
     #[serde(default = "one")]
     pub v: u32,
     #[serde(default = "unit", skip_serializing_if = "is_unit")]
@@ -154,10 +170,11 @@ impl Row {
         self.inputs
             .iter()
             .chain(self.slots.values())
+            .chain(self.anchor.iter().map(|a| &a.reference))
             .chain(self.sweep.iter().flat_map(|s| s.path.references()))
     }
     fn keys(&self) -> HashSet<Key> {
-        let mut keys = HashSet::new();
+        let mut keys: HashSet<_> = self.cuts.iter().cloned().map(Key::Row).collect();
         if let Some(uid) = self.sweep.as_ref().and_then(|s| s.profile.sketch.as_ref()) {
             keys.insert(Key::Row(uid.clone()));
         }
@@ -188,6 +205,7 @@ impl Row {
 #[derive(Default, Clone)]
 pub struct LiveTable {
     pub presets: Arc<std::collections::BTreeMap<String, super::presets::Preset>>,
+    pub cut_targets: OrdSet<String>,
     pub groups: Arc<std::collections::HashMap<String, u64>>,
     pub rows: HashMap<String, Arc<Row>>,
     pub owners: HashMap<String, String>,
@@ -238,7 +256,10 @@ impl LiveTable {
     pub fn remove(&mut self, uid: &str) -> Option<Arc<Row>> {
         let row = self.rows.remove(uid)?;
         self.clear_frames(uid);
-        self.owners.remove(&row.owner);
+        self.cut_targets.remove(uid);
+        if row.kind != "cut" {
+            self.owners.remove(&row.owner);
+        }
         for k in row.keys() {
             if let Some(users) = self.users.get_mut(&k) {
                 users.remove(uid);
@@ -251,13 +272,16 @@ impl LiveTable {
         Some(row)
     }
     pub fn insert(&mut self, row: Row) -> Result<(), &'static str> {
-        if !row.owner.is_empty() && self.owners.get(&row.owner).is_some_and(|id| id != &row.uid) {
+        if row.kind != "cut"
+            && !row.owner.is_empty()
+            && self.owners.get(&row.owner).is_some_and(|id| id != &row.uid)
+        {
             return Err("placement already has a recipe");
         }
         if self
             .rows
             .get(&row.uid)
-            .is_some_and(|old| old.owner != row.owner)
+            .is_some_and(|old| old.owner != row.owner || old.kind != row.kind)
         {
             return Err("recipe owner cannot change");
         }
@@ -269,8 +293,11 @@ impl LiveTable {
         for k in row.keys() {
             self.users.entry(k).or_default().insert(row.uid.clone());
         }
-        if !row.owner.is_empty() {
+        if row.kind != "cut" && !row.owner.is_empty() {
             self.owners.insert(row.owner.clone(), row.uid.clone());
+        }
+        if !row.cuts.is_empty() {
+            self.cut_targets.insert(row.uid.clone());
         }
         self.order.insert(row.uid.clone(), ordinal);
         self.rows.insert(row.uid.clone(), Arc::new(row));
@@ -297,7 +324,9 @@ impl LiveTable {
             };
             if dirty.insert(id.clone()) {
                 queue.extend(self.users(&Key::Row(id)).cloned());
-                queue.extend(self.users(&Key::Placement(row.owner.clone())).cloned());
+                if row.kind != "cut" {
+                    queue.extend(self.users(&Key::Placement(row.owner.clone())).cloned());
+                }
             }
         }
         let mut ready = BTreeSet::new();
@@ -356,6 +385,14 @@ mod tests {
             sweep: None,
             curves: None,
             sketch_fields: Default::default(),
+            cuts: vec![],
+            source: None,
+            clearance: None,
+            cutter: None,
+            anchor: None,
+            operation: None,
+            end: None,
+            on: None,
             open_top: false,
             inputs,
             slots: Default::default(),

@@ -16,7 +16,7 @@ from built_core.version import __version__
 from .entities import Builder
 from core.ifc_tables_data import SCHEMA_DATA
 from .relationships import Appearance
-from .geometry import array_body, mapped_body, sweep_body
+from .geometry import array_body, live_cut_body, mapped_body, sweep_body
 from built_core.geometry_arrays import (world_arrays, merged, faces_arrays,
                                   quantities as array_quantities, measurements,
                                   face_attributes, recorded_arrays)
@@ -135,12 +135,16 @@ def _save_ifc(scene, path, project_name, profile, stream, placements):
     from built_core.protocol.queries import live_rows
     rows = live_rows(scene)
     sketches = {r['uid']: r for r in rows if r['kind'] == 'sketch'}
+    cuts = {r['uid']: r for r in rows if r['kind'] == 'cut'}
+    cut_targets = {r['owner'] for r in cuts.values()}
+    stacks = {r['owner']: r for r in rows if r['kind'] == 'cut_stack'}
+    sources = {g.uid: g for g in scene.kept_components} if stacks else {}
     sweeps = {r['owner']: r for r in rows if r['kind'] == 'sweep'}
     for row in sweeps.values():
         source = sketches.get(row.get('profile', {}).get('sketch'))
         if source:
             row['profile']['drawing'] = source
-    view = config.get('view', 'DesignTransferView' if sweeps else 'ReferenceView')
+    view = config.get('view', 'DesignTransferView' if sweeps or cut_targets else 'ReferenceView')
     if view == 'ReferenceView' and schema == 'IFC4':
         view = 'ReferenceView_V1.2'
     header = ("ISO-10303-21;\nHEADER;\n"
@@ -296,18 +300,27 @@ def _save_ifc(scene, path, project_name, profile, stream, placements):
         if len(arrays.ring_counts):
             sweep = sweeps.get(group.uid) if group is not None else None
             reference_view = view.startswith('ReferenceView')
-            if sweep and not reference_view:
-                rep = sweep_body(w, group, bases[id(group)], sweep, body) if group.ext.get('built.live') else None
-                if rep is not None:
-                    rep, line = rep
-                    if axis_context is None:
-                        axis_context = w.add('IFCGEOMETRICREPRESENTATIONSUBCONTEXT', "'Axis'", "'Model'",
-                                             '*', '*', '*', '*', ref(context), '$', '.GRAPH_VIEW.', '$')
-                    axis_rep = w.add('IFCSHAPEREPRESENTATION', ref(axis_context), "'Axis'", "'Curve3D'", f'({line})')
+            target = sweep or (stacks.get(group.uid) if group is not None else None)
+            if target and not reference_view:
+                reason = 'Sweep exported from its evaluated faces'
+                marker = group.ext.get('built.live', {})
+                if marker.get('body_cut') and schema == 'IFC4':
+                    from built_core.command_protocol import live_openings
+                    tools = live_openings(scene, group.uid, True)
+                    shape, reason = live_cut_body(w, group, bases[id(group)], target, tools, cuts,
+                                                  sources.get(target.get('source')), body)
                 else:
-                    problems.append({'uid': group.uid, 'name': group.name,
-                                     'messages': ['Sweep exported from its evaluated faces']})
-            if sweep and reference_view:
+                    shape = sweep_body(w, group, bases[id(group)], sweep, body) if sweep and marker else None
+                if shape is not None:
+                    rep, line = shape
+                    if line:
+                        if axis_context is None:
+                            axis_context = w.add('IFCGEOMETRICREPRESENTATIONSUBCONTEXT', "'Axis'", "'Model'",
+                                                 '*', '*', '*', '*', ref(context), '$', '.GRAPH_VIEW.', '$')
+                        axis_rep = w.add('IFCSHAPEREPRESENTATION', ref(axis_context), "'Axis'", "'Curve3D'", f'({line})')
+                elif sweep or marker.get('body_cut'):
+                    problems.append({'uid': group.uid, 'name': group.name, 'messages': [reason]})
+            if target and reference_view:
                 rep = array_body(w, arrays, body, 'polygonal')
             elif rep is None and config.get('instancing', False) and group is not None:
                 rep = mapped_body(w, group, bases[id(group)], excluded,
@@ -352,7 +365,23 @@ def _save_ifc(scene, path, project_name, profile, stream, placements):
                              attributes, data[0] if data is not None else [])
         else:
             appearance.apply(r, group, faces, node, eg, rep, item)
+        if group is not None and group.uid in cut_targets:
+            from built_core.command_protocol import live_openings
+            for cut_uid, tool, opening_guid in live_openings(scene, group.uid):
+                og = opening_guid or guid('cut', group.uid, cut_uid)
+                placement_frame = _compose(bases[id(group)], group.xform)
+                opening_arrays = merged(world_arrays(tool, placement_frame))
+                orep = array_body(w, opening_arrays, body, geometry)
+                shape = w.entity('IfcProductDefinitionShape', Representations=refs([orep]))
+                onode = w.entity('IfcOpeningElement', GlobalId=_s(og), Name=_s('Opening'),
+                                 ObjectPlacement=ref(placement), Representation=ref(shape),
+                                 PredefinedType='.OPENING.')
+                opening_nodes[og] = onode
+                relation('IfcRelVoidsElement', (eg, og), RelatingBuildingElement=ref(node),
+                         RelatedOpeningElement=ref(onode))
         for index, opening in enumerate(r.get('openings', [])):
+            if opening.get('cut'):
+                continue
             from core.ifc_identity import ensure_guid
             oarrays = recorded_arrays(opening.get('faces', []))
             if opening.get('group_uid'):

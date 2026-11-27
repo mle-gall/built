@@ -119,6 +119,7 @@ pub(crate) fn refresh_unfiled(scene: &Obj<'_>, tree: &Obj<'_>) -> PyResult<bool>
 }
 
 struct Catalogue<'py> {
+    cuts: HashMap<String,Vec<(String,String,bool)>>,
     scene: Obj<'py>,
     tree: Obj<'py>,
     nodes: Obj<'py>,
@@ -316,10 +317,17 @@ impl<'py> Catalogue<'py> {
         }
         r.1[2] = self.bad.contains(&id(g)) as i64;
         crate::project_tree::placement_controls(&mut r, g)?;
-        r.1[7] = kids.is_truthy()? as i64;
+        let cuts=if self.cuts.is_empty(){None}else{self.cuts.get(&g.getattr("uid")?.extract::<String>()?)};
+        r.1[7] = (kids.is_truthy()? || cuts.is_some()) as i64;
         r.1[8] = open as i64;
         rows.push(r);
         if open {
+            for (id,label,on) in cuts.into_iter().flatten() {
+                let mut child=row(format!("cut:{id}"),label.clone(),"","cut",d+1,2,0,0);
+                child.1[5]=i64::from(*on);
+                child.0[2]=if *on {"Cut".into()}else{"Disabled cut".into()};
+                rows.push(child);
+            }
             let max = self.cap(&key);
             if self.filter.is_empty() {
                 for child in kids.try_iter()?.take(max) {
@@ -550,6 +558,7 @@ pub(crate) fn filing_rows<'py>(
         Ok(text(cls)?.trim_start_matches("Ifc").to_string())
     };
     let mut c = Catalogue {
+        cuts:crate::live::cut_labels(&scene)?,
         scene,
         tree: tree.clone(),
         nodes: nodes.clone(),

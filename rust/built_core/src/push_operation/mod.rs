@@ -399,6 +399,20 @@ fn commit(op: &Obj, viewport: &Obj) -> PyResult<()> {
     op.setattr("_light_faces", PyList::empty(py))?;
     op.setattr("_light_wires", PyList::empty(py))?;
     viewport.call_method1("set_suppressed_faces", (PySet::empty(py)?,))?;
+    let scene=viewport.getattr("scene")?;
+    let group=op.getattr("_group")?;
+    let group=if group.is_none(){scene.getattr("edit_group")?}else{group};
+    let distance=number(op,"extrusion")?;
+    if distance.abs()>=MIN_EXTRUDE {
+        if let Some(row)=crate::live::pushed_row(&scene,&group,&op.getattr("base_face")?,distance)? {
+            revert_preview(op,viewport)?;
+            let kw=PyDict::new(py);kw.set_item("row",row)?;
+            py.import("built_core.command_protocol")?.getattr("run")?.call((viewport.getattr("history")?,"live_set"),Some(&kw))?;
+            op.call_method0("_reset")?;
+            viewport.call_method0("notify_scene_changed")?;
+            return Ok(());
+        }
+    }
     let mut cmd = staged_command(op, viewport)?;
     if cmd.is_none() {
         revert_preview(op, viewport)?;

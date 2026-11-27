@@ -133,3 +133,8 @@ pub fn stamp(store: &Store) -> String {
         u64::from_be_bytes(hash.finalize()[..8].try_into().unwrap())
     )
 }
+
+pub(super) fn matches_role(pid:u64,role:&str)->bool {
+    eid::origin_of(eid::origin_index(pid))==Some(h64(b"built:generated:v1")) &&
+        eid::counter(pid)==h64(role.as_bytes()) & eid::COUNTER_MASK
+}

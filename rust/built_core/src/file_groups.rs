@@ -245,7 +245,7 @@ impl FileGroups {
                     let g = builder.group(record.cast::<PyDict>()?)?;
                     if !is_kept {
                         roots.append(g)?;
-                    } else if g.call_method0("is_component")?.is_truthy()? {
+                    } else if g.call_method0("is_component")?.is_truthy()? || g.getattr("ext")?.contains("built.cut_source").unwrap_or(false) {
                         library.append(g)?;
                     }
                 }
