@@ -12,7 +12,7 @@ use std::sync::Arc;
 pub(crate) struct ArcBinding {
     #[serde(default)]
     pub fitted: bool,
-    pub frame: Frame,
+    pub frame: Arc<Frame>,
     pub radius: f64,
     pub interval: [f64; 2],
 }
@@ -155,7 +155,7 @@ impl Store {
         Some(Strip {
             group,
             pair: (ga.min(gb), ga.max(gb)),
-            frame: base.frame.clone(),
+            frame: (*base.frame).clone(),
             radius: base.radius,
             semi_angle,
             swept: None,

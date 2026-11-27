@@ -45,7 +45,7 @@ impl Builder<'_> {
         let (curve, mut interval) = if let Some(a) = pure {
             (
                 Curve::Circle {
-                    frame: a.frame.clone(),
+                    frame: (*a.frame).clone(),
                     radius: a.radius,
                 },
                 a.interval,

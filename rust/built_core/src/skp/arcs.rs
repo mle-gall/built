@@ -99,7 +99,7 @@ pub(super) fn bind(mesh: &Obj<'_>, rec: &Obj<'_>) -> PyResult<usize> {
     for row in data.cast::<PyList>()? {
         let (axes, radius, start, end, pairs): ([[f64; 3]; 3], f64, f64, f64, Vec<[[f64; 3]; 2]>) =
             row.extract()?;
-        let frame = Frame::from_array(axes);
+        let frame = std::sync::Arc::new(Frame::from_array(axes));
         if frame.validate().is_err() {
             continue;
         }

@@ -48,7 +48,7 @@ pub(super) fn bind(
     let t = theta(start);
     let d = (theta(end) - t + PI).rem_euclid(TAU) - PI;
     let arc = ArcBinding {
-        frame,
+        frame: frame.into(),
         radius,
         interval: [t, t + d],
         fitted: true,
