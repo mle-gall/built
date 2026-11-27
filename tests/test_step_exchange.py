@@ -503,6 +503,7 @@ def test_step_import_feedback_has_one_result_and_optional_details(native_host, m
 
     win = native_host.window
     monkeypatch.setattr(dialogs, "async_host", lambda _: win)
+    monkeypatch.setenv("BUILT_LOG_DIR", str(tmp_path / "logs"))
     fixtures = Path(__file__).parent / "fixtures" / "step"
     assert built_render.import_file(win, fixtures / "stepmesh/torus.step", "step")
     rows = [r for r in dialogs.history(win) if "torus.step" in r.title]
@@ -517,6 +518,7 @@ def test_step_import_feedback_has_one_result_and_optional_details(native_host, m
     assert [key for key, _, _, role in sheet.buttons if role == 1] == ["cancel"]
     assert "1 of 2 bodies" in sheet.text and "damaged closed shell" in sheet.text
     assert "ValueError" not in sheet.text and "BREP_WITH_VOIDS #" in caplog.text
+    assert "BREP_WITH_VOIDS #187" in (tmp_path / "logs/built-import.log").read_text()
     assert dialogs.sheet_buttons(sheet)[-1] == ("details", "Details", "", 6)
     dialogs.answer(win, "details")
     assert "BREP_WITH_VOIDS #" in dialogs.sheet_buttons(sheet)[-1][2]

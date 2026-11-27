@@ -19,6 +19,18 @@ pub(crate) fn finish_progress(bar: &Obj) -> PyResult<()> {
 }
 
 pub fn log(py: Python, name: &str, details: &str) -> PyResult<()> {
+    use std::{fs::OpenOptions, io::Write, path::PathBuf};
+    let folder = py
+        .import("built_core.paths")?
+        .call_method0("user_log_dir")?
+        .extract::<PathBuf>()?;
+    if let Ok(mut file) = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(folder.join("built-import.log"))
+    {
+        let _ = file.write_all(format!("{name}\n{details}\n").as_bytes());
+    }
     py.import("logging")?
         .call_method1("getLogger", ("formats.import",))?
         .call_method1("warning", ("%s\n%s", name, details))?;
@@ -51,7 +63,11 @@ pub fn summary(doc: &Obj) -> PyResult<String> {
         let args = [("part", part)];
         lines.push(match kind.as_str() {
             "shell" => trf(py, "{part} has a damaged closed shell.", &args)?,
-            "boundary" => trf(py, "{part} has a face boundary that could not be verified.", &args)?,
+            "boundary" => trf(
+                py,
+                "{part} has a face boundary that could not be verified.",
+                &args,
+            )?,
             _ => trf(py, "{part} contains a shape that could not be read.", &args)?,
         });
     }
