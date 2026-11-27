@@ -14,6 +14,15 @@ pub(crate) fn save(scene: &Obj<'_>, out: &Bound<'_, PyDict>) -> PyResult<()> {
     data.set_item("v", 1)?;
     data.set_item("rows", to_py(py, &t.by_creation())?)?;
     ext.set_item(EXT, data)?;
+    if !t.presets.is_empty() {
+        ext.set_item(
+            "built.presets",
+            to_py(
+                py,
+                &serde_json::json!({"v":1,"rows":t.presets.values().collect::<Vec<_>>()}),
+            )?,
+        )?;
+    }
     out.set_item("_doc_ext", ext)
 }
 // Read placement extension data from the arena. Building ten thousand
@@ -106,6 +115,20 @@ pub(crate) fn load(scene: &Obj<'_>, ext: &Bound<'_, PyDict>) -> PyResult<()> {
     }
     for uid in t.rows.keys().cloned().collect::<Vec<_>>() {
         super::reference::bind_frames(&mut t, &uid);
+    }
+    if let Some(pack) = ext.get_item("built.presets")? {
+        if pack.get_item("v").is_ok_and(|v| v.eq(1).unwrap_or(false)) {
+            if let Some(rows) = pack
+                .get_item("rows")
+                .ok()
+                .and_then(|r| json::<Vec<presets::Preset>>(&r).ok())
+            {
+                for p in rows {
+                    Arc::make_mut(&mut t.presets).insert(p.uid.clone(), p);
+                }
+                ext.del_item("built.presets")?;
+            }
+        }
     }
     put(scene, t)?;
     ext.del_item(EXT)

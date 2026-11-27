@@ -664,3 +664,19 @@ Sketch curves use the lane 2 IDs and shape fields. Coordinates and radii are mil
 The evaluated placement marker exposes `zones` per path span. Each span contains three signed metre intervals along its own axis, in start, middle, end order. Square ends have zero depth. A mitre or butt can extend past the picked station. The middle has the unchanged section. The Cut lane can expand the end intervals by its fitting extents and cache the resulting local cut geometry. Butt joints keep the manufacturing ends as distinct closed shells. Their evaluated planes are also recorded for exact IFC clipping.
 
 During integration with the Sketch workspace, preserve its flattened sketch fields and `sketch_commit` command alongside the Sweep fields and `create_sweeps`. Keep the sketch UID in the Sweep dependency index. An open profile leaves its users' baked geometry in place. The sketch editor supplies the curve and point records described above.
+
+## Preset interchange
+
+Sweep stores the preset's display name in `preset`, its stable 16-hex ID in
+`preset_uid` and its followed revision in `preset_rev`. Existing Sweep rows
+with only a name keep their geometry and record. A document embeds its preset
+rows in `ext["built.presets"] = {"v": 1, "rows": [...]}`. A pack file uses the
+same envelope plus `"format": "built.presets"`. A single saved Library preset
+is one JSON row in a `.builtpreset` file. Drawn profiles in a portable preset
+carry their sketch under `values.profile.drawing`.
+
+The command protocol accepts `preset_update(history, rows)` for a single
+atomic pack edit, and `preset_delete(history, uid)` for an unused project
+preset. The active node remembers `recipe.default_preset`. Cut and Repeat can
+use the same preset row with `primitive` set to `cut` or `repeat` and their
+own fields in `values`.

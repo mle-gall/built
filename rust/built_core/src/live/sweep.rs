@@ -85,6 +85,12 @@ pub struct Sweep {
     pub segments: usize,
     #[serde(default)]
     pub preset: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preset_uid: Option<String>,
+    #[serde(default)]
+    pub preset_rev: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preset_definition: Option<super::presets::Preset>,
 }
 fn mitre() -> String {
     "mitre".into()

@@ -12,6 +12,9 @@
 //! Paint strip and the material inspector. Model edits go through
 //! `built_core.protocol.commands`.
 mod bulk;
+mod presets;
+use presets::PresetsProvider;
+pub(crate) use presets::capture_preset;
 use std::path::PathBuf;
 use crate::library_collections as collections;
 use crate::settings_rows::{func, none, obj, opt, s, Res};
@@ -2448,7 +2451,7 @@ impl LibrarySheet {
                 }
                 if ok {
                     st.set_item("type", &arg)?;
-                    st.set_item("scope", if arg == "families" { "s:all" } else { "s:model" })?;
+                    st.set_item("scope", if arg == "presets" || arg=="profiles" {"s:bundled"} else if arg == "families" { "s:all" } else { "s:model" })?;
                     st.set_item("cursor", py.None())?;
                     _save_state(&st)?;
                 }
@@ -2651,7 +2654,7 @@ fn open_library(py: Python<'_>, win: &Bound<'_, PyAny>, type_id: Option<String>,
     let st = _state(&view)?;
     _land(&view, win)?;
     if let Some(t) = type_id.filter(|t| !t.is_empty()) {
-        if t=="profiles" && !st.get_item("type")?.eq("profiles")?{st.set_item("scope","s:bundled")?;}
+        if matches!(t.as_str(),"profiles"|"presets") && !st.get_item("type")?.eq(&t)?{st.set_item("scope","s:bundled")?;}
         if t == "families" && !st.get_item("type")?.eq("families")? { st.set_item("scope", "s:all")?; }
         st.set_item("type", t)?;
     }
@@ -3053,12 +3056,14 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     sub.add_function(wrap_pyfunction!(collections::import_collection, &sub)?)?;
     sub.add_class::<FamiliesProvider>()?;
     sub.add_class::<ProfilesProvider>()?;
+    sub.add_class::<PresetsProvider>()?;
     sub.add_class::<LibrarySheet>()?;
     sub.add("PROVIDERS", vec![
         Bound::new(py, MaterialsProvider::new())?.into_any(),
         Bound::new(py, ComponentsProvider::new())?.into_any(),
         Bound::new(py, FamiliesProvider::new())?.into_any(),
         Bound::new(py, ProfilesProvider::new())?.into_any(),
+        Bound::new(py, PresetsProvider::new())?.into_any(),
     ])?;
     for f in [
         wrap_pyfunction!(_hex, &sub)?,

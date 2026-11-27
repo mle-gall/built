@@ -58,6 +58,7 @@ pub struct Facts {
     pub textured_face: bool,
     pub bridgeable: bool,
     pub billboard: bool,
+    pub live: bool,
     pub replaceable: bool,
     pub kept: bool,
     pub solids: usize,
@@ -407,6 +408,7 @@ pub fn menu_rows(f: &Facts, kind: &str) -> Vec<Row> {
             }
         }
         "group" | "component" => {
+            if f.live { r.one(vec![e("savepreset","Save as preset…")]); }
             r.one(vec![ek("open", "Open for editing", "double-click")]);
             r.one(vec![e("rename", "Rename…")]);
             let mut visibility = vec![e("hide", "Hide")];
@@ -725,6 +727,7 @@ pub fn dispatch(kind: &str, id: &str) -> (&'static str, String, String) {
         "explodecurve" => slot("_on_explode_curve", ""),
         "bridge" => slot("_on_bridge", ""),
         "open" => tree("open"),
+        "savepreset" => glue("savepreset",""),
         "rename" => glue("rename", ""),
         "lock" => glue("lock", ""),
         "explode" => slot("_on_explode_group", ""),

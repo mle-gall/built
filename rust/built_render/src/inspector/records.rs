@@ -91,13 +91,47 @@ impl Records {
                 let property = |ui: &mut egui::Ui, name: &str, value: &str| {
                     kit::property_control(ui, name, |ui| { ui.label(value); });
                 };
-                for (key, title) in [("profile_name", "Profile"), ("preset", "Preset"), ("attachment", "Attachment"), ("state", "State")] {
-                    if let Some(value) = row.get(key).and_then(Value::as_str) {
-                        property(ui, title, value);
+                let owner=&self.sweep["owner"];
+                ui.add_enabled_ui(self.sweep_editable,|ui|{
+                    for (key,title,display) in [("preset","Preset","preset"),("profile","Profile","profile_name")]{
+                        let entries:Vec<_>=self.sweep[format!("{key}_options")].as_array().into_iter().flatten()
+                            .filter(|p|key!="preset" || p["preset"]["primitive"]=="sweep").collect();
+                        let names:Vec<_>=entries.iter().map(|p|label(&p["name"])).collect();
+                        kit::property_control(ui,title,|ui|{
+                            let (choice,popup)=kit::select(ui,key,self.sweep[display].as_str().unwrap_or("Choose…"),&names);
+                            layers.extend(popup);
+                            if let Some(i)=choice{
+                                let p=entries[i];
+                                let val=if key=="preset"{p["preset"].clone()}else if let Some(d)=p.get("sketch"){
+                                    if p["source"]=="project"{json!({"sketch":d["uid"]})}else{json!({"drawing":d})}
+                                }else{json!({"library":p["key"]})};
+                                send(out,"sweep.field",json!([owner,key,val]));
+                            }
+                        });
                     }
-                }
-                property(ui, "Rotation", &format!("{}°", self.sweep["rotation"]));
-                property(ui, "Mirror", if self.sweep["mirror"] == true { "On" } else { "Off" });
+                    kit::property_control(ui,"Attachment",|ui|{
+                        let names=["centre","bottom","bottom_left","left","top_left","top","top_right","right","bottom_right"];
+                        let (choice,popup)=kit::select(ui,"sweep attachment",label(&self.sweep["attachment"]),&names);
+                        layers.extend(popup);
+                        if let Some(i)=choice{send(out,"sweep.field",json!([owner,"attachment",names[i]]));}
+                    });
+                    kit::property_control(ui,"Rotation",|ui|{
+                        let id=ui.make_persistent_id(("sweep rotation",owner.as_str()));
+                        let old=self.sweep["rotation"].as_f64().unwrap_or(0.);
+                        let mut value=ui.data(|d|d.get_temp(id)).unwrap_or(old);
+                        let response=ui.add(kit::number(&mut value,"°"));
+                        if response.changed(){ui.data_mut(|d|d.insert_temp(id,value));}
+                        if response.drag_stopped() || response.lost_focus() || (response.changed() && !response.has_focus() && !response.dragged()){
+                            ui.data_mut(|d|d.remove::<f64>(id));
+                            if value!=old{send(out,"sweep.field",json!([owner,"rotation",value]));}
+                        }
+                    });
+                    kit::property_control(ui,"Mirror",|ui|{
+                        let mut on=self.sweep["mirror"]==true;
+                        if kit::toggle(ui,&mut on,"Mirror section").clicked(){send(out,"sweep.field",json!([owner,"mirror",on]));}
+                    });
+                });
+                if let Some(state)=row.get("state").and_then(Value::as_str){property(ui,"State",state);}
                 if let Some(path) = self.sweep["resolved_points"].as_array() {
                     let count = path.len().saturating_sub(1) + usize::from(self.sweep["path"]["closed"] == true);
                     property(ui, "Path", &format!("{count} {}", if count == 1 { "span" } else { "spans" }));

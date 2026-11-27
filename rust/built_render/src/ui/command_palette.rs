@@ -87,7 +87,7 @@ impl Ui {
                         }
                         let r = ui.add(
                             kit::field(&mut self.cmd_query)
-                                .hint_text(egui::RichText::new(if self.cmd_scope=="Sweep profiles" {"Search profiles"}else{"Search commands"}).color(FAINT))
+                                .hint_text(egui::RichText::new(if self.cmd_scope=="Sweep presets" {"Search presets"}else{"Search commands"}).color(FAINT))
                                 .font(body())
                                 .margin(Margin::symmetric(10, 7))
                                 .desired_width((width - 24.).max(1.))

@@ -531,6 +531,48 @@ pub(crate) fn file_created_placement<'py>(
     Ok(Some(command))
 }
 
+/// File under the preset's named node when there is no active drawing node.
+pub(crate) fn file_sweep(scene:&Obj<'_>,g:&Obj<'_>,destination:&str)->PyResult<()>{
+    if destination.is_empty() {file_created_placement(scene,g)?;return Ok(());}
+    let py=scene.py();
+    let api=py.import("built_core.structure")?;
+    let registry=api.getattr("bim_registry")?.call_method1("get",(scene,))?;
+    let section=registry.call_method1("setdefault",("structure",PyDict::new(py)))?;
+    if get(&section,"active")?.is_truthy()?{file_created_placement(scene,g)?;return Ok(());}
+    let nodes=section.call_method1("setdefault",("nodes",PyDict::new(py)))?;
+    if !nodes.contains(destination)?{
+        let node=PyDict::new(py);
+        node.set_item("name",destination)?;
+        node.set_item("order",nodes.len()?)?;
+        node.set_item("parent",py.None())?;
+        node.set_item("recipe",PyDict::new(py))?;
+        nodes.set_item(destination,node)?;
+        api.call_method1("SetRegistryCommand",(&registry,))?.call_method1("do",(scene,))?;
+    }
+    let key=PyString::new(py,destination);
+    let steps=plan_filing(scene,vec![g.clone()],&registry,key.as_any(),&empty(py))?;
+    api.call_method1("CompoundCommand",(steps,))?.call_method1("do",(scene,))?;
+    Ok(())
+}
+pub(crate) fn sweep_default(scene:&Obj<'_>,set:Option<&str>)->PyResult<Option<String>>{
+    let data=scene.getattr("plugin_data")?;
+    if !data.contains("bim_registry")? && !data.contains("project")? {return Ok(None);}
+    let api=scene.py().import("built_core.structure")?;
+    let registry=api.getattr("bim_registry")?.call_method1("get",(scene,))?;
+    let section=get(&registry,"structure")?;
+    if !section.is_truthy()? {return Ok(None);}
+    let key=get(&section,"active")?;
+    if !key.is_truthy()? {return Ok(None);}
+    let nodes=api.call_method1("_nodes",(&registry,))?;
+    let Some(node)=nodes.call_method1("get",(&key,)).ok().filter(|n|!n.is_none()) else{return Ok(None)};
+    let recipe=node.call_method1("setdefault",("recipe",PyDict::new(scene.py())))?;
+    let current:Option<String>=get(&recipe,"default_preset")?.extract()?;
+    if let Some(id)=set.filter(|id|Some(*id)!=current.as_deref() && !node.contains("source").unwrap_or(true)){
+        recipe.set_item("default_preset",id)?;
+        api.call_method1("SetRegistryCommand",(&registry,))?.call_method1("do",(scene,))?;
+    }
+    Ok(current)
+}
 /// Plan a change to the authored tree and rederive every affected placement
 /// against the same detached registry before entering History.
 #[pyfunction]

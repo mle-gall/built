@@ -2967,6 +2967,9 @@ impl Renderer {
             ui.set_cursor_value(caption, value, typing, x, y, start, revision);
         }
     }
+    fn ui_set_section_inset(&mut self,rings:Option<Vec<Vec<[f32;2]>>>){
+        if let Some(ui)=self.ui.as_mut(){ui.section_inset=rings;}
+    }
     fn ui_set_selection(&mut self, summary: String, actions: Vec<(String, String, String, bool, bool)>) {
         if let Some(ui) = self.ui.as_mut() { ui.set_selection(summary, actions); }
     }

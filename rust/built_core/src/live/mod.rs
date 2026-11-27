@@ -5,6 +5,7 @@ mod drawn_profile;
 mod file;
 mod geometry;
 mod joints;
+mod presets;
 pub(crate) mod profile;
 mod reference;
 mod sweep;
@@ -45,7 +46,7 @@ fn current(py: Python<'_>, root: doc::Key) -> Option<LiveTable> {
 }
 fn put(scene: &Obj<'_>, table: LiveTable) -> PyResult<()> {
     let py = scene.py();
-    let value = if table.rows.is_empty() {
+    let value = if table.rows.is_empty() && table.presets.is_empty() {
         py.None()
     } else {
         Py::new(py, table)?.into_any()
@@ -204,6 +205,8 @@ pub(crate) fn finish(
     };
     let mut seeds: HashSet<_> = std::mem::take(&mut t.pending).into_iter().collect();
     let mut structure = false;
+    let mut records = HashSet::new();
+    let ifc = doc::attr_id("ifc").map_err(PyValueError::new_err)?;
     {
         let d = doc::lock();
         let mut moved = HashSet::new();
@@ -261,6 +264,21 @@ pub(crate) fn finish(
                     old.iter().chain(new).copied().for_each(&mut add);
                     structure = true;
                 }
+                Op::Set {
+                    k,
+                    f: Field::Attr(a),
+                    ..
+                }
+                | Op::Patch { k, a, .. }
+                    if *a == ifc =>
+                {
+                    records.insert(*k);
+                }
+                Op::SetMany {
+                    keys,
+                    f: Field::Attr(a),
+                    ..
+                } if *a == ifc => records.extend(keys.iter().copied()),
                 _ => (),
             }
         }
@@ -333,7 +351,57 @@ pub(crate) fn finish(
             seeds.extend(t.users(&Key::Placement(uid)).cloned());
         }
     }
-    if seeds.is_empty() && !structure {
+    let mut detached = false;
+    for k in records {
+        let owner = doc::lock().node(k).and_then(|node| match &node.data {
+            Data::Placement(p) => p.uid.clone(),
+            _ => None,
+        });
+        let Some(uid) = owner.as_ref().and_then(|id| t.owners.get(id)).cloned() else {
+            continue;
+        };
+        let row = &t.rows[&uid];
+        let Some(p) = row
+            .sweep
+            .as_ref()
+            .and_then(|s| s.preset_uid.as_ref())
+            .and_then(|id| t.presets.get(id))
+        else {
+            continue;
+        };
+        let Some(g) = group(py, &t, &row.owner) else {
+            continue;
+        };
+        let record = g.getattr("ifc")?;
+        for (key, expected) in &p.record {
+            if p.locks.get(key).is_none_or(|v| v != "fixed") {
+                continue;
+            }
+            if !record
+                .get_item(key)
+                .is_ok_and(|v| to_py(py, expected).and_then(|e| v.eq(e)).unwrap_or(false))
+            {
+                let note = format!("Detached from {}: {key}", p.name);
+                let row = Arc::make_mut(t.rows.get_mut(&uid).unwrap())
+                    .sweep
+                    .as_mut()
+                    .unwrap();
+                row.preset = None;
+                row.preset_uid = None;
+                row.preset_rev = 0;
+                let record = if record.is_none() {
+                    PyDict::new(py)
+                } else {
+                    record.cast::<PyDict>()?.copy()?
+                };
+                record.set_item("preset_note", note)?;
+                g.setattr("ifc", record)?;
+                detached = true;
+                break;
+            }
+        }
+    }
+    if seeds.is_empty() && !structure && !detached {
         return Ok(());
     }
     if journalled {
@@ -366,6 +434,8 @@ pub(crate) fn finish(
 
 #[derive(Clone)]
 enum Edit {
+    Presets(Vec<presets::Preset>),
+    DeletePreset(String),
     Create(Vec<sweep::Sweep>),
     Set(Row),
     Release(String),
@@ -419,7 +489,31 @@ impl Mutation {
             groups: Arc::new(index(document)),
             ..Default::default()
         });
+        if scene
+            .getattr_opt("doc_ext")?
+            .filter(|ext| !ext.is_none())
+            .is_some_and(|ext| ext.contains("built.presets").unwrap_or(false))
+            && matches!(
+                self.0,
+                Edit::Presets(_) | Edit::DeletePreset(_) | Edit::Create(_)
+            )
+        {
+            return Err(PyValueError::new_err("Unrecognised preset extension"));
+        }
         match &self.0 {
+            Edit::Presets(rows) => presets::update(scene, &mut t, rows)?,
+            Edit::DeletePreset(id) => {
+                if t.rows.values().any(|r| {
+                    r.sweep
+                        .as_ref()
+                        .is_some_and(|s| s.preset_uid.as_ref() == Some(id))
+                }) {
+                    return Err(PyValueError::new_err("Preset is in use"));
+                }
+                Arc::make_mut(&mut t.presets)
+                    .remove(id)
+                    .ok_or_else(|| PyValueError::new_err("Unknown project preset"))?;
+            }
             Edit::Create(sweeps) => {
                 for spec in sweeps {
                     let key = &spec.profile.library;
@@ -440,6 +534,19 @@ impl Mutation {
                     g.setattr("ifc", record)?;
                     let parent = scene.getattr("edit_group")?;
                     let mut spec = spec.clone();
+                    let mut destination = String::new();
+                    if let Some(p) = presets::link(&mut t, &mut spec)? {
+                        destination = p.node.clone();
+                        crate::structure::sweep_default(scene, Some(&p.uid))?;
+                        p.record(&g, false)?;
+                        let name = if p.naming.contains("{n}") {
+                            p.naming.replace("{n}", &(t.serial + 1).to_string())
+                        } else {
+                            p.name.clone()
+                        };
+                        g.setattr("name", &name)?;
+                        g.getattr("ifc")?.set_item("name", name)?;
+                    }
                     if let Some(mut drawing) = spec.profile.drawing.take() {
                         if spec.profile.sketch.is_none() {
                             let uid = eid::new_uid();
@@ -467,7 +574,7 @@ impl Mutation {
                         }
                         parent.getattr("children")?.call_method1("append", (&g,))?;
                     }
-                    crate::structure::file_created_placement(scene, &g)?;
+                    crate::structure::file_sweep(scene, &g, &destination)?;
                     let owner: String = g.getattr("uid")?.extract()?;
                     let uid = eid::new_uid();
                     Arc::make_mut(&mut t.groups)
@@ -500,6 +607,26 @@ impl Mutation {
                     ));
                 }
                 let mut row = row.clone();
+                if let (Some(old), Some(new)) = (
+                    t.rows.get(&row.uid).and_then(|r| r.sweep.as_deref()),
+                    row.sweep.as_deref_mut(),
+                ) {
+                    if let Some(g) = group(py, &t, &row.owner) {
+                        if old.preset_uid != new.preset_uid {
+                            if let Some(p) = presets::link(&mut t, new)? {
+                                p.record(&g, false)?;
+                            }
+                        } else if let Some(p) = old
+                            .preset_uid
+                            .as_deref()
+                            .and_then(|id| presets::lookup(&t, id))
+                        {
+                            if let Some(note) = presets::detach(old, new, &p) {
+                                g.getattr("ifc")?.set_item("preset_note", note)?;
+                            }
+                        }
+                    }
+                }
                 row.state.clear();
                 t.insert(row.clone()).map_err(PyValueError::new_err)?;
                 t.schedule([row.uid.clone()])
@@ -660,7 +787,27 @@ fn sweep_profile<'p>(row: &Obj<'p>) -> PyResult<Obj<'p>> {
 }
 #[pyfunction]
 fn create_sweeps<'p>(history: &Obj<'p>, sweeps: &Obj<'p>) -> PyResult<Bound<'p, PyDict>> {
-    let specs: Vec<sweep::Sweep> = json(sweeps)?;
+    let raw: Vec<serde_json::Value> = json(sweeps)?;
+    let mut specs = Vec::with_capacity(raw.len());
+    for mut value in raw {
+        if let Some(uid) = value["preset_uid"].as_str() {
+            let scene = history.getattr("scene")?;
+            let t = current(scene.py(), root(&scene)?).unwrap_or_default();
+            let p = presets::lookup(&t, uid)
+                .or_else(|| serde_json::from_value(value["preset_definition"].clone()).ok())
+                .ok_or_else(|| PyValueError::new_err("Unknown preset"))?;
+            let obj = value
+                .as_object_mut()
+                .ok_or_else(|| PyValueError::new_err("Expected sweep fields"))?;
+            for (k, v) in p.values {
+                obj.entry(k).or_insert(v);
+            }
+        }
+        specs.push(
+            serde_json::from_value::<sweep::Sweep>(value)
+                .map_err(|e| PyValueError::new_err(e.to_string()))?,
+        );
+    }
     if specs.is_empty() {
         return Err(PyValueError::new_err("expected a sweep"));
     }
@@ -711,6 +858,7 @@ fn live_rows<'p>(scene: &Obj<'p>) -> PyResult<Obj<'p>> {
     to_py(scene.py(), &t.by_creation())
 }
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    presets::register(m)?;
     m.add_function(wrap_pyfunction!(sweep_thumbnail, m)?)?;
     m.add_function(wrap_pyfunction!(live_sweep, m)?)?;
     m.add_function(wrap_pyfunction!(sweep_profile, m)?)?;
@@ -719,6 +867,16 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(live_release, m)?)?;
     m.add_function(wrap_pyfunction!(live_reevaluate, m)?)?;
     m.add_function(wrap_pyfunction!(live_rows, m)?)
+}
+pub(crate) fn starter_preset() -> serde_json::Value {
+    presets::starter()
+}
+pub(crate) fn default_preset(scene: &Obj<'_>) -> PyResult<serde_json::Value> {
+    let t = current(scene.py(), root(scene)?).unwrap_or_default();
+    Ok(serde_json::json!(crate::structure::sweep_default(
+        scene, None
+    )?
+    .and_then(|id| presets::lookup(&t, &id))))
 }
 pub(crate) fn clear(scene: &Obj<'_>) -> PyResult<()> {
     if let Some(root) = scene.getattr_opt("_root")? {

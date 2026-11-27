@@ -762,6 +762,10 @@ fn cursor_value<'py>(a: &Args<'py>) -> Reply<'py> {
         _ => 0.into_bound_py_any(py)?,
     };
     let renderer = view.getattr("renderer")?;
+    if renderer.hasattr("ui_set_section_inset")?{
+        let inset=if sweep && !at.is_none(){tool.call_method1("_state",("section_inset",))?}else{none(py)};
+        renderer.call_method1("ui_set_section_inset",(inset,))?;
+    }
     if tool.is_none() && attr(&display.getattr("source_viewport")?, "nav_mode")?.eq("zoom")? {
         direct(py, lens_value, (&view, &tools, &revision))?;
         return Ok(none(py));
