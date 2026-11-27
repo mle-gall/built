@@ -82,6 +82,7 @@ impl Paint {
 /// (`set(set_minus(now, set(before)))`).
 pub enum Fresh {
     Listed(Vec<u128>),
+    Delta(PySet),
     Since { now: Vec<u128>, before: Vec<u128> },
 }
 
@@ -106,6 +107,7 @@ struct Cache {
     comp_token: i64,
     scope: Option<Scope>,
     scope_token: i64,
+    blocks: Option<(i64, FaceBlocks)>,
     packed: Option<(i64, Option<Vec<u128>>, Option<BTreeSet<u32>>, Option<RayWindow>, Tris)>,
     dropped: Vec<[V3; 2]>,
     frames: HashMap<u128, (V3, V3)>,
@@ -178,6 +180,49 @@ impl RayWindow {
             }
         }
         sides.into_iter().all(|yes| yes)
+    }
+}
+
+/// Conservative bounds over consecutive batches of face slots. Inner rings
+/// participate just as in RayWindow::intersects. Keep list order so the
+/// indexed surface has exactly the reference triangle and owner order.
+struct FaceBlocks {
+    faces: Vec<u32>,
+    bounds: Vec<([f64; 3], [f64; 3])>,
+}
+
+impl FaceBlocks {
+    const BLOCK: usize = 64;
+    fn new(store: &Store) -> Self {
+        let faces = store.live_slots(Kind::Face);
+        let st = &store.state;
+        let bounds = faces.chunks(Self::BLOCK).map(|batch| {
+            let (mut lo, mut hi) = ([f64::INFINITY; 3], [f64::NEG_INFINITY; 3]);
+            for &f in batch {
+                let r = st.frings.get(f as usize);
+                let count: usize = (0..r.n_rings)
+                    .map(|i| *st.ring_sizes.get((r.ring_start + i) as usize) as usize).sum();
+                if count == 0 {
+                    lo = [f64::NEG_INFINITY; 3];
+                    hi = [f64::INFINITY; 3];
+                }
+                for i in r.corner_start as usize..r.corner_start as usize + count {
+                    let p = st.vpos.get(*st.corners.get(i) as usize);
+                    for k in 0..3 {
+                        lo[k] = lo[k].min(p[k]); hi[k] = hi[k].max(p[k]);
+                    }
+                }
+            }
+            (lo, hi)
+        }).collect();
+        Self { faces, bounds }
+    }
+
+    fn candidates(&self, window: RayWindow) -> impl Iterator<Item = u32> + '_ {
+        self.faces.chunks(Self::BLOCK).zip(&self.bounds)
+            .filter(move |(_, (lo, hi))| window.axes.iter().enumerate()
+                .all(|(i, &k)| hi[k] >= window.lo[i] && lo[k] <= window.hi[i]))
+            .flat_map(|(batch, _)| batch.iter().copied())
     }
 }
 
@@ -352,6 +397,31 @@ impl Store {
         cache.scope.clone()
     }
 
+    fn face_blocks<'a>(&self, cache: &'a mut Cache) -> &'a FaceBlocks {
+        if cache.blocks.as_ref().is_none_or(|(token, _)| *token != cache.token) {
+            cache.blocks = Some((cache.token, FaceBlocks::new(self)));
+        }
+        &cache.blocks.as_ref().unwrap().1
+    }
+
+    /// Whole components need all coplanar faces, including those outside
+    /// the edit window. Reject only batches completely on one side. Use the
+    /// same allowance as may_meet_cap, with an upper bound on ring size.
+    fn plane_face_scope(&self, cache: &mut Cache, scope: &std::sync::Arc<[u32]>, origin: V3, normal: V3,
+                        threshold: usize) -> std::sync::Arc<[u32]> {
+        if scope.len() < threshold || scope.len() != self.n(Kind::Face) { return scope.clone(); }
+        let n = arr(normal);
+        let Some(k) = (0..3).find(|&k| n[k].abs() == 1. && n[(k+1)%3] == 0. && n[(k+2)%3] == 0.)
+            else { return scope.clone(); };
+        let blocks = self.face_blocks(cache);
+        let x = arr(origin)[k];
+        let scale = (self.state.corners.len() as f64 + 4.) * f64::EPSILON * 4.;
+        blocks.faces.chunks(FaceBlocks::BLOCK).zip(&blocks.bounds).filter(|(_, (lo, hi))| {
+            let pad = ON_PLANE + (lo[k].abs().max(hi[k].abs()) + x.abs() + 1.) * scale;
+            !(lo[k] - x > pad || x - hi[k] > pad)
+        }).flat_map(|(faces, _)| faces.iter().copied()).collect()
+    }
+
     /// `cache.packed(mesh, shadowed, want)`.
     fn packed(&self, cache: &mut Cache, shadowed: &HashSet<u32>, want: Option<BTreeSet<u32>>, window: Option<RayWindow>, h: Hypot) {
         let skey = if shadowed.is_empty() {
@@ -369,11 +439,16 @@ impl Store {
         if want.is_some() {
             self.components(cache);
         }
+        let candidates: Vec<u32> = match window {
+            Some(w) => {
+                self.face_blocks(cache).candidates(w)
+                    .filter(|&f| w.intersects(self, f)).collect()
+            }
+            None => self.live_slots(Kind::Face),
+        };
         let comp = cache.comp.as_ref();
-        let faces: Vec<u32> = self
-            .live_slots(Kind::Face)
-            .into_iter()
-            .filter(|&f| window.is_none_or(|w| w.intersects(self, f)) && !shadowed.contains(&f))
+        let faces: Vec<u32> = candidates.into_iter()
+            .filter(|f| !shadowed.contains(f))
             .filter(|&f| match &want {
                 None => true,
                 Some(w) => comp
@@ -449,6 +524,7 @@ impl Store {
         let fresh_set: Vec<u32> = fresh.iter().filter_map(|k| self.live_face(k)).collect();
         let fresh_slots: HashSet<u32> = fresh_set.iter().copied().collect();
         let shadowed = if ctx.keep { self.shadowed(&fresh_set, &scope_faces, cache, ctx) } else { HashSet::new() };
+        let scope_faces = self.plane_face_scope(cache, &scope_faces, origin, n, ctx.window_min_faces);
         let mut probes = Vec::with_capacity(regions.len());
         for (outer, holes) in &regions {
             probes.push(planar::region_point(&ctx.metrics, outer, holes).map_err(|_| OpError::Fallback("no region point"))?);
@@ -636,6 +712,7 @@ impl Store {
             Some((f, _)) => f,
             None => self.live_slots(Kind::Face).into(),
         };
+        let scope_faces = self.plane_face_scope(cache, &scope_faces, origin, n, ctx.window_min_faces);
         let old: Vec<u32> = scope_faces.iter().copied().filter(|&f| self.coplanar_on(f, origin, n, cache, ctx)).collect();
         let print_new: BTreeSet<_> = rebuilt
             .iter()
@@ -808,6 +885,31 @@ impl Store {
         })
     }
 
+    /// CPython inserts the survivors of a difference in the current set's
+    /// table order. After its last resize every key occupies its home slot
+    /// if those slots are distinct. Store face keys differ in their low
+    /// slot bits: verify that neither the hash modulus nor the table mask
+    /// can alias two slots, then order only the newly created faces.
+    pub(super) fn new_push_faces(&self, before: &super::State) -> PySet {
+        let slots = &self.state.slots[Kind::Face as usize];
+        let old = &before.slots[Kind::Face as usize];
+        let size = crate::pyset::insertion_capacity(slots.live);
+        let first = super::keys::full_key(self.state.ns, super::keys::local_key(Kind::Face, 0, 0));
+        let last = first + (1u128 << super::keys::KIND_SHIFT) - 1;
+        const HASH_MODULUS: u128 = (1u128 << 61) - 1;
+        if slots.live >> 2 <= old.live && slots.len() <= size && size <= super::keys::MAX_SLOTS as usize
+            && first / HASH_MODULUS == last / HASH_MODULUS && before.ns == self.state.ns {
+            let [_, _, mut added] = self.state.changes_since(before).created;
+            added.sort_unstable_by_key(|&key| crate::pyset::hash(key) & (size - 1));
+            return PySet::from_keys(added);
+        }
+        let now = self.live_slots(Kind::Face).into_iter().map(|f| self.key(Kind::Face, f));
+        PySet::from_keys(now).difference(old.live, |key| {
+            let Some((ns, _, generation, slot)) = super::keys::split_key(key) else { return false };
+            ns == before.ns && old.alive(slot) && old.gen(slot) == generation
+        })
+    }
+
     /// The push's plane rebuild to a fixpoint, then the trailing stitch.
     #[allow(clippy::too_many_arguments)]
     pub(super) fn single_plane(&self, origin: [f64;3], normal: [f64;3], h: Hypot, compensated: bool)
@@ -843,6 +945,7 @@ impl Store {
     ) -> Result<Rebuilt, OpError> {
         let mut fresh: PySet = match fresh {
             Fresh::Listed(keys) => PySet::from_keys(keys),
+            Fresh::Delta(keys) => keys,
             Fresh::Since { now, before } => {
                 let before: HashSet<u128> = before.into_iter().collect();
                 PySet::from_keys(now).difference(before.len(), |k| before.contains(&k)).copy()
@@ -894,10 +997,9 @@ impl Store {
                 let before_state = self.state.clone();
                 let did = self.apply_cap_rebuild(origin, normal, &fresh, &mut op, &mut cache, &mut ctx, ch, &mut bumps)?;
                 if did {
-                    let now: Vec<u128> = self.live_slots(Kind::Face).into_iter().map(|f| self.key(Kind::Face, f)).collect();
+                    let new = self.new_push_faces(&before_state);
                     let mut before = Store::empty(self.state.ns, Default::default());
                     before.state = before_state;
-                    let new = PySet::from_keys(now).difference(before.state.slots[2].live, |k| before.live_face(k).is_some());
                     let mut add = Vec::new();
                     for k in new.iter() {
                         let Some(f) = self.slot(Kind::Face, k) else { continue };
@@ -986,9 +1088,32 @@ mod window_tests {
     use super::*;
 
     #[test]
+    fn fresh_face_order_matches_full_python_difference() {
+        for ns in [2, (1 << 21) - 1, u64::MAX] {
+            let mut st = Store::empty(ns, Default::default());
+            let mut ch = Change::default();
+            for k in 0..178 {
+                let x = 2. * k as f64;
+                st.add_face(&[vec![[x,0.,0.],[x+1.,0.,0.],[x,1.,0.]]], &mut ch).unwrap();
+            }
+            let old = st.state.clone();
+            for f in (0..123).step_by(7) { st.remove_face(f, &mut ch); }
+            for k in 0..28 {
+                let x = 2. * k as f64;
+                st.add_face(&[vec![[x,0.,2.],[x+1.,0.,2.],[x,1.,2.]]], &mut ch).unwrap();
+            }
+            let keys = |s: &super::super::State| s.order[2].live(&s.slots[2]).into_iter()
+                .map(|f| s.key_of(Kind::Face, f)).collect::<Vec<_>>();
+            let before: HashSet<_> = keys(&old).into_iter().collect();
+            let reference = PySet::from_keys(keys(&st.state)).difference(before.len(), |k| before.contains(&k));
+            assert_eq!(st.new_push_faces(&old).iter().collect::<Vec<_>>(), reference.iter().collect::<Vec<_>>());
+        }
+    }
+
+    #[test]
     fn pruned_and_full_parity_give_identical_cap_edits() {
         let mut random = PyRandom::new(421);
-        for round in 0..32 {
+        for round in 0..224 {
             let mut model = Store::empty(2, Default::default());
             let mut fresh = PySet::new();
             let mut ch = Change::default();
@@ -1023,9 +1148,19 @@ mod window_tests {
                     }
                 }
             }
+            // A sheet with an opening supplies an inner ring to the cap
+            // arrangement. Several solids supply competing paint donors.
+            let at = |x, y| [x, y, 0.0];
+            model.add_face(&[
+                vec![at(11.,0.), at(15.,0.), at(15.,4.), at(11.,4.)],
+                vec![at(12.,1.), at(12.,3.), at(14.,3.), at(14.,1.)],
+            ], &mut ch).unwrap();
+            let classes: HashMap<_, _> = model.live_slots(Kind::Face).into_iter()
+                .filter(|f| f % 3 != 0)
+                .map(|f| (model.key(Kind::Face, f), 1 + f % 5)).collect();
             let apply = |mut model: Store, window_min_faces| {
                 let mut ch = Change::default();
-                let mut paint = Paint::new(HashMap::new(), Vec::new());
+                let mut paint = Paint::new(classes.clone(), Vec::new());
                 let mut ctx = Ctx {
                     window_min_faces,
                     standalone: false,
@@ -1049,11 +1184,11 @@ mod window_tests {
                         &mut bumps,
                     )
                     .unwrap();
-                (model, ch, result, bumps)
+                (model, ch, result, bumps, paint.made, paint.order)
             };
-            let (reference, a, ra, ba) = apply(model.clone(), usize::MAX);
-            let (local, b, rb, bb) = apply(model, 0);
-            assert_eq!((a, ra, ba), (b, rb, bb));
+            let (reference, a, ra, ba, ma, oa) = apply(model.clone(), usize::MAX);
+            let (local, b, rb, bb, mb, ob) = apply(model, 0);
+            assert_eq!((a, ra, ba, ma, oa), (b, rb, bb, mb, ob));
             assert!(reference.state.same_as(&local.state));
         }
     }

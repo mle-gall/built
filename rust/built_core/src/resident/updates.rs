@@ -552,7 +552,10 @@ impl InstanceUpdates {
     }
 
     fn face_ranges<'py>(slf: &Bound<'py,Self>, mesh: &Obj<'py>, faces: &Obj<'py>) -> PyResult<Option<Vec<(usize,u32,u32)>>> {
-        super::plain_edit::face_ranges(slf,mesh,faces)
+        match super::plain_edit::face_ranges(slf, mesh, faces)? {
+            Some(ranges) => Ok(Some(ranges)),
+            None => super::plain_edit::painted_face_ranges(slf, mesh, faces),
+        }
     }
 
     /// Use History's existing journal callbacks to avoid scanning known edits.
@@ -1355,6 +1358,9 @@ impl InstanceUpdates {
             kw.set_item("hidden_tags", s.getattr("_hidden_tags")?)?;
             // Each prototype in the frame it is drawn in (its rows say so).
             kw.set_item("previous_pack", &packed)?;
+            // This staging pack supplies material rows and texture keys. The
+            // resident atlas is decoded below only when the key list grows.
+            kw.set_item("texture_images", false)?;
             let baked = core(py)?.getattr("pack_scene")?.call((stage,), Some(&kw))?;
             if let (Some(used), Some(added)) = (packed.getattr_opt("_element_tags")?, baked.getattr_opt("_element_tags")?) {
                 used.call_method1("update", (added,))?;
@@ -1397,7 +1403,10 @@ impl InstanceUpdates {
             let baked_instances = raw(py, &baked.getattr("instances")?)?;
             let tables = ["commands", "edge_commands", "hidden_commands", "hidden_edge_commands"];
             let baked_tables: Vec<Vec<u8>> = tables.iter().map(|name| raw(py, &baked.getattr(*name)?)).collect::<PyResult<_>>()?;
-            let baked_materials = raw(py, &baked.getattr("materials")?)?;
+            let material_array = baked.getattr("materials")?;
+            let material_read: PyReadonlyArray1<u8> = material_array.extract()?;
+            let baked_materials = material_read.as_slice()?;
+            let same_layers = texture_map.iter().enumerate().all(|(i,&layer)| i == layer as usize);
             let (baked_vertices, baked_indices, baked_bounds) = (baked.getattr("vertices")?, baked.getattr("indices")?, baked.getattr("bounds")?);
             for (i, entry) in changed.try_iter()?.enumerate() {
                 let entry = entry?;
@@ -1445,25 +1454,30 @@ impl InstanceUpdates {
                         (&code, flat(&vertices.get_item(slice(0, count))?)?, flat(&indices.get_item(slice(0, count))?)?, flat(&bounds)?, faces),
                     )?;
                 }
-                let mut material: Vec<u8> = Vec::new();
+                let mut stored = PyArray1::<u8>::from_vec(py, Vec::new()).into_any();
                 let mut flags = 0u32;
                 if let Some(p) = prototype {
                     let header = p * 16;
                     let (first, length) = (u32_at(&baked_materials, header + 4) as usize, u32_at(&baked_materials, header + 8) as usize);
                     flags = u32_at(&baked_materials, header + 12);
                     if length != 0 {
-                        material = baked_materials.get(first * 16..first * 16 + length * 32).ok_or_else(|| PyValueError::new_err("material records out of range"))?.to_vec();
-                        // Each record's two texture layers, in this pack's numbering.
-                        for record in material.chunks_exact_mut(32) {
-                            for word in [5usize, 6] {
-                                let layer = u32_at(record, word * 4) as usize;
-                                let mapped = *texture_map.get(layer).ok_or_else(|| PyValueError::new_err("texture layer out of range"))?;
-                                record[word * 4..word * 4 + 4].copy_from_slice(&mapped.to_le_bytes());
+                        let range = first * 16..first * 16 + length * 32;
+                        let rows = baked_materials.get(range.clone()).ok_or_else(|| PyValueError::new_err("material records out of range"))?;
+                        if same_layers {
+                            stored = material_array.get_item(slice(range.start, range.end))?;
+                        } else {
+                            let mut material = rows.to_vec();
+                            for record in material.chunks_exact_mut(32) {
+                                for word in [5usize, 6] {
+                                    let layer = u32_at(record, word * 4) as usize;
+                                    let mapped = *texture_map.get(layer).ok_or_else(|| PyValueError::new_err("texture layer out of range"))?;
+                                    record[word * 4..word * 4 + 4].copy_from_slice(&mapped.to_le_bytes());
+                                }
                             }
+                            stored = PyArray1::from_vec(py, material).into_any();
                         }
                     }
                 }
-                let stored = PyArray1::from_vec(py, material.clone());
                 packed.getattr("material_updates")?.set_item(&code, (flags, &stored))?;
                 if let Some(renderer) = &renderer {
                     let live = if flags & 1 != 0 {
@@ -1474,7 +1488,7 @@ impl InstanceUpdates {
                         for (record, colour) in records.chunks_exact_mut(32).zip(colours.chunks_exact(4)) {
                             record[16..20].copy_from_slice(colour);
                         }
-                        PyArray1::from_vec(py, records)
+                        PyArray1::from_vec(py, records).into_any()
                     } else {
                         stored
                     };

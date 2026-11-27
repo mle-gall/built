@@ -704,7 +704,20 @@ pub fn pack_scene<'py>(
     let wide = !wide_variants.is_empty();
     let with_maps = !texture_ids.is_empty() || !billboard_codes.is_empty();
     let hypot: String = py.import("core._native")?.call_method0("qt_hypot")?.extract()?;
-    let built = assemble(py, &meshes, codes, worlds, flags, paints, tints, &coordinates, billboard_codes, with_maps, &previous_origin, wide, &hypot)?;
+    let cache = if let Some(previous) = &previous_pack {
+        use crate::scene_bake::GeometryCache;
+        match previous.getattr_opt("_geometry_cache")? {
+            Some(cache) => Some(cache.cast_into::<GeometryCache>()?),
+            None => {
+                let cache = Bound::new(py, GeometryCache::empty())?;
+                previous.setattr("_geometry_cache", &cache)?;
+                Some(cache)
+            }
+        }
+    } else if !edit_sources.is_empty() || with_maps {
+        Some(Bound::new(py, crate::scene_bake::GeometryCache::empty())?)
+    } else { None };
+    let built = assemble(py, &meshes, codes, worlds, flags, paints, tints, &coordinates, billboard_codes, with_maps, &previous_origin, wide, &hypot, cache.as_ref().map(|v| v.get()))?;
     // Drop the per-prototype copies before decoding textures. Deferred
     // source arrays remain owned by their meshes.
     drop(meshes);
@@ -738,6 +751,7 @@ pub fn pack_scene<'py>(
             mesh_codes.into_any().unbind(),
         )?,
     )?;
+    if let Some(cache) = cache { packed.setattr("_geometry_cache", cache)?; }
     packed.setattr("_element_tags", element_tags)?;
     if !edit_sources.is_empty() { packed.setattr("_edit_sources", edit_sources)?; }
     Ok(packed)

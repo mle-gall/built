@@ -54,6 +54,7 @@ impl Store {
         distance: f64,
         h: Hypot,
         compensated: bool,
+        index: Option<&super::face_index::FaceIndex>,
     ) -> Option<(u32, Ring, Option<Ring>)> {
         let rings = self.position_rings(base);
         let outer = rings.first()?;
@@ -73,7 +74,11 @@ impl Store {
         hi += DVec3::splat(margin);
         let mut best = None;
         let mut best_depth = f64::INFINITY;
-        for far in self.live_slots(Kind::Face) {
+        let candidates = match index {
+            Some(tree) => tree.faces(self, [lo.x, lo.y, lo.z, hi.x, hi.y, hi.z], super::face_index::Query::Meeting),
+            None => self.live_slots(Kind::Face),
+        };
+        for far in candidates {
             if far == base {
                 continue;
             }

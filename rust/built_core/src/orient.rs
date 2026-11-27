@@ -275,19 +275,31 @@ impl PyRandom {
         self.idx = 624;
     }
 
-    fn next_u32(&mut self) -> u32 {
-        if self.idx >= 624 {
-            const UPPER: u32 = 0x8000_0000;
-            const LOWER: u32 = 0x7fff_ffff;
-            const MATRIX_A: u32 = 0x9908_b0df;
-            let mt = &mut self.mt;
-            for kk in 0..624 {
-                let y = (mt[kk] & UPPER) | (mt[(kk + 1) % 624] & LOWER);
-                let mag = if y & 1 != 0 { MATRIX_A } else { 0 };
-                mt[kk] = mt[(kk + 397) % 624] ^ (y >> 1) ^ mag;
-            }
-            self.idx = 0;
+    fn twist(&mut self) {
+        const UPPER: u32 = 0x8000_0000;
+        const LOWER: u32 = 0x7fff_ffff;
+        const MATRIX_A: u32 = 0x9908_b0df;
+        let mt = &mut self.mt;
+        for kk in 0..624 {
+            let y = (mt[kk] & UPPER) | (mt[(kk + 1) % 624] & LOWER);
+            let mag = if y & 1 != 0 { MATRIX_A } else { 0 };
+            mt[kk] = mt[(kk + 397) % 624] ^ (y >> 1) ^ mag;
         }
+        self.idx = 0;
+    }
+
+    fn skip_draws(&mut self, draws: usize) {
+        let mut words = draws * 2;
+        while words != 0 {
+            if self.idx == 624 { self.twist(); }
+            let step = words.min(624 - self.idx);
+            self.idx += step;
+            words -= step;
+        }
+    }
+
+    fn next_u32(&mut self) -> u32 {
+        if self.idx == 624 { self.twist(); }
         let mut y = self.mt[self.idx];
         self.idx += 1;
         y ^= y >> 11;
@@ -357,6 +369,8 @@ fn grown(lo: [f64; 3], hi: [f64; 3]) -> ([f64; 3], [f64; 3]) {
 struct Node {
     lo: [f64; 3],
     hi: [f64; 3],
+    // All triangle corners in this node share this axis coordinate.
+    plane: Option<(usize, f64)>,
     /// Leaf: `order[start..end]`; inner: children `kids`.
     start: u32,
     end: u32,
@@ -364,9 +378,55 @@ struct Node {
     leaf: bool,
 }
 
+/// An envelope of the leaves outside one sheet plane. Every crossing from
+/// a point on that plane must pass a box in this envelope: the remaining
+/// leaves have an exactly zero ray-distance numerator.
+struct SheetWindow {
+    axis: usize,
+    plane: f64,
+    lo: [f64; 3],
+    hi: [f64; 3],
+}
+
+impl SheetWindow {
+    fn of(nodes: &[Node]) -> Option<Self> {
+        if nodes.len() < 256 { return None; }
+        let (axis, plane) = nodes.iter().find(|n| n.leaf)?.plane?;
+        let mut lo = [f64::INFINITY; 3];
+        let mut hi = [f64::NEG_INFINITY; 3];
+        for n in nodes.iter().filter(|n| n.leaf && n.plane != Some((axis, plane))) {
+            for k in 0..3 {
+                if !n.lo[k].is_finite() || !n.hi[k].is_finite() { return None; }
+                lo[k] = lo[k].min(n.lo[k]);
+                hi[k] = hi[k].max(n.hi[k]);
+            }
+        }
+        Some(Self { axis, plane, lo, hi })
+    }
+
+    fn misses(&self, point: V3, normal: V3, jitter: f64) -> bool {
+        let k = self.axis;
+        let (p, n) = (f64s(point), f64s(normal));
+        let (u, v) = ((k + 1) % 3, (k + 2) % 3);
+        if p[k] != self.plane || n[k].abs() != 1. || n[u] != 0. || n[v] != 0. || !(jitter.abs() <= 0.01) {
+            return false;
+        }
+        if self.lo[k] > self.hi[k] { return true; }
+        let travel = (self.hi[k] - p[k]).abs().max((self.lo[k] - p[k]).abs());
+        // Both normalized tangent slopes are bounded by the uniform jitter.
+        // Allow for floating arithmetic and the BVH's parallel-ray floor.
+        let spread = (travel + 1.) * (2. * jitter.abs() + 1e-12);
+        [u, v].into_iter().any(|i| {
+            let pad = spread + 1e-10 * (1. + p[i].abs() + self.lo[i].abs() + self.hi[i].abs());
+            p[i] < self.lo[i] - pad || p[i] > self.hi[i] + pad
+        })
+    }
+}
+
 /// `parity::Tris` with the same triangles in the same order, split at the
 /// same medians, so every box prunes what the original's prunes.
 pub struct RayIndex {
+    sheet: Option<SheetWindow>,
     a: Vec<[f64; 3]>,
     e1: Vec<[f64; 3]>,
     e2: Vec<[f64; 3]>,
@@ -404,7 +464,7 @@ impl RayIndex {
             let sub = Self::build(&mut order, 0, &tlo, &thi, &cen);
             nodes = sub.nodes;
         }
-        RayIndex { a, e1, e2, face, order, nodes }
+        RayIndex { sheet: SheetWindow::of(&nodes), a, e1, e2, face, order, nodes }
     }
 
     /// The subtree over `order` (a slice of the whole starting at `base`),
@@ -429,7 +489,8 @@ impl RayIndex {
             glo = [f64::NEG_INFINITY; 3];
             ghi = [f64::INFINITY; 3];
         }
-        let mut root = Node { lo: glo, hi: ghi, start: base as u32, end: (base + len) as u32, kids: [0, 0], leaf: true };
+        let plane = (0..3).find(|&k| lo[k] == hi[k]).map(|k| (k, lo[k]));
+        let mut root = Node { plane, lo: glo, hi: ghi, start: base as u32, end: (base + len) as u32, kids: [0, 0], leaf: true };
         if len <= LEAF {
             return Sub { nodes: vec![root] };
         }
@@ -536,6 +597,9 @@ impl RayIndex {
         stack.push((0, all));
         while let Some((ni, live)) = stack.pop() {
             let n = &self.nodes[ni as usize];
+            // In the Möller–Trumbore test the distance numerator is
+            // exactly zero for an origin on this axis-aligned plane.
+            if n.plane.is_some_and(|(k, x)| o[k] == x) { continue; }
             let mut m = 0u32;
             let mut bits = live;
             while bits != 0 {
@@ -590,6 +654,7 @@ struct Ctx<'a> {
     /// Per face: the probe and normal (`None`: degenerate, no query).
     probe: &'a [V3],
     deg: &'a [bool],
+    certain: &'a [bool],
     rays: usize,
 }
 
@@ -682,6 +747,36 @@ impl<'a> Ctx<'a> {
     fn pass(&self, list: &[u32], boundary: &[bool], seed: u64, jitter: f64) -> Vec<Side> {
         let per = 2 * (self.rays - 1);
         let n = list.len();
+        if !self.certain.is_empty() {
+            let mut rng = PyRandom::new(seed);
+            let mut skip = 0;
+            return list.iter().map(|&face| {
+                let f = face as usize;
+                if self.deg[f] { return Side::Undecided; }
+                if self.certain[f] {
+                    skip += per;
+                    return Side::Outward;
+                }
+                rng.skip_draws(skip);
+                skip = 0;
+                let mut ask = |dir| {
+                    let mut draws = [0.; 62];
+                    for draw in &mut draws[..per] {
+                        *draw = -jitter + (jitter - -jitter) * rng.random();
+                    }
+                    self.vote(face, dir, &draws[..per], boundary, None)
+                };
+                match ask(self.g.normal[f]) {
+                    Some(true) => Side::Outward,
+                    None => Side::Undecided,
+                    Some(false) => match ask(neg(self.g.normal[f])) {
+                        Some(true) => Side::Inward,
+                        Some(false) => Side::Interior,
+                        None => Side::Undecided,
+                    },
+                }
+            }).collect();
+        }
         // Predicted draws: the unjittered ray's reading of the side ahead.
         let c0: Vec<u32> = list
             .par_iter()
@@ -906,7 +1001,19 @@ pub fn orient(scan: &MeshScan, g: &Geom, only: Option<&[u32]>, prm: &Params) -> 
         probe[f as usize] = p;
         deg[f as usize] = d;
     }
-    let ctx = Ctx { g, comp: &comp, index: &index, probe: &probe, deg: &deg, rays: prm.rays };
+    let mut certain = Vec::new();
+    if index.values().any(|ix| ix.sheet.is_some()) {
+        certain.resize(nf, false);
+        for &face in &scope {
+            let f = face as usize;
+            certain[f] = index.get(&comp[f]).and_then(|ix| ix.sheet.as_ref())
+                .is_some_and(|s| s.misses(probe[f], g.normal[f], prm.jitter));
+        }
+        if certain.iter().filter(|c| **c).count() < scope.len() - scope.len() / 32 {
+            certain.clear();
+        }
+    }
+    let ctx = Ctx { g, comp: &comp, index: &index, probe: &probe, deg: &deg, certain: &certain, rays: prm.rays };
     lap("probes", &mut t);
     // The interior rounds.
     let mut boundary = vec![true; nf];
@@ -1149,4 +1256,40 @@ pub fn scan_face_probes(
 pub fn py_random_stream(seed: u64, n: usize) -> Vec<f64> {
     let mut r = PyRandom::new(seed);
     (0..n).map(|_| r.random()).collect()
+}
+
+#[cfg(test)]
+mod sheet_votes {
+    use super::*;
+
+    #[test]
+    fn skipping_proven_sheet_votes_keeps_the_jitter_stream() {
+        let mut a = Vec::new();
+        for y in 0..64 {
+            for x in 0..64 { a.push([x as f64, y as f64, 0.]); }
+        }
+        // Small sheets on opposite sides, with probes beside triangle edges
+        // where the unjittered ray and the majority can disagree.
+        for z in [-1., 1.] { a.push([32., 31., z]); }
+        let n = a.len();
+        let probe: Vec<_> = a.iter().map(|p| V3(p[0] + 0.5, p[1] + 0.49999, p[2])).collect();
+        let faces: Vec<_> = (0..n as u32).collect();
+        let normal = V3(0., 0., 1.);
+        let ix = RayIndex::new(a, vec![[1.,0.,0.]; n], vec![[0.,1.,0.]; n], faces.clone());
+        let window = ix.sheet.as_ref().unwrap();
+        let certain: Vec<_> = probe.iter().map(|&p| window.misses(p, normal, 3e-4)).collect();
+        assert!(certain.iter().filter(|v| **v).count() > n * 9 / 10);
+        let index = HashMap::from([(0, ix)]);
+        let geom = Geom { h: Hypot::LibStdCxx, pos: vec![], normal: vec![normal; n],
+            centroid: vec![], tstart: vec![], tris: vec![] };
+        let (comp, deg, boundary) = (vec![0; n], vec![false; n], vec![true; n]);
+        let mut ctx = Ctx { g: &geom, comp: &comp, index: &index, probe: &probe, deg: &deg,
+            certain: &[], rays: 7 };
+        for seed in [12345, 771] {
+            ctx.certain = &[];
+            let full = ctx.pass(&faces, &boundary, seed, 3e-4);
+            ctx.certain = &certain;
+            assert_eq!(ctx.pass(&faces, &boundary, seed, 3e-4), full);
+        }
+    }
 }

@@ -308,6 +308,17 @@ impl<K: PyHash> PySet<K> {
     }
 }
 
+/// Final table size after inserting `len` distinct keys without deletions.
+pub(crate) fn insertion_capacity(len: usize) -> usize {
+    let mut capacity = MINSIZE;
+    loop {
+        let grow_at = ((capacity - 1) * 3).div_ceil(5);
+        if len < grow_at { return capacity; }
+        let minused = grow_at * if grow_at > 50000 { 2 } else { 4 };
+        capacity = (minused + 1).next_power_of_two();
+    }
+}
+
 /// Test face: replay `ops` and return the iteration order after each.
 /// Ops: `("add", k)`, `("discard", k)`, `("new", [keys])` (a fresh set from
 /// a list, made current), `("copy", 0)` (`set(current)`), `("update", i)`

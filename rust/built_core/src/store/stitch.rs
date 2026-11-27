@@ -44,6 +44,21 @@ use std::sync::Arc;
 /// `built_core.mesh._STITCH_TOL`.
 pub const STITCH_TOL: f64 = 1e-4;
 
+/// In lexicographic order a step to the next x slab, y row or z cell
+/// crosses at least this gap on the first coordinate that differs.
+fn separated_cells(sorted: &[Cell]) -> bool {
+    sorted.windows(2).all(|pair| {
+        let (a, b) = (pair[0], pair[1]);
+        if a.0 != b.0 {
+            a.0.abs_diff(b.0) > 1
+        } else if a.1 != b.1 {
+            a.1.abs_diff(b.1) > 1
+        } else {
+            a.2.abs_diff(b.2) > 1
+        }
+    })
+}
+
 #[inline]
 fn v3(p: &[f64; 3]) -> V3 {
     V3(p[0], p[1], p[2])
@@ -781,36 +796,61 @@ impl Store {
         let live = self.live_slots(Kind::Vertex);
         let mut cells: Vec<Cell> = live.par_iter().map(|&v| self.cell(self.state.vpos.get(v as usize))).collect();
         cells.par_sort_unstable();
+        // Prove both passes empty on separated grids. Check the registry
+        // covers exactly these vertices' own cells, including after undo
+        // and welds that leave additional cell aliases.
+        if self.state.registry.len() == live.len() && separated_cells(&cells)
+            && live.par_iter().all(|&v| self.state.registry.get(&self.cell(self.state.vpos.get(v as usize))) == Some(v))
+        {
+            return true;
+        }
         if cells.windows(2).any(|w| w[0] == w[1]) {
             return false;
         }
         !live.par_iter().any(|&v| self.cross_partner(v).is_some())
     }
 
-    /// Whether `dedupe_faces` would drop nothing: no two live faces with
-    /// the same outer-ring edge signature. Read only, in parallel.
+    fn outer_edge_set(&self, face: u32) -> Vec<(u32, u32)> {
+        let ring = self.outer_ring(face);
+        let mut edges: Vec<_> = ring.iter().zip(ring.iter().cycle().skip(1))
+            .map(|(&a, &b)| (a.min(b), a.max(b))).collect();
+        edges.sort_unstable();
+        edges.dedup();
+        edges
+    }
+
+    /// Distinct extrema prove that no two outer rings have the same set
+    /// of undirected edges. Only a colliding bucket needs exact edge sets.
     fn nothing_to_dedupe(&self) -> bool {
         use rayon::prelude::*;
-        let sigs: Vec<Vec<(u32, u32)>> = self
+        let mut extrema: Vec<((u64, u64), u32)> = self
             .live_slots(Kind::Face)
             .par_iter()
             .map(|&f| {
-                let lp = self.outer_ring(f);
-                let n = lp.len();
-                let mut sig: Vec<(u32, u32)> = (0..n)
-                    .map(|i| {
-                        let (a, b) = (lp[i], lp[(i + 1) % n]);
-                        (a.min(b), a.max(b))
-                    })
-                    .collect();
-                sig.sort_unstable();
-                sig.dedup();
-                sig
+                let ring = self.state.frings.get(f as usize);
+                let mut bounds = (u64::MAX, 0u64);
+                if ring.n_rings != 0 {
+                    let n = *self.state.ring_sizes.get(ring.ring_start as usize) as usize;
+                    let corner = |i| *self.state.corners.get(ring.corner_start as usize + i);
+                    if n != 0 {
+                        let mut a: u32 = corner(n - 1);
+                        for i in 0..n {
+                            let b = corner(i);
+                            let edge = u64::from(a.min(b)) << 32 | u64::from(a.max(b));
+                            bounds = (bounds.0.min(edge), bounds.1.max(edge));
+                            a = b;
+                        }
+                    }
+                }
+                (bounds, f)
             })
             .collect();
-        let mut sigs = sigs;
-        sigs.par_sort_unstable();
-        !sigs.windows(2).any(|w| w[0] == w[1])
+        extrema.par_sort_unstable();
+        extrema.chunk_by(|a, b| a.0 == b.0).all(|group| {
+            if group.len() == 1 { return true; }
+            let mut seen = HashSet::with_capacity(group.len());
+            group.iter().all(|&(_, face)| seen.insert(self.outer_edge_set(face)))
+        })
     }
 
     /// The cross-cell pass's test of one vertex: `(its cell, the
@@ -973,16 +1013,7 @@ impl Store {
         let mut seen: HashMap<Vec<(u32, u32)>, u32> = HashMap::new();
         let mut pairs = Vec::new();
         for f in self.live_slots(Kind::Face) {
-            let lp = self.outer_ring(f);
-            let n = lp.len();
-            let mut sig: Vec<(u32, u32)> = (0..n)
-                .map(|i| {
-                    let (a, b) = (lp[i], lp[(i + 1) % n]);
-                    (a.min(b), a.max(b))
-                })
-                .collect();
-            sig.sort_unstable();
-            sig.dedup();
+            let sig = self.outer_edge_set(f);
             let holes = |s: &Store, x: u32| s.state.frings.get(x as usize).n_rings.saturating_sub(1);
             match seen.get(&sig).copied() {
                 None => {
@@ -1170,5 +1201,31 @@ impl Store {
             r.reverse();
         }
         self.put_rings(f, &rings, ch);
+    }
+}
+
+#[cfg(test)]
+mod cell_gap_tests {
+    use super::{separated_cells, Cell};
+
+    #[test]
+    fn separated_slabs_cannot_have_neighbouring_registry_cells() {
+        let grid: Vec<Cell> = (-3..=3).flat_map(|x| (-2..=2).flat_map(move |y|
+            (-1..=1).map(move |z| (x * 10, y * 10, z * 10))
+        )).collect();
+        assert!(separated_cells(&grid));
+        for &original in &grid {
+            for dx in -1..=1 {
+                for dy in -1..=1 {
+                    for dz in -1..=1 {
+                        let mut cells = grid.clone();
+                        cells.push((original.0 + dx, original.1 + dy, original.2 + dz));
+                        cells.sort_unstable();
+                        assert!(!separated_cells(&cells));
+                    }
+                }
+            }
+        }
+        assert!(separated_cells(&[(i64::MIN, 0, 0), (i64::MAX, 0, 0)]));
     }
 }

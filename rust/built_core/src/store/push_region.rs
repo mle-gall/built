@@ -1,10 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! Refine the swept rings and classify their neighbours before opening the cap.
 use super::{drawing_face::refine, geometry::Hypot, keys::Kind, topo::OpError, Store};
-use crate::{
-    pushscan::{grown_ring_box, holds_point},
-    scans::{MeshScan, RINGS},
-};
+use crate::pushscan::{grow_box, holds_point};
 use std::collections::HashSet;
 
 type Ring = Vec<[f64; 3]>;
@@ -34,26 +31,54 @@ impl Store {
         face: u32,
         closed: bool,
         h: Hypot,
+        index: Option<&super::face_index::FaceIndex>,
     ) -> Result<(Vec<Ring>, bool, bool, bool), OpError> {
         const TOL: f64 = 1e-4;
         let rings = self.position_rings(face);
-        let scan = MeshScan::from_state(self.state.clone(), RINGS);
+        let vertices = self.live_slots(Kind::Vertex);
         let mut refined = Vec::with_capacity(rings.len());
         for r in rings {
             let (lo, hi) = super::drawing_plane::bounds(&r);
             let big = lo.iter().chain(&hi).fold(0.0f64, |m, x| m.max(x.abs()));
             let g = 2. * TOL + 1e-6 * big + 1e-9 * (1. + big);
-            let points: Vec<_> = scan.positions()[..scan.n_listed_vertices()]
-                .iter()
-                .copied()
+            let points: Vec<_> = vertices.iter().map(|&v| *self.state.vpos.get(v as usize))
                 .filter(|p| (0..3).all(|i| lo[i] - g <= p[i] && p[i] <= hi[i] + g))
                 .collect();
             refined.push(refine(&r, &points, TOL, h));
         }
-        let faces = self.live_slots(Kind::Face);
-        let boxes: Vec<_> = (0..faces.len())
-            .map(|f| grown_ring_box(&scan, f, 4. * TOL, 2. * TOL))
-            .collect();
+        // The classifier grows each face box by its diagonal and position.
+        // A bound from all listed points encloses every such growth. Include
+        // multi-ring faces explicitly: the BVH indexes outer loops only.
+        let all = self.live_slots(Kind::Face);
+        let faces = if let Some(index) = index {
+            let big = self.state.vpos.iter().flatten().fold(0f64, |m, x| m.max(x.abs()));
+            let margin = 4. * TOL + 8. * TOL * big + 1e-5 * (1. + big);
+            let mut bounds = [f64::INFINITY, f64::INFINITY, f64::INFINITY,
+                              f64::NEG_INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY];
+            for p in refined.iter().flatten() {
+                for k in 0..3 {
+                    bounds[k] = bounds[k].min(p[k] - margin);
+                    bounds[k + 3] = bounds[k + 3].max(p[k] + margin);
+                }
+            }
+            let mut hits = index.faces(self, bounds, super::face_index::Query::Meeting);
+            hits.extend(all.iter().copied().filter(|&f| self.state.frings.get(f as usize).n_rings > 1));
+            hits.sort_unstable_by_key(|&f| self.state.list_rank(Kind::Face, f));
+            hits.dedup();
+            hits
+        } else { all };
+        let boxes: Vec<_> = faces.iter().map(|&f| {
+            let mut bounds = [f64::INFINITY, f64::INFINITY, f64::INFINITY,
+                              f64::NEG_INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY];
+            for v in self.face_rings(f).into_iter().flatten() {
+                let p = self.state.vpos.get(v as usize);
+                for k in 0..3 {
+                    bounds[k] = bounds[k].min(p[k]);
+                    bounds[k + 3] = bounds[k + 3].max(p[k]);
+                }
+            }
+            grow_box(bounds, 4. * TOL, 2. * TOL)
+        }).collect();
         let mut backed = true;
         let mut sheet = !closed;
         for (i, r) in refined.iter().enumerate() {
@@ -79,6 +104,9 @@ impl Store {
             }
         }
         sheet = sheet && !self.push_component_closed(face);
+        if sheet && !self.has_empty_outer(&self.live_slots(Kind::Face)) {
+            return Ok((refined, backed, true, false));
+        }
         let flat = self
             .faces_are_flat(1e-3, h)
             .ok_or(OpError::Fallback("empty face in push region"))?;

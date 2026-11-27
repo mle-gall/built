@@ -57,17 +57,11 @@ impl Extruded {
 
 impl Store {
     fn push_closed(&self) -> bool {
-        !self.live_slots(Kind::Face).is_empty()
+        self.n(Kind::Face) != 0
             && self
-                .live_slots(Kind::Edge)
-                .iter()
-                .all(|&e| self.edge_faces(e).len() >= 2)
-    }
-    fn face_keys_in_order(&self) -> Vec<u128> {
-        self.live_slots(Kind::Face)
-            .into_iter()
-            .map(|f| self.key(Kind::Face, f))
-            .collect()
+                .state.slots[Kind::Edge as usize]
+                .live_slots()
+                .all(|e| self.edge_faces(e).len() >= 2)
     }
     fn merge_push_sheet(
         &mut self,
@@ -165,6 +159,7 @@ impl Store {
         surface: &[u32],
         h: Hypot,
         compensated: bool,
+        index: Option<&std::sync::Arc<super::face_index::FaceIndex>>,
         ch: &mut Change,
     ) -> Result<Extruded, OpError> {
         let mut result = Extruded::default();
@@ -184,10 +179,11 @@ impl Store {
         if normal.dot(pre) < 0. {
             distance = -distance;
         }
-        let (mut base, backed, sheet, was_solid) = self.push_region(face, closed, h)?;
+        let index = index.map(|tree| tree.refresh(self));
+        let (mut base, backed, sheet, was_solid) = self.push_region(face, closed, h, index.as_deref())?;
         let attached = backed && !keep;
         let opening = if attached {
-            self.push_opening(face, distance, h, compensated)
+            self.push_opening(face, distance, h, compensated, index.as_deref())
         } else {
             None
         };
@@ -246,7 +242,7 @@ impl Store {
         } else {
             top
         };
-        let before = self.face_keys_in_order();
+        let before = self.state.clone();
         let shell = self.push_shell(face, base, upper, delta.to_array(), attached, opening, h)?;
         result.steps = shell.steps;
         result.bumps = shell.dirty;
@@ -268,9 +264,11 @@ impl Store {
         if class != 0 {
             result.give(paint, shell.cap, class);
         }
-        let now = self.face_keys_in_order();
-        let old: HashSet<_> = before.iter().copied().collect();
-        let fresh: HashSet<_> = now.iter().filter(|k| !old.contains(k)).copied().collect();
+        let fresh: HashSet<_> = self.state.changes_since(&before).created[2].iter().copied().collect();
+        // Preserve Python set iteration order for the solid rebuild. The
+        // sheet dissolve only tests membership in its fresh-face set.
+        let solid = backed && was_solid;
+        let rebuild_keys = solid.then(|| Fresh::Delta(self.new_push_faces(&before).copy()));
         if keep && backed && distance < 0. {
             for &key in &fresh {
                 let f = self.slot(Kind::Face, key).unwrap();
@@ -286,15 +284,14 @@ impl Store {
                 }
             }
         }
-        let solid = backed && was_solid;
         let connected = self.stitch_connect(&seeds, !solid, 1e-4, h, ch)?;
         result.bumps += connected.bumps;
         for (d, k) in connected.deduped {
             result.dedupe(self, paint, d, k);
         }
-        if solid {
+        if let Some(keys) = rebuild_keys {
             let rebuilt = self.rebuild_push_planes(
-                Fresh::Since { now, before },
+                keys,
                 &seeds,
                 keep,
                 distance < 0.,
@@ -318,11 +315,12 @@ impl Store {
         if !preview {
             let orient = !sheet
                 || self.push_closed()
-                || self
-                    .live_slots(Kind::Face)
-                    .into_iter()
-                    .find(|&f| self.touched_face(f, &seed_set))
-                    .is_some_and(|f| self.push_component_closed(f));
+                || {
+                    let vertices = self.push_seed_vertices(&seed_set);
+                    self.live_slots(Kind::Face).into_iter()
+                        .find(|&f| self.touches_push_vertex(f, &vertices))
+                        .is_some_and(|f| self.push_component_closed(f))
+                };
             if orient {
                 result.flipped = self.orient_push(&seed_set, h, compensated);
             }

@@ -146,9 +146,12 @@ fn face_ranges<'py>(a: &Args<'py>) -> Reply<'py> {
         }
         let mapping = PyDict::new(py);
         let mut first = 0usize;
+        let hidden_tags = attr(&tracker, "_hidden_tags")?;
         for face in mesh.getattr("faces")?.try_iter()? {
             let face = face?;
-            if face.getattr("attrs")?.call_method1("get", ("hidden",))?.is_truthy()? {
+            let attrs = face.getattr("attrs")?;
+            if attrs.call_method1("get", ("hidden",))?.is_truthy()?
+                || (!hidden_tags.is_none() && hidden_tags.contains(attrs.call_method1("get", ("layer",))?)?) {
                 continue;
             }
             let count = face.call_method0("triangulate")?.len()?;

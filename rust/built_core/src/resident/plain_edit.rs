@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-//! A local rebake for large unpainted store meshes. Each face slot remembers
+//! A local rebake for large store meshes with vertex-colour paint. Each face slot remembers
 //! its range in the last resident pack. Untouched faces copy their baked
 //! corners in document order. Only new rings and faces incident on moved
 //! vertices run the triangulator again.
@@ -44,6 +44,7 @@ pub(super) struct Layout {
     spans: Vec<(u32, u32)>,
     anchor: [f64; 3],
     edges: Vec<u32>,
+    colors: Vec<[u8; 4]>,
 }
 
 #[repr(C)]
@@ -62,7 +63,7 @@ fn encoded(vertices: &[Vertex]) -> &[u8] {
     unsafe { std::slice::from_raw_parts(vertices.as_ptr().cast(), vertices.len() * 28) }
 }
 
-fn face(store: &Store, points: &[V3], slot: u32, hypot: Hypot) -> Vec<Vertex> {
+fn face(store: &Store, points: &[V3], slot: u32, hypot: Hypot, color: [u8; 4]) -> Vec<Vertex> {
     let rings = store.face_rings(slot);
     let refs: Vec<_> = rings.iter().map(Vec::as_slice).collect();
     let (triangles, n) = resident_geometry(points, &refs, hypot);
@@ -74,7 +75,7 @@ fn face(store: &Store, points: &[V3], slot: u32, hypot: Hypot) -> Vec<Vertex> {
             Vertex {
                 pos: [x, y, z],
                 normal: [n.0, n.1, n.2],
-                color: [210, 210, 210, 0],
+                color,
             }
         })
         .collect()
@@ -167,7 +168,7 @@ struct Bake {
     edges: Vec<u32>,
 }
 
-fn bake(store: &Store, anchor: [f64; 3], hypot: Hypot, previous: Option<&Layout>) -> Option<Bake> {
+fn bake(store: &Store, anchor: [f64; 3], hypot: Hypot, previous: Option<&Layout>, colors: &[[u8; 4]]) -> Option<Bake> {
     let st = &store.state;
     let shift: [f64; 3] = std::array::from_fn(|i| st.frame.origin[i] - anchor[i]);
     let points: Vec<_> = st
@@ -222,13 +223,21 @@ fn bake(store: &Store, anchor: [f64; 3], hypot: Hypot, previous: Option<&Layout>
             }
         }
     }
+    let color = |slot: u32| colors.get(slot as usize).copied().unwrap_or(DEFAULT_COLOR);
+    if let Some(layout) = previous {
+        if !(colors.is_empty() && layout.colors.is_empty()) {
+            for (slot, changed) in dirty.iter_mut().enumerate() {
+                *changed |= color(slot as u32) != layout.colors.get(slot).copied().unwrap_or(DEFAULT_COLOR);
+            }
+        }
+    }
     let faces = store.live_slots(Kind::Face);
     let mut spans = vec![(0, 0); dirty.len()];
     let mut edit = Edit::default();
     let cold = previous.is_none().then(|| {
         faces
             .par_iter()
-            .map(|&slot| face(store, &points, slot, hypot))
+            .map(|&slot| face(store, &points, slot, hypot, color(slot)))
             .collect::<Vec<_>>()
     });
     if cold.is_some() {
@@ -240,7 +249,7 @@ fn bake(store: &Store, anchor: [f64; 3], hypot: Hypot, previous: Option<&Layout>
         if let Some(all) = &cold {
             edit.write(encoded(&all[i]));
         } else if dirty[slot as usize] {
-            edit.write(encoded(&face(store, &points, slot, hypot)));
+            edit.write(encoded(&face(store, &points, slot, hypot, color(slot))));
         } else {
             let &(a, b) = previous?.spans.get(slot as usize)?;
             edit.keep(a, (b - a) as usize);
@@ -282,12 +291,31 @@ fn bake(store: &Store, anchor: [f64; 3], hypot: Hypot, previous: Option<&Layout>
     })
 }
 
+const DEFAULT_COLOR: [u8; 4] = [210, 210, 210, 0];
+
+/// Flat opaque paint has no secondary material record. Keep the resolved
+/// bytes by face slot: in-place edits of an attribute dict need no native
+/// geometry revision to invalidate the colour in the previous draw.
+fn opaque_color(attrs: &Obj<'_>) -> PyResult<Option<[u8; 4]>> {
+    let attrs = attrs.cast::<PyDict>()?;
+    for key in ["back", "pbr", "texture", "opacity", "hidden"] {
+        if attrs.get_item(key)?.is_some_and(|v| !v.is_none()) {
+            return Ok(None);
+        }
+    }
+    let Some(color) = attrs.get_item("color")?.filter(|c| !c.is_none()) else {
+        return Ok(Some(DEFAULT_COLOR));
+    };
+    let [r,g,b] = super::sources::rgb_bytes(&color)?;
+    Ok(Some([r,g,b,255]))
+}
+
 fn plain_store<'p>(
     tracker: &Obj<'p>,
     packed: &Obj<'p>,
     mesh: &Obj<'p>,
     code: usize,
-) -> PyResult<Option<Bound<'p, PyMeshStore>>> {
+) -> PyResult<Option<(Bound<'p, PyMeshStore>, Vec<[u8; 4]>)>> {
     let Some(own) = mesh.getattr_opt("__dict__")? else {
         return Ok(None);
     };
@@ -313,21 +341,32 @@ fn plain_store<'p>(
         || st.exact.native.is_some()
         || st.exact.curved.is_some()
         || st.exact.arcs.is_some()
-        || !st.layers.is_empty()
         || st.eflags.iter().any(|f| *f != 0)
         // Push/Pull marks interior cap faces for the topology kernel.
         // The resident bake renders them using the same face attributes.
         || st.fflags.iter().any(|f| *f & !crate::store::INTERIOR != 0)
-        || st.fattr.iter().any(|f| *f != 0)
-        || mesh.getattr("_attr_table")?.is_truthy()?
     {
         return Ok(None);
     }
-    // Looking at a face's attributes creates an empty override. Drawing
-    // tools copy these dictionaries when they split an unpainted cell.
-    for (_, value) in mesh.getattr("_attr_own")?.cast::<PyDict>()?.iter() {
-        if value.is_truthy()? {
-            return Ok(None);
+    let mut palette = vec![DEFAULT_COLOR];
+    for attrs in mesh.getattr("_attr_table")?.try_iter()? {
+        let Some(color) = opaque_color(&attrs?)? else { return Ok(None) };
+        palette.push(color);
+    }
+    let mut colors = if palette.len() == 1 {
+        if st.fattr.iter().any(|f| *f != 0) { return Ok(None); }
+        Vec::new()
+    } else {
+        let Some(colors) = st.fattr.iter().map(|&f| palette.get(f as usize).copied()).collect::<Option<Vec<_>>>() else { return Ok(None) };
+        colors
+    };
+    for (key, attrs) in mesh.getattr("_attr_own")?.cast::<PyDict>()?.iter() {
+        if attrs.is_none() { continue; }
+        let Some(color) = opaque_color(&attrs)? else { return Ok(None) };
+        if colors.is_empty() && color == DEFAULT_COLOR { continue; }
+        if let Some(slot) = key.extract::<u128>().ok().and_then(|k| native.slot(Kind::Face,k)) {
+            if colors.is_empty() { colors.resize(st.slots[2].len(), DEFAULT_COLOR); }
+            colors[slot as usize] = color;
         }
     }
     for row in packed.getattr("profile_exclusions")?.try_iter()? {
@@ -343,7 +382,7 @@ fn plain_store<'p>(
     if variant.get_item(0)?.is_truthy()? || variant.get_item(1)?.is_truthy()? {
         return Ok(None);
     }
-    Ok(Some(store_obj.cast_into::<PyMeshStore>()?))
+    Ok(Some((store_obj.cast_into::<PyMeshStore>()?, colors)))
 }
 
 /// Seed a layout from an unmodified resident draw. A single-ring triangle
@@ -373,7 +412,7 @@ pub(super) fn prime(tracker: &Bound<'_, super::updates::InstanceUpdates>) -> PyR
     if faces < 32768 * 3 || !entry.get_item(1)?.eq(mesh.getattr("_mut_serial")?)? {
         return Ok(());
     }
-    let Some(st) = plain_store(t, &packed, &mesh, code)? else {
+    let Some((st, colors)) = plain_store(t, &packed, &mesh, code)? else {
         return Ok(());
     };
     let store = st.borrow();
@@ -440,6 +479,7 @@ pub(super) fn prime(tracker: &Bound<'_, super::updates::InstanceUpdates>) -> PyR
         spans,
         edges,
         anchor,
+        colors,
     });
     Ok(())
 }
@@ -488,6 +528,80 @@ pub(super) fn face_ranges<'p>(
     Ok(Some(ranges))
 }
 
+/// Face attributes are mutable document dictionaries. Reading them through
+/// Face.attrs creates an override, so resolving a preview by walking every
+/// face view changes how the next edit has to look up its paint. Read the
+/// store columns instead and verify the triangle bound against each draw.
+pub(super) fn painted_face_ranges<'p>(
+    tracker: &Bound<'p, super::updates::InstanceUpdates>,
+    mesh: &Obj<'p>,
+    faces: &Obj<'p>,
+) -> PyResult<Option<Vec<(usize, u32, u32)>>> {
+    let Some(owner) = mesh.getattr_opt("__dict__")? else { return Ok(None) };
+    let owner = owner.cast_into::<PyDict>()?;
+    let Some(raw) = owner.get_item("_store")? else { return Ok(None) };
+    if !raw.is_exact_instance_of::<PyMeshStore>() || owner.get_item("_deferred_source")?.is_some_and(|v| !v.is_none()) {
+        return Ok(None);
+    }
+    let raw = raw.cast_into::<PyMeshStore>()?;
+    let store = raw.borrow();
+    let st = &store.inner.state;
+    if st.slots[2].live < 32768 || st.exact.native.is_some() { return Ok(None); }
+    let t = tracker.as_any();
+    let variants = t.getattr("variants")?.cast_into::<PyDict>()?;
+    let Some(codes) = variants.get_item(mesh.as_ptr() as usize)? else { return Ok(None) };
+    let packed = t.getattr("packed")?;
+    let commands = packed.getattr("commands")?;
+    let tags = t.getattr("_hidden_tags")?;
+    let hidden = |attrs: &Obj<'p>| -> PyResult<bool> {
+        Ok(attrs.call_method1("get", ("hidden",))?.is_truthy()? ||
+            tags.contains(attrs.call_method1("get", ("layer",))?)?)
+    };
+    let mut exclude = vec![false];
+    for attrs in mesh.getattr("_attr_table")?.try_iter()? { exclude.push(hidden(&attrs?)?); }
+    let mut skip: Vec<_> = st.fattr.iter().map(|row| exclude.get(*row as usize).copied().unwrap_or(false)).collect();
+    for (key, attrs) in mesh.getattr("_attr_own")?.cast::<PyDict>()?.iter() {
+        if let Some(slot) = key.extract::<u128>().ok().and_then(|key| store.inner.slot(Kind::Face, key)) {
+            if !attrs.is_none() { skip[slot as usize] = hidden(&attrs)?; }
+        }
+    }
+    let mut wanted = std::collections::HashSet::new();
+    for f in faces.try_iter()? {
+        if let Some(slot) = store.inner.slot(Kind::Face, f?.getattr("key")?.extract()?) { wanted.insert(slot); }
+    }
+    let mut spans = Vec::new();
+    let mut first = 0u32;
+    for f in store.inner.live_slots(Kind::Face) {
+        if skip[f as usize] { continue; }
+        let r = st.frings.get(f as usize);
+        // Clipping ears or splitting a loop emits at most n-2 triangles.
+        // Each bridged hole adds its corners plus two bridge endpoints.
+        // Equality with the total draw below proves every bound was reached.
+        if r.n_rings == 0 { return Ok(None); }
+        let mut size = 0u32;
+        for i in 0..r.n_rings {
+            let n = *st.ring_sizes.get((r.ring_start + i) as usize);
+            if n < 3 { return Ok(None); }
+            let Some(total) = size.checked_add(n) else { return Ok(None); };
+            size = total;
+        }
+        let Some(extra) = (r.n_rings - 1).checked_mul(2) else { return Ok(None); };
+        let Some(count) = (size - 2).checked_add(extra) else { return Ok(None); };
+        if wanted.contains(&f) { spans.push((first, count)); }
+        let Some(end) = first.checked_add(count) else { return Ok(None) };
+        first = end;
+    }
+    let mut result = Vec::new();
+    for code in codes.try_iter()? {
+        let code: usize = code?.extract()?;
+        let variant = codes.get_item(code)?;
+        if variant.get_item(0)?.is_truthy()? || variant.get_item(1)?.is_truthy()? { return Ok(None); }
+        if commands.get_item(code)?.get_item("count")?.extract::<usize>()? != first as usize * 3 { return Ok(None); }
+        result.extend(spans.iter().map(|&(a,n)| (code,a,n)));
+    }
+    Ok(Some(result))
+}
+
 pub(super) fn apply<'p>(
     tracker: &Obj<'p>,
     changed: &Obj<'p>,
@@ -503,7 +617,7 @@ pub(super) fn apply<'p>(
     let mesh = entry.get_item(0)?;
     let code = entry.get_item(2)?.extract::<usize>()?;
     let packed = tracker.getattr("packed")?;
-    let Some(store_obj) = plain_store(tracker, &packed, &mesh, code)? else {
+    let Some((store_obj, colors)) = plain_store(tracker, &packed, &mesh, code)? else {
         return Ok(false);
     };
     let store = store_obj.borrow();
@@ -531,7 +645,7 @@ pub(super) fn apply<'p>(
             .call_method0("qt_hypot")?
             .extract::<String>()?,
     )?;
-    let Some(result) = bake(native, anchor, h, previous) else {
+    let Some(result) = bake(native, anchor, h, previous, &colors) else {
         return Ok(false);
     };
     let layout = Layout {
@@ -543,6 +657,7 @@ pub(super) fn apply<'p>(
         spans: result.spans,
         edges: result.edges,
         anchor,
+        colors,
     };
     drop(store);
     let edit = result.edit;

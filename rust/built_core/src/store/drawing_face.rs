@@ -525,6 +525,36 @@ impl Store {
         use super::keys::Kind;
         use std::collections::HashSet;
         let keys: HashSet<_> = pts.iter().copied().map(key).collect();
+        if edges.len() >= 4096 {
+            let vertices = self.push_seed_vertices(&keys);
+            let pos = |v: u32| *self.state.vpos.get(v as usize);
+            let candidates: Vec<_> = edges.iter().filter_map(|&e| {
+                let [a, b] = *self.state.ends.get(e as usize);
+                (vertices[a as usize] || vertices[b as usize])
+                    .then(|| (e, pairsig(pos(a), pos(b))))
+            }).collect();
+            // A matching position pair in any ring proves the candidate is
+            // used, even when the ring references coincident, distinct slots.
+            let mut unseen: HashSet<_> = candidates.iter().map(|(_, pair)| *pair).collect();
+            for &face in faces {
+                if unseen.is_empty() { break; }
+                let rings = self.state.frings.get(face as usize);
+                let mut at = rings.corner_start as usize;
+                for r in 0..rings.n_rings {
+                    let n = *self.state.ring_sizes.get((rings.ring_start + r) as usize) as usize;
+                    if n == 0 { continue; }
+                    let mut a = *self.state.corners.get(at + n - 1);
+                    for i in at..at + n {
+                        let b = *self.state.corners.get(i);
+                        if vertices[a as usize] || vertices[b as usize] { unseen.remove(&pairsig(pos(a), pos(b))); }
+                        a = b;
+                    }
+                    at += n;
+                }
+            }
+            return candidates.into_iter().filter(|(_, pair)| unseen.contains(pair))
+                .map(|(e, _)| self.key(Kind::Edge, e)).collect();
+        }
         let mut used = HashSet::new();
         let pos = |v: u32| *self.state.vpos.get(v as usize);
         for &f in faces {

@@ -2352,7 +2352,8 @@ impl PyMeshStore {
             return Err(PyValueError::new_err("missing push paint class"));
         }
         let mut paint=super::Paint::new(own,rows);
-        let (r,_)=self.op_all(|s,ch|s.push_extrude(f,distance,normal,keep,oriented,preview,&mut paint,&swapped,&surface,h,compensated,ch))?;
+        let index = (self.inner.n(Kind::Face) >= 8192).then(|| self.face_index_for(&self.inner));
+        let (r,_)=self.op_all(|s,ch|s.push_extrude(f,distance,normal,keep,oriented,preview,&mut paint,&swapped,&surface,h,compensated,index.as_ref(),ch))?;
         Ok((r.bumps,r.steps,r.painted,r.flipped,r.faces,r.edges))
     }
 

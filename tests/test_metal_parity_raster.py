@@ -478,8 +478,8 @@ def test_pbr_shading_changes_pixels_and_keeps_picks(native, tmp_path):
     after = capture(native)
     assert not np.array_equal(before[32, 32], after[32, 32])
     assert [native.pick(x, y) for x, y in points] == picks
-    # Replacing this prototype's records grows the table, then reuses it.
-    # Both paths must keep the recipe/normal-map bindings and the pixels.
+    # Replacing an equal-length table reuses its run. Growing its capacity
+    # must also keep the recipe, normal-map bindings and pixels.
     packed = pack_scene(scene)
     offset, count = map(int, packed.materials[:16].view('<u4')[1:3])
     records = packed.materials[offset * 16:offset * 16 + count * 32]
@@ -489,8 +489,14 @@ def test_pbr_shading_changes_pixels_and_keeps_picks(native, tmp_path):
         native.update_prototype_materials(0, records)
         sizes.append(native.gpu_memory)
         np.testing.assert_array_equal(capture(native), after)
-    assert sizes[-1] > sizes[0]
-    assert any(a == b for a, b in zip(sizes, sizes[1:]))
+    assert sizes == [sizes[0]] * len(sizes)
+    native.update_prototype_materials(0, np.tile(records, 64))
+    grown = native.gpu_memory
+    assert grown > sizes[0]
+    np.testing.assert_array_equal(capture(native), after)
+    native.update_prototype_materials(0, records)
+    assert native.gpu_memory == grown
+    np.testing.assert_array_equal(capture(native), after)
 
 def test_hidden_object_readback_survives_gpu_growth(native):
     """GPU-owned faces must still supply identical ghosts after an append."""
@@ -920,7 +926,8 @@ def test_filtered_face_has_no_colour_depth_or_reveal_geometry(native, grouped):
     np.testing.assert_array_equal(filtered, capture(native))
 
 
-def test_large_mesh_edits_match_a_fresh_pack_and_frame(native, monkeypatch):
+@pytest.mark.parametrize("painted", [False, True])
+def test_large_mesh_edits_match_a_fresh_pack_and_frame(native, monkeypatch, painted):
     from built_core import InstanceUpdates, Vec3, pack_scene
     from tests.test_big_model_budgets import _grid
     from tests.test_wgpu_updates import assert_matches_fresh_pack
@@ -928,6 +935,10 @@ def test_large_mesh_edits_match_a_fresh_pack_and_frame(native, monkeypatch):
     scene = Scene()
     mesh = scene.loose_mesh
     _grid(mesh, 182)
+    if painted:
+        mesh._attr_table.append(dict(color=(.4, .7, .9)))
+        for key in mesh._store.keys("face")[::3]:
+            mesh._store.set_face_attr(key, 0)
     packed = pack_scene(scene)
     updates = InstanceUpdates(scene, packed)
     packed.upload(native)
@@ -955,7 +966,57 @@ def test_large_mesh_edits_match_a_fresh_pack_and_frame(native, monkeypatch):
     mesh.add_face([Vec3(-1,0,0), Vec3(0,0,0), Vec3(0,1,0), Vec3(-1,1,0)])
     assert np.any(original != check())
     assert updates.face_ranges(mesh, [mesh.faces[0]]) == [(0, 0, 2)]
-    assert not mesh.faces[0].attrs
+    if painted:
+        mesh.faces[0].attrs["color"] = (.9, .2, .1)
+    else:
+        assert not mesh.faces[0].attrs
     mesh.faces[0].interior = True
     mesh.move_vertex(mesh.vertices[0], Vec3(.5,.5,.25))
+    check()
+
+def test_painted_curved_edits_match_fresh_frames(native):
+    from built_core import InstanceUpdates, Vec3, pack_scene
+    from tests.test_big_model_budgets import _grid
+    from tests.test_exact_edit import cylinder, run
+    from tests.test_wgpu_updates import assert_matches_fresh_pack
+    from pathlib import Path
+
+    scene, history = cylinder()
+    walls = [f.key for f in scene.mesh.faces if scene.mesh._store.exact_face(f.key)]
+    assert "corner_normals" in scene.mesh._store.display_arrays()
+    mesh = scene.mesh
+    _grid(mesh, 182, x0=-182.)
+    tex = str(Path(__file__).resolve().parents[1] / "resources/textures/checker.png")
+    row = dict(color=(.2,.4,.8), back=dict(color=(.8,.3,.2)),
+               texture=dict(path=tex, sw=2., sh=2., uvw=[.5,0.,0.,0.,0.,.5,0.,.25]))
+    mesh._attr_table.append(row)
+    for key in mesh._store.keys("face")[::3]:
+        mesh._store.set_face_attr(key, 0)
+    packed = pack_scene(scene)
+    updates = InstanceUpdates(scene, packed)
+    packed.upload(native)
+    corner = mesh.vertex_at(Vec3(-1., 1., 0.))
+    def check():
+        updates.apply(*updates.diff(scene), native)
+        frame = capture(native)
+        assert_matches_fresh_pack(updates, scene)
+        fresh = pack_scene(scene)
+        _, start, count, flags = (int(v) for v in fresh.materials[:16].view(np.uint32))
+        live_flags, live_rows = packed.material_updates[0]
+        assert live_flags == flags and count > 0
+        np.testing.assert_array_equal(live_rows, fresh.materials[start * 16:start * 16 + count * 32])
+        fresh.upload(native)
+        np.testing.assert_array_equal(frame, capture(native))
+
+    for delta in (.2, .4):
+        row["texture"]["uvw"][3] += .25
+        row["back"]["color"] = (delta, .7, .2)
+        mesh.move_vertex(corner, Vec3(0., 0., delta))
+        check()
+    other = mesh._store.exact_face(walls[1])
+    run(history, "erase", faces=[walls[0]])
+    assert mesh._store.exact_face(walls[1]) == other
+    check()
+    history.undo()
+    assert mesh._store.exact_face(walls[0])
     check()

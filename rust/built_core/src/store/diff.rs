@@ -134,7 +134,7 @@ impl State {
     }
 
     /// The key of slot `s` of `kind` under its generation in this state.
-    fn key_of(&self, kind: Kind, s: u32) -> u128 {
+    pub(super) fn key_of(&self, kind: Kind, s: u32) -> u128 {
         full_key(self.ns, local_key(kind, self.slots[kind as usize].gen(s), s))
     }
 }

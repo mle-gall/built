@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! Ordered T-junction splits and seeded coplanar regions for a stitch.
 use super::{
-    commands::{cell, supplied_cell},
+    commands::supplied_cell,
     geometry::{normalized, Hypot},
     keys::Kind,
     Store,
@@ -217,14 +217,8 @@ impl Store {
         h: Hypot,
     ) -> Option<(usize, Vec<u128>)> {
         let seeds: HashSet<_> = seeds.into_iter().map(supplied_cell).collect();
-        let mut touches = HashMap::new();
-        let mut seeded = |f| {
-            *touches.entry(f).or_insert_with(|| {
-                self.outer_ring(f)
-                    .iter()
-                    .any(|&v| seeds.contains(&cell(*self.state.vpos.get(v as usize))))
-            })
-        };
+        let vertices = self.push_seed_vertices(&seeds);
+        let seeded = |f| self.touches_push_vertex(f, &vertices);
         let mut normals = HashMap::new();
         let mut normal = |f| *normals.entry(f).or_insert_with(|| self.face_normal(f, h));
         for (index, first) in self
