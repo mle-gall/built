@@ -182,6 +182,7 @@ impl Menus {
                 "scene_play"=>playing,
                 "hide_similar"=>similar,
                 "hide_rest"=>rest=="hide",
+                "show_keystrokes"=>built_render::keycast::shown(),
                 id=>id.strip_prefix("rest_")==Some(rest),
             };
             if on!=item.is_checked(){ item.set_checked(on); }

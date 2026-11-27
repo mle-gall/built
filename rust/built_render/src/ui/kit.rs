@@ -1429,6 +1429,42 @@ pub mod organisms {
             });
     }
 
+    /// The keystroke overlay for recordings (keycast.rs): each key or chord
+    /// lit like the active tool, the tool it armed after it, a typed value
+    /// as a field. On the pill glass while held; plain and fading after.
+    pub fn keystroke_pill(ui: &mut egui::Ui, chips: &[crate::keycast::Chip], opacity: f32) {
+        let content = |ui: &mut egui::Ui| {
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing = vec2(SPACE_XS, 0.0);
+                for chip in chips {
+                    let font = if chip.typed { title_font() } else { strong(TYPE_TITLE) };
+                    let g = ui.painter().layout_no_wrap(chip.keys.clone(), font, BRIGHT);
+                    let w = (g.size().x + 2.0 * SPACE_S).max(CONTROL_H + 4.0);
+                    let (r, _) = ui.allocate_exact_size(vec2(w, BUTTON_H), Sense::hover());
+                    if chip.typed {
+                        ui.painter().rect_filled(r, R_CONTROL, FIELD);
+                        ui.painter().rect_stroke(r, R_CONTROL, Stroke::new(1.0_f32, ACCENT), egui::StrokeKind::Inside);
+                    } else {
+                        paint_lit(ui, r, R_CONTROL);
+                    }
+                    ui.painter().galley(r.center() - g.size() / 2.0, g, BRIGHT);
+                    if !chip.tool.is_empty() {
+                        ui.add_space(SPACE_XS);
+                        ui.label(egui::RichText::new(&chip.tool).font(body()).color(INK));
+                        ui.add_space(SPACE_XS);
+                    }
+                }
+            });
+        };
+        if opacity >= 1.0 {
+            glass(Surface::Pill).inner_margin(Margin::same(4)).show(ui, content);
+        } else {
+            ui.set_opacity(opacity.max(0.0));
+            egui::Frame::new().fill(POPOVER).corner_radius(CornerRadius::same(Surface::Pill.radius()))
+                .inner_margin(Margin::same(4)).show(ui, content);
+        }
+    }
+
     /// Regions of a large glass sheet. Callers supply each region's content
     /// and keep ownership of their focus, scrolling and commands.
     pub struct SheetFrame {

@@ -108,7 +108,9 @@ pub(super) fn snapshot<'p>(h: &Bound<'p, Host>) -> PyResult<Bound<'p, PyDict>> {
     d.set_item("nav_mode", vp.getattr("nav_mode")?)?;
     let camera = vp.getattr("camera")?;
     d.set_item("camera_distance", camera.getattr("distance")?)?;
-    for method in ["forward", "eye"] {
+    d.set_item("camera_perspective", camera.getattr("perspective")?.is_truthy()?)?;
+    d.set_item("camera_gliding", w.getattr("scene_player")?.call_method0("is_active")?.is_truthy()?)?;
+    for method in ["forward", "eye", "up_vector"] {
         d.set_item(
             format!("camera_{method}"),
             camera.call_method0(method)?.call_method0("toTuple")?,
@@ -190,6 +192,10 @@ pub(super) fn snapshot<'p>(h: &Bound<'p, Host>) -> PyResult<Bound<'p, PyDict>> {
                 .get_item(0)?
                 .extract()?
         },
+    )?;
+    d.set_item(
+        "keystrokes",
+        if r.is_none() { PyList::empty(py).into_any() } else { r.call_method0("ui_keycast_chips")? },
     )?;
     d.set_item(
         "form_open",

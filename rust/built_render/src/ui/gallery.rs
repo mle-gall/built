@@ -643,6 +643,13 @@ impl Gallery {
         sub(ui, pos2(x, y), "Value field");
         put(ui, Rect::from_min_size(pos2(x, y + 18.), vec2(180., 40.)), down(), |ui| value_pill(ui, "Length", "2.35 m", true, false));
         put(ui, Rect::from_min_size(pos2(x, y + 62.), vec2(180., 40.)), down(), |ui| value_pill(ui, "Length", "2.35 m", false, true));
+        // The keystroke overlay for recordings (keycast.rs).
+        let chips = [
+            crate::keycast::Chip { keys: "R".into(), tool: "Rectangle".into(), typed: false },
+            crate::keycast::Chip { keys: "2.5m".into(), tool: String::new(), typed: true },
+            crate::keycast::Chip { keys: "⇧⌘Z".into(), tool: String::new(), typed: false },
+        ];
+        put(ui, Rect::from_min_size(pos2(x + 190., y + 18.), vec2(300., 40.)), down(), |ui| keystroke_pill(ui, &chips, 1.0));
         // Atoms: visibility, lock, disclosure, state dot, focus ring,
         // selected-row marker, badge, swatch, activity ring.
         sub(ui, pos2(x, y + 112.), "Atoms");
