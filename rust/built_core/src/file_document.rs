@@ -352,7 +352,13 @@ fn igz_load_into_inner<'p>(
                             return Err(PyValueError::new_err("missing native patch pool row"));
                         }
                     } else {
-                        crate::exact::file::decode(&arrays, &table.0, None)?;
+                        let arcs=arrays.contains("edge_exact_curve_id")? || arrays.contains("edge_exact_curve_ref")?;
+                        if arcs{
+                            crate::exact::file::decode_supports(&arrays,&table.2,None,"edge_exact_curve_id","edge_exact_curve_ref")?;
+                        }
+                        if !arcs || arrays.contains("face_surface_id")? || arrays.contains("face_surface_ref")?{
+                            crate::exact::file::decode(&arrays,&table.0,None)?;
+                        }
                     }
                     bound = true;
                 }

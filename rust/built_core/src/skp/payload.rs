@@ -290,6 +290,7 @@ fn build<'p>(rec: &Obj<'p>, tick: &Obj<'p>) -> PyResult<Obj<'p>> {
             }
         }
     }
+    super::arcs::bind(&mesh,rec)?;
     Ok(mesh)
 }
 

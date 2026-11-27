@@ -306,6 +306,8 @@ impl<'p> Builder<'p> {
         g: &Bound<'p, PyDict>,
         kw: &Bound<'p, PyDict>,
     ) -> PyResult<()> {
+        let arcs=g.call_method1("setdefault",("source_arcs",PyList::empty(self.py)))?;
+        kw.set_item("arcs_out",arcs)?;
         for (key, field) in [
             ("edges_out", "soft_edges"),
             ("loose_out", "loose_edges"),
@@ -549,6 +551,9 @@ impl<'p> Builder<'p> {
             ] {
                 glue.call_method1(func, (d, &xf, g.as_any().get_item(key)?))?;
             }
+            let arcs=PyList::empty(self.py);
+            super::arcs::collect(d,&xf,arcs.as_any())?;
+            if !arcs.is_empty(){g.set_item("source_arcs",arcs)?;}
             g.set_item("identity", ("root",))?;
             g.set_item("name", &self.name)?;
             self.publish_group(g)?;

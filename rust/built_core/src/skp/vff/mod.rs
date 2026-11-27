@@ -189,13 +189,14 @@ impl<'py> Model<'py> {
                 path(body, &[0x1b58, t]).is_some_and(|s| s.first() == Some(&1)),
             )?;
         }
+        let arcs=PyDict::new(py);
         let vertices = PyDict::new(py);
         let edges = PyDict::new(py);
         let faces = PyDict::new(py);
         let placements = PyList::empty(py);
         let construction_lines = PyList::empty(py);
         let construction_points = PyList::empty(py);
-        for (i, (tag, rec)) in select(py, body, &[0x09c4, 0x0bb8, 0x0dac, 0x1964, 0x4269, 0x426c])
+        for (i, (tag, rec)) in select(py, body, &[0x09c4, 0x0bb8, 0x0dac, 0x1964, 0x4269, 0x426c,0x4c2c])
             .into_iter()
             .enumerate()
         {
@@ -210,6 +211,14 @@ impl<'py> Model<'py> {
                 .copied()
                 .unwrap_or(0);
             match tag {
+                0x4c2c => {
+                    if let (Some(id),Some(data))=(raw(rec,0x4a38).and_then(entity),raw(rec,0x4c2d).filter(|b|b.len()==128).and_then(|b|doubles(b,16))){
+                        let arc=PyDict::new(py);
+                        for (k,i) in [("center",0),("x_axis",7),("y_axis",10)]{arc.set_item(k,&data[i..i+3])?}
+                        arc.set_item("start_angle",data[14])?;arc.set_item("end_angle",data[15])?;
+                        arcs.set_item(integer(py,id)?,arc)?;
+                    }
+                }
                 0x09c4 => {
                     if let (Some(id), Some(p)) = (
                         id,
@@ -332,6 +341,7 @@ impl<'py> Model<'py> {
         for (k, v) in [("vertices", vertices), ("edges", edges), ("faces", faces)] {
             def.setattr(k, v)?;
         }
+        def.setattr("arcs",arcs)?;
         def.setattr("instances", placements)?;
         def.setattr("construction_lines", construction_lines)?;
         def.setattr("construction_points", construction_points)?;

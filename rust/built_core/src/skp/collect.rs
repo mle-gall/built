@@ -96,7 +96,7 @@ pub fn skp_world_points<'p>(arr: &Obj<'p>, xf: &Obj<'p>) -> PyResult<Obj<'p>> {
         .import("built_core")?
         .call_method1("PointRows", (mapped(arr, xf)?,))
 }
-fn ends(edge: &Obj<'_>, verts: &Bound<'_, PyDict>) -> PyResult<Option<[[f64; 3]; 2]>> {
+pub(super) fn ends(edge: &Obj<'_>, verts: &Bound<'_, PyDict>) -> PyResult<Option<[[f64; 3]; 2]>> {
     let mut p = [[0.; 3]; 2];
     for (i, key) in ["v1_id", "v2_id"].iter().enumerate() {
         let Some(v) = verts.get_item(edge.getattr(key)?)? else {
@@ -242,6 +242,7 @@ struct Collect<'a, 'p> {
     group_layer: &'a Obj<'p>,
     lines: Option<&'a Obj<'p>>,
     curves: Option<&'a Obj<'p>>,
+    arcs: Option<&'a Obj<'p>>,
     release: Option<&'a Obj<'p>>,
 }
 impl<'p> Collect<'_, 'p> {
@@ -289,6 +290,7 @@ impl<'p> Collect<'_, 'p> {
                 }
             }
         }
+        if let Some(out)=self.arcs{super::arcs::collect(d,xf,out)?;}
         if let Some(out) = self.curves {
             skp_curve_segments(d, xf, out)?;
         }
@@ -349,7 +351,7 @@ impl<'p> Collect<'_, 'p> {
         Ok(())
     }
 }
-#[pyfunction(signature=(defn,xform,by_id,attr_map,out,depth,stack,proto_ids=None,proto_uses=None,inherited=None,image_uses=None,edges_out=None,layer=None,layer_uses=None,group_layer=None,loose_out=None,curves_out=None,identity=None,release=None))]
+#[pyfunction(signature=(defn,xform,by_id,attr_map,out,depth,stack,proto_ids=None,proto_uses=None,inherited=None,image_uses=None,edges_out=None,layer=None,layer_uses=None,group_layer=None,loose_out=None,curves_out=None,identity=None,release=None,arcs_out=None))]
 pub fn skp_collect<'p>(
     defn: &Obj<'p>,
     xform: &Obj<'p>,
@@ -370,6 +372,7 @@ pub fn skp_collect<'p>(
     curves_out: Option<&Obj<'p>>,
     identity: Option<&Obj<'p>>,
     release: Option<&Obj<'p>>,
+    arcs_out:Option<&Obj<'p>>,
 ) -> PyResult<()> {
     let py = defn.py();
     let n = none(py);
@@ -389,6 +392,7 @@ pub fn skp_collect<'p>(
         group_layer: group_layer.unwrap_or(&n),
         lines: loose_out,
         curves: curves_out,
+        arcs:arcs_out,
         release,
     }
     .walk(

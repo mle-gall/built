@@ -526,6 +526,8 @@ pub fn skp_apply<'py>(
         }
     }
     let create = py.import("built_core.store_mesh")?.getattr("StoreMesh")?;
+    let mut exact_arcs=0;
+    let mut strips=0;
     let mut done = 0usize;
     let mut last = None;
     skp_apply_metadata(scene, payload)?;
@@ -541,6 +543,14 @@ pub fn skp_apply<'py>(
                 &opt(rec, "loose_edges")?,
                 &opt(rec, "curves")?,
             )?;
+            let count=super::arcs::bind(&mesh,&rec)?;
+            exact_arcs+=count;
+            if count>0{
+                let h=mesh.getattr("_store")?.cast_into::<crate::store::py::PyMeshStore>()?;
+                let s=h.try_borrow()?;
+                let candidates:std::collections::HashSet<u32>=s.inner.state.exact.arcs.iter().flat_map(|a|a.keys()).flat_map(|&e|s.inner.edge_faces(e).iter().copied()).collect();
+                strips+=candidates.into_iter().filter(|&f|s.inner.source_strip(f).is_some()).count();
+            }
             if let Some(count) = remaining.get_mut(&rec.as_ptr()) {
                 *count -= 1;
                 if *count == 0 {
@@ -569,6 +579,8 @@ pub fn skp_apply<'py>(
             Ok(())
         },
     )?;
+    payload.set_item("exact_arc_edges",exact_arcs)?;
+    payload.set_item("exact_strip_faces",strips)?;
     finish(scene, payload, consume)
 }
 pub(super) fn finish(

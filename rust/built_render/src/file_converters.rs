@@ -158,7 +158,12 @@ fn import_skp(win: &Bound<'_, PyAny>, path: &Bound<'_, PyAny>) -> PyResult<bool>
                 ("{name} has no geometry — nothing to import.", 8000)
             } else {
                 win.call_method0("_on_zoom_extents")?;
-                ("Imported {name}", 3000)
+                let arcs=payload.call_method1("get",("exact_arc_edges",0))?.extract::<usize>()?;
+                if arcs>0{
+                    args.set_item("arcs",arcs)?;
+                    args.set_item("faces",payload.call_method1("get",("exact_strip_faces",0))?)?;
+                    ("Imported {name} · {arcs} circular edges, {faces} recovered faces",8000)
+                }else{("Imported {name}",3000)}
             };
             win.call_method0("statusBar")?
                 .call_method1("showMessage", (translated(py, caption, Some(&args))?, ms))?;

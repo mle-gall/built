@@ -384,6 +384,7 @@ struct Builder {
     precise: bool,
     json: bool,
     planes: Option<Vec<(u64, crate::exact::Frame)>>,
+    arcs: Vec<(u64,crate::store::source_arcs::ArcBinding)>,
     native: Option<Py<PyAny>>,
     table: Option<Py<crate::exact::file::PlaneTable>>,
     id_map: Option<Vec<u32>>,
@@ -454,6 +455,16 @@ impl Builder {
                 crate::store::ids_py::apply_source_ids(mesh, s)?;
             }
         }
+        if !self.arcs.is_empty(){
+            use crate::store::{keys::Kind,py::PyMeshStore};
+            let handle=mesh.getattr("_store")?.cast_into::<PyMeshStore>()?;
+            let mut store=handle.try_borrow_mut()?;
+            let index=store.inner.pid_index(Kind::Edge);
+            for (id,arc) in &self.arcs{
+                let e=*index.get(id).ok_or_else(||PyValueError::new_err("missing source arc edge"))?;
+                store.inner.bind_source_arc(e,arc.clone()).map_err(PyValueError::new_err)?;
+            }
+        }
         if let Some(rows) = &self.planes {
             crate::exact::file::bind(mesh, rows.clone())?;
         }
@@ -505,6 +516,7 @@ fn igz_load_mesh(mesh: &Obj<'_>, payload: &Obj<'_>, geom: Option<&Obj<'_>>) -> P
                     precise: false,
                     json: true,
                     planes: None,
+                    arcs:vec![],
                     native: None,
                     table: None,
                     id_map: None,
@@ -569,6 +581,10 @@ fn igz_load_geometry<'p>(mesh: &Obj<'p>, meta: &Obj<'p>, geom: &Obj<'p>) -> PyRe
         .transpose()?;
     let plane_table = geom.getattr_opt("_exact_planes")?;
     let native = a.contains("face_loop_patch")? && plane_table.is_some();
+    let mut arcs=if !native && (a.contains("edge_exact_curve_ref")?||a.contains("edge_exact_curve_id")?){
+        let table=plane_table.as_ref().ok_or_else(||PyValueError::new_err("missing exact arc pool"))?.cast::<crate::exact::file::PlaneTable>()?;
+        crate::exact::file::decode_supports(&a,&table.get().2,id_map.as_deref(),"edge_exact_curve_id","edge_exact_curve_ref")?
+    }else{vec![]};
     let mut bindings = if native {
         None
     } else if let Some(table) = &plane_table {
@@ -590,9 +606,16 @@ fn igz_load_geometry<'p>(mesh: &Obj<'p>, meta: &Obj<'p>, geom: &Obj<'p>) -> PyRe
             meta,
             &a,
             id_map.clone(),
-            bindings.is_some() || native,
+            bindings.is_some() || native || !arcs.is_empty(),
         )?,
     )?;
+    if !arcs.is_empty(){
+        if let Ok(ids)=s.as_any().get_item("ids")?.get_item(1)?.extract::<numpy::PyReadonlyArray1<u64>>(){
+            let mut seen=std::collections::HashSet::new();
+            let dup:std::collections::HashSet<_>=ids.as_slice()?.iter().copied().filter(|id|!seen.insert(*id)).collect();
+            let n=arcs.len();arcs.retain(|(id,_)|!dup.contains(id));if n>arcs.len(){repair(py,n-arcs.len())?;}
+        }
+    }
     if let Some(rows) = &mut bindings {
         if let Ok(raw) = s.as_any().get_item("ids")?.get_item(2) {
             if let Ok(ids) = raw.extract::<numpy::PyReadonlyArray1<u64>>() {
@@ -698,7 +721,7 @@ fn igz_load_geometry<'p>(mesh: &Obj<'p>, meta: &Obj<'p>, geom: &Obj<'p>) -> PyRe
     let precise = pos
         .getattr("dtype")?
         .eq(np.call_method1("dtype", ("<f8",))?)?;
-    let exact = bindings.is_some() || native;
+    let exact = bindings.is_some() || native || !arcs.is_empty();
     let builder = Py::new(
         py,
         Builder {
@@ -706,6 +729,7 @@ fn igz_load_geometry<'p>(mesh: &Obj<'p>, meta: &Obj<'p>, geom: &Obj<'p>) -> PyRe
             precise,
             json: false,
             planes: bindings,
+            arcs,
             native: native.then(|| a.clone().unbind()),
             table: plane_table
                 .map(|t| {

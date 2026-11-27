@@ -861,6 +861,16 @@ impl PyMeshStore {
         !self.inner.state.exact.is_faceted()
     }
 
+    fn exact_source_strip(&self,key:u128)->PyResult<Option<(i128,[[f64;3];3],f64,f64,Vec<[f64;2]>)>>{
+        let slot=live_of(&self.inner,Kind::Face,key)?;
+        Ok(self.inner.source_strip(slot).map(|s|(s.group,s.frame.array(),s.radius,s.semi_angle,s.uv)))
+    }
+
+    fn exact_circle_interval(&self,key:u128)->PyResult<Option<([[f64;3];3],f64,[f64;2])>>{
+        let slot=live_of(&self.inner,Kind::Edge,key)?;
+        Ok(self.inner.state.exact.arcs.as_ref().and_then(|a|a.get(&slot)).filter(|a|self.inner.arc_matches(slot,a)).map(|a|(a.frame.array(),a.radius,a.interval)))
+    }
+
     fn exact_plane(&self, key: u128) -> PyResult<Option<[[f64; 3]; 3]>> {
         let Some(planes) = &self.inner.state.exact.planes else {
             return Ok(None);

@@ -48,6 +48,7 @@ impl Column {
 
 #[derive(Clone, Debug, Default)]
 pub struct ExactColumns {
+    pub(crate) arcs: Option<Arc<std::collections::BTreeMap<u32,super::source_arcs::ArcBinding>>>,
     pub(crate) native: Option<Arc<super::native::NativePatch>>,
     pub(crate) planes: Option<Arc<Vec<crate::exact::Frame>>>,
     face_surface: Column,
@@ -64,6 +65,7 @@ impl ExactColumns {
     }
 
     fn same_binding(&self, other: &Self, kind: Kind, slot: u32) -> bool {
+        if kind==Kind::Edge && self.arcs.as_ref().and_then(|a|a.get(&slot))!=other.arcs.as_ref().and_then(|a|a.get(&slot)){return false}
         let a = self.get(kind, slot);
         let b = other.get(kind, slot);
         if kind == Kind::Face && a != NONE && b != NONE {
@@ -84,6 +86,7 @@ impl ExactColumns {
     }
 
     pub fn shared(&self, other: &Self, kind: Kind) -> bool {
+        if kind==Kind::Edge && !match (&self.arcs,&other.arcs){(None,None)=>true,(Some(a),Some(b))=>Arc::ptr_eq(a,b),_=>false}{return false}
         self.column(kind).is_none_or(|c| {
             c.shared(other.column(kind).unwrap())
                 && (kind != Kind::Face
@@ -102,7 +105,8 @@ impl ExactColumns {
     ) -> impl Iterator<Item = u32> + 'a {
         let a = self.column(kind).unwrap();
         let b = other.column(kind).unwrap();
-        a.rows()
+        let arcs=|c:&'a Self| c.arcs.iter().filter(move |_|kind==Kind::Edge).flat_map(|a|a.keys().copied());
+        arcs(self).chain(arcs(other)).filter(move |&s|!self.same_binding(other,kind,s)).chain(a.rows()
             .iter()
             .filter(move |&&(s, _)| !self.same_binding(other, kind, s))
             .map(|r| r.0)
@@ -111,7 +115,7 @@ impl ExactColumns {
                     .iter()
                     .filter(move |&&(s, _)| a.get(s) == NONE)
                     .map(|r| r.0),
-            )
+            ))
     }
 
     pub fn same_live(&self, other: &Self, kind: Kind, live: impl Fn(u32) -> bool) -> bool {
@@ -125,6 +129,7 @@ impl ExactColumns {
             }
             _ => return false,
         }
+        if kind==Kind::Edge && self.arcs!=other.arcs && self.changed_slots(other,kind).any(&live){return false}
         if self.shared(other, kind) {
             return true;
         }
@@ -140,6 +145,12 @@ impl ExactColumns {
     }
 
     pub fn alloc(&mut self, kind: Kind, slot: u32) {
+        if kind==Kind::Edge {
+            if let Some(arcs)=self.arcs.as_mut().filter(|a|a.contains_key(&slot)){
+                Arc::make_mut(arcs).remove(&slot);
+                if arcs.is_empty(){self.arcs=None}
+            }
+        }
         self.inherit(kind, slot, NONE);
     }
 
@@ -156,7 +167,7 @@ impl ExactColumns {
     }
 
     pub fn is_faceted(&self) -> bool {
-        self.native.is_none() && self.face_surface.0.is_none() && self.edge_exact_curve.0.is_none()
+        self.arcs.is_none() && self.native.is_none() && self.face_surface.0.is_none() && self.edge_exact_curve.0.is_none()
     }
 }
 
@@ -302,6 +313,10 @@ impl ExactColumns {
 }
 impl super::Store {
     pub(super) fn discard_invalid_planes(&mut self) {
+        if let Some(arcs)=&self.state.exact.arcs{
+            let invalid:Vec<_>=arcs.iter().filter(|(e,a)|self.alive(Kind::Edge,**e)&&!self.arc_matches(**e,a)).map(|(&e,_)|e).collect();
+            for e in invalid {self.state.exact.alloc(Kind::Edge,e)}
+        }
         let Some(planes) = &self.state.exact.planes else {
             return;
         };

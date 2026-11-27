@@ -12,6 +12,7 @@ pub use finish::{
     skp_needs_tint, skp_texture_dir,
 };
 mod collect;
+mod arcs;
 pub use collect::{
     skp_collect, skp_curve_segments, skp_defn_geom, skp_instance_identity, skp_loose_segments,
     skp_soft_segments, skp_world_points,

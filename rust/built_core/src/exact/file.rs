@@ -13,6 +13,7 @@ use pyo3::{
     types::{PyDict, PyList},
 };
 use serde::{Deserialize, Serialize};
+use crate::store::source_arcs::ArcBinding;
 type Obj<'p> = Bound<'p, PyAny>;
 fn bad(e: impl std::fmt::Display) -> PyErr {
     PyValueError::new_err(format!("damaged exact geometry ({e})"))
@@ -24,6 +25,8 @@ struct Header {
     version: u32,
     units: String,
     surfaces: Vec<PlaneRow>,
+    #[serde(default,skip_serializing_if="Vec::is_empty")]
+    source_arcs: Vec<ArcBinding>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     patches: Vec<Rows>,
 }
@@ -60,7 +63,7 @@ pub(crate) fn read_header(data: &Obj<'_>) -> PyResult<Option<PlaneTable>> {
         .call_method1("dumps", (value,))?
         .extract::<String>()?;
     let h: Header = serde_json::from_str(&json).map_err(|_| unsupported())?;
-    if h.version != 1 || h.units != "model" || (h.surfaces.is_empty() && h.patches.is_empty()) {
+    if h.version != 1 || h.units != "model" || (h.surfaces.is_empty() && h.patches.is_empty() && h.source_arcs.is_empty()) {
         return Err(bad("invalid pool header"));
     }
     for pool in &h.patches {
@@ -80,7 +83,8 @@ pub(crate) fn read_header(data: &Obj<'_>) -> PyResult<Option<PlaneTable>> {
             Ok(p.frame)
         })
         .collect::<PyResult<Vec<_>>>()?;
-    Ok(Some(PlaneTable(planes, h.patches)))
+    for arc in &h.source_arcs {arc.validate().map_err(bad)?}
+    Ok(Some(PlaneTable(planes, h.patches, h.source_arcs)))
 }
 
 /// Snapshot these rows together with the element id columns. Keep ids as
@@ -137,6 +141,15 @@ pub(crate) fn capture(st: &crate::store::Store, arrays: &Bound<'_, PyDict>) -> P
             arrays.set_item(format!("{key}_id"), ids.into_pyarray(arrays.py()))?;
             arrays.set_item(format!("{key}_ref"), refs.into_pyarray(arrays.py()))?;
         }
+    }
+    if let Some(arcs)=&st.state.exact.arcs{
+        let mut ids=Vec::new();
+        let mut values=Vec::new();
+        for (&slot,arc) in arcs.iter().filter(|(s,a)|st.arc_matches(**s,a)){
+            ids.push(st.pid(Kind::Edge,slot));
+            values.push(serde_json::to_string(arc).map_err(bad)?);
+        }
+        if !ids.is_empty(){arrays.set_item("_arc_ids",ids.into_pyarray(arrays.py()))?;arrays.set_item("_arc_rows",values)?;}
     }
     if st.state.exact.planes.is_none() {
         return Ok(());
@@ -223,6 +236,25 @@ pub(crate) fn encode(
         }
         return Ok(());
     }
+    if let Some(ids)=arrays.get_item("_arc_ids")?{
+        let rows=arrays.as_any().get_item("_arc_rows")?.extract::<Vec<String>>()?;
+        arrays.del_item("_arc_rows")?;arrays.del_item("_arc_ids")?;
+        if let Some(index)=index{
+            let pool=match sink.getattr_opt("_arc_pool")?{
+                Some(v)=>v.cast_into::<PyDict>()?,None=>{let p=PyDict::new(sink.py());sink.setattr("_arc_pool",&p)?;p}
+            };
+            let ids=ids.extract::<PyReadonlyArray1<u64>>()?;
+            let mut pairs=Vec::new();
+            for (&id,v) in ids.as_slice()?.iter().zip(rows){
+                let origin=index.iter().position(|&o|o==eid::origin_index(id)).ok_or_else(||bad("missing arc origin"))?;
+                let r=pool.call_method1("setdefault",(v,pool.len()))?.extract::<u32>()?;
+                pairs.push((eid::pack(origin as u32,eid::counter(id)),r));
+            }
+            pairs.sort_unstable();let (ids,refs):(Vec<_>,Vec<_>)=pairs.into_iter().unzip();
+            arrays.set_item("edge_exact_curve_id",ids.into_pyarray(sink.py()))?;
+            arrays.set_item("edge_exact_curve_ref",refs.into_pyarray(sink.py()))?;
+        }
+    }
     let Some(ids) = arrays.get_item("_plane_ids")? else {
         return Ok(());
     };
@@ -273,7 +305,8 @@ pub(crate) fn encode(
 pub(crate) fn write_header(data: &Bound<'_, PyDict>, sink: &Obj<'_>) -> PyResult<()> {
     let plane_pool = sink.getattr_opt("_plane_pool")?;
     let patch_pool = sink.getattr_opt("_patch_pool")?;
-    if plane_pool.is_none() && patch_pool.is_none() {
+    let arc_pool=sink.getattr_opt("_arc_pool")?;
+    if plane_pool.is_none() && patch_pool.is_none() && arc_pool.is_none() {
         return Ok(());
     }
     let pool = plane_pool.unwrap_or_else(|| PyDict::new(sink.py()).into_any());
@@ -296,7 +329,10 @@ pub(crate) fn write_header(data: &Bound<'_, PyDict>, sink: &Obj<'_>) -> PyResult
             },
         });
     }
+    let mut source_arcs=Vec::new();
+    if let Some(pool)=arc_pool{for row in pool.try_iter()? {source_arcs.push(serde_json::from_str(&row?.extract::<String>()?).map_err(bad)?);}}
     let json = serde_json::to_string(&Header {
+        source_arcs,
         version: 1,
         units: "model".into(),
         surfaces,
@@ -320,14 +356,17 @@ pub(crate) fn decode(
     frames: &[Frame],
     map: Option<&[u32]>,
 ) -> PyResult<Vec<(u64, Frame)>> {
+    decode_supports(arrays,frames,map,"face_surface_id","face_surface_ref")
+}
+pub(crate) fn decode_supports<T:Clone>(arrays:&Obj<'_>,pool:&[T],map:Option<&[u32]>,id_name:&str,ref_name:&str)->PyResult<Vec<(u64,T)>>{
     let ids: PyReadonlyArray1<u64> = arrays
-        .get_item("face_surface_id")
+        .get_item(id_name)
         .and_then(|x| Ok(x.extract()?))
-        .map_err(|_| bad("face_surface_id needs a u64 column"))?;
+        .map_err(|_| bad(format!("{id_name} needs a u64 column")))?;
     let refs: PyReadonlyArray1<u32> = arrays
-        .get_item("face_surface_ref")
+        .get_item(ref_name)
         .and_then(|x| Ok(x.extract()?))
-        .map_err(|_| bad("face_surface_ref needs a u32 column"))?;
+        .map_err(|_| bad(format!("{ref_name} needs a u32 column")))?;
     let ids = ids.as_slice()?;
     let refs = refs.as_slice()?;
     if ids.len() != refs.len() || ids.is_empty() || !ids.windows(2).all(|w| w[0] < w[1]) {
@@ -342,9 +381,9 @@ pub(crate) fn decode(
             };
             Ok((
                 id,
-                frames
+                pool
                     .get(r as usize)
-                    .ok_or_else(|| bad("missing plane pool row"))?
+                    .ok_or_else(|| bad("missing support pool row"))?
                     .clone(),
             ))
         })
@@ -368,7 +407,7 @@ pub(crate) fn bind(mesh: &Obj<'_>, rows: Vec<(u64, Frame)>) -> PyResult<()> {
 
 #[pyclass(frozen)]
 #[derive(Serialize)]
-pub(crate) struct PlaneTable(pub Vec<Frame>, pub Vec<Rows>);
+pub(crate) struct PlaneTable(pub Vec<Frame>, pub Vec<Rows>,pub Vec<ArcBinding>);
 
 /// Reconstruct a definition only after its document pool passed validation.
 pub(crate) fn native_rows(a: &Obj<'_>, table: &PlaneTable) -> PyResult<Rows> {
