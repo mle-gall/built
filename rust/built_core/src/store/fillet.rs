@@ -120,19 +120,22 @@ fn floor_digits(x: f64, digits: i32) -> f64 {
 pub(crate) fn clean_fits(limit: f64, unit: f64, fits: impl Fn(f64) -> bool) -> (f64, f64) {
     let unit = if unit.is_finite() && unit > 0. { unit } else { 1. };
     let u = limit / unit;
-    let settle = |v: f64, digits: i32| {
-        let mut v = v;
+    // `x` to two digits, stepped down by its own last digit while refused
+    // (0.99999 rounds to 1.00, refused, then 0.99; not 0.9).
+    let settle = |x: f64| {
+        let step = 10f64.powi(x.max(f64::MIN_POSITIVE).log10().floor() as i32 - 1);
+        let mut v = floor_digits(x, 2);
         for _ in 0..4 {
             if v > 0. && fits(v * unit) {
                 return v * unit;
             }
-            v -= 10f64.powi(v.max(f64::MIN_POSITIVE).log10().floor() as i32 - (digits - 1));
+            v -= step;
         }
         limit
     };
-    let said = settle(floor_digits(u, 2), 2);
+    let said = settle(u);
     let one = floor_digits(u, 1);
-    let proposed = if one >= 0.9 * u && fits(one * unit) { one * unit } else { settle(floor_digits(0.9 * u, 2), 2) };
+    let proposed = if one >= 0.9 * u && fits(one * unit) { one * unit } else { settle(0.9 * u) };
     (said, proposed)
 }
 
@@ -1592,6 +1595,9 @@ mod largest_tests {
         // 39.99 mm, with 40 refused: not 30 but about 10 % under, 36 mm.
         let (said, proposed) = super::clean_fits(0.03999, mm, |r| r < 0.04);
         assert!((said - 0.039).abs() < 1e-12 && (proposed - 0.036).abs() < 1e-12, "{said} {proposed}");
+        // A limit just under a round value is said by its own digits.
+        let (said, _) = super::clean_fits(0.99999, 1., |r| r < 1.);
+        assert!((said - 0.99).abs() < 1e-12, "{said}");
         // Roundoff over the limit steps down.
         let (said, _) = super::clean_fits(0.00949, mm, |r| r <= 0.00949);
         assert!((said - 0.0094).abs() < 1e-12);
