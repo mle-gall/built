@@ -680,6 +680,40 @@ impl PyRoundPlan {
         self.materials.clone()
     }
 }
+impl PyMeshStore {
+    #[allow(clippy::too_many_arguments)]
+    fn fillet_result(
+        &self,
+        es: &[u32],
+        size: f64,
+        segments: usize,
+        profile: f64,
+        measure: &str,
+        corners: &str,
+        shape: &str,
+        controls: &[(f64, f64, bool)],
+        h: crate::store::geometry::Hypot,
+    ) -> super::fillet::Result<super::fillet::RoundPlan> {
+        let n = segments.max(1);
+        super::fillet::sample_profile(shape, controls, n).and_then(|outline| {
+            let mirror = matches!(shape, "custom" | "cornice" | "crown");
+            super::fillet::plan(
+                &self.inner,
+                es.to_vec(),
+                size,
+                n,
+                profile,
+                measure,
+                corners == "cut",
+                &outline,
+                mirror,
+                shape == "steps",
+                h,
+            )
+        })
+    }
+}
+
 fn round_preview(
     s: &Store,
     result: super::fillet::Result<super::fillet::RoundPlan>,
@@ -3668,29 +3702,70 @@ impl PyMeshStore {
         hypot: &str,
     ) -> PyResult<PyRoundPlan> {
         let s = &self.inner;
-        let es = keys
+        let es: Vec<u32> = keys
             .iter()
             .map(|&k| live_of(s, Kind::Edge, k))
             .collect::<PyResult<_>>()?;
         let h = crate::hypot_of(hypot)?;
-        let n = segments.max(1);
-        let result = super::fillet::sample_profile(shape, &controls, n).and_then(|outline| {
-            let mirror = matches!(shape, "custom" | "cornice" | "crown");
-            super::fillet::plan(
-                s,
-                es,
-                size,
-                n,
-                profile,
-                measure,
-                corners == "cut",
-                &outline,
-                mirror,
-                shape == "steps",
-                h,
-            )
-        });
+        let result = self.fillet_result(&es, size, segments, profile, measure, corners, shape, &controls, h);
         round_preview(s, result, h)
+    }
+
+    /// For a refused `size`: the largest size the planner accepts for these
+    /// edges as said and as proposed (`fillet::clean_fits`, `unit` metres a
+    /// display unit), or None when even a tiny one is refused: the refusal
+    /// is not about the size. Same arguments as `plan_fillet`.
+    #[allow(clippy::too_many_arguments)]
+    #[pyo3(signature = (keys, size, segments, profile, measure, corners, shape, controls, hypot, unit=1e-3))]
+    fn fillet_fit(
+        &self,
+        py: Python<'_>,
+        keys: Vec<u128>,
+        size: f64,
+        segments: usize,
+        profile: f64,
+        measure: &str,
+        corners: &str,
+        shape: &str,
+        controls: Vec<(f64, f64, bool)>,
+        hypot: &str,
+        unit: f64,
+    ) -> PyResult<Option<(f64, f64)>> {
+        let es: Vec<u32> = keys
+            .iter()
+            .map(|&k| live_of(&self.inner, Kind::Edge, k))
+            .collect::<PyResult<_>>()?;
+        let h = crate::hypot_of(hypot)?;
+        Ok(py.detach(|| {
+            let fits = |r| self.fillet_result(&es, r, segments, profile, measure, corners, shape, &controls, h).is_ok();
+            let limit = super::fillet::largest(size, fits)?;
+            Some(super::fillet::clean_fits(limit, unit, fits))
+        }))
+    }
+
+    /// `fillet_fit` for corners (`plan_vertex_bevel`).
+    #[pyo3(signature = (keys, size, segments, profile, hypot, unit=1e-3))]
+    fn vertex_bevel_fit(
+        &self,
+        py: Python<'_>,
+        keys: Vec<u128>,
+        size: f64,
+        segments: usize,
+        profile: f64,
+        hypot: &str,
+        unit: f64,
+    ) -> PyResult<Option<(f64, f64)>> {
+        let s = &self.inner;
+        let vs: Vec<u32> = keys
+            .iter()
+            .map(|&k| live_of(s, Kind::Vertex, k))
+            .collect::<PyResult<_>>()?;
+        let h = crate::hypot_of(hypot)?;
+        Ok(py.detach(|| {
+            let fits = |r| super::bevel::plan(s, vs.clone(), r, segments.max(1), profile, h).is_ok();
+            let limit = super::fillet::largest(size, fits)?;
+            Some(super::fillet::clean_fits(limit, unit, fits))
+        }))
     }
 
     #[pyo3(signature = (plan, curve_ids, material_index=None))]

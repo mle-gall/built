@@ -11,6 +11,8 @@ fn fillet_host_init<'py>(a: &Args<'py>) -> Reply<'py> {
     tool.setattr("_plan", none(py))?;
     tool.setattr("_plan_key", none(py))?;
     tool.setattr("_message", none(py))?;
+    tool.setattr("_fit", none(py))?;
+    tool.setattr("_fit_key", none(py))?;
     tool.setattr("_viewport", none(py))?;
     Ok(none(py))
 }
