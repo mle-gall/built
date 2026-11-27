@@ -516,6 +516,22 @@ impl Store {
             ],
         };
         let mut out = Store::from_block(ns, &block, w)?;
+        if self.state.exact.curved.is_some() {
+            // The part keeps its element ids: pair them and carry the
+            // curved bindings (validated on the copy).
+            let mut verts: Vec<u32> = edges.iter().flat_map(|&e| *st.ends.get(e as usize)).collect();
+            verts.extend(faces.iter().flat_map(|&f| self.face_rings(f).into_iter().flatten()));
+            verts.sort_unstable();
+            verts.dedup();
+            let pair = |kind: Kind, slots: &[u32]| -> Vec<(u32, u32)> {
+                slots
+                    .iter()
+                    .map(|&s| (s, out.slot_of_pid(kind, self.pid(kind, s)).unwrap_or(super::keys::NONE)))
+                    .collect()
+            };
+            let pairs = [pair(Kind::Vertex, &verts), pair(Kind::Edge, edges), pair(Kind::Face, faces)];
+            out.adopt_curved(self, &pairs);
+        }
         if let Some(planes) = &self.state.exact.planes {
             for (i, &f) in faces.iter().enumerate() {
                 let r = self.state.exact.get(Kind::Face, f);

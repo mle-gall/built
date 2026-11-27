@@ -356,7 +356,11 @@ fn igz_load_into_inner<'p>(
                         if arcs{
                             crate::exact::file::decode_supports(&arrays,&table.2,None,"edge_exact_curve_id","edge_exact_curve_ref")?;
                         }
-                        if !arcs || arrays.contains("face_surface_id")? || arrays.contains("face_surface_ref")?{
+                        let curved = arrays.contains("face_surface_curved")?;
+                        if curved {
+                            crate::exact::file::curved_rows(&arrays, table, None)?;
+                        }
+                        if (!arcs && !curved) || arrays.contains("face_surface_id")? || arrays.contains("face_surface_ref")?{
                             crate::exact::file::decode(&arrays,&table.0,None)?;
                         }
                     }

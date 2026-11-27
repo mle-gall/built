@@ -166,3 +166,37 @@ Stepmesh matched the reference's placed-solid counts on every file. Comparing su
 3. **Editing.** Connect drawing, push, offset, sweep and intersection donor paths to the transition table. Cover each row with keep, re-trim and fallback cases. Assert orientation, ids, unchanged neighbours, atomic failure and exact undo.
 4. **Exchange.** Map source topology into the store and export canonical AP242. Build a redistributable corpus from cleared assets plus authored adversarial fixtures. Compare part and occurrence counts, bounds, curve types, shells, orientation and exact volumes against independent readers. Test mixed assemblies, unit conversion and malformed headers before picking a production reader.
 5. **Recovery and scale.** Implement the explicit fit/report command separately. Exercise rounded rectangles with holes, interrupted cylinders, planar mitres and false-positive noisy meshes. Run the storage and latency gates in §5. Later curved booleans and fillets use the new intersections, oriented coedges and trimming API.
+
+## 10. Editing as built (lane 3)
+
+Drawn geometry keeps its conforming facet topology, and each element carries an exact binding beside it (`store/exact.rs` `Curved`, sparse and sorted by slot). An edge carries a curve and the parameter interval from its first to its second end. A face carries a curved support (cylinder, cone, sphere, torus, linear extrusion, revolution); a planar face needs no binding, its plane is its own and its curved sides come from their edges. Pcurves are implicit: a face's trims are its store edges, mapped into the support's parameters by analytic inverses (`exact/bound.rs`). A curve lies on a support only if `deg(curve)·deg(support)+2` distinct points of the whole curve do, by Bezout, so tolerances are never inflated. The facets are always the model-tolerance mesh, so dropping a binding is the fallback, it never fails the step, and undo restores bindings with the state.
+
+The segment count of a circle is the number of divisions of one exact curve: display draws every bound edge along its curve and every face with a curved support or curved sides from the support, at a fixed angular step (`store/exact_display.rs`). Edges between two faces of one support draw soft, and so do native seams.
+
+Every History step runs a rebind pass after persistent-id succession (`store/exact_bound.rs`):
+
+1. a created element whose id was inherited or derived takes the parent's binding;
+2. bound elements whose vertices moved follow the affine map fitted to every vertex of their support (a partial move fits no map and drops what no longer holds);
+3. new edges are derived: circles fitted to the curve runs the step drew, when the command asks for it (Circle, Arc, Follow Me, Offset, Resegment); a copy of a bound edge at its old place; plane sections of a bound cylinder; turns about a Follow Me axis; mitre sections at Follow Me joints;
+4. new faces are derived: an extrusion or cylinder of a bound side along an adjacent straight side, a revolution of a side about a bound circular side's axis, binding translated or rotated rails on the way;
+5. every touched binding is validated against its element and dropped if it does not hold. Supports equal to roundoff are interned, so one surface has one row.
+
+Commands state their intent through `exact_bound::with_intent`: fit runs, keep chords, project divided vertices, keep the base face. Bindings save in the format-2 exact pool (`ext["built.exact_geometry"].curved`, one JSON row per block, element ids in file space; block array `face_surface_curved`), set the critical feature, and pickle after the store.
+
+| §3 row | Status | Tests (`tests/test_exact_edit.py`) |
+|---|---|---|
+| Circle, arc | Exact circle per run; Polygon stays straight; Resegment keeps the circle | `test_circle_*`, `test_arc_*`, `test_resegmenting_*` |
+| Move, rotate, uniform scale | Supports transform; partial moves re-trim on the surface or fall back | `test_transforms_carry_the_support`, `test_vertex_moved_along_*`, `test_partial_vertex_move_*` |
+| Nonuniform scale | Circles become ellipses; a cylinder stays one while its right section is round, else an elliptic extrusion. Spline images are not built (fallback) | `test_nonuniform_scale_*` |
+| Paint, tag, hide, soften | Attribute-only, bindings untouched | (existing suites) |
+| Line across curved face | Line tool previews and commits the support's parameter line, corners on the surface; horizontal paths bind as circles, generators are lines, helices stay faceted; Alt draws a straight chord | `test_line_around_a_cylinder_*`, `test_chord_mode_*`, `test_line_across_disk_*` |
+| Push/pull | Planar caps translate, walls from circles are one cylinder, from other curves extrusions; keep_base keeps the base id; push-through ends the id | `test_push_pull_*`, `test_second_push_*`, `test_push_through_*` |
+| Offset | Concentric circles on planar faces; outer face keeps its id | `test_offset_*` |
+| Follow Me | Straight path: extrusion; about an axis: cylinder, cone, plane, torus; mitred joints bind the elliptic section, each span its own cylinder | `test_follow_me_*` |
+| Intersect faces | Plane/cylinder sections: circle or ellipse, both halves keep the cylinder | `test_intersect_cylinder_with_a_plane` |
+| Erase, merge, divide, weld | Erase releases, undo restores; merge keeps the survivor's binding; divide splits the interval and puts new vertices on the curve where faces stay planar, else falls back | `test_erase_*`, `test_line_across_disk_*`, `test_divide_*` |
+| Explode, copy, Make Group | Bindings follow the placement's affine map onto the copies | `test_make_group_and_explode_*` |
+| Solids | Unchanged: results are faceted (§3) | — |
+| Import, export, undo | Undo/redo exact; save/open/pickle round trip. STEP and .skp are lane 4 | `test_save_open_*`, undo asserts throughout |
+
+Known costs and limits: the pass copies the definition's binding map on each step that touches exact geometry (zero for faceted definitions); weld has no dedicated command and is covered only by validation; spline images under shear and helical trims stay faceted; display tessellation is recomputed per display request.

@@ -29,6 +29,18 @@ struct Header {
     source_arcs: Vec<ArcBinding>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     patches: Vec<Rows>,
+    /// Curves and curved surfaces bound to ordinary elements, one JSON row
+    /// per geometry block (element ids in file space).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    curved: Vec<String>,
+}
+
+/// One block's curved bindings, keyed by persistent element id.
+#[derive(Serialize, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct CurvedRows {
+    pub edges: Vec<(u64, super::bound::EdgeBind)>,
+    pub faces: Vec<(u64, super::bound::Support)>,
 }
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -63,8 +75,21 @@ pub(crate) fn read_header(data: &Obj<'_>) -> PyResult<Option<PlaneTable>> {
         .call_method1("dumps", (value,))?
         .extract::<String>()?;
     let h: Header = serde_json::from_str(&json).map_err(|_| unsupported())?;
-    if h.version != 1 || h.units != "model" || (h.surfaces.is_empty() && h.patches.is_empty() && h.source_arcs.is_empty()) {
+    if h.version != 1
+        || h.units != "model"
+        || (h.surfaces.is_empty() && h.patches.is_empty() && h.source_arcs.is_empty() && h.curved.is_empty())
+    {
         return Err(bad("invalid pool header"));
+    }
+    let mut curved = Vec::with_capacity(h.curved.len());
+    for row in &h.curved {
+        let rows: CurvedRows = serde_json::from_str(row).map_err(bad)?;
+        if !rows.edges.iter().all(|(_, b)| b.curve.validate().is_ok() && b.interval.iter().all(|t| t.is_finite()))
+            || !rows.faces.iter().all(|(_, s)| s.validate())
+        {
+            return Err(bad("invalid curved binding"));
+        }
+        curved.push(rows);
     }
     for pool in &h.patches {
         if pool.topology.is_some() {
@@ -84,7 +109,7 @@ pub(crate) fn read_header(data: &Obj<'_>) -> PyResult<Option<PlaneTable>> {
         })
         .collect::<PyResult<Vec<_>>>()?;
     for arc in &h.source_arcs {arc.validate().map_err(bad)?}
-    Ok(Some(PlaneTable(planes, h.patches, h.source_arcs)))
+    Ok(Some(PlaneTable(planes, h.patches, h.source_arcs, curved)))
 }
 
 /// Snapshot these rows together with the element id columns. Keep ids as
@@ -151,6 +176,25 @@ pub(crate) fn capture(st: &crate::store::Store, arrays: &Bound<'_, PyDict>) -> P
         }
         if !ids.is_empty(){arrays.set_item("_arc_ids",ids.into_pyarray(arrays.py()))?;arrays.set_item("_arc_rows",values)?;}
     }
+    if let Some(c) = st.state.exact.curved.as_deref() {
+        let rows = CurvedRows {
+            edges: c
+                .edges
+                .iter()
+                .filter(|(s, _)| st.alive(Kind::Edge, **s))
+                .map(|(s, b)| (st.pid(Kind::Edge, *s), b.clone()))
+                .collect(),
+            faces: c
+                .faces
+                .iter()
+                .filter(|(s, _)| st.alive(Kind::Face, **s))
+                .map(|(s, b)| (st.pid(Kind::Face, *s), b.clone()))
+                .collect(),
+        };
+        if !rows.edges.is_empty() || !rows.faces.is_empty() {
+            arrays.set_item("_curved_rows", serde_json::to_string(&rows).map_err(bad)?)?;
+        }
+    }
     if st.state.exact.planes.is_none() {
         return Ok(());
     }
@@ -174,6 +218,44 @@ pub(crate) fn encode(
     sink: &Obj<'_>,
     index: Option<&[u32]>,
 ) -> PyResult<()> {
+    if let Some(raw) = arrays.get_item("_curved_rows")? {
+        arrays.del_item("_curved_rows")?;
+        // A compatibility facet copy has no format-2 ids: it drops them.
+        if let Some(index) = index {
+            let mut rows: CurvedRows = serde_json::from_str(&raw.extract::<String>()?).map_err(bad)?;
+            let file_id = |id: u64| -> PyResult<u64> {
+                let origin = index
+                    .iter()
+                    .position(|p| *p == eid::origin_index(id))
+                    .ok_or_else(|| bad("missing origin"))?;
+                Ok(eid::pack(origin as u32, eid::counter(id)))
+            };
+            for r in &mut rows.edges {
+                r.0 = file_id(r.0)?;
+            }
+            for r in &mut rows.faces {
+                r.0 = file_id(r.0)?;
+            }
+            let json = serde_json::to_string(&rows).map_err(bad)?;
+            let pool = match sink.getattr_opt("_curved_pool")? {
+                Some(p) => p.cast_into::<PyDict>()?,
+                None => {
+                    let p = PyDict::new(sink.py());
+                    sink.setattr("_curved_pool", &p)?;
+                    p
+                }
+            };
+            let entry = match pool.get_item(&json)? {
+                Some(r) => r.extract::<u32>()?,
+                None => {
+                    let r = u32::try_from(pool.len()).map_err(bad)?;
+                    pool.set_item(&json, r)?;
+                    r
+                }
+            };
+            arrays.set_item("face_surface_curved", vec![entry].into_pyarray(sink.py()))?;
+        }
+    }
     if let Some(raw) = arrays.get_item("_native_pool")? {
         let index = index.ok_or_else(|| bad("native patch requires a format-2 geometry block"))?;
         let pool = match sink.getattr_opt("_patch_pool")? {
@@ -306,8 +388,15 @@ pub(crate) fn write_header(data: &Bound<'_, PyDict>, sink: &Obj<'_>) -> PyResult
     let plane_pool = sink.getattr_opt("_plane_pool")?;
     let patch_pool = sink.getattr_opt("_patch_pool")?;
     let arc_pool=sink.getattr_opt("_arc_pool")?;
-    if plane_pool.is_none() && patch_pool.is_none() && arc_pool.is_none() {
+    let curved_pool = sink.getattr_opt("_curved_pool")?;
+    if plane_pool.is_none() && patch_pool.is_none() && arc_pool.is_none() && curved_pool.is_none() {
         return Ok(());
+    }
+    let mut curved = Vec::new();
+    if let Some(pool) = curved_pool {
+        for row in pool.try_iter()? {
+            curved.push(row?.extract::<String>()?);
+        }
     }
     let pool = plane_pool.unwrap_or_else(|| PyDict::new(sink.py()).into_any());
     let mut patches = Vec::new();
@@ -337,6 +426,7 @@ pub(crate) fn write_header(data: &Bound<'_, PyDict>, sink: &Obj<'_>) -> PyResult
         units: "model".into(),
         surfaces,
         patches,
+        curved,
     })
     .map_err(bad)?;
     let ext = match data.get_item("ext")? {
@@ -407,7 +497,7 @@ pub(crate) fn bind(mesh: &Obj<'_>, rows: Vec<(u64, Frame)>) -> PyResult<()> {
 
 #[pyclass(frozen)]
 #[derive(Serialize)]
-pub(crate) struct PlaneTable(pub Vec<Frame>, pub Vec<Rows>,pub Vec<ArcBinding>);
+pub(crate) struct PlaneTable(pub Vec<Frame>, pub Vec<Rows>, pub Vec<ArcBinding>, pub Vec<CurvedRows>);
 
 /// Reconstruct a definition only after its document pool passed validation.
 pub(crate) fn native_rows(a: &Obj<'_>, table: &PlaneTable) -> PyResult<Rows> {
@@ -606,4 +696,44 @@ pub(crate) fn build_native(
     store.inner = staged;
     drop(store);
     crate::kernel::store_views::lifecycle::become_store(mesh, &object, table.as_any(), None)
+}
+
+/// The block's curved rows, ids remapped to this process.
+pub(crate) fn curved_rows(arrays: &Obj<'_>, table: &PlaneTable, map: Option<&[u32]>) -> PyResult<Option<CurvedRows>> {
+    let Ok(col) = arrays.get_item("face_surface_curved") else {
+        return Ok(None);
+    };
+    let refs = col.extract::<PyReadonlyArray1<u32>>().map_err(|_| bad("face_surface_curved needs a u32 column"))?;
+    let &[r] = refs.as_slice()? else {
+        return Err(bad("invalid curved pool reference"));
+    };
+    let rows = table.3.get(r as usize).ok_or_else(|| bad("missing curved pool row"))?;
+    let remap = |id: u64| -> PyResult<u64> {
+        match map {
+            Some(m) => eid::remap(id, m).map_err(bad),
+            None => Ok(id),
+        }
+    };
+    Ok(Some(CurvedRows {
+        edges: rows.edges.iter().map(|(id, b)| Ok((remap(*id)?, b.clone()))).collect::<PyResult<_>>()?,
+        faces: rows.faces.iter().map(|(id, b)| Ok((remap(*id)?, b.clone()))).collect::<PyResult<_>>()?,
+    }))
+}
+
+/// Install a block's curved bindings. A binding that no longer holds on
+/// its element (a damaged or foreign file) is dropped, never forced.
+pub(crate) fn bind_curved(mesh: &Obj<'_>, rows: &CurvedRows) -> PyResult<()> {
+    let st = mesh.getattr("_store")?;
+    let mut st = st.cast::<PyMeshStore>()?.try_borrow_mut()?;
+    st.inner.install_curved(rows);
+    Ok(())
+}
+
+impl Clone for CurvedRows {
+    fn clone(&self) -> Self {
+        Self {
+            edges: self.edges.clone(),
+            faces: self.faces.clone(),
+        }
+    }
 }

@@ -112,6 +112,7 @@ pub(crate) fn source_ids_checked<'p>(
                         name.as_str(),
                         "face_surface_id"
                             | "face_surface_ref"
+                            | "face_surface_curved"
                             | "face_loop_patch"
                             | "coedge_topology"
                             | "coedge_edge_id"

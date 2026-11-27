@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! Definition-local f64 supports. Generator references point only into the
 //! curve table, making cycles unrepresentable.
+pub(crate) mod bound;
 pub(crate) mod file;
 pub(crate) mod patch;
 mod spline;

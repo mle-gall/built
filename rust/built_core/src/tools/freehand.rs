@@ -106,7 +106,7 @@ impl Tool for Freehand {
                 if host
                     .run(&Command {
                         name: "add_arc",
-                        args: json!({"points":points}),
+                        args: json!({"points": points, "exact": false}),
                     })
                     .ok
                 {

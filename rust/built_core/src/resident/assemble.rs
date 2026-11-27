@@ -52,6 +52,9 @@ struct Sources {
     offsets: Vec<i64>,
     /// `(code, endpoints)` of the prototypes with soft or hidden edges.
     exclusions: Vec<(usize, Vec<f32>)>,
+    /// Per corner, an exact surface normal or NaN; used if any is given.
+    corner_normals: Vec<f32>,
+    exact: bool,
 }
 
 impl Sources {
@@ -69,6 +72,19 @@ impl Sources {
             let hidden: PyReadonlyArray1<'_, bool> = field(7)?.extract()?;
             let attributes: PyReadonlyArray1<'_, i64> = field(8)?.extract()?;
             let paints: PyReadonlyArray2<'_, u32> = field(10)?.extract()?;
+            // Exact corner normals of curved supports (optional 12th field).
+            let corners_here = corners.as_array().len();
+            match (mesh.len()? > 11).then(|| field(11)).transpose()?.filter(|n| !n.is_none()) {
+                Some(n) => {
+                    let n: PyReadonlyArray2<'_, f32> = n.extract()?;
+                    if n.shape() != [corners_here, 3] {
+                        return Err(PyValueError::new_err("invalid prototype corner normals"));
+                    }
+                    all.exact = true;
+                    all.corner_normals.extend(n.as_array().iter().copied());
+                }
+                None => all.corner_normals.extend(std::iter::repeat(f32::NAN).take(3 * corners_here)),
+            }
             if pos.shape()[1] != 3 || edges.shape()[1] != 2 || palette.shape()[1] != 4 || paints.shape()[1] != 3 {
                 return Err(PyValueError::new_err("invalid prototype source arrays"));
             }
@@ -195,6 +211,7 @@ pub(super) fn assemble<'py>(
         maps.extract()?,
         rows_of(py, sources.paints, 3)?.readonly(),
         true,
+        if sources.exact { Some(rows_of(py, sources.corner_normals, 3)?.readonly()) } else { None },
     )?;
 
     // The prototypes' frame anchors and boxes.

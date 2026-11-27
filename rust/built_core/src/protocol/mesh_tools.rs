@@ -107,13 +107,14 @@ fn orient_faces<'py>(history: &Obj<'py>, face: &Obj<'py>) -> Reply<'py> {
 #[pyfunction]
 fn resegment_curve<'py>(history: &Obj<'py>, edge: &Obj<'py>, segments: &Obj<'py>) -> Reply<'py> {
     let seed = one(history, "edge", edge)?;
-    execute(
-        history,
-        &history
-            .py()
-            .import("built_core.curve_segments")?
-            .call_method1("ResegmentCurveCommand", (seed, int(segments)?))?,
-    )
+    let cmd = history
+        .py()
+        .import("built_core.curve_segments")?
+        .call_method1("ResegmentCurveCommand", (seed, int(segments)?))?;
+    // An exact curve keeps its circle: only its divisions change.
+    crate::store::exact_bound::with_intent(crate::store::exact_bound::FIT_CIRCLES, || {
+        execute(history, &cmd)
+    })
 }
 #[pyfunction]
 #[pyo3(signature=(history,face,path,closed=false))]
@@ -132,13 +133,53 @@ fn follow_me<'py>(
     let key = py
         .import("built_core.command_protocol")?
         .call_method1("from_json_key", (face,))?;
-    execute(
-        history,
-        &py.import("built_core.sweep")?.call_method1(
-            "build_sweep_face",
-            (mesh(history)?, key, points, closed, message),
-        )?,
-    )
+    let cmd = py.import("built_core.sweep")?.call_method1(
+        "build_sweep_face",
+        (mesh(history)?, key, &points, closed, message),
+    )?;
+    // Swept runs along an arc path become exact circles about its axis.
+    let (axis, joints) = path_axis(&points)?;
+    crate::store::exact_bound::with_joints(joints, || {
+        crate::store::exact_bound::with_axis(axis, || {
+            crate::store::exact_bound::with_intent(crate::store::exact_bound::FIT_CIRCLES, || {
+                execute(history, &cmd)
+            })
+        })
+    })
+}
+
+/// The axis of a Follow Me path whose points all lie on one circle.
+type Joint = (glam::DVec3, glam::DVec3);
+fn path_axis(points: &Obj<'_>) -> PyResult<(Option<Joint>, Vec<Joint>)> {
+    let mut pts = Vec::new();
+    for p in points.try_iter()? {
+        let p = p?;
+        let v = if let Ok(v) = p.extract::<[f64; 3]>() {
+            v
+        } else {
+            p.call_method0("toTuple")?.extract::<[f64; 3]>()?
+        };
+        pts.push(glam::DVec3::from(v));
+    }
+    // Mitre planes bisect the directions meeting at each interior joint.
+    let mut joints = Vec::new();
+    for w in pts.windows(3) {
+        if let (Some(a), Some(b)) = ((w[1] - w[0]).try_normalize(), (w[2] - w[1]).try_normalize()) {
+            if let Some(n) = (a + b).try_normalize() {
+                joints.push((w[1], n));
+            }
+        }
+    }
+    // Any three points lie on a circle: an axis needs a fourth to verify.
+    if pts.len() < 4 {
+        return Ok((None, joints));
+    }
+    let scale = pts.iter().fold(0f64, |m, p| m.max(p.abs().max_element()));
+    let axis = match crate::exact::bound::fit_circle(&pts, crate::exact::bound::tolerance(scale)) {
+        Some(crate::exact::Curve::Circle { frame, .. }) => Some((frame.origin, frame.axis)),
+        _ => None,
+    };
+    Ok((axis, joints))
 }
 
 enum Edit {
@@ -223,14 +264,15 @@ fn rebuild_cap<'py>(history: &Obj<'py>, face: &Obj<'py>) -> Reply<'py> {
 }
 #[pyfunction]
 fn divide_edges<'py>(history: &Obj<'py>, edges: &Obj<'py>, n: &Obj<'py>) -> Reply<'py> {
-    mutation(
-        history,
-        Edit::Divide,
-        PyTuple::new(
-            history.py(),
-            [need(&mesh(history)?, "edge", edges)?.into_any(), int(n)?],
-        )?,
-    )
+    let args = PyTuple::new(
+        history.py(),
+        [need(&mesh(history)?, "edge", edges)?.into_any(), int(n)?],
+    )?;
+    // Dividing an exact edge splits its parameter interval: the new
+    // vertices go onto the curve (succession, `exact_bound::project`).
+    crate::store::exact_bound::with_intent(crate::store::exact_bound::PROJECT, || {
+        mutation(history, Edit::Divide, args)
+    })
 }
 #[pyfunction]
 fn join_edges<'py>(history: &Obj<'py>, edges: &Obj<'py>) -> Reply<'py> {

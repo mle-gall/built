@@ -360,6 +360,8 @@ fn source_arrays<'py>(
     let source = own.get_item("_deferred_source")?.filter(|s| !s.is_none());
     let stored = mesh.get_type().name()? == "StoreMesh";
     let mut stored_edge_layers = None;
+    // Exact surface normals per ring corner (curved supports), if any.
+    let mut corner_normals: Option<Obj<'py>> = None;
     let (pos, corners, sizes, counts, edges, flags, table, attr) = match &source {
         // A file's own arrays: one coordinate per face or edge corner.
         Some(source) => {
@@ -384,6 +386,9 @@ fn source_arrays<'py>(
                 stored_edge_layers = Some(field("layer")?);
             }
             let exact = arrays.contains("face_owner")?;
+            if arrays.contains("corner_normals")? {
+                corner_normals = Some(field("corner_normals")?);
+            }
             // A plain store's dense face attributes are its own column:
             // given, they spare a pass over every face's key when no face
             // has attributes of its own.
@@ -438,7 +443,11 @@ fn source_arrays<'py>(
         if allowed.contains(&false) {
             let keep = Array1::from(allowed).into_pyarray(py).get_item(np.call_method1("asarray", (&attr, "int64"))?.add(1)?)?;
             let rings = np.call_method1("repeat", (&keep, &counts))?;
-            corners = corners.get_item(np.call_method1("repeat", (&rings, &sizes))?)?;
+            let kept_corners = np.call_method1("repeat", (&rings, &sizes))?;
+            if let Some(n) = &corner_normals {
+                corner_normals = Some(n.get_item(&kept_corners)?);
+            }
+            corners = corners.get_item(kept_corners)?;
             sizes = sizes.get_item(rings)?;
             counts = counts.get_item(&keep)?;
             attr = attr.get_item(keep)?;
@@ -581,22 +590,23 @@ fn source_arrays<'py>(
         paints.set_item(column(2), paints.get_item(column(1))?)?;
     }
     let hidden: Vec<bool> = attributes.iter().map(|a| hidden_rows[*a as usize]).collect();
-    PyTuple::new(
-        py,
-        [
-            single.into_any(),
-            corners.into_any(),
-            sizes.into_any(),
-            counts.into_any(),
-            edges.into_pyarray(py).into_any(),
-            flags.into_pyarray(py).into_any(),
-            palette.into_pyarray(py).into_any(),
-            Array1::from(hidden).into_pyarray(py).into_any(),
-            PyArray1::from_vec(py, attributes).into_any(),
-            maps,
-            paints,
-        ],
-    )
+    let mut fields = vec![
+        single.into_any(),
+        corners.into_any(),
+        sizes.into_any(),
+        counts.into_any(),
+        edges.into_pyarray(py).into_any(),
+        flags.into_pyarray(py).into_any(),
+        palette.into_pyarray(py).into_any(),
+        Array1::from(hidden).into_pyarray(py).into_any(),
+        PyArray1::from_vec(py, attributes).into_any(),
+        maps,
+        paints,
+    ];
+    if let Some(n) = corner_normals {
+        fields.push(np.call_method1("ascontiguousarray", (n, np.getattr("float32")?))?);
+    }
+    PyTuple::new(py, fields)
 }
 
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {

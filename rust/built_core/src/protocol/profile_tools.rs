@@ -77,7 +77,8 @@ fn push_pull<'py>(
             return answer(history, &before, false);
         }
         let viewport = Bound::new(py, super::api::Headless::from_history(history.clone())?)?;
-        op.call_method1("_commit", (viewport,))?;
+        let intent = if keep_base { crate::store::exact_bound::KEEP_BASE } else { 0 };
+        crate::store::exact_bound::with_intent(intent, || op.call_method1("_commit", (viewport,)))?;
         answer(history, &before, true)
     })
 }
@@ -131,7 +132,10 @@ fn offset_outline<'py>(
             if cmd.is_none() {
                 return failed(history, &before, "collapsed_face");
             }
-            execute(history, &cmd)
+            // An offset arc is concentric: its run fits a circle.
+            crate::store::exact_bound::with_intent(crate::store::exact_bound::FIT_CIRCLES, || {
+                execute(history, &cmd)
+            })
         });
     }
     let points = points.unwrap();

@@ -168,6 +168,8 @@ impl Store {
                 }
             }
         }
+        // Exact bindings come along through the placement (§3 Explode).
+        self.adopt_curved(src, &pairs);
         Ok(Pasted { faces, vertices, edges })
     }
 

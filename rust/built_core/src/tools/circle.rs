@@ -145,7 +145,9 @@ impl RadialTool {
         let (u, v) = axes.unwrap_or_else(|| self.uv());
         let center = center.unwrap_or_else(|| pts.iter().fold(DVec3::ZERO, |s, p| s + *p) / pts.len() as f64);
         let ring: Vec<serde_json::Value> = pts.iter().map(|p| serde_json::json!([p.x, p.y, p.z])).collect();
-        let answer = host.run(&Command { name: "add_face", args: serde_json::json!({"outer": ring, "curve": true}) });
+        // A circle is exact; a polygon keeps straight sides.
+        let exact = std::ptr::eq(self.info, &CIRCLE);
+        let answer = host.run(&Command { name: "add_face", args: serde_json::json!({"outer": ring, "curve": true, "exact": exact}) });
         self.last = Some(Last { center, rim: pts[0], u, v, token: answer.ok.then_some(answer.revision) });
         self.reset();
     }

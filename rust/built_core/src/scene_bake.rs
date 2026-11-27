@@ -39,6 +39,8 @@ impl std::hash::Hasher for FastHash {
     }
 }
 
+#[cfg(test)]
+#[allow(clippy::too_many_arguments)]
 fn prepare(
     p: &[V3],
     c: &[u32],
@@ -50,6 +52,26 @@ fn prepare(
     flags: &[u8],
     h: Hypot,
     retain_hidden: bool,
+) -> Prepared {
+    prepare_with(p, c, sizes, counts, colors, hidden, edges, flags, h, retain_hidden, None)
+}
+
+/// `exact`: per ring corner, the exact surface normal of the face at that
+/// corner (NaN: none). Where given it replaces the soft-fan average, so a
+/// curved support shades from its own normals (store/exact_display.rs).
+#[allow(clippy::too_many_arguments)]
+fn prepare_with(
+    p: &[V3],
+    c: &[u32],
+    sizes: &[i64],
+    counts: &[i64],
+    colors: &[[u8; 4]],
+    hidden: &[bool],
+    edges: &[[u32; 2]],
+    flags: &[u8],
+    h: Hypot,
+    retain_hidden: bool,
+    exact: Option<&[[f32; 3]]>,
 ) -> Prepared {
     let mut bounds = [0.; 8];
     if !p.is_empty() {
@@ -136,10 +158,28 @@ fn prepare(
     }
     let visible_triangles = triangles.iter().filter(|t| !hidden[t.1]).count();
     let faces = triangles.iter().map(|t| t.1).collect();
+    let exact_at = |v: u32, f: usize| -> Option<V3> {
+        let exact = exact?;
+        let (mut r, mut k) = face_rings[f];
+        for _ in 0..counts[f] {
+            let n = sizes[r] as usize;
+            if let Some(i) = c[k..k + n].iter().position(|&x| x == v) {
+                let [x, y, z] = *exact.get(k + i)?;
+                return x.is_finite().then_some(V3(x, y, z));
+            }
+            k += n;
+            r += 1;
+        }
+        None
+    };
     let triangles = triangles
         .into_iter()
         .map(|(t, f, color)| {
-            let ns = t.map(|v| fans.get(&(v as usize, f)).map(|n| V3(n.0 as f32, n.1 as f32, n.2 as f32)).unwrap_or(normals[f]));
+            let ns = t.map(|v| {
+                exact_at(v, f).unwrap_or_else(|| {
+                    fans.get(&(v as usize, f)).map(|n| V3(n.0 as f32, n.1 as f32, n.2 as f32)).unwrap_or(normals[f])
+                })
+            });
             (t, ns, color)
         })
         .collect();
@@ -300,7 +340,7 @@ fn fill(p: &[V3], prepared: &Prepared, bytes: &mut [u8], indices: &mut [u32]) {
 }
 
 #[pyfunction]
-#[pyo3(signature = (pos, corners, sizes, counts, colors, hidden, edges, flags, offsets, attributes, hypot, material_maps, material_paints, retain_hidden=false))]
+#[pyo3(signature = (pos, corners, sizes, counts, colors, hidden, edges, flags, offsets, attributes, hypot, material_maps, material_paints, retain_hidden=false, corner_normals=None))]
 pub fn bake_scene<'py>(
     py: Python<'py>,
     pos: PyReadonlyArray2<'_, f32>,
@@ -317,6 +357,7 @@ pub fn bake_scene<'py>(
     material_maps: PyReadonlyArray2<'_, f32>,
     material_paints: PyReadonlyArray2<'_, u32>,
     retain_hidden: bool,
+    corner_normals: Option<PyReadonlyArray2<'_, f32>>,
 ) -> PyResult<(
     Bound<'py, PyArray1<u8>>,
     Bound<'py, PyArray1<u32>>,
@@ -405,6 +446,17 @@ pub fn bake_scene<'py>(
         .map(|r| [r[0], r[1], r[2]])
         .collect();
     let h = crate::hypot_of(hypot)?;
+    let exact: Option<Vec<[f32; 3]>> = match &corner_normals {
+        Some(a) => {
+            let a = a.as_array();
+            if a.shape() != [c.len(), 3] {
+                return Err(invalid());
+            }
+            Some(a.rows().into_iter().map(|r| [r[0], r[1], r[2]]).collect())
+        }
+        None => None,
+    };
+    let exact = exact.as_deref();
     // Borrowed read-only NumPy slices stay alive throughout this synchronous call.
     let (bytes, indices, bounds, table, materials) = py.detach(|| {
         // One prototype (a rebake) runs here, not on a pool thread: under a
@@ -412,7 +464,7 @@ pub fn bake_scene<'py>(
         let one = offsets.len() == 2;
         let prepare_pair = |pair: &[[usize; 5]]| {
             let (a, b) = (pair[0], pair[1]);
-            prepare(
+            prepare_with(
                 &pts[a[0]..b[0]],
                 &corners[a[1]..b[1]],
                 &s[a[2]..b[2]],
@@ -423,13 +475,14 @@ pub fn bake_scene<'py>(
                 &flags[a[4]..b[4]],
                 h,
                 retain_hidden,
+                exact.map(|e| &e[a[1]..b[1]]),
             )
         };
         let prepared: Vec<_> = if one { vec![prepare_pair(&offsets)] } else { offsets
             .par_windows(2)
             .map(|pair| {
                 let (a, b) = (pair[0], pair[1]);
-                let result = prepare(
+                let result = prepare_with(
                     &pts[a[0]..b[0]],
                     &corners[a[1]..b[1]],
                     &s[a[2]..b[2]],
@@ -440,6 +493,7 @@ pub fn bake_scene<'py>(
                     &flags[a[4]..b[4]],
                     h,
                     retain_hidden,
+                    exact.map(|e| &e[a[1]..b[1]]),
                 );
                 result
             })

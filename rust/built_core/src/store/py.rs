@@ -906,6 +906,69 @@ impl PyMeshStore {
             .map_err(PyValueError::new_err)
     }
 
+    /// The curve bound to an edge, as JSON (definition coordinates).
+    fn exact_edge(&self, key: u128) -> PyResult<Option<String>> {
+        let e = live_of(&self.inner, Kind::Edge, key)?;
+        Ok(self
+            .inner
+            .curved_edge(e)
+            .map(|b| serde_json::to_string(b).unwrap_or_default()))
+    }
+
+    /// The curved surface bound to a face, as JSON (definition coordinates).
+    fn exact_face(&self, key: u128) -> PyResult<Option<String>> {
+        let f = live_of(&self.inner, Kind::Face, key)?;
+        Ok(self
+            .inner
+            .curved_face(f)
+            .map(|s| serde_json::to_string(s).unwrap_or_default()))
+    }
+
+    /// The line from `a` to `b` over the curved face under `a` (store
+    /// coordinates), corners on the exact surface; None off curved faces.
+    fn surface_path(&self, a: [f64; 3], b: [f64; 3]) -> Option<Vec<[f64; 3]>> {
+        self.inner.surface_path(a, b).map(|p| p.path)
+    }
+
+    /// (hits, misses, entries) of the process-wide exact display cache.
+    #[staticmethod]
+    fn exact_display_cache() -> (u64, u64, usize) {
+        super::exact_display::cache_stats()
+    }
+
+    /// Live (edges, faces) carrying a curved binding.
+    fn exact_counts(&self) -> (usize, usize) {
+        let Some(c) = self.inner.state.exact.curved.as_deref() else {
+            return (0, 0);
+        };
+        (
+            c.edges.keys().filter(|&s| self.inner.alive(Kind::Edge, s)).count(),
+            c.faces.keys().filter(|&s| self.inner.alive(Kind::Face, s)).count(),
+        )
+    }
+
+    /// What the last step did to exact bindings: (kept, derived,
+    /// transformed, dropped).
+    #[getter]
+    fn exact_report(&self) -> (usize, usize, usize, usize) {
+        let r = self.inner.exact_report;
+        (r.kept, r.derived, r.transformed, r.dropped)
+    }
+
+    /// Bind edges to one circle (definition coordinates). All or nothing.
+    fn bind_exact_circle(&mut self, edges: Vec<u128>, center: [f64; 3], axis: [f64; 3], reference: [f64; 3], radius: f64) -> PyResult<()> {
+        let slots = edges
+            .iter()
+            .map(|&k| live_of(&self.inner, Kind::Edge, k))
+            .collect::<PyResult<Vec<_>>>()?;
+        let frame = crate::exact::Frame::from_array([center, axis, reference]);
+        frame.validate().map_err(PyValueError::new_err)?;
+        let circle = crate::exact::Curve::Circle { frame, radius };
+        self.inner
+            .bind_circle(&slots, circle)
+            .map_err(PyValueError::new_err)
+    }
+
     #[getter]
     fn native_exact(&self) -> bool {
         self.inner.state.exact.native.is_some()
@@ -1002,6 +1065,13 @@ impl PyMeshStore {
         if let Some(patch) = &self.inner.state.exact.native {
             serde_json::to_writer(&mut bytes, &patch.rows)
                 .map_err(|err| PyValueError::new_err(err.to_string()))?;
+        } else if let Some(c) = self.inner.state.exact.curved.as_deref() {
+            let rows = crate::exact::file::CurvedRows {
+                edges: c.edges.iter().map(|(s, b)| (*s as u64, b.clone())).collect(),
+                faces: c.faces.iter().map(|(s, b)| (*s as u64, b.clone())).collect(),
+            };
+            serde_json::to_writer(&mut bytes, &serde_json::json!({ "curved_slots": rows }))
+                .map_err(|err| PyValueError::new_err(err.to_string()))?;
         }
         Ok(pyo3::types::PyBytes::new(py, &bytes))
     }
@@ -1030,7 +1100,19 @@ impl PyMeshStore {
                     }
                     store.bind_plane(slot, p).map_err(PyValueError::new_err)?;
                 }
-                if cursor.position() != bytes.len() as u64 {
+                let tail = &bytes[cursor.position() as usize..];
+                if tail.starts_with(b"{\"curved_slots\"") {
+                    #[derive(serde::Deserialize)]
+                    struct Tail {
+                        curved_slots: crate::exact::file::CurvedRows,
+                    }
+                    let t: Tail = serde_json::from_slice(tail)
+                        .map_err(|err| PyValueError::new_err(format!("invalid exact archive: {err}")))?;
+                    store.install_curved_slots(
+                        t.curved_slots.edges.into_iter().map(|(s, b)| (s as u32, b)).collect(),
+                        t.curved_slots.faces.into_iter().map(|(s, b)| (s as u32, b)).collect(),
+                    );
+                } else if cursor.position() != bytes.len() as u64 {
                     let rows = serde_json::from_slice(&bytes[cursor.position() as usize..])
                         .map_err(|err| {
                             PyValueError::new_err(format!("invalid exact archive: {err}"))
@@ -1179,6 +1261,15 @@ impl PyMeshStore {
     /// Resident draw data. Logical element order remains the editing API.
     #[pyo3(signature=(bake=false))]
     fn display_arrays<'py>(&self, py: Python<'py>, bake: bool) -> PyResult<Bound<'py, PyDict>> {
+        if self.inner.has_curved() {
+            let d = py.detach(|| self.inner.curved_display(bake));
+            let out = dense_dict(py, d.dense)?;
+            out.set_item("face_owner", d.face_owner.into_pyarray(py))?;
+            out.set_item("edge_owner", d.edge_owner.into_pyarray(py))?;
+            let normals = numpy::ndarray::Array2::from_shape_fn((d.corner_normals.len(), 3), |(i, j)| d.corner_normals[i][j]);
+            out.set_item("corner_normals", normals.into_pyarray(py))?;
+            return Ok(out);
+        }
         let Some(patch) = &self.inner.state.exact.native else {
             // The resident baker reads no edge's faces.
             return self.arrays(py, !bake, true);
@@ -1192,10 +1283,23 @@ impl PyMeshStore {
             .map(|&p| self.inner.model_point(p))
             .collect();
         let mut edge_ids = Vec::new();
+        // A seam (both uses on one face) and an edge between two faces of
+        // one support draw soft: neither is a crease of the solid.
+        let mut uses: std::collections::HashMap<u64, Vec<u32>> = Default::default();
+        for f in &patch.topology().faces {
+            for c in f.loops.iter().flatten() {
+                if let Some(e) = c.edge {
+                    uses.entry(e).or_default().push(f.surface);
+                }
+            }
+        }
         for (&e, points) in &mesh.edge_samples {
+            let smooth = uses
+                .get(&e)
+                .is_some_and(|s| s.len() >= 2 && s.iter().all(|&x| x == s[0]));
             for pair in points.windows(2) {
                 display.edges.push([pair[0] as i64, pair[1] as i64]);
-                display.flags.push(logical.flags[e as usize]);
+                display.flags.push(logical.flags[e as usize] | if smooth { super::SOFT } else { 0 });
                 display.layer.push(logical.layer[e as usize]);
                 display.curve.push(logical.curve[e as usize]);
                 edge_ids.push(e as i64);

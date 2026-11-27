@@ -63,6 +63,8 @@ pub(crate) mod ids_py;
 pub mod succession;
 pub mod exact;
 pub(crate) mod source_arcs;
+pub(crate) mod exact_bound;
+pub(crate) mod exact_display;
 pub(crate) mod native;
 pub mod intersect;
 pub mod offset;
@@ -223,6 +225,9 @@ pub struct Store {
     pub weld: Weld,
     /// Diagnostic mode for legacy float32 vertex edits and weld lookup.
     pub f32_parity: bool,
+    /// What the last succession did to exact bindings (not persisted).
+    #[serde(skip)]
+    pub exact_report: exact_bound::Report,
 }
 
 impl Store {
@@ -236,6 +241,7 @@ impl Store {
             lineage: LINEAGE.fetch_add(1, Ordering::Relaxed),
             weld,
             f32_parity: false,
+            exact_report: Default::default(),
         }
     }
 

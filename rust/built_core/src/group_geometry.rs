@@ -34,10 +34,77 @@ pub(crate) struct GroupGeometry {
     faces: Vec<FaceSpec>,
     edges: Vec<[DVec3; 2]>,
     flags: Vec<([DVec3; 2], Py<PyAny>)>,
+    /// Where `build` put the geometry: origin and component axes.
+    placed: std::sync::Mutex<Option<(DVec3, Option<[DVec3; 3]>)>>,
 }
 
 #[pymethods]
 impl GroupGeometry {
+    /// The built group's elements keep their source elements' persistent
+    /// ids (persistent-ids §4: Make Group moves elements, the new definition
+    /// is fresh so nothing collides) and their exact bindings. Elements are
+    /// matched by where `build` placed each vertex.
+    fn adopt_exact(&self, source: &Obj<'_>, target: &Obj<'_>) -> PyResult<()> {
+        use crate::store::{keys::{Kind, NONE}, py::PyMeshStore};
+        let Some((origin, axes)) = *self.placed.lock().unwrap() else { return Ok(()) };
+        let (Ok(src), Ok(dst)) = (source.getattr("_store"), target.getattr("_store")) else { return Ok(()) };
+        let (Ok(src), Ok(dst)) = (src.cast::<PyMeshStore>(), dst.cast::<PyMeshStore>()) else { return Ok(()) };
+        let src = src.borrow();
+        let mut dst = dst.borrow_mut();
+        let local = |p: [f64; 3]| {
+            let d = DVec3::from(p) - origin;
+            match axes {
+                Some(dirs) => DVec3::from_array(dirs.map(|v| d.dot(v))),
+                None => d,
+            }
+            .to_array()
+        };
+        let s = &src.inner;
+        let t = &dst.inner;
+        let vertex = |v: u32| t.lookup(local(*s.state.vpos.get(v as usize))).unwrap_or(NONE);
+        let verts: Vec<(u32, u32)> = s.live_slots(Kind::Vertex).into_iter().map(|v| (v, vertex(v))).collect();
+        let edges: Vec<(u32, u32)> = s
+            .live_slots(Kind::Edge)
+            .into_iter()
+            .map(|e| {
+                let [a, b] = *s.state.ends.get(e as usize);
+                let (x, y) = (vertex(a), vertex(b));
+                (e, if x == NONE || y == NONE { NONE } else { t.find_edge(x, y).unwrap_or(NONE) })
+            })
+            .collect();
+        let faces: Vec<(u32, u32)> = s
+            .live_slots(Kind::Face)
+            .into_iter()
+            .map(|f| {
+                let ring: Vec<u32> = s.face_rings(f)[0].iter().map(|&v| vertex(v)).collect();
+                let found = (ring.len() >= 2 && !ring.contains(&NONE))
+                    .then(|| t.find_edge(ring[0], ring[1]))
+                    .flatten()
+                    .and_then(|e| {
+                        t.edge_faces(e).iter().copied().find(|&g| {
+                            let mut a: Vec<u32> = t.face_rings(g)[0].clone();
+                            let mut b = ring.clone();
+                            a.sort_unstable();
+                            b.sort_unstable();
+                            a == b
+                        })
+                    });
+                (f, found.unwrap_or(NONE))
+            })
+            .collect();
+        let pairs = [verts, edges, faces];
+        for (kind, list) in Kind::ALL.into_iter().zip(&pairs) {
+            for &(from, to) in list {
+                if to != NONE {
+                    let id = s.pid(kind, from);
+                    dst.inner.set_pid(kind, to, id);
+                }
+            }
+        }
+        dst.inner.adopt_curved(s, &pairs);
+        Ok(())
+    }
+
     #[new]
     fn new(py: Python<'_>, faces: &Obj<'_>, edges: &Obj<'_>) -> PyResult<Self> {
         let facade = py.import("built_core.mesh")?;
@@ -91,6 +158,7 @@ impl GroupGeometry {
             faces: captured,
             edges: loose,
             flags,
+            placed: Default::default(),
         })
     }
 
@@ -139,6 +207,7 @@ impl GroupGeometry {
                 d
             }
         };
+        *self.placed.lock().unwrap() = Some((origin, axes.filter(|_| component)));
         let mesh = mesh_api.getattr("Mesh")?.call0()?;
         let ring = |r: &Ring| r.iter().map(|&p| Vec3::from(local(p))).collect::<Vec<_>>();
         for f in &self.faces {

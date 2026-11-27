@@ -91,6 +91,27 @@ impl ViewportToolHost {
             | "tape_source" => self.paint_service(py, verb, arg)?,
             "edge_under" | "corner_edges" | "rounded_corners" | "two_edge_corners"
             | "vertex_degree" | "tangent_at" => self.arc_service(py, verb, arg)?,
+            "surface_path" => {
+                // A line over a curved face follows its surface (world
+                // points in and out; the store keeps them from its origin).
+                let a: P3 = serde_json::from_value(arg["a"].clone()).map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+                let b: P3 = serde_json::from_value(arg["b"].clone()).map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+                let store = view
+                    .getattr_opt("scene")?
+                    .and_then(|s| s.getattr_opt("mesh").ok().flatten())
+                    .and_then(|m| m.getattr_opt("_store").ok().flatten())
+                    .filter(|s| !s.is_none());
+                let Some(store) = store else { return Ok(Some(Value::Null)) };
+                let Ok(st) = store.cast::<crate::store::py::PyMeshStore>() else { return Ok(Some(Value::Null)) };
+                let st = st.borrow();
+                let o: [f64; 3] = store.getattr("frame_origin")?.extract()?;
+                let local = |p: P3| [p[0] - o[0], p[1] - o[1], p[2] - o[2]];
+                let world = |v: &Vec<[f64; 3]>| v.iter().map(|p| [p[0] + o[0], p[1] + o[1], p[2] + o[2]]).collect::<Vec<_>>();
+                match st.inner.surface_path(local(a), local(b)) {
+                    Some(p) => json!({"path": world(&p.path), "curve": world(&p.curve)}),
+                    None => Value::Null,
+                }
+            }
             "north_pixels" | "to_px" => {
                 if !view.hasattr("_world_to_pixel")? {
                     return Ok(Some(Value::Null));

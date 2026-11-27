@@ -104,8 +104,24 @@ impl<'py> Drawing<'py> {
     }
 }
 #[pyfunction]
-#[pyo3(signature=(history,a,b=None,soft=None,tag=None,eye=None,offset=None))]
+#[pyo3(signature=(history,a,b=None,soft=None,tag=None,eye=None,offset=None,chord=false))]
+#[allow(clippy::too_many_arguments)]
 fn add_edge<'py>(
+    history: &Obj<'py>,
+    a: &Obj<'py>,
+    b: Option<&Obj<'py>>,
+    soft: Option<&Obj<'py>>,
+    tag: Option<&Obj<'py>>,
+    eye: Option<&Obj<'py>>,
+    offset: Option<&Obj<'py>>,
+    chord: bool,
+) -> Reply<'py> {
+    // A chord across a curved face stays straight (no section binding).
+    let intent = if chord { crate::store::exact_bound::CHORDS } else { 0 };
+    crate::store::exact_bound::with_intent(intent, || add_edge_now(history, a, b, soft, tag, eye, offset))
+}
+#[allow(clippy::too_many_arguments)]
+fn add_edge_now<'py>(
     history: &Obj<'py>,
     a: &Obj<'py>,
     b: Option<&Obj<'py>>,
@@ -195,7 +211,7 @@ fn add_edges<'py>(history: &Obj<'py>, segments: &Obj<'py>) -> Reply<'py> {
     answer(history, &before, true)
 }
 #[pyfunction]
-#[pyo3(signature=(history,outer=None,holes=None,anchor=None,offsets=None,curve=false))]
+#[pyo3(signature=(history,outer=None,holes=None,anchor=None,offsets=None,curve=false,exact=false))]
 fn add_face<'py>(
     history: &Obj<'py>,
     outer: Option<&Obj<'py>>,
@@ -203,6 +219,19 @@ fn add_face<'py>(
     anchor: Option<&Obj<'py>>,
     offsets: Option<&Obj<'py>>,
     #[pyo3(from_py_with=PyAnyMethods::is_truthy)] curve: bool,
+    #[pyo3(from_py_with=PyAnyMethods::is_truthy)] exact: bool,
+) -> Reply<'py> {
+    // A drawn circle: its curve run is fitted and bound exactly.
+    let intent = if exact && curve { crate::store::exact_bound::FIT_CIRCLES } else { 0 };
+    crate::store::exact_bound::with_intent(intent, || add_face_now(history, outer, holes, anchor, offsets, curve))
+}
+fn add_face_now<'py>(
+    history: &Obj<'py>,
+    outer: Option<&Obj<'py>>,
+    holes: Option<&Obj<'py>>,
+    anchor: Option<&Obj<'py>>,
+    offsets: Option<&Obj<'py>>,
+    curve: bool,
 ) -> Reply<'py> {
     let py = history.py();
     let offsets = offsets.map(ring).transpose()?;
@@ -282,8 +311,20 @@ fn add_face<'py>(
     answer(history, &before, true)
 }
 #[pyfunction]
-#[pyo3(signature=(history,points,center=None,trim=None))]
+#[pyo3(signature=(history,points,center=None,trim=None,exact=true))]
 fn add_arc<'py>(
+    history: &Obj<'py>,
+    points: &Obj<'py>,
+    center: Option<&Obj<'py>>,
+    trim: Option<&Obj<'py>>,
+    exact: bool,
+) -> Reply<'py> {
+    // Arc points lie on one circle: the run is fitted and bound exactly.
+    // A freehand stroke (exact=false) stays a polyline.
+    use crate::store::exact_bound::{with_intent, ARC, FIT_CIRCLES};
+    with_intent(if exact { FIT_CIRCLES | ARC } else { 0 }, || add_arc_now(history, points, center, trim))
+}
+fn add_arc_now<'py>(
     history: &Obj<'py>,
     points: &Obj<'py>,
     center: Option<&Obj<'py>>,

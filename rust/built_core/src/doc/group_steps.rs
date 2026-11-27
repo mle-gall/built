@@ -221,7 +221,14 @@ fn run_make_group(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResult<(
     // Built once: a redo puts back the same group the next commands hold.
     let group = match s.remembered(py, 0) {
         Some(g) => g,
-        None => geometry.call_method1("build", (scene, s.arg(py, 1), s.arg(py, 2)))?,
+        None => {
+            let group = geometry.call_method1("build", (scene, s.arg(py, 1), s.arg(py, 2)))?;
+            // Exact bindings move into the new definition with the elements.
+            if geometry.hasattr("adopt_exact")? {
+                geometry.call_method1("adopt_exact", (&mesh, group.getattr("mesh")?))?;
+            }
+            group
+        }
     };
     geometry.call_method1("take_off", (&mesh, discard(scene)?))?;
     let after = mesh.call_method0("capture_state")?;

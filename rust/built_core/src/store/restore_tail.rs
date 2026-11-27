@@ -44,6 +44,26 @@ impl Store {
         if cur.ns != next.ns {
             return;
         }
+        // Curved bindings of the carried tombstones come along for relink.
+        if let Some(c) = cur.exact.curved.as_deref() {
+            let (ne, nf) = (next.slots[Kind::Edge as usize].len() as u32, next.slots[Kind::Face as usize].len() as u32);
+            let carried_e: Vec<_> = c.edges.iter().filter(|r| *r.0 >= ne).map(|(k, v)| (*k, v.clone())).collect();
+            let carried_f: Vec<_> = c.faces.iter().filter(|r| *r.0 >= nf).map(|(k, v)| (*k, v.clone())).collect();
+            if !carried_e.is_empty() || !carried_f.is_empty() {
+                let mut merged = next.exact.curved.as_deref().cloned().unwrap_or_default();
+                let stale_e: Vec<u32> = merged.edges.keys().filter(|&k| k >= ne).collect();
+                let stale_f: Vec<u32> = merged.faces.keys().filter(|&k| k >= nf).collect();
+                for k in stale_e {
+                    merged.edges.remove(&k);
+                }
+                for k in stale_f {
+                    merged.faces.remove(&k);
+                }
+                merged.edges.extend(carried_e);
+                merged.faces.extend(carried_f);
+                next.exact.curved = Some(Arc::new(merged));
+            }
+        }
         let v = Kind::Vertex as usize;
         for s in next.slots[v].len()..cur.slots[v].len() {
             let g = cur.slots[v].gen(s as u32);

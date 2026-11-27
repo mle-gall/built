@@ -152,6 +152,7 @@ impl Store {
     pub fn succeed(&mut self, before: &State) -> Lineage {
         let mut out = Lineage::default();
         if before.ns != self.state.ns {
+            super::exact_bound::set_intent(0);
             return out;
         }
         let ch = self.state.changes_since(before);
@@ -209,8 +210,13 @@ impl Store {
                     }
                 }
             }
-            // A rebuilt cap: a removed face's translated copy.
+            // A rebuilt cap: a removed face's translated copy. With
+            // keep_base the face left in place keeps the id instead.
+            let keep_base = super::exact_bound::peek_intent() & super::exact_bound::KEEP_BASE != 0;
             for (i, r) in rf.iter().enumerate() {
+                if keep_base {
+                    break;
+                }
                 if taken_r.contains(&i) {
                     continue;
                 }
@@ -223,6 +229,7 @@ impl Store {
         }
         // A lone face pushed into a box: the original stays as the bottom,
         // turned over; the moved top takes its id.
+        let keep_base = super::exact_bound::peek_intent() & super::exact_bound::KEEP_BASE != 0;
         if !nf.is_empty() && nf.len() <= 4096 {
             let kept: Vec<u32> = ch.modified[2].iter().filter_map(|&k| slot(k)).collect();
             for b in kept {
@@ -234,6 +241,12 @@ impl Store {
                     taken_n.insert(j);
                     let top = self.state.ids[2].get(nf[j].slot);
                     let id = before.ids[2].get(b);
+                    if keep_base {
+                        // persistent-ids §4: the face left in place keeps
+                        // its id; the new cap is fresh, derived from it.
+                        out.derived.push((Kind::Face, top, id));
+                        continue;
+                    }
                     assign.push((Kind::Face, nf[j].slot, id));
                     assign.push((Kind::Face, b, top));
                     out.derived.push((Kind::Face, top, id));
@@ -317,13 +330,14 @@ impl Store {
                 .collect();
             assign.iter().filter_map(|&(k, s, id)| by_id.get(&(k as usize, id)).map(|&shape| (k, s, shape))).collect()
         };
-        for (kind, s, id) in assign {
+        for &(kind, s, id) in &assign {
             self.set_pid(kind, s, id);
         }
         for (kind, s, shape) in shapes {
             self.state.exact.inherit(kind, s, shape);
         }
         self.discard_invalid_planes();
+        self.exact_report = self.rebind(before, &ch, &assign, &out.derived);
         out
     }
 }
