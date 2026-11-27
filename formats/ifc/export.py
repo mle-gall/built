@@ -110,11 +110,16 @@ def _save_ifc(scene, path, project_name, profile, stream, placements):
         scene.plugin_data['ifc_identity'] = project['ifc_identity']
     identity = scene.plugin_data.setdefault('ifc_identity', {})
     if not identity.get('namespace'):
-        identity['namespace'] = uuid.uuid4().hex
+        # The document id names the namespace (docs/persistent-ids.md §7.1).
+        # It is kept with the document so a format without ids (.igz)
+        # exports the same GlobalIds after a save and reopen too.
+        from core.ifc_identity import document_namespace
+        identity['namespace'] = document_namespace(scene)
         scene.version += 1
+    namespace = identity['namespace']
 
     def guid(*parts):
-        value = stable_guid(identity['namespace'], *parts)
+        value = stable_guid(namespace, *parts)
         if len(parts) == 1 and parts[0] in ('project', 'site', 'building', 'storey'):
             if parts[0] not in identity:
                 identity[parts[0]] = value

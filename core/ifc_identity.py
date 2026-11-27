@@ -23,15 +23,55 @@ def ensure_guid(tag):
     return tag["guid"]
 
 
+def document_namespace(scene):
+    """The namespace IFC identities derive from: the project's or the
+    document's stored one, else the document id (docs/persistent-ids.md
+    §7.1). Choosing it writes nothing."""
+    identity = (getattr(scene, "plugin_data", None) or {}).get("ifc_identity") or {}
+    if identity.get("namespace"):
+        return identity["namespace"]
+    from built_core.element_ids import ensure_doc_id
+    return ensure_doc_id(scene)
+
+
+def occurrence_guid(scene, path, namespace=None):
+    """The GlobalId of a placement without a stored GUID: derived from its
+    persistent uid path, the same in every export and session."""
+    return stable_guid(namespace or document_namespace(scene), "occurrence", *path)
+
+
+def component_guid(scene, tool_id):
+    """A BCF component's IfcGuid from its authoring tool id: a placement
+    uid, a uid path (`a/b`), optionally `built:`-prefixed and `#element`
+    suffixed. None when no placement has it."""
+    text = str(tool_id or "")
+    if text.startswith("built:"):
+        text = text[len("built:"):]
+    text = text.split("#", 1)[0]
+    path = [p for p in text.split("/") if p]
+    if not path:
+        return None
+    from built_core.group import iter_placements
+    target = path[-1]
+    for root in scene.groups:
+        for group, _ in iter_placements(root):
+            if group.uid == target:
+                stored = group.ifc.get("guid") if group.ifc else None
+                full = scene.occurrence_path(group) or [group.uid]
+                return stored or occurrence_guid(scene, [str(p) for p in full])
+    return None
+
+
 def object_guid(scene, obj, occurrence=None):
     group = obj.get("group")
     if group is not None:
-        tag = group.ifc
-        before = tag.get("guid")
-        result = ensure_guid(tag)
-        if before != result:
-            scene.version += 1
-        return result
+        # A stored GUID wins (imported, typed, or saved by an earlier
+        # build); otherwise derive it, without writing to the document.
+        stored = group.ifc.get("guid")
+        if stored:
+            return stored
+        path = occurrence or scene.occurrence_path(group) or [group.uid]
+        return occurrence_guid(scene, [str(p) for p in path])
     owner = obj.get("owner")
     # Shared definitions cannot store a placement's GUID on their faces.
     if owner is not None:
@@ -56,7 +96,7 @@ def object_guid(scene, obj, occurrence=None):
             attrs["ifc"] = {**attrs["ifc"], "guid": guid}
             scene.version += 1
     if owner is not None:
-        return stable_guid(scene.plugin_data["ifc_identity"]["namespace"],
+        return stable_guid(document_namespace(scene),
                            "faces", occurrence or owner.uid, guid)
     return guid
 

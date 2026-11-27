@@ -1149,6 +1149,11 @@ fn export_igz<'py>(py: Python<'py>, win: &Any<'py>, path: Option<Any<'py>>) -> P
         return Ok(false); // the precision question said no
     }
     status(win, trf(py, "Saved a copy as {name}", &[("name", path.getattr("name")?)])?)?;
+    // .igz has no persistent ids (docs/persistent-ids.md §5.4): say so once.
+    dialogs.getattr("notify")?.call(
+        (win, tr(py, "Copy saved without ids")?, tr(py, "The .igz copy keeps no persistent element ids: references to its faces, edges and vertices start over when it is opened.")?),
+        Some(&kw(py, &[("tone", s(py, "info"))])?),
+    )?;
     Ok(true)
 }
 

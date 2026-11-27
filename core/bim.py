@@ -123,8 +123,12 @@ def untag_faces(faces) -> None:
 
 def tag_group(group, ifc_class: str, name: str) -> None:
     from core.ifc_identity import ensure_guid
+    new = not group.ifc
     group.ifc = {**(group.ifc or {}), "class": ifc_class, "name": name}
-    ensure_guid(group.ifc)
+    # A record tagged again keeps the GlobalId its uid path derives when it
+    # has no stored GUID (docs/persistent-ids.md §7.1).
+    if new:
+        ensure_guid(group.ifc)
 
 
 def untag_group(group) -> None:
