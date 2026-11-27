@@ -38,7 +38,17 @@ pub(super) fn instance_view<'py>(
         .call_method1("_instance_view", (mesh, matrix, origin, for_edit))
     {
         Ok(v) => v,
-        Err(e) if e.is_instance_of::<PyValueError>(py) => return Ok(None),
+        Err(e) if e.is_instance_of::<PyValueError>(py) => {
+            if for_edit
+                && mesh
+                    .getattr("_store")?
+                    .getattr("native_exact")?
+                    .is_truthy()?
+            {
+                return Err(e);
+            }
+            return Ok(None);
+        }
         Err(e) => return Err(e),
     };
     let result = class.call0()?;

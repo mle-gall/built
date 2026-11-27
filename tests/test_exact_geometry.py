@@ -664,3 +664,24 @@ def test_native_group_cross_document_clipboard():
     assert copied._store.native_exact
     assert copied._store.counts() == (2, 3, 1)
     assert copied._store.face_boundary_uses(copied.faces[0].key)[0][1][0] == int(copied._store.ids("edge")[2])
+
+
+def test_native_identity_context_without_placement_and_singular_refusal():
+    from built_core import Matrix4
+    from built_core.protocol import commands
+    scene, history, group = native_cylinder()
+    group.xform = None
+    scene.begin_group_edit(group)
+    assert group.mesh._store.native_exact and len(scene.mesh.faces) > 10
+    assert commands.run(history, "erase", faces=[scene.mesh.faces[0].key])["ok"]
+    history.undo()
+    scene.end_group_edit()
+    matrix = Matrix4()
+    matrix.scale(0, 1, 1)
+    group.xform = matrix
+    before = group.mesh.capture_state()
+    with pytest.raises(ValueError):
+        scene.begin_group_edit(group)
+    assert scene.edit_group is None
+    assert group.mesh.capture_state() == before
+    assert group.mesh._store.native_exact

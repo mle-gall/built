@@ -147,7 +147,15 @@ pub fn begin_group_edit<'py>(scene: &Obj<'py>, group: &Obj<'py>) -> PyResult<()>
         let last = levels.get_item(-1)?;
         last.call_method1("get", ("affine",))?.is_truthy()?
     };
-    if !group.getattr("xform")?.is_none() || affine_above {
+    let native_definition = || -> PyResult<bool> {
+        let Some(store) = entry_mesh.getattr_opt("_store")? else {
+            return Ok(false);
+        };
+        Ok(store
+            .cast::<crate::store::py::PyMeshStore>()
+            .is_ok_and(|s| s.borrow().inner.state.exact.native.is_some()))
+    };
+    if !group.getattr("xform")?.is_none() || affine_above || native_definition()? {
         let world = scene
             .getattr("_root")?
             .call_method1("_edit_matrix", (group,))?;
