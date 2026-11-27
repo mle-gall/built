@@ -161,14 +161,59 @@ fn uv(s: &Surface, p: DVec3) -> Result<DVec2> {
 }
 
 pub(super) fn rows(model: &StepModel, solid: Solid<'_>, metres: f64, tol: f64) -> Result<Rows> {
-    if solid.voids().next().is_some() {
-        return Err("void shell import unavailable");
-    }
     let (shell, sense) = solid.outer().ok_or("missing shell")?;
     if !shell.is_closed() {
         return Err("open solid shell");
     }
-    shell_rows(model, shell, sense, metres, tol)
+    let mut result = shell_rows(model, shell, sense, metres, tol)?;
+    for (cavity, orientation) in solid.voids() {
+        if !cavity.is_closed() {
+            return Err("open interior shell");
+        }
+        let cavity = shell_rows(model, cavity, orientation, metres, tol)?;
+        append_void(&mut result, cavity)?;
+    }
+    Ok(result)
+}
+
+/// Separate shells own disjoint topology ids, even when coordinates match.
+fn append_void(result: &mut Rows, mut cavity: Rows) -> Result<()> {
+    let t = result.topology.as_mut().ok_or("missing outer topology")?;
+    let mut inner = cavity.topology.take().ok_or("missing void topology")?;
+    let v = t.vertices.len() as u64;
+    let e = t.edges.len() as u64;
+    let f = t.faces.len() as u64;
+    let c = result.curves.len() as u32;
+    let s = result.surfaces.len() as u32;
+    t.void_starts.push(t.faces.len());
+    t.vertices
+        .extend(inner.vertices.into_iter().map(|(id, p)| (id + v, p)));
+    for edge in &mut inner.edges {
+        edge.id += e;
+        edge.vertices = edge.vertices.map(|id| id + v);
+        edge.curve += c;
+    }
+    for face in &mut inner.faces {
+        face.id += f;
+        face.surface += s;
+        for u in face.loops.iter_mut().flatten() {
+            u.edge = u.edge.map(|id| id + e);
+            u.pole = u.pole.map(|id| id + v);
+        }
+    }
+    for surface in &mut cavity.surfaces {
+        match surface {
+            Surface::Extrusion { generator, .. } | Surface::Revolution { generator, .. } => {
+                *generator += c
+            }
+            _ => (),
+        }
+    }
+    t.edges.append(&mut inner.edges);
+    t.faces.append(&mut inner.faces);
+    result.curves.append(&mut cavity.curves);
+    result.surfaces.append(&mut cavity.surfaces);
+    Ok(())
 }
 pub(super) fn shell_rows(
     model: &StepModel,

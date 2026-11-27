@@ -164,3 +164,28 @@ def test_cylinder_fit_checks_chord_deviation_before_binding():
     assert sum(mesh._store.exact_source_strip(k) is not None for k in keys) == 16
     history.undo()
     assert all(mesh._store.exact_source_strip(k) is None for k in keys)
+
+
+@pytest.mark.parametrize("name,counts", [
+    ("cavity", (1, 0)), ("display-mesh", (0, 1)), ("mixed-parts", (1, 1))
+])
+def test_cavity_and_tessellation_ownership(tmp_path, name, counts):
+    from formats import igz
+
+    src = Path(__file__).parent / "fixtures" / "step" / (name + ".step")
+    doc = step.prepare_step(src)
+    assert (doc["exact"], doc["faceted"]) == counts and not doc["problems"]
+    scene = Scene()
+    step.apply_step(scene, doc)
+    save = tmp_path / "roundtrip.built"
+    igz.save_scene(scene, save)
+    reopened = Scene()
+    igz.load_into(reopened, save)
+    path = tmp_path / "restored.step"
+    step.save_step(reopened, path)
+    text = path.read_text()
+    assert text.count("= BREP_WITH_VOIDS(") == counts[0]
+    assert text.count("= ORIENTED_CLOSED_SHELL(") == counts[0]
+    assert text.count("= NEXT_ASSEMBLY_USAGE_OCCURRENCE(") == (name == "mixed-parts")
+    out = step.prepare_step(path)
+    assert out["exact"] == sum(counts) and not out["problems"]

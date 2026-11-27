@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+mod display_mesh;
 mod exact_read;
 mod exact_write;
 use exact_write::Geometry;
@@ -173,6 +174,22 @@ fn save_step(scene: &Bound<'_, PyAny>, path: PathBuf) -> PyResult<()> {
         0,
         0,
     )?;
+    // An imported assembly already has its product root. Promote a single
+    // identity placement to avoid adding a wrapper on every round trip.
+    if let [(1, at)] = defs[0].children.as_slice() {
+        if defs[0].bodies.is_empty()
+            && at.origin == [0.; 3]
+            && at.axis == [0., 0., 1.]
+            && at.ref_dir == [1., 0., 0.]
+        {
+            defs.remove(0);
+            for d in &mut defs {
+                for (id, _) in &mut d.children {
+                    *id -= 1;
+                }
+            }
+        }
+    }
     scene
         .py()
         .detach(|| {

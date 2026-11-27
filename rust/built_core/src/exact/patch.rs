@@ -42,6 +42,9 @@ pub(crate) struct Topology {
     pub(crate) vertices: BTreeMap<u64, DVec3>,
     pub(crate) edges: Vec<Edge>,
     pub(crate) faces: Vec<Face>,
+    /// First face of each interior shell, following the outer shell.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) void_starts: Vec<usize>,
 }
 
 impl Curve {
@@ -310,6 +313,13 @@ impl Topology {
                 )?;
             }
         }
+        check(
+            self.void_starts
+                .iter()
+                .all(|&i| i > 0 && i < self.faces.len())
+                && self.void_starts.windows(2).all(|w| w[0] < w[1]),
+            "invalid void shell partition",
+        )?;
         let mut ids = std::collections::HashSet::new();
         for f in &self.faces {
             check(ids.insert(f.id), "duplicate exact face id")?;

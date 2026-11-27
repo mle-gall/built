@@ -38,14 +38,16 @@ fn volume(rows: &Rows, tolerance: f64) -> Result<f64, String> {
     t.tolerance = tolerance;
     let mesh = t.mesh(rows)?;
     let base = DVec3::from(*mesh.points.first().ok_or("empty solid")?);
-    let volume = mesh
-        .triangles
-        .iter()
-        .map(|tri| {
-            let [a, b, c] = tri.map(|i| DVec3::from(mesh.points[i]) - base);
-            a.dot(b.cross(c)) / 6.
-        })
-        .sum::<f64>();
+    let mut volumes = vec![0.; t.void_starts.len() + 1];
+    for (tri, &face) in mesh.triangles.iter().zip(&mesh.face_ids) {
+        let shell = t.void_starts.partition_point(|&i| i <= face as usize);
+        let [a, b, c] = tri.map(|i| DVec3::from(mesh.points[i]) - base);
+        volumes[shell] += a.dot(b.cross(c)) / 6.;
+    }
+    if volumes[0] <= 0. || volumes[1..].iter().any(|v| *v >= 0.) {
+        return Err("inconsistent shell orientation".into());
+    }
+    let volume = volumes.iter().sum::<f64>();
     if !volume.is_finite() || volume <= 0. {
         return Err("nonpositive shell volume".into());
     }
@@ -131,7 +133,23 @@ impl Geometry {
         if uses.len() != edges.len() || uses.values().any(|v| v.len() != 2 || v[0] == v[1]) {
             return Err("STEP solid requires a closed, oriented shell".into());
         }
-        b.solid(part, name, faces).map_err(|e| e.to_string())?;
+        if t.void_starts.is_empty() {
+            b.solid(part, name, faces).map_err(|e| e.to_string())?;
+        } else {
+            let mut cavities = Vec::new();
+            for &first in t.void_starts.iter().rev() {
+                cavities.push(faces.split_off(first));
+            }
+            cavities.reverse();
+            b.solid_with_voids(
+                part,
+                name,
+                faces,
+                cavities,
+                built_step::step_io::build::VoidShellNormals::AwayFromMaterial,
+            )
+            .map_err(|e| e.to_string())?;
+        }
         Ok(built_step::Measure::Volume(volume(&p.rows, tol)?))
     }
 }

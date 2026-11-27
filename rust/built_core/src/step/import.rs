@@ -5,7 +5,11 @@ use built_step::step_io::{model as m, scene::ProductDef};
 use pyo3::types::{PyDict, PyList};
 use std::collections::HashSet;
 
-fn make_mesh<'p>(py: Python<'p>, body: &Body, exact: bool) -> PyResult<Bound<'p, PyAny>> {
+pub(super) fn make_mesh<'p>(
+    py: Python<'p>,
+    body: &Body,
+    exact: bool,
+) -> PyResult<Bound<'p, PyAny>> {
     let mesh = py.import("built_core.mesh")?.call_method0("Mesh")?;
     let store = mesh.getattr("_store")?.cast_into::<PyMeshStore>()?;
     let mut borrow = store.try_borrow_mut()?;
@@ -32,9 +36,9 @@ fn make_mesh<'p>(py: Python<'p>, body: &Body, exact: bool) -> PyResult<Bound<'p,
     Ok(mesh)
 }
 
-struct Node<'p> {
-    name: String,
-    meshes: Vec<Bound<'p, PyAny>>,
+pub(super) struct Node<'p> {
+    pub(super) name: String,
+    pub(super) meshes: Vec<Bound<'p, PyAny>>,
     children: Vec<(m::EntityKey, DMat4)>,
 }
 fn instance<'p>(
@@ -132,7 +136,7 @@ pub(super) fn prepare_step(py: Python<'_>, path: PathBuf) -> PyResult<Bound<'_, 
         .map(|(id, reason)| format!("#{id}: {reason}"))
         .collect();
     let mut exact = 0;
-    let mut faceted = 0;
+    let mut accepted_solids = HashSet::new();
     let mut rejected = 0;
     let mut missing = 0;
     let mut nodes = HashMap::new();
@@ -159,6 +163,7 @@ pub(super) fn prepare_step(py: Python<'_>, path: PathBuf) -> PyResult<Bound<'_, 
                 });
             match result {
                 Ok(mesh) => {
+                    accepted_solids.insert(solid.key());
                     meshes.push(mesh);
                     exact += 1
                 }
@@ -228,30 +233,15 @@ pub(super) fn prepare_step(py: Python<'_>, path: PathBuf) -> PyResult<Bound<'_, 
         missing += 1;
         problems.push(format!("Unresolved mapped placement {:?}", mapped.key()));
     }
-    if scene.all_solids().next().is_none() && scene.all_meshes().next().is_some() {
-        if nodes.len() == 1 && scene.all_mapped_instances().next().is_none() {
-            let node = nodes.values_mut().next().unwrap();
-            for mesh in scene.all_meshes() {
-                let points: Vec<_> = mesh
-                    .points()
-                    .into_iter()
-                    .map(|p| DVec3::from(p) * metres)
-                    .collect();
-                let triangles = mesh.triangles();
-                if triangles.is_empty() || triangles.iter().flatten().any(|&v| v >= points.len()) {
-                    return Err(bad("invalid STEP display mesh"));
-                }
-                let body = Body {
-                    points,
-                    faces: triangles.into_iter().map(|t| vec![t.to_vec()]).collect(),
-                };
-                node.meshes.push(make_mesh(py, &body, false)?);
-                faceted += 1;
-            }
-        } else {
-            return Err(bad("ambiguous STEP tessellation ownership"));
-        }
-    }
+    let (faceted, invalid_meshes) = super::display_mesh::read(
+        py,
+        model,
+        metres,
+        &accepted_solids,
+        &mut nodes,
+        &mut problems,
+    );
+    rejected += invalid_meshes;
     problems.extend(scene.warnings().iter().map(ToString::to_string));
     if exact + faceted == 0 {
         return Err(bad(format!(
