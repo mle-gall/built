@@ -226,3 +226,43 @@ def test_four_body_cuts_keep_donor_ids_and_identify_a_miss():
     assert [r["state"] for r in rows_of(s, "cut")].count("cut_misses") == 1
     apply(h, "undo")
     assert all(r["state"] == "ok" for r in rows_of(s, "cut"))
+
+
+def test_hosted_opening_on_a_pitched_wall_follows_its_placement(tmp_path):
+    from built_core import Matrix4, Vec3
+    from built_core.group import Group
+    from tests.test_geometry_arrays import CUBE
+
+    scene = Scene()
+    h = History(scene)
+    wall = Group(name="Wall")
+    wall.ifc = {"class": "IfcWall"}
+    wall.xform = Matrix4()
+    profile = [(0, 0), (8, 0), (8, 3), (6, 3), (0, 2.7)]
+    front, back = [[Vec3(x, y, z) for x, z in profile] for y in [0, .25]]
+    wall.mesh.add_face(front)
+    wall.mesh.add_face(back[::-1])
+    for i in range(len(profile)):
+        j = (i + 1) % len(profile)
+        wall.mesh.add_face([front[j], front[i], back[i], back[j]])
+    scene.groups.append(wall)
+    before = solid_volume(wall)
+    window = Group(name="Window")
+    window.ifc = {"class": "IfcWindow"}
+    window.ext = {"library_host": "wall"}
+    window.xform = Matrix4()
+    for face in CUBE:
+        window.mesh.add_face([Vec3(x, .12*y, z) for x, y, z in face])
+    apply(h, "place_group", template=window.uid, _pending=window,
+          basis=[[1, 0, 0], [0, 1, 0], [0, 0, 1]], offset=[2, 0, 1],
+          wall_host=dict(uid=wall.uid, outline=[[2, 0, 1], [3, 0, 1], [3, 0, 2], [2, 0, 2]],
+                         normal=[0, -1, 0], initial_offset=0, offset=0, sill=1, flipped=False))
+    assert solid_volume(wall) == pytest.approx(before - .25)
+    apply(h, "move_placements", placements=[wall.uid], delta=[1, 2, 0])
+    assert window.xform.data()[12:15] == (3., 2., 1.)
+    path = tmp_path / "pitched.built"
+    igz.save_scene(scene, path)
+    reopened = Scene()
+    igz.load_into(reopened, path)
+    assert rows_of(reopened, "cut")[0]["state"] == "ok"
+    assert solid_volume(reopened.groups[0]) == pytest.approx(before - .25)
