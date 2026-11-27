@@ -125,6 +125,19 @@ pub enum Query {
 }
 
 impl FaceIndex {
+    /// The next raised neighbour needs component labels and orientation,
+    /// even if the first extrusion on a flat sheet needed neither.
+    pub(super) fn prepare_push(&self, store: &Store, h: super::geometry::Hypot, compensated: bool) {
+        if store.lineage != self.lineage || store.state.ns != self.last.ns {
+            return;
+        }
+        self.cap.get_or_init(|| super::cap_blocks::CapBlocks::new(store));
+        self.orientation.get_or_init(|| {
+            let scan = crate::scans::MeshScan::from_state(store.state.clone(), crate::scans::RINGS);
+            super::push_orientation::OrientationCache::new(store, &scan, &store.live_slots(Kind::Face), h, compensated)
+        });
+    }
+
     pub fn build(store: &Store) -> Self {
         let st = &store.state;
         let slots = store.live_slots(Kind::Face);

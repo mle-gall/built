@@ -760,10 +760,27 @@ pub(super) fn apply(
     let mut exclusions = Vec::<f32>::new();
     let mut has_special = false;
     let mut all_matching = true;
+    let mut reveal_faces = Vec::new();
+    let mut reveal_edges = Vec::new();
     for draw in 0..2 {
-        for &f in &faces {
-            if rows.face(f) != draw {
-                continue;
+        // On the second draw only the reveal-only items collected in the
+        // first pass remain. Their order is the document order.
+        let deferred_faces;
+        let face_list = if draw == 0 {
+            &faces
+        } else {
+            deferred_faces = std::mem::take(&mut reveal_faces);
+            &deferred_faces
+        };
+        for &f in face_list {
+            if draw == 0 {
+                let group = rows.face(f);
+                if group == 1 {
+                    reveal_faces.push(f);
+                }
+                if group != 0 {
+                    continue;
+                }
             }
             let start = edit.len / 28;
             if dirty_face_slots[f as usize] {
@@ -789,7 +806,14 @@ pub(super) fn apply(
             }
             counts[draw as usize * 2] += n;
         }
-        for &e in &edges {
+        let deferred_edges;
+        let edge_list = if draw == 0 {
+            &edges
+        } else {
+            deferred_edges = std::mem::take(&mut reveal_edges);
+            &deferred_edges
+        };
+        for &e in edge_list {
             let ends = *st.ends.get(e as usize);
             let position = |v| point(st, v, l.anchor).map(|x| x as f32);
             if draw == 0 && st.eflags.get(e as usize) & 3 != 0 {
@@ -797,7 +821,16 @@ pub(super) fn apply(
                     exclusions.extend(position(v));
                 }
             }
-            if rows.edge(st, e) != draw || ends[0] == ends[1] {
+            if draw == 0 {
+                let group = rows.edge(st, e);
+                if group == 1 {
+                    reveal_edges.push(e);
+                }
+                if group != 0 {
+                    continue;
+                }
+            }
+            if ends[0] == ends[1] {
                 continue;
             }
             let start = edit.len / 28;

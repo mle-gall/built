@@ -399,9 +399,13 @@ impl PyMeshStore {
         if self.face_index.get().is_none() {
             let target = Arc::downgrade(&self.face_index);
             let snapshot = self.inner.clone();
+            let h = crate::hypot_of(&py.import("core._native")?.call_method0("qt_hypot")?.extract::<String>()?)?;
+            let compensated = py.import("sys")?.getattr("version_info")?.ge((3, 12))?;
             rayon::spawn(move || {
                 if let Some(target) = target.upgrade() {
-                    target.get_or_init(|| Mutex::new(Arc::new(super::face_index::FaceIndex::build(&snapshot))));
+                    let index = target.get_or_init(|| Mutex::new(Arc::new(super::face_index::FaceIndex::build(&snapshot))))
+                        .lock().unwrap().clone();
+                    index.prepare_push(&snapshot, h, compensated);
                 }
             });
         }
