@@ -148,7 +148,7 @@ def test_a_catalogue_member_opens_as_a_drawing_and_done_adopts_it_in_one_step():
 
 def test_library_sections_list_drawn_sections_only(tmp_path, monkeypatch):
     from built_render import sketch_workspace
-    from built_render.wgpu_library import PROVIDERS, SectionsProvider
+    from built_render.wgpu_library import PROVIDERS, ProfilesProvider, SectionsProvider
 
     monkeypatch.setenv("BUILT_SETTINGS_DIR", str(tmp_path))
     body = {"use": "section", "name": "Notch", "curves": rect(40, 30),
@@ -165,7 +165,11 @@ def test_library_sections_list_drawn_sections_only(tmp_path, monkeypatch):
     items = SectionsProvider().items(SimpleNamespace(scene=scene))
     assert sorted((i["name"], i["source"]) for i in items) == [("Cope", "model"), ("Notch", "mine")]
     notch = next(i for i in items if i["name"] == "Notch")
-    assert notch["verbs"] == ["edit"] and ["Size", "40 × 30 mm", ""] in [list(r) for r in notch["defaults"]]
+    # A saved section opens as its drawing (the Cut tool takes presets).
+    assert notch["verbs"][0] == "edit" and "apply" not in notch["verbs"]
+    assert ["Size", "40 × 30 mm", ""] in [list(r) for r in notch["defaults"]]
+    assert ProfilesProvider().items(SimpleNamespace(scene=scene)) and not [
+        i for i in ProfilesProvider().items(SimpleNamespace(scene=scene)) if i["name"] in ("Notch", "Cope")]
 
 
 class _Window:
