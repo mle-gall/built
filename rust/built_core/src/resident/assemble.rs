@@ -172,6 +172,7 @@ pub(super) fn assemble<'py>(
     previous_origin: &Obj<'py>,
     wide: bool,
     hypot: &str,
+    cache: Option<&crate::scene_bake::GeometryCache>,
 ) -> PyResult<Bound<'py, PyDict>> {
     let np = py.import("numpy")?;
     let prototype_count = meshes.len();
@@ -215,6 +216,7 @@ pub(super) fn assemble<'py>(
         true,
         if sources.exact { Some(rows_of(py, sources.corner_normals, 3)?.readonly()) } else { None },
         true,
+        cache,
     )?;
 
     // The prototypes' frame anchors and boxes.

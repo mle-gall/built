@@ -33,7 +33,7 @@ fn alpha(attrs: &Obj<'_>) -> PyResult<u8> {
 }
 
 /// `np.clip(rgb * 255, 0, 255)` as bytes (the cast truncates).
-fn rgb_bytes(color: &Obj<'_>) -> PyResult<[u8; 3]> {
+pub(super) fn rgb_bytes(color: &Obj<'_>) -> PyResult<[u8; 3]> {
     let mut out = [0u8; 3];
     for (axis, byte) in out.iter_mut().enumerate() {
         let value: f64 = color.get_item(axis)?.extract()?;

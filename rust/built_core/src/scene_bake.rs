@@ -7,6 +7,17 @@ use pyo3::{exceptions::PyValueError, prelude::*};
 use rayon::prelude::*;
 use std::collections::HashMap;
 
+mod edit_geometry;
+use edit_geometry::GeometryMemo;
+
+/// One previous large prototype, owned by the resident scene's updater.
+#[pyclass(frozen)]
+pub(crate) struct GeometryCache(std::sync::Mutex<Option<GeometryMemo>>);
+
+impl GeometryCache {
+    pub(crate) fn empty() -> Self { Self(Default::default()) }
+}
+
 struct Prepared {
     triangles: Vec<([u32; 3], [V3; 3], [u8; 4])>,
     faces: Vec<usize>,
@@ -53,7 +64,7 @@ fn prepare(
     h: Hypot,
     retain_hidden: bool,
 ) -> Prepared {
-    prepare_with(p, c, sizes, counts, colors, hidden, edges, flags, h, retain_hidden, None)
+    prepare_with(p, c, sizes, counts, colors, hidden, edges, flags, h, retain_hidden, None, None)
 }
 
 /// `exact`: per ring corner, the exact surface normal of the face at that
@@ -72,6 +83,7 @@ fn prepare_with(
     h: Hypot,
     retain_hidden: bool,
     exact: Option<&[[f32; 3]]>,
+    cache: Option<&GeometryCache>,
 ) -> Prepared {
     let mut bounds = [0.; 8];
     if !p.is_empty() {
@@ -105,12 +117,21 @@ fn prepare_with(
         }
         facegeom::resident_geometry(p, &rings, h)
     };
-    let per_face: Vec<_> = if counts.len() >= 4096 {
-        use rayon::prelude::*;
-        (0..counts.len()).into_par_iter().map(geometry).collect()
-    } else {
-        (0..counts.len()).map(geometry).collect()
+    let previous = cache.and_then(|cache| cache.0.lock().unwrap_or_else(|e| e.into_inner()).take())
+        .filter(|memo| memo.h == h);
+    let changes = previous.as_ref().map(|old| old.changes(p, c, sizes, counts, &face_rings));
+    let bake_face = |f: usize| {
+        if let (Some(old), Some(changes)) = (&previous, &changes) {
+            if !changes.faces[f] { return old.face(f); }
+        }
+        geometry(f)
     };
+    let per_face: Vec<_> = if counts.len() >= 4096 {
+        (0..counts.len()).into_par_iter().map(bake_face).collect()
+    } else {
+        (0..counts.len()).map(bake_face).collect()
+    };
+    let mut memo = cache.map(|_| GeometryMemo::new(p, c, sizes, counts, &face_rings, h, &per_face));
     let mut triangles = Vec::new();
     let mut normals = Vec::with_capacity(counts.len());
     for (f, (tris, normal)) in per_face.into_iter().enumerate() {
@@ -142,7 +163,11 @@ fn prepare_with(
         let corners: Vec<_> = c.iter().map(|&v| v as i64).collect();
         let model_vectors = |vs: &[V3]| vs.iter().map(|v|
             crate::store::geometry::V3(v.0 as f64, v.1 as f64, v.2 as f64)).collect::<Vec<_>>();
-        crate::smooth::corners(
+        let mut dirty = changes.map(|c| c.vertices);
+        if let (Some(old), Some(mask)) = (&previous, &mut dirty) {
+            old.changed_edges(&edge_list, &soft, mask);
+        }
+        let mut fans = crate::smooth::corners_at(
             &model_vectors(p),
             &model_vectors(&normals),
             &corners,
@@ -153,8 +178,18 @@ fn prepare_with(
             &starts,
             &adjacent,
             h,
-        )
+            dirty.as_deref(),
+        );
+        if let (Some(old), Some(mask)) = (&previous, dirty.as_ref()) {
+            fans.extend(old.fans.iter().filter(|((v,_),_)| mask.get(*v) == Some(&false)).map(|(k,v)| (*k,*v)));
+        }
+        if let Some(memo) = &mut memo {
+            memo.soft_edges = edge_list.iter().zip(&soft).filter(|(_,soft)| **soft).map(|(e,_)| *e).collect();
+            memo.fans = fans.clone();
+        }
+        fans
     } else { Default::default() };
+    if let Some(cache) = cache { *cache.0.lock().unwrap_or_else(|e| e.into_inner()) = memo; }
     if retain_hidden && hidden.iter().any(|v| *v) {
         triangles.sort_by_key(|t| hidden[t.1]);
     }
@@ -342,7 +377,7 @@ fn fill(p: &[V3], prepared: &Prepared, bytes: &mut [u8], indices: &mut [u32]) {
 }
 
 #[pyfunction]
-#[pyo3(signature = (pos, corners, sizes, counts, colors, hidden, edges, flags, offsets, attributes, hypot, material_maps, material_paints, retain_hidden=false, corner_normals=None, edit_room=false))]
+#[pyo3(signature = (pos, corners, sizes, counts, colors, hidden, edges, flags, offsets, attributes, hypot, material_maps, material_paints, retain_hidden=false, corner_normals=None, edit_room=false, geometry_cache=None))]
 pub fn bake_scene<'py>(
     py: Python<'py>,
     pos: PyReadonlyArray2<'_, f32>,
@@ -361,6 +396,7 @@ pub fn bake_scene<'py>(
     retain_hidden: bool,
     corner_normals: Option<PyReadonlyArray2<'_, f32>>,
     edit_room: bool,
+    geometry_cache: Option<&GeometryCache>,
 ) -> PyResult<(
     Bound<'py, PyArray1<u8>>,
     Bound<'py, PyArray1<u32>>,
@@ -479,28 +515,12 @@ pub fn bake_scene<'py>(
                 h,
                 retain_hidden,
                 exact.map(|e| &e[a[1]..b[1]]),
+                geometry_cache.filter(|_| one && b[3] - a[3] >= 32768),
             )
         };
-        let prepared: Vec<_> = if one { vec![prepare_pair(&offsets)] } else { offsets
-            .par_windows(2)
-            .map(|pair| {
-                let (a, b) = (pair[0], pair[1]);
-                let result = prepare_with(
-                    &pts[a[0]..b[0]],
-                    &corners[a[1]..b[1]],
-                    &s[a[2]..b[2]],
-                    &f[a[3]..b[3]],
-                    &colors[a[3]..b[3]],
-                    &hidden[a[3]..b[3]],
-                    &edges[a[4]..b[4]],
-                    &flags[a[4]..b[4]],
-                    h,
-                    retain_hidden,
-                    exact.map(|e| &e[a[1]..b[1]]),
-                );
-                result
-            })
-            .collect() };
+        let prepared: Vec<_> = if one { vec![prepare_pair(&offsets)] } else {
+            offsets.par_windows(2).map(prepare_pair).collect()
+        };
         let span = |n: usize| if edit_room && n >= 196608 {
             n + (n / 64).min(16384)
         } else { n };

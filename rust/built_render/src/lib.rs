@@ -2013,17 +2013,34 @@ impl Renderer {
         let s = self.scene.as_mut().ok_or_else(|| PyValueError::new_err("no scene"))?;
         if id >= s.p as usize || data.len()%32 != 0 { return Err(PyValueError::new_err("invalid material rows")); }
         let limit = self.device.limits().max_storage_buffer_binding_size as usize;
-        if data.len() > limit.saturating_sub(s.material_data.len()) {
-            return Err(PyValueError::new_err("material records exceed storage binding limit"));
-        }
+        // The sparse table owns one disjoint run per prototype. Find a gap
+        // among the other live runs so edits can reuse their old allocation.
+        let at = material_room(&s.material_data, s.p as usize, id, data.len(), limit)
+            .ok_or_else(|| PyValueError::new_err("material records exceed storage binding limit"))?;
         let mut header = [0u32;4];
         if !data.is_empty() {
             let face: Command = bytemuck::pod_read_unaligned(&s.template_data[id*20..id*20+20]);
-            header = [face.base as u32, (s.material_data.len()/16) as u32, (data.len()/32) as u32, 0];
+            header = [face.base as u32, (at/16) as u32, (data.len()/32) as u32, 0];
         }
         s.material_data[id*16..(id+1)*16].copy_from_slice(bytemuck::bytes_of(&header));
-        let appended_at = s.material_data.len();
-        s.material_data.extend_from_slice(data);
+        if at + data.len() > s.material_data.len() {
+            s.material_data.resize(at + data.len(), 0);
+        }
+        let target = &mut s.material_data[at..at + data.len()];
+        // Preserve unchanged blocks on the device, including complete rows
+        // when a material or mapping changed on only part of a large mesh.
+        let mut writes: Vec<std::ops::Range<usize>> = Vec::new();
+        for (i, (old, new)) in target.chunks_mut(4096).zip(data.chunks(4096)).enumerate() {
+            if old != new {
+                old.copy_from_slice(new);
+                let begin = i * 4096;
+                if let Some(run) = writes.last_mut().filter(|r| r.end == begin) {
+                    run.end += new.len();
+                } else {
+                    writes.push(begin..begin + new.len());
+                }
+            }
+        }
         s.face_ranges = face_ranges(&s.material_data, s.p);
         // Write only this prototype's header and its new records into the
         // resident buffer. Allocating the whole table per call (one call per
@@ -2038,8 +2055,8 @@ impl Renderer {
                 return Ok(());
             }
             self.queue.write_buffer(materials, (id*16) as u64, bytemuck::bytes_of(&header));
-            if !data.is_empty() {
-                self.queue.write_buffer(materials, appended_at as u64, data);
+            for run in writes {
+                self.queue.write_buffer(materials, (at + run.start) as u64, &data[run]);
             }
             return Ok(());
         }
@@ -4024,6 +4041,24 @@ mod update_tests {
 
 // Sparse rows contain a back color followed by front/back texture indices.
 // Only the fragment texture branch is specialized: vertex paint lookup stays.
+fn material_room(data: &[u8], count: usize, id: usize, bytes: usize, limit: usize) -> Option<usize> {
+    let mut at = count.checked_mul(16)?;
+    let mut used = Vec::new();
+    for (i, header) in data.get(..at)?.chunks_exact(16).enumerate() {
+        let words: [u32; 4] = bytemuck::pod_read_unaligned(header);
+        if i != id && words[2] != 0 {
+            let start = (words[1] as usize).checked_mul(16)?;
+            used.push((start, start.checked_add((words[2] as usize).checked_mul(32)?)?));
+        }
+    }
+    used.sort_unstable();
+    for (start, end) in used {
+        if at.checked_add(bytes)? <= start { break; }
+        at = at.max(end);
+    }
+    (at.checked_add(bytes)? <= limit).then_some(at)
+}
+
 fn face_ranges(data: &[u8], prototypes: u32) -> Vec<(u32, u32, bool)> {
     let word = |at: usize| data.get(at..at+4).map(|b| u32::from_le_bytes(b.try_into().unwrap()));
     let mut runs: Vec<(u32, u32, bool)> = Vec::new();
@@ -4043,6 +4078,16 @@ fn face_ranges(data: &[u8], prototypes: u32) -> Vec<(u32, u32, bool)> {
 }
 #[cfg(test)]
 mod plain_face_tests {
+    #[test]
+    fn successive_material_edits_reuse_free_records() {
+        // Three headers, then a two-record run and a three-record run.
+        let words = [0u32,3,2,0, 0,7,3,0, 0,0,0,0];
+        let data = bytemuck::cast_slice(&words);
+        assert_eq!(super::material_room(data, 3, 0, 64, 208), Some(48));
+        assert_eq!(super::material_room(data, 3, 0, 96, 208), None);
+        assert_eq!(super::material_room(data, 3, 1, 96, 208), Some(112));
+    }
+
     #[test]
     fn sparse_texture_indices_split_only_textured_prototypes() {
         let mut words = vec![0u32; 24];

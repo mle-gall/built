@@ -16,11 +16,21 @@ pub fn corners(pos: &[V3], normals: &[V3], corners: &[i64], sizes: &[i64],
                counts: &[i64], edges: &[[i64; 2]], soft: &[bool],
                starts: &[i64], adjacent: &[i64], h: Hypot)
     -> HashMap<(usize, usize), V3> {
+    corners_at(pos, normals, corners, sizes, counts, edges, soft, starts, adjacent, h, None)
+}
+
+pub fn corners_at(pos: &[V3], normals: &[V3], corners: &[i64], sizes: &[i64],
+               counts: &[i64], edges: &[[i64; 2]], soft: &[bool],
+               starts: &[i64], adjacent: &[i64], h: Hypot, dirty: Option<&[bool]>)
+    -> HashMap<(usize, usize), V3> {
     let mut incident = vec![Vec::new(); pos.len()];
     let mut curved = vec![false; normals.len()];
     for (e, ends) in edges.iter().enumerate() {
         if soft[e] && starts[e+1] - starts[e] > 1 {
-            for &v in ends { incident[v as usize].push(e); }
+            if dirty.is_some_and(|mask| ends.iter().all(|&v| !mask[v as usize])) { continue; }
+            for &v in ends {
+                if dirty.is_none_or(|mask| mask[v as usize]) { incident[v as usize].push(e); }
+            }
             for &f in &adjacent[starts[e] as usize..starts[e+1] as usize] {
                 curved[f as usize] = true;
             }
@@ -35,6 +45,7 @@ pub fn corners(pos: &[V3], normals: &[V3], corners: &[i64], sizes: &[i64],
                 let ring = &corners[offset..offset+n];
                 for i in 0..n {
                     let v = ring[i] as usize;
+                    if incident[v].is_empty() { continue; }
                     let a = pos[ring[(i+n-1)%n] as usize].sub(pos[v]);
                     let b = pos[ring[(i+1)%n] as usize].sub(pos[v]);
                     let cross = a.cross(b, h);
