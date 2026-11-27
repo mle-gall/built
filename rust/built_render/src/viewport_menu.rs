@@ -335,6 +335,7 @@ fn read_facts_of<'py>(
         f.filed = filed_path(py, scene, one);
         f.text3d = editable.is_some();
         f.edited_letters = editable == Some(false);
+        f.repeat_copy=one.getattr_opt("ext")?.is_some_and(|ext|ext.contains("built.repeat").unwrap_or(false));
         f.live = one.getattr_opt("ext")?.is_some_and(|ext|ext.contains("built.live").unwrap_or(false));
         f.billboard = flag(one, "billboard");
         if is_component(one) {
@@ -874,6 +875,27 @@ fn glue(
         }
         "reveal" => {
             ui()?.call_method1("_tree_action", (win, view_or_none(py, view), format!("revealselection{}", sep(py)?)))?;
+        }
+        "skiprepeat" => {
+            let marker = first()?.getattr("ext")?.get_item("built.repeat")?;
+            let api = py.import("built_core.command_protocol")?;
+            let scene = vp.getattr("scene")?;
+            for row in api.call_method1("live_rows", (&scene,))?.try_iter()? {
+                let row = row?;
+                if row.get_item("uid")?.eq(marker.get_item("row")?)? {
+                    let skip = PyDict::new(py);
+                    skip.set_item("from", "start")?;
+                    skip.set_item("at", marker.get_item("at")?)?;
+                    row.call_method1("setdefault", ("skips", PyList::empty(py)))?
+                        .call_method1("append", (skip,))?;
+                    let kw = PyDict::new(py);
+                    kw.set_item("row", row)?;
+                    api.getattr("run")?
+                        .call((vp.getattr("history")?, "live_set"), Some(&kw))?;
+                    vp.call_method0("notify_scene_changed")?;
+                    break;
+                }
+            }
         }
         "savepreset" => crate::library_host::capture_preset(win,first()?)?,
         "rename" => ask_rename(win, view, first()?)?,

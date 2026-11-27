@@ -556,6 +556,16 @@ pub fn parse_value_buffer(buffer: &str, comma_lists: bool, ctx: Ctx) -> Option<T
     let normalized = buffer.replace(',', ".").replace(';', " ");
     let stripped = py_strip(&normalized);
     let lower = stripped.to_lowercase();
+    if let Some(limit) = lower.strip_prefix("<=").or_else(|| lower.strip_prefix('≤')) {
+        if let Typed::One(step) = parse_value_buffer(limit, false, ctx)? {
+            return (step > 0.).then_some(Typed::Array {
+                count: 1,
+                mode: "fit_max",
+                step: Some(step),
+            });
+        }
+        return None;
+    }
     if let Some(c) = ARRAY_COUNT.captures(&lower) {
         return Some(Typed::Array { count: int(c.get(1).or(c.get(2))?.as_str())?, mode: "x", step: None });
     }

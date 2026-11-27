@@ -233,6 +233,30 @@ fn document_value_key(v: &Obj, event: &Obj) -> PyResult<bool> {
     }
     let key: i32 = event.call_method0("key")?.extract()?;
     let buffer = v.getattr("_value_buffer")?.extract::<String>()?;
+    if key == 0x1000001
+        && opt(&t, "accepts_array")?.is_truthy()?
+        && v.call_method0("_array_pending")?.is_truthy()?
+    {
+        let next = if let Some(n) = buffer
+            .strip_suffix('x')
+            .or_else(|| buffer.strip_suffix('*'))
+        {
+            n.to_owned()
+        } else if let Some(n) = buffer.strip_prefix('/') {
+            format!("≤{n}")
+        } else if let Some(n) = buffer
+            .strip_prefix('≤')
+            .or_else(|| buffer.strip_prefix("<="))
+        {
+            format!("{n}x")
+        } else if buffer.is_empty() {
+            "4x".into()
+        } else {
+            format!("/{buffer}")
+        };
+        v.call_method1("_set_value_buffer", (next,))?;
+        return Ok(true);
+    }
     if key == 0x1000004 || key == 0x1000005 {
         return if zoom {
             zoom_enter(v, &buffer)

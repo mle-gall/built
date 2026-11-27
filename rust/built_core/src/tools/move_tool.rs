@@ -53,6 +53,9 @@ pub struct MoveTool {
     copy: bool,
     ctrl_toggled: bool,
     last: Option<Window>,
+    run_edit: Option<serde_json::Value>,
+    grip_active: bool,
+    repeat_count: i64,
 }
 
 fn d3(p: [f64; 3]) -> DVec3 { DVec3::from_array(p) }
@@ -61,6 +64,8 @@ fn j(v: DVec3) -> serde_json::Value { json!([v.x, v.y, v.z]) }
 impl MoveTool {
     fn reset(&mut self) {
         self.grab = None;
+        self.run_edit = None;
+        self.grip_active = false;
         self.hover = None;
         self.copy = false; // the Ctrl modifier arms ONE operation
     }
@@ -81,6 +86,7 @@ impl MoveTool {
         if self.copy && delta.length() > 1e-9 {
             let token = host.call("copy", json!({"deltas": [j(delta)], "fresh": true}));
             if let Some(t) = token.as_u64() {
+                self.repeat_count = 1;
                 self.last = Some(Window { delta, token: t });
                 if announce { host.message("Copy placed", &[]); }
             }
@@ -91,7 +97,20 @@ impl MoveTool {
     }
 
     fn array(&mut self, count: i64, mode: &str, step: Option<f64>, host: &mut dyn ToolHost) -> bool {
-        if let Some(step) = step {
+        let spacing = matches!(mode, "spacing" | "fit_max");
+        let mut count = count;
+        if spacing {
+            let (Some(w), Some(step)) = (&self.last, step.filter(|v| *v > 0.)) else {
+                return false;
+            };
+            let quotient = w.delta.length() / step;
+            count = if mode == "spacing" {
+                quotient.floor()
+            } else {
+                quotient.ceil()
+            } as i64;
+        }
+        if let Some(step) = step.filter(|_| !spacing) {
             if let Some(grab) = self.grab {
                 let Some(hover) = self.hover.filter(|_| self.copy) else { return false };
                 let dir = hover - grab;
@@ -111,7 +130,7 @@ impl MoveTool {
                 w.delta = w.delta.normalize() * step;
             }
         }
-        if self.grab.is_some() || count < 1 {
+        if self.grab.is_some() || !(1..=10000).contains(&count) {
             return false;
         }
         let Some(w) = self.last.clone() else { return false };
@@ -119,16 +138,33 @@ impl MoveTool {
             self.last = None;
             return false;
         }
-        let deltas: Vec<serde_json::Value> = (1..=count).map(|k| {
-            let f = if mode == "/" { k as f64 / count as f64 } else { k as f64 };
-            j(w.delta * f)
-        }).collect();
+        let rule = if spacing {
+            json!({(mode): step.unwrap() * 1000.})
+        } else if mode == "/" {
+            json!({"divide":count})
+        } else {
+            json!({"count":count})
+        };
+        let increment = match mode {
+            "/" | "fit_max" => w.delta / count as f64,
+            "spacing" => w.delta.normalize() * step.unwrap(),
+            _ => w.delta,
+        };
+        let deltas: Vec<_> = (1..=count).map(|k| j(increment * k as f64)).collect();
         host.run(&Command { name: "undo", args: json!({}) });
-        let token = host.call("copy", json!({"deltas": deltas, "fresh": false}));
+        let token = host.call("copy", json!({
+            "deltas": deltas, "fresh": false,
+            "run": {"points":[[0.,0.,0.],j(w.delta)]}, "rule": rule
+        }));
         let Some(t) = token.as_u64() else {
+            host.run(&Command {
+                name: "redo",
+                args: json!({}),
+            });
             self.last = None;
             return false;
         };
+        self.repeat_count = count;
         self.last = Some(Window { token: t, ..w });
         host.message("{n} copies", &[("n", count.to_string())]);
         true
@@ -158,6 +194,97 @@ impl Tool for MoveTool {
     fn info(&self) -> &'static ToolInfo { &INFO }
 
     fn event(&mut self, ev: &ToolEvent, host: &mut dyn ToolHost) -> Reply {
+        if let Some(row) = &self.run_edit {
+            let points = row["stations"].as_array();
+            let frame = serde_json::from_value::<[f64; 16]>(row["owner_frame"].clone())
+                .ok()
+                .map(|m| glam::DMat4::from_cols_array(&m));
+            if let (Some(points), Some(frame)) = (points, frame) {
+                if let Some((start, last)) = points
+                    .first()
+                    .and_then(super::json_p3)
+                    .zip(points.last().and_then(super::json_p3))
+                {
+                    match ev {
+                        ToolEvent::Click(p) if !self.grip_active => {
+                            let grip = frame.transform_point3(last.into());
+                            let pixels = host.call("to_px", json!({"points":[grip.to_array()]}));
+                            let at = pixels
+                                .get(0)
+                                .and_then(|v| serde_json::from_value::<[f64; 2]>(v.clone()).ok());
+                            self.grip_active = at
+                                .is_some_and(|v| glam::DVec2::from(v).distance(p.px.into()) < 14.);
+                            return Reply::redraw();
+                        }
+                        ToolEvent::Hover(p) => {
+                            self.hover = p.world.map(d3);
+                            return Reply::redraw();
+                        }
+                        ToolEvent::Click(p) if self.grip_active => {
+                            let Some(end) = p.world else {
+                                return Reply::redraw();
+                            };
+                            let edge = host.call("repeat_edge", json!(p.px));
+                            let mut next = row.clone();
+                            let mut delta =
+                                frame.inverse().transform_point3(end.into()) - d3(start);
+                            if let Some(n) = row["rule"]["count"].as_f64() {
+                                delta /= n.max(1.);
+                                next["rule"].as_object_mut().unwrap().remove("step");
+                            }
+                            next["run"] = if edge.is_object() {
+                                if let Some(n) = row["rule"]["count"].as_u64() {
+                                    next["rule"] = json!({"divide":n});
+                                }
+                                json!({"edge":edge})
+                            } else if let Some(polar) = row["run"].get("polar") {
+                                let (Some(c), Some(axis)) = (
+                                    super::json_p3(&polar["centre"]),
+                                    super::json_p3(&polar["axis"]),
+                                ) else {
+                                    return Reply::redraw();
+                                };
+                                let n = d3(axis).normalize_or_zero();
+                                let radial = |p: DVec3| {
+                                    let v = p - d3(c);
+                                    v - n * v.dot(n)
+                                };
+                                let a = radial(d3(start));
+                                let b = radial(frame.inverse().transform_point3(end.into()));
+                                if a.length_squared() * b.length_squared() < 1e-16 {
+                                    return Reply::redraw();
+                                }
+                                let mut angle = n.dot(a.cross(b)).atan2(a.dot(b)).to_degrees();
+                                let prior = polar["angle"].as_f64().unwrap_or_default();
+                                if angle * prior < 0. {
+                                    angle += 360f64.copysign(prior);
+                                }
+                                if let Some(count) = row["rule"]["count"].as_f64() {
+                                    angle /= count.max(1.);
+                                }
+                                let mut run = row["run"].clone();
+                                run["polar"]["angle"] = json!(angle);
+                                run
+                            } else {
+                                json!({"points":[[0.,0.,0.],delta.to_array()]})
+                            };
+                            if host
+                                .run(&Command {
+                                    name: "live_set",
+                                    args: json!({"row":next}),
+                                })
+                                .ok
+                            {
+                                self.reset();
+                                return Reply::committed();
+                            }
+                            return Reply::redraw();
+                        }
+                        _ => (),
+                    }
+                }
+            }
+        }
         let done = |ok: bool| Reply { consumed: ok, redraw: true, committed: ok };
         match ev {
             ToolEvent::Activate => {
@@ -201,6 +328,9 @@ impl Tool for MoveTool {
                 }
                 Reply::redraw()
             }
+            ToolEvent::Value(Value::Length(s)) if self.last.is_some() && self.grab.is_none() => {
+                done(self.array(1, "spacing", Some(*s), host))
+            }
             ToolEvent::Value(v) => done(self.value(v, host)),
             ToolEvent::Array { count, mode, step } => done(self.array(*count, mode, *step, host)),
             ToolEvent::Key { key, .. } if key == "Control" => {
@@ -233,6 +363,33 @@ impl Tool for MoveTool {
 
     fn preview(&self) -> Preview {
         let mut out = Preview::default();
+        if let Some(row) = &self.run_edit {
+            if let (Some(stations), Ok(m)) = (
+                row["stations"].as_array(),
+                serde_json::from_value::<[f64; 16]>(row["owner_frame"].clone()),
+            ) {
+                let frame = glam::DMat4::from_cols_array(&m);
+                if let Some((a, b)) = stations
+                    .first()
+                    .and_then(super::json_p3)
+                    .zip(stations.last().and_then(super::json_p3))
+                {
+                    let a = frame.transform_point3(a.into());
+                    let b = if self.grip_active { self.hover } else { None }
+                        .unwrap_or(frame.transform_point3(b.into()));
+                    out.lines.push(Preview::rubber(a.to_array(), b.to_array()));
+                    for axis in [DVec3::X, DVec3::Y, DVec3::Z] {
+                        let d = axis * (a.distance(b) * 0.018).max(0.02);
+                        out.lines
+                            .push(Preview::rubber((b - d).to_array(), (b + d).to_array()));
+                    }
+                    out.value = Some(ValueAnchor {
+                        at: b.to_array(),
+                        label: "Repeat run",
+                    });
+                }
+            }
+        }
         if let (Some(g), Some(h)) = (self.grab, self.hover) {
             out.lines.push(Preview::rubber(g.to_array(), h.to_array()));
             out.value = Some(ValueAnchor { at: ((g + h) * 0.5).to_array(), label: "Distance" });
@@ -249,6 +406,7 @@ impl Tool for MoveTool {
             "grab": pt(self.grab),
             "hover_point": pt(self.hover),
             "copy": self.copy,
+            "repeat_count":self.repeat_count,
             "window": self.last.as_ref().map(|w| json!({"delta": j(w.delta), "token": w.token})),
         })
     }
@@ -259,6 +417,10 @@ impl Tool for MoveTool {
             "start_point" | "grab" => self.grab = point,
             "hover_point" => self.hover = point,
             "copy" => self.copy = value.as_bool().unwrap_or(false),
+            "repeat_run" => {
+                self.run_edit = Some(value.clone());
+                self.grip_active = false;
+            }
             "reset" => self.reset(),
             _ => return false,
         }

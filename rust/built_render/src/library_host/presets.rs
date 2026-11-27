@@ -306,7 +306,7 @@ impl PresetsProvider {
         let mut items = Vec::new();
         for (p, source) in rows(ctx)? {
             let mut verbs = vec!["edit", "duplicate", "export"];
-            if matches!(p["primitive"].as_str(),Some("sweep"|"cut")) {
+            if matches!(p["primitive"].as_str(), Some("sweep" | "cut" | "repeat")) {
                 verbs.insert(0, "apply");
             }
             if source == "model" || source == "mine" {
@@ -370,6 +370,32 @@ impl PresetsProvider {
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
         let personal = item.get_item("source")?.eq("mine")?;
         match verb {
+            "apply" if p["primitive"] == "repeat" => {
+                let scene = ctx.getattr("scene")?;
+                let selection = scene.getattr("selection")?;
+                if selection.len()? != 1 {
+                    return flash(ctx, "Select a Repeat to apply the preset");
+                }
+                let g = selection.try_iter()?.next().unwrap()?;
+                let api = py.import("built_core.command_protocol")?;
+                let Some(owner) = g.getattr_opt("uid")? else {
+                    return flash(ctx, "Select a Repeat to apply the preset");
+                };
+                let row = api.call_method1("live_repeat", (&scene, owner))?;
+                if row.is_none() {
+                    return flash(ctx, "Select a Repeat to apply the preset");
+                }
+                for (key, val) in data.get_item("values")?.cast::<PyDict>()? {
+                    row.set_item(key, val)?;
+                }
+                let kw = PyDict::new(py);
+                kw.set_item("row", row)?;
+                api.getattr("run")?.call(
+                    (ctx.getattr("vp")?.getattr("history")?, "live_set"),
+                    Some(&kw),
+                )?;
+                notify(&ctx.getattr("vp")?)?;
+            }
             "apply" if matches!(p["primitive"].as_str(),Some("sweep"|"cut")) => {
                 let win = ctx.getattr("win")?;
                 win.call_method1("_activate_tool", (p["primitive"].as_str().unwrap(),))?;
@@ -449,7 +475,23 @@ pub(crate) fn capture_preset(win: &Bound<'_, PyAny>, group: &Bound<'_, PyAny>) -
     let scene = ctx.getattr("scene")?;
     let row = api.call_method1("live_sweep", (&scene, group.getattr("uid")?))?;
     if row.is_none() {
-        return flash(&ctx, "This element has no reusable recipe");
+        let repeat = api.call_method1("live_repeat", (&scene, group.getattr("uid")?))?;
+        if repeat.is_none() {
+            return flash(&ctx, "This element has no reusable recipe");
+        }
+        let mut values = json!({});
+        let spec: Value = serde_json::from_str(&dumps(py, &repeat)?)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        for field in ["rule", "orientation", "adapt"] {
+            if let Some(value) = spec.get(field) {
+                values[field] = value.clone();
+            }
+        }
+        return edit(
+            &ctx,
+            json!({"uid":uid(py)?,"name":group.getattr("name")?.extract::<String>()?,"pack":"This project","node":"","primitive":"repeat","values":values,"record":{},"locks":{},"naming":"","rev":1}),
+            "Save as preset",
+        );
     }
     let row: Value = serde_json::from_str(&dumps(py, &row)?)
         .map_err(|e| PyValueError::new_err(e.to_string()))?;

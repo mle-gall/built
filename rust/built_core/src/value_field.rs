@@ -91,6 +91,12 @@ pub fn tool_key(buffer: &str, key: Key, chord: bool, accepts: Accepts) -> Option
         // Inside a calculation every printable key is part of it.
         return printable(&text).then(|| format!("{buffer}{text}"));
     }
+    if accepts.arrays
+        && ((buffer.is_empty() && matches!(text.as_str(), "<" | "≤"))
+            || (buffer == "<" && text == "="))
+    {
+        return push(&text);
+    }
     if accepts.arrays && text == "*" {
         return push(&text);
     }
@@ -255,6 +261,12 @@ fn expression_error(buffer: &str, length: Ctx) -> Entry {
 /// the length, not fire Move. Looser than `tool_key`: it reserves what
 /// could continue the box. `text` is the key's text, lower case.
 pub fn claims(buffer: &str, text: &str, tool_on: bool, zoom: bool, accepts: Accepts) -> bool {
+    if tool_on
+        && accepts.arrays
+        && ((buffer.is_empty() && matches!(text, "<" | "≤")) || (buffer == "<" && text == "="))
+    {
+        return true;
+    }
     if text.is_empty() || (!tool_on && !zoom) {
         return false;
     }

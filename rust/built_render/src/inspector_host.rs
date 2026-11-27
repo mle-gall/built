@@ -152,9 +152,11 @@ fn selection(view: &Bound<'_, PyAny>, win: &Bound<'_, PyAny>) -> PyResult<()> {
                 record.set_item("quantities", effective.call_method1("get", ("quantities",PyDict::new(py)))?)?;
             }
             record.set_item("uid", record_address(&scene, g)?)?;
-            if groups.len()==1 && g.getattr("ext")?.is_truthy()? && g.getattr("ext")?.contains("built.live")?{
+            let ext = g.getattr("ext")?;
+            if groups.len() == 1 && ext.is_truthy()? && (ext.contains("built.live")? || ext.contains("built.repeat")?) {
                 let cuts=py.import("built_core.command_protocol")?.call_method1("live_cuts",(&scene,g.getattr("uid")?))?;
                 record.set_item("cut_rows",cuts)?;
+                record.set_item("repeat",py.import("built_core.command_protocol")?.call_method1("live_repeat",(&scene,g.getattr("uid")?))?)?;
                 let sweep=py.import("built_core.command_protocol")?.call_method1("live_sweep",(&scene,g.getattr("uid")?))?;
                 if !sweep.is_none(){
                     let lib=py.import("built_render.wgpu_library")?;
@@ -680,7 +682,29 @@ fn inspector_action(win: &Bound<'_, PyAny>, view: &Bound<'_, PyAny>, payload: &s
     let (surface, verb) = key.split_once('.').ok_or_else(|| pyo3::exceptions::PyValueError::new_err(key.clone()))?;
     let vp = win.getattr("viewport")?;
     let result = match surface {
-        "cut" if matches!(verb,"edit"|"release") => {
+        "repeat" if verb == "source" => {
+            let scene = vp.getattr("scene")?;
+            let source = scene.call_method1("resolve_occurrence", (&v,))?;
+            if !source.is_none() {
+                if source.getattr("ext")?.get_item("built.live").is_ok() {
+                    scene.setattr("selection", PyList::new(py, [source])?)?;
+                    vp.call_method0("notify_scene_changed")?;
+                } else {
+                    vp.call_method1("begin_group_edit", (source,))?;
+                }
+            }
+            Ok(())
+        }
+        "repeat" if verb == "run" => {
+            win.call_method1("_activate_tool", ("move",))?;
+            win.getattr("_tools")?
+                .get_item("move")?
+                .getattr("_machine")?
+                .call_method1("set", ("repeat_run", &v))?;
+            vp.call_method0("update")?;
+            Ok(())
+        }
+        "repeat" | "cut" if matches!(verb,"edit"|"release") => {
             let kw=PyDict::new(py);
             let (command,key)=if verb=="release"{("live_release","uid")}else{("live_set","row")};
             kw.set_item(key,&v)?;

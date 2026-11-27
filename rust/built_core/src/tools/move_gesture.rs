@@ -21,6 +21,7 @@ pub struct MoveGesture {
     delta: DVec3,
     resident: bool,
     builder: Option<Py<PyAny>>,
+    repeat_uid: String,
 }
 
 #[pymethods]
@@ -195,7 +196,9 @@ impl ViewportToolHost {
                     tool.setattr("_copy_notice", py.None())?;
                     let builder =
                         tool.call_method1("_make_copy_builder", (view.getattr("scene")?,))?;
-                    gesture.borrow_mut().builder = Some(builder.unbind());
+                    let mut state = gesture.borrow_mut();
+                    state.repeat_uid = crate::element_ids::new_uid();
+                    state.builder = Some(builder.unbind());
                 }
                 let deltas = arg["deltas"]
                     .as_array()
@@ -204,6 +207,33 @@ impl ViewportToolHost {
                     .map(|v| point(v).map(Vec3::from))
                     .collect::<PyResult<Vec<_>>>()?;
                 let builder = gesture.borrow().builder.as_ref().unwrap().clone_ref(py);
+                if let (Some(run), Some(rule)) = (arg.get("run"), arg.get("rule")) {
+                    if let Some(source) = builder
+                        .bind(py)
+                        .cast::<super::copy_history::MoveCopies>()
+                        .ok()
+                        .and_then(|b| b.borrow().repeat_source(py))
+                    {
+                        let cmd = crate::live::repeat_command(
+                            py,
+                            source.bind(py),
+                            run.clone(),
+                            rule.clone(),
+                            gesture.borrow().repeat_uid.clone(),
+                        )?;
+                        let result = crate::protocol::execute(&view.getattr("history")?, &cmd)?;
+                        return Ok(Some(
+                            if result
+                                .get_item("ok")?
+                                .is_some_and(|v| v.is_truthy().unwrap_or(false))
+                            {
+                                json!(self.history_token(py)?)
+                            } else {
+                                Value::Null
+                            },
+                        ));
+                    }
+                }
                 let cmd = builder.call1(py, (deltas,))?;
                 let history = view.getattr("history")?;
                 if cmd.is_none(py) {

@@ -9,6 +9,7 @@ pub(super) struct Records {
     pub rows: BTreeMap<Vec<String>, Row>,
     sweep:Value,
     cuts:Value,
+    repeat:Value,
     sweep_editable:bool,
     total: usize,
     writable: Vec<String>,
@@ -36,6 +37,7 @@ impl Records {
         for object in data.as_array().into_iter().flatten() {
             if selection_count==1{
                 result.sweep=object["sweep"].clone();
+                result.repeat=object["repeat"].clone();
                 result.cuts=object["cut_rows"].clone();
                 result.sweep_editable=object["editable"]==true;
             }
@@ -88,6 +90,136 @@ impl Records {
         layers: &mut Vec<egui::Id>,
         measured: &[(String, String)],
     ) {
+        if self.repeat.is_object() {
+            let row = &self.repeat;
+            kit::disclosure(ui, "repeat record", "Repeat", true, |ui| {
+                if let Some(names) = row["breadcrumb"].as_array().filter(|names| names.len() > 1) {
+                    ui.label(
+                        names
+                            .iter()
+                            .filter_map(Value::as_str)
+                            .collect::<Vec<_>>()
+                            .join(" › "),
+                    );
+                }
+                ui.label(format!(
+                    "{} copies · {} distinct parts",
+                    row["copies"], row["distinct"]
+                ));
+                ui.add_enabled_ui(self.sweep_editable, |ui| {
+                    let rules = ["count", "spacing", "divide", "fit_max"];
+                    let names = ["Count", "Spacing", "Divide", "Fit ≤"];
+                    let current = rules
+                        .iter()
+                        .position(|k| row["rule"][*k].is_number())
+                        .unwrap_or(0);
+                    kit::property_control(ui, "Rule", |ui| {
+                        let (choice, popup) =
+                            kit::select(ui, "repeat rule", names[current], &names);
+                        layers.extend(popup);
+                        if let Some(i) = choice {
+                            let mut next = row.clone();
+                            next["rule"] = json!({(rules[i]): if i%2==0{4}else{600}});
+                            send(out, "repeat.edit", next);
+                        }
+                    });
+                    let key = rules[current];
+                    let old = row["rule"][key].as_f64().unwrap_or(1.);
+                    kit::property_control(ui, names[current], |ui| {
+                        let id = ui.make_persistent_id(("repeat value", row["uid"].as_str(), key));
+                        let mut n = ui.data(|d| d.get_temp(id)).unwrap_or(old);
+                        let r = ui.add(kit::number(
+                            &mut n,
+                            if current % 2 == 0 {
+                                ""
+                            } else if row["run"]["polar"].is_object() {
+                                "°"
+                            } else {
+                                " mm"
+                            },
+                        ));
+                        if r.changed() {
+                            ui.data_mut(|d| d.insert_temp(id, n));
+                        }
+                        if r.drag_stopped() || r.lost_focus() {
+                            ui.data_mut(|d| d.remove::<f64>(id));
+                            if old != n && n > 0. {
+                                let mut next = row.clone();
+                                next["rule"][key] = if current % 2 == 0 {
+                                    json!(n.round() as u64)
+                                } else {
+                                    json!(n)
+                                };
+                                send(out, "repeat.edit", next);
+                            }
+                        }
+                    });
+                    for (field, title, options) in [
+                        ("adapt", "Copies", &["auto", "identical", "adaptive"][..]),
+                        (
+                            "orientation",
+                            "Orientation",
+                            &["fixed", "follow", "alternate"][..],
+                        ),
+                    ] {
+                        if field == "adapt" && row["can_adapt"] != true {
+                            continue;
+                        }
+                        kit::property_control(ui, title, |ui| {
+                            let (choice, popup) = kit::select(
+                                ui,
+                                field,
+                                row[field].as_str().unwrap_or(
+                                    if field == "orientation" && row["run"]["polar"].is_object() {
+                                        "follow"
+                                    } else {
+                                        options[0]
+                                    },
+                                ),
+                                options,
+                            );
+                            layers.extend(popup);
+                            if let Some(i) = choice {
+                                let mut next = row.clone();
+                                next[field] = json!(options[i]);
+                                send(out, "repeat.edit", next);
+                            }
+                        });
+                    }
+                    if let Some(hosts) = row["between_options"].as_array().filter(|h| !h.is_empty())
+                    {
+                        let names: Vec<_> = hosts
+                            .iter()
+                            .map(|h| h[1].as_str().unwrap_or("Repeat"))
+                            .collect();
+                        kit::property_control(ui, "Between", |ui| {
+                            let current = hosts
+                                .iter()
+                                .position(|h| h[0] == row["run"]["between"])
+                                .map(|i| names[i])
+                                .unwrap_or("Choose Repeat…");
+                            let (choice, popup) =
+                                kit::select(ui, "between repeat", current, &names);
+                            layers.extend(popup);
+                            if let Some(i) = choice {
+                                let mut next = row.clone();
+                                next["run"] = json!({"between":hosts[i][0]});
+                                send(out, "repeat.edit", next);
+                            }
+                        });
+                    }
+                    if kit::quiet(ui, "Edit source").clicked() {
+                        send(out, "repeat.source", row["source_path"].clone());
+                    }
+                    if kit::quiet(ui, "Edit run").clicked() {
+                        send(out, "repeat.run", row.clone());
+                    }
+                    if kit::quiet(ui, "Release").clicked() {
+                        send(out, "repeat.release", row["uid"].clone());
+                    }
+                });
+            });
+        }
         if let Some(row)=self.sweep.as_object(){
             kit::disclosure(ui,"sweep record","Sweep",true,|ui|{
                 let property = |ui: &mut egui::Ui, name: &str, value: &str| {

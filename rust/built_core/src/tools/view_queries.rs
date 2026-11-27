@@ -289,9 +289,19 @@ impl ViewportToolHost {
         )
     }
     fn open_placement(&self, py: Python<'_>, id: u64) -> PyResult<()> {
-        self.vp
-            .bind(py)
-            .call_method1("begin_group_edit", (self.object(py, id)?,))?;
+        let view = self.vp.bind(py);
+        let picked = self.object(py, id)?;
+        let scene = view.getattr("scene")?;
+        if let Some(source) = crate::live::repeat_source(&scene, &picked)? {
+            if source.getattr("ext")?.get_item("built.live").is_ok() {
+                scene.setattr("selection", pyo3::types::PyList::new(py, [source])?)?;
+                view.call_method0("notify_scene_changed")?;
+            } else {
+                view.call_method1("begin_group_edit", (source,))?;
+            }
+        } else {
+            view.call_method1("begin_group_edit", (picked,))?;
+        }
         Ok(())
     }
     fn close_placement(&self, py: Python<'_>) -> PyResult<()> {
