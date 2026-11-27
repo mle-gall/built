@@ -200,8 +200,17 @@ def test_a_drawn_profile_sweeps_exactly_like_the_library_one(tmp_path, monkeypat
     (tmp_path / "out").mkdir()
     sketch_workspace.save_profile(json.dumps({"format": "built.profile", "v": 1, "name": drawn["name"],
                                               "use": "profile", "sketch": body}))
-    local, = [i for i in ProfilesProvider().items(None) if i["source"] == "local"]
+    sketch_workspace.save_profile(json.dumps({"format": "built.profile", "v": 1, "name": "Notch",
+                                              "use": "section", "sketch": dict(body, use="section")}))
+    # The Sweep presets picker lists these after the presets: the saved
+    # drawing, and the model's own sketch; never a cutter section.
+    from types import SimpleNamespace
+    choices = ProfilesProvider().items(SimpleNamespace(scene=scene))
+    local, = [i for i in choices if i["source"] == "local"]
     assert local["name"] == "Timber 45 x 145"
+    project, = [i for i in choices if i["source"] == "project"]
+    assert project["key"] == "sketch:" + drawn["uid"]
+    assert not [i for i in choices if i["name"] == "Notch"]
     apply(h, "create_sweeps", sweeps=[member(dict(drawing=local["sketch"]), path)])
     library, from_row, from_file = [g for g in scene.groups]
     assert positions(library) == positions(from_row) == positions(from_file)
