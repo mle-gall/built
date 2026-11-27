@@ -315,6 +315,12 @@ fn igz_load_into_inner<'p>(
         let doc = data.call_method1("get", ("doc",))?;
         geom.setattr("id_map", crate::file_ids::file_origin_map(&doc)?)?;
         if let Some(planes) = planes {
+            if link_meshes.is_some() {
+                use sha2::{Digest, Sha256};
+                let pool = serde_json::to_vec(&planes)
+                    .map_err(|e| PyValueError::new_err(e.to_string()))?;
+                geom.setattr("_exact_pool_digest", pyo3::types::PyBytes::new(py, &Sha256::digest(pool)))?;
+            }
             geom.setattr(
                 "_exact_planes",
                 Py::new(py, crate::exact::file::PlaneTable(planes))?,

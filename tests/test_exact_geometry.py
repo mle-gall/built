@@ -439,3 +439,28 @@ def test_materialization_refuses_welding_two_disjoint_shells_together():
     result = commands.run(h, "materialize_exact_geometry", geometry=shape)
     assert not result["ok"] and "distinct model samples" in str(result["error"])
     assert scene.mesh.capture_state() == before
+
+
+def test_link_reload_observes_a_changed_support_in_an_unchanged_block(tmp_path):
+    from built_core import Vec3
+    from built_core.group import Group
+    from built_core.link_meshes import LinkMeshes
+    from built_core.scene import Scene
+    from formats import igz
+
+    scene = Scene()
+    face = scene.mesh.add_face([Vec3(), Vec3(2, 0, 0), Vec3(0, 2, 0)])
+    rows = list(frame().values())
+    scene.mesh._store.bind_exact_plane(face.key, rows)
+    path = tmp_path / "sheet.built"
+    igz.save_scene(scene, path)
+    first = Scene()
+    igz.load_into(first, path, link_meshes=LinkMeshes(path, {}))
+    previous = Group(first.mesh)
+    rows[0] = [1, 0, 0]
+    scene.mesh._store.bind_exact_plane(face.key, rows)
+    igz.save_scene(scene, path)
+    second = Scene()
+    reader = LinkMeshes(path, {}, previous)
+    igz.load_into(second, path, link_meshes=reader)
+    assert second.mesh._store.exact_plane(second.mesh.faces[0].key) == rows

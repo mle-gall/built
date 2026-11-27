@@ -33,6 +33,14 @@ fn digest<'p>(
             hash.call_method1("update", (geom.get_item(member)?,))?;
         }
         hash.call_method1("update", (json(&meta)?,))?;
+        if let Some(pool_digest) = geom.getattr_opt("_exact_pool_digest")? {
+            if let Ok(arrays) = meta.get_item("arrays") {
+                if arrays.contains("face_surface_id")? {
+                    hash.call_method1("update", (pool_digest,))?;
+                    hash.call_method1("update", (json(&geom.getattr("id_map")?)?,))?;
+                }
+            }
+        }
     } else if block.contains("_arrays")? {
         let np = py.import("numpy")?;
         let arrays = block.get_item("_arrays")?;
