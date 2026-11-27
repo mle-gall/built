@@ -16,8 +16,7 @@ palette! {
     // Selected: accent at 14 % (was 24 % plus an outline; design pass 2026-11-23).
     ACTIVE = Color32::from_rgba_premultiplied(15, 23, 36, 36);
     ACCENT_LINE = Color32::from_rgba_premultiplied(58, 91, 140, 140);
-    // Lit: an armed tool or a bar toggle that is on: accent at 28 % under an
-    // ACCENT_LINE edge (UX pass 1, M02: ACTIVE alone read as idle on the rail).
+    // Accent under the glass on armed tools and active bar toggles.
     LIT = Color32::from_rgba_premultiplied(30, 47, 72, 72);
     HOVER = Color32::from_rgba_premultiplied(18, 18, 18, 18);
     // The rest fill of buttons and chips (a neutral wash, no outline).
@@ -64,6 +63,11 @@ palette! {
     HOVER_EDGE = Color32::from_rgba_premultiplied(46, 46, 46, 46);
     // Neutral outline for secondary and destructive actions at rest.
     ACTION_EDGE = HOVER_EDGE;
+    // Neutral light and shade transmitted by the control's glass face.
+    BUTTON_GLASS_TOP = Color32::from_rgba_premultiplied(25, 25, 25, 25);
+    BUTTON_GLASS_BOTTOM = Color32::from_black_alpha(23);
+    BUTTON_RIM_TOP = Color32::from_rgba_premultiplied(84, 84, 84, 84);
+    BUTTON_RIM_BOTTOM = Color32::from_rgba_premultiplied(9, 9, 9, 9);
     ON_PRIMARY = SHEET;
     ON_PRIMARY_HINT = ON_PRIMARY;
     PRIMARY_PRESS = Color32::from_rgb(0x55, 0x8C, 0xE6);

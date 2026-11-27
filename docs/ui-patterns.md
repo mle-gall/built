@@ -72,7 +72,7 @@ Manager**, **About** and report sheets also use this component.
 
 ### Actions at rest
 
-Use one filled primary button per panel or section when there is a clear next action, such as Run. Use a neutral, outlined `BUTTON_H` button for secondary commands. A header action such as + New can use a compact width. Icons can stand alone when their meaning is familiar.
+Use one filled primary button per panel or section when there is a clear next action, such as Run. Use a neutral, outlined `BUTTON_H` button for secondary commands. A header action such as + New can use a compact width. Icons can stand alone when their meaning is familiar. Buttons and active tools share a faint top highlight and inner shade over their existing surface. The one-device-pixel rim fades from its lit top edge around the corners into the lower edge. An active tool adds an accent tint and bright glyph.
 
 Put an inline reveal or navigation action at the trailing edge of its row. Use the kit's accent text link and chevron. Keep labels, values and captions in neutral ink. A disclosure uses a triangle and dim text to show that it expands.
 

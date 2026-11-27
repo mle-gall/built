@@ -163,13 +163,38 @@ pub mod atoms {
             ACCENT,
         );
     }
-    /// A lit control (an armed tool, a bar toggle that is on): an accent
-    /// tint under a 1-pt accent edge, so the state reads at a glance on a
-    /// rail or bar. The control's glyph goes BRIGHT on top.
+    /// A translucent face over the existing panel. The rounded gradient shares
+    /// egui's ordinary white atlas texel, so it batches with the surrounding chrome.
+    pub(super) fn glass_sheen(ui: &egui::Ui, rect: Rect, radius: u8) {
+        if !ui.is_rect_visible(rect) { return; }
+        let scale = ui.ctx().pixels_per_point();
+        let pixel = 1.0 / scale;
+        let snap = |p: Pos2| pos2((p.x * scale).round() / scale, (p.y * scale).round() / scale);
+        let face = Rect::from_min_max(snap(rect.min), snap(rect.max)).shrink(pixel * 0.5);
+        if !face.is_positive() { return; }
+        let mut outline = Vec::new();
+        egui::epaint::tessellator::path::rounded_rectangle(
+            &mut outline, face, CornerRadius::same(radius).into());
+        let mut mesh = egui::Mesh::default();
+        for (i, &pos) in outline.iter().enumerate() {
+            let depth = ((pos.y - face.top()) / face.height()).clamp(0.0, 1.0);
+            mesh.colored_vertex(pos, BUTTON_GLASS_TOP.lerp_to_gamma(BUTTON_GLASS_BOTTOM, depth));
+            if i >= 2 { mesh.add_triangle(0, i as u32 - 1, i as u32); }
+        }
+        ui.painter().add(mesh);
+        // Tessellate the entire rim as one antialiased ring, including the corners.
+        let rim = egui::epaint::PathStroke::new_uv(pixel, move |_, pos| {
+            let depth = ((pos.y - face.top()) / face.height()).clamp(0.0, 1.0);
+            BUTTON_RIM_TOP.lerp_to_gamma(BUTTON_RIM_BOTTOM, depth)
+        });
+        ui.painter().add(egui::epaint::PathShape::closed_line(outline, rim));
+    }
+
+    /// An armed tool or active bar toggle keeps its accent tint under the glass.
     pub fn paint_lit(ui: &egui::Ui, rect: Rect, radius: u8) {
         let r = CornerRadius::same(radius);
         ui.painter().rect_filled(rect, r, LIT);
-        ui.painter().rect_stroke(rect, r, Stroke::new(1.0_f32, ACCENT_LINE), egui::StrokeKind::Inside);
+        glass_sheen(ui, rect, radius);
     }
     /// A disclosure chevron: right when closed, down when open.
     pub fn chevron(painter: &egui::Painter, center: Pos2, open: bool, color: Color32) {
@@ -371,7 +396,7 @@ pub mod molecules {
         let (rect, resp) = chip_rect(ui, g.size().x, Sense::click());
         let st = control_state(ui, &resp, false);
         if st != State::Off {
-            action_outline(ui, rect, R_ROW);
+            super::atoms::glass_sheen(ui, rect, R_ROW);
         }
         paint_state(ui, rect, st, R_ROW);
         centered(ui.painter(), rect, g, if st == State::Off { OFF } else { INK });
@@ -432,8 +457,11 @@ pub mod molecules {
                 paint_focus(ui, rect, R_CONTROL);
             }
         } else {
-            action_outline(ui, rect, R_CONTROL);
+            if off { action_outline(ui, rect, R_CONTROL); }
             paint_state(ui, rect, state, R_CONTROL);
+        }
+        if !off {
+            super::atoms::glass_sheen(ui, rect, R_CONTROL);
         }
         let x0 = (rect.center().x - (g.size().x + kw) / 2.0).round();
         let mut text = ui.painter().clone();
@@ -484,7 +512,8 @@ pub mod molecules {
         let g = ui.painter().layout_no_wrap(label.to_owned(), body(), INK_2);
         let (rect, resp) = ui.allocate_exact_size(vec2(g.size().x + 16.0, CONTROL_H), Sense::click());
         let st = control_state(ui, &resp, false);
-        action_outline(ui, rect, R_ROW);
+        if st == State::Off { action_outline(ui, rect, R_ROW); }
+        else { super::atoms::glass_sheen(ui, rect, R_ROW); }
         paint_state(ui, rect, st, R_ROW);
         centered(ui.painter(), rect, g, ink_of(st));
         resp
@@ -1889,6 +1918,34 @@ pub fn credits_roll(ui: &mut egui::Ui, id: &str, rows: &[CreditRow], height: f32
     }
     if !hovered && span > height {ui.ctx().request_repaint_after(std::time::Duration::from_millis(45));}
     clicked
+}
+
+#[cfg(test)]
+mod glass_tests {
+    use super::*;
+
+    #[test]
+    fn control_rim_fades_over_one_physical_pixel_at_both_densities() {
+        for density in [1.0, 2.0] {
+            let ctx = egui::Context::default();
+            let mut input = egui::RawInput::default();
+            input.viewports.get_mut(&egui::ViewportId::ROOT).unwrap().native_pixels_per_point = Some(density);
+            let rect = Rect::from_min_size(pos2(18.25, 21.75), vec2(80.0, BUTTON_H));
+            let frame = ctx.run(input, |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| atoms::glass_sheen(ui, rect, R_CONTROL));
+            });
+            let rim = frame.shapes.iter().find_map(|shape| match &shape.shape {
+                egui::Shape::Path(path) if path.closed => Some(&path.stroke),
+                _ => None,
+            }).expect("a closed rim");
+            assert_eq!(rim.width * density, 1.0);
+            let egui::epaint::ColorMode::UV(color) = &rim.color else { panic!("expected a gradient rim") };
+            let top = color(rect, rect.center_top());
+            let bottom = color(rect, rect.center_bottom());
+            assert_eq!((top, bottom), (BUTTON_RIM_TOP, BUTTON_RIM_BOTTOM));
+            assert!((bottom.a() + 1..top.a()).contains(&color(rect, rect.center()).a()));
+        }
+    }
 }
 
 #[cfg(test)]
