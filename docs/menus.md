@@ -346,7 +346,7 @@ Generated from the fixture (`(system …)` rows are AppKit's own).
 | View | Shadows and Sun… | `form-shadows` |  |
 | View | Sections ▸ |  |  |
 | View ▸ Sections | Section Cuts | `section_cuts` |  |
-| View ▸ Sections | Show all cutters | `show_cutters` |  |
+| View ▸ Sections | Show All Cutters | `show_cutters` |  |
 | View ▸ Sections | Section Planes | `section_planes` |  |
 | View ▸ Sections | Section Fill | `section_fill` |  |
 | View | Scenes ▸ |  |  |

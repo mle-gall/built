@@ -617,7 +617,7 @@ fn options<'py>(a: &Args<'py>) -> Reply<'py> {
                 let win = ui(py)?.call_method1("_window", (held_view.bind(py),))?;
                 py.import("views.view_commands")?.call_method1("run", (win, "show_cutters")).map(drop)
             })?;
-            out.append(("show_cutters", "Show all cutters", "", i32::from(on), run))?;
+            out.append(("show_cutters", "Show All Cutters", "", i32::from(on), run))?;
         }
         "MoveTool" if tool.hasattr("_toggle_copy")? => {
             let run = action(py, move |py| held_tool.bind(py).call_method1("_toggle_copy", (held_host.bind(py),)).map(drop))?;

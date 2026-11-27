@@ -535,7 +535,7 @@ pass-5 ones.
 | Chip | *preset · operation · cutter* ("Mitre · Subtract · bisector of C-1 · R-1"); Tab cycles the operation; L opens presets and cutter kinds; the field holds the preset's number (gap, clearance, depth) |
 | Anchor | the cutter is anchored to the element it was picked on (the face, the joint, the member end); Alt-hover another element while placing anchors to it instead (owner remark 1: the end plate anchored to R-1's web, cutting the purlin); the offset is the field value |
 | Commit | one step: the cut row, the target re-evaluated |
-| Display | the target's cutters drawn amber with grips only while the target is selected; View › Show all cutters for review |
+| Display | the target's cutters drawn amber with grips only while the target is selected; View › Show All Cutters for review |
 | Tree and record | a row under the target (amber scissors, kind text, no eye or IFC class); the record's Cuts list with an eye per cut; right-click: Edit, Select cutter, Disable, Bake into target, Remove |
 | Push/Pull routing | on a cut face: edits that cut (plane offset, section depth); on an end cap of a sweep: edits the length; elsewhere on a recipe target: offers Edit profile or Release; on a plain group target: edits its uncut source and every cut re-applies (§5.6) |
 
@@ -758,7 +758,7 @@ in the document. A copied placement gets its own cut rows.
 The Cut tool takes a target and then a cutter. Shift-click toggles additional
 targets before the cutter pick. Their cut rows share one undo step. Tab cycles
 the operation, L opens preset search, A picks a separate anchor and D draws a section on the
-hovered face. Select a target to see its cutters, or enable **Show all cutters** in
+hovered face. Select a target to see its cutters, or enable **Show All Cutters** in
 View ▸ Sections or the Cut tool strip. Pick a grip and drag or type the offset
 or plane angle. Release on the cut row in the project tree or record bakes the
 stack through that row.

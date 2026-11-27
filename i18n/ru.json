@@ -1,5 +1,5 @@
 {
- "Show all cutters": "Показать все режущие элементы",
+ "Show All Cutters": "Показать все режущие элементы",
  "Pick a target, Shift-click for more, then pick the cutter. Tab changes operation, L picks a preset, A anchors, D draws a section.": "Выберите объект, затем режущий элемент. Tab меняет операцию, L выбирает предустановку, A задаёт привязку, D рисует сечение. Щелчок с Shift добавляет или исключает объект.",
  "Pick a target, then its cutter. Tab changes operation, L picks a preset, A anchors, D draws a section.": "Выберите объект, затем режущий элемент. Tab меняет операцию, L выбирает предустановку, A задаёт привязку, D рисует сечение.",
  "Pick a start, or press Enter to sweep selected edges.": "Укажите начало или нажмите Enter, чтобы использовать выбранные рёбра.",

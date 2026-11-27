@@ -104,7 +104,7 @@ const COMMANDS: &[Command] = &[
     command("style_monochrome", "Monochrome", "", &[], "Style", Style),
     command("style_wireframe", "Wireframe", "", &[], "Style", Style),
     command("style_xray", "X-ray Style", "", &[], "Style", Style).on(RegistryOnly),
-    command("show_cutters", "Show all cutters", "", &[], "Sections", Flag("_set_scene_visibility", "show_all_cutters")),
+    command("show_cutters", "Show All Cutters", "", &[], "Sections", Flag("_set_scene_visibility", "show_all_cutters")),
     command("section_planes", "Section Planes", "", &[], "Sections", Flag("_set_scene_visibility", "show_section_planes")),
     command("section_fill", "Section Fill", "", &[], "Sections", Flag("_set_style_field", "section_fill")),
     command("organise-scenes", "Organise Scenes", "", &[], "Scenes", Chrome).on(RegistryOnly),
