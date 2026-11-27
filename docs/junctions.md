@@ -339,9 +339,9 @@ GlobalId, countable, pinnable).
 **A Repeat of a bolt junction** is an ordinary `repeat` row whose source is
 the bolt junction's assembly. Its copies are adaptive (general-base §2.5: the
 source has external references, its plies). The hole cut row on each ply
-becomes one repeated cutter (`cutter: {"repeat": "<repeat uid>"}`, which lane 3
-already evaluates once per copy, one row): a 2 × 2 grid cuts the plate and the
-flange with one row each. Copy bolts take derived uids from the Repeat row
+keeps its hole specification and stores the Repeat uid in `cutter.hole.repeat`.
+The evaluator drills the source and each station. A 2 × 2 grid cuts the plate
+and the flange with one row each. Copy bolts take derived uids from the Repeat row
 and station (general-base §2.6). In the tree: "Bolts M16 × 4 (Repeat)".
 
 **A weld junction** is a child junction of meeting `parts`, roles `a` and
@@ -1021,7 +1021,8 @@ alongside the station source.
 A `part.weld` uses the stock section of role `a` projected onto
 `b.contact`. Its record contains length in millimetres. An optional
 `edges` array selects profile edge roles and `bead: true` creates the
-triangular fillet. A `part.glue` stores contact area in square millimetres.
+triangular fillet. A `part.glue` clips the projected outline to the stock faces
+on the contact plane and stores their overlap in square millimetres.
 The junction exposes the measured `length` or `area` as a derived field.
 
 ## 13. Risks
