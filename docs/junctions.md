@@ -994,6 +994,10 @@ with `junction_frames(scene, uid)`. Edit the row with `junction_set` and use
 cuts and parameter values as a custom junction. `junction_release` accepts
 `uid` and an optional `deep` boolean as described in §7. J1 adds template
 expansion for parts and fasteners to the ownership and frame machinery.
+For a low-level owned sweep, pass `junction`, `key`, `profile` and `path`
+to `live_set`. The assembly creates the child placement. The row uid uses
+the content key and the placement uid uses the same key with `:owner`
+appended.
 
 ## 13. Risks
 

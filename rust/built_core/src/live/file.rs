@@ -103,7 +103,8 @@ fn load_rows(scene: &Obj<'_>, ext: &Bound<'_, PyDict>, rows: Vec<Row>) -> PyResu
     let attr = doc::attr_id("ext").map_err(PyValueError::new_err)?;
     for mut row in rows {
         let id = row.uid.clone();
-        if row.v != 1
+        if row.uid.is_empty()
+            || row.v != 1
             || !matches!(
                 row.kind.as_str(),
                 "test_box" | "sweep" | "sketch" | "cut" | "cut_stack" | "repeat" | "junction"

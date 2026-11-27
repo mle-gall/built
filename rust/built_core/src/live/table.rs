@@ -102,6 +102,7 @@ pub struct SketchFields {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Row {
+    #[serde(default)]
     pub uid: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub owner: String,

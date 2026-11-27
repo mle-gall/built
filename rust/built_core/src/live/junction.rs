@@ -1273,6 +1273,44 @@ pub(super) fn remove_descendants(t: &mut LiveTable, uid: &str) -> PyResult<()> {
     Ok(())
 }
 
+/// Keep an owned sweep under its assembly, using the same placement on re-expansion.
+pub(super) fn place_owned_sweep(scene: &Obj<'_>, t: &mut LiveTable, row: &Row) -> PyResult<()> {
+    let Some(parent) = row.junction.as_deref().filter(|_| row.kind == "sweep") else {
+        return Ok(());
+    };
+    let key = row.key.as_deref().ok_or_else(|| err("Missing part key"))?;
+    if row.owner != id(parent, &format!("{key}:owner")) {
+        return Err(err("Invalid junction part placement"));
+    }
+    let owner = &t
+        .rows
+        .get(parent)
+        .ok_or_else(|| err("Missing junction"))?
+        .owner;
+    let parent_key = *t
+        .groups
+        .get(owner)
+        .ok_or_else(|| err("Missing junction assembly"))?;
+    if let Some(existing) = t.groups.get(&row.owner) {
+        if doc::lock()
+            .node(*existing)
+            .is_none_or(|n| !n.owners.contains(&parent_key))
+        {
+            return Err(err("Part must be under its junction assembly"));
+        }
+        return Ok(());
+    }
+    let py = scene.py();
+    let g = py.import("built_core.group")?.getattr("Group")?.call0()?;
+    g.setattr("uid", &row.owner)?;
+    g.setattr("name", key)?;
+    g.setattr("xform", crate::math::Matrix4::from(DMat4::IDENTITY))?;
+    let parent = group(py, t, owner).ok_or_else(|| err("Missing junction assembly"))?;
+    parent.getattr("children")?.call_method1("append", (&g,))?;
+    Arc::make_mut(&mut t.groups).insert(row.owner.clone(), g.getattr("_doc_key")?.extract()?);
+    Ok(())
+}
+
 pub(super) fn validate_ownership(t: &mut LiveTable, row: &Row) -> PyResult<()> {
     let owner = row.junction.as_ref().or(row.joint.parent.as_ref());
     if let Some(old) = t.rows.get(&row.uid) {

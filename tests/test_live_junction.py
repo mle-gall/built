@@ -216,3 +216,29 @@ def test_member_tree_links_to_assembly():
     links = [key for key, (name, _) in rows.items() if key.startswith("g:") and name == "Corner mitre"]
     assert len(links) == 1
     assert rows[links[0]][1][0] == rows[owner_key][1][0] + 1
+
+
+def test_owned_part_gets_a_stable_placement_and_releases_in_place(tmp_path):
+    import hashlib
+
+    scene, h, a, _, uid = setup()
+    parent = junction(scene)
+    sweep = live.live_sweep(scene, a.uid)
+    apply(h, "live_set", row=dict(kind="sweep", junction=uid, key="plate",
+                                  path=sweep["path"], profile=sweep["profile"]))
+    derive = lambda key: hashlib.sha256(f"built:junction:v1:{uid}:{key}".encode()).hexdigest()[:16]
+    part = next(r for r in live.live_rows(scene) if r.get("key") == "plate")
+    assert part["uid"] == derive("plate") and part["owner"] == derive("plate:owner")
+    assembly = scene.groups_by_uid()[parent["owner"]]
+    assert [g.uid for g in assembly.children] == [part["owner"]]
+    path = tmp_path / "owned.built"
+    igz.save_scene(scene, path)
+    reopened = Scene()
+    igz.load_into(reopened, path)
+    assert all(r["state"] == "ok" for r in live.live_rows(reopened))
+    part_ids = all_ids(assembly.children[0].mesh)
+    apply(h, "junction_release", uid=uid)
+    released = next(r for r in live.live_rows(scene) if r["uid"] == part["uid"])
+    assert "junction" not in released and all_ids(assembly.children[0].mesh) == part_ids
+    apply(h, "undo")
+    assert junction(scene)["contents"][-1]["row"] == part["uid"]

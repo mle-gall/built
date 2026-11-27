@@ -301,6 +301,9 @@ fn run(scene: &Obj<'_>, t: &mut LiveTable, seeds: HashSet<String>) -> PyResult<(
         {
             continue;
         }
+        if let Some(owner) = t.rows[&uid].junction.as_ref().or(t.rows[&uid].joint.parent.as_ref()) {
+            checked.insert(owner.clone());
+        }
         reference::bind_frames(t, &uid);
         if t.rows[&uid].kind == "junction" {
             if junction::evaluate(scene, t, &uid)? {
@@ -377,7 +380,20 @@ fn run(scene: &Obj<'_>, t: &mut LiveTable, seeds: HashSet<String>) -> PyResult<(
             dirty.extend(downstream);
         }
     }
+    // Check leaves before their owning assemblies. A part change affects every
+    // enclosing assembly stamp even when the detail's frames did not move.
+    let mut owners = Vec::new();
+    let mut seen = HashSet::new();
     for id in checked {
+        let mut chain = Vec::new();
+        let mut next = Some(id);
+        while let Some(id) = next.filter(|id| seen.insert(id.clone())) {
+            next = t.rows.get(&id).and_then(|r| r.joint.parent.as_ref().or(r.junction.as_ref())).cloned();
+            chain.push(id);
+        }
+        owners.extend(chain.into_iter().rev());
+    }
+    for id in owners.into_iter().rev() {
         let Some(row) = t.rows.get(&id) else { continue };
         if let Some(g) = group(scene.py(), t, &row.owner) {
             let stamp = repeat::stamp(&g)?;
@@ -561,6 +577,9 @@ pub(crate) fn finish(
             seeds.extend(t.users(&Key::Placement(uid.clone())).cloned());
             if let Some(id) = t.owners.get(&uid).cloned() {
                 if let Some(row) = t.remove(&id) {
+                    if let Some(parent) = row.joint.parent.as_ref().or(row.junction.as_ref()) {
+                        seeds.insert(parent.clone());
+                    }
                     junction::forget_content(&mut t, &row);
                     if row.kind == "junction" {
                         junction::remove_descendants(&mut t, &id)?;
@@ -929,6 +948,7 @@ impl Mutation {
                 for request in requests {
                     let mut row = request.clone();
                     junction::validate_ownership(&mut t, &row)?;
+                    junction::place_owned_sweep(scene, &mut t, &row)?;
                     if row.kind == "junction" {
                         let preset = junction::detail(&t, &row)?;
                         junction::prepare(scene, &mut t, &mut row, &preset)?;
@@ -1426,7 +1446,7 @@ fn create_sweeps<'p>(history: &Obj<'p>, sweeps: &Obj<'p>) -> PyResult<Bound<'p, 
 }
 #[pyfunction]
 fn live_set<'p>(history: &Obj<'p>, row: &Obj<'p>) -> PyResult<Bound<'p, PyDict>> {
-    let rows: Vec<Row> = if row.is_instance_of::<pyo3::types::PyList>() {
+    let mut rows: Vec<Row> = if row.is_instance_of::<pyo3::types::PyList>() {
         json(row)?
     } else {
         vec![json(row)?]
@@ -1434,7 +1454,20 @@ fn live_set<'p>(history: &Obj<'p>, row: &Obj<'p>) -> PyResult<Bound<'p, PyDict>>
     if rows.is_empty() {
         return Err(PyValueError::new_err("Expected live rows"));
     }
-    for row in &rows {
+    for row in &mut rows {
+        if row.kind == "junction" && row.joint.parent.is_none() {
+            row.joint.parent.clone_from(&row.junction);
+        }
+        if let (Some(owner), Some(key)) = (
+            row.junction.as_ref().or(row.joint.parent.as_ref()), &row.key,
+        ) {
+            if row.uid.is_empty() {
+                row.uid = junction::id(owner, key);
+            }
+            if row.kind == "sweep" && row.owner.is_empty() {
+                row.owner = junction::id(owner, &format!("{key}:owner"));
+            }
+        }
         for uid in std::iter::once(&row.uid).chain(
             (!matches!(row.kind.as_str(), "sketch" | "repeat" | "junction")
                 || !row.owner.is_empty())
