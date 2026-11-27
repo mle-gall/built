@@ -347,14 +347,14 @@ impl Panels {
                 tabs.sort_by_key(|tab| match tab.plugin.as_str() {
                     "render_blender" => 0, "python_console" => 1, "solid_inspector" => 2, _ => 3,
                 });
-                let labels: Vec<_> = tabs.iter().map(|tab| (tab.title.clone(), String::new(), true)).collect();
+                let labels: Vec<_> = tabs.iter().map(|tab| (super::tr(&tab.title), String::new(), true)).collect();
                 if let Some(at) = tabs.iter().position(|tab| tab.instance == id) {
                     if let Some(pick) = kit::inline_underline_tabs(ui, &labels, at).filter(|pick| *pick != at) {
                         open_tab = Some(tabs[pick].plugin.clone());
                     }
                 }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    let button = kit::quiet(ui, "Close");
+                    let button = kit::quiet(ui, &super::tr("Close"));
                     ui.data_mut(|d| d.insert_temp(egui::Id::new("drawer-close"), button.rect.center()));
                     if button.clicked() {
                         close = true;
@@ -480,7 +480,7 @@ fn draw_item(
                     let draft = drafts.entry(key.clone()).or_insert_with(|| value.clone());
                     let r = if path {
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            if kit::quiet(ui, "Choose…").clicked() {
+                            if kit::quiet(ui, &super::tr("Choose…")).clicked() {
                                 event = Some(("browse", Value::Null));
                             }
                             kit::path_field(ui, draft)
@@ -551,7 +551,7 @@ fn draw_item(
                             .desired_width(width)
                             .hint_text(">>>"),
                     );
-                    (response, kit::sheet_button(ui, "Run", "", 1))
+                    (response, kit::sheet_button(ui, &super::tr("Run"), "", 1))
                 })
                 .inner;
             if focus {

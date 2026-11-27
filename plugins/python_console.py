@@ -172,10 +172,10 @@ class ConsolePanel(_ConsoleExecution):
             self._append_text(", ".join(sorted(k for k in self._scope if not k.startswith("_"))))
         elif control == "script":
             vp = self._viewport
-            path, _ = ShellFileDialog.getOpenFileName(vp.window(), "Run script", "", "Python (*.py)")
+            path, _ = ShellFileDialog.getOpenFileName(vp.window(), tr("Run script"), "", "Python (*.py)")
             if path and vp.window().viewport is vp:
                 self._scope["__file__"] = str(Path(path).resolve())
-                self._append_text("Running " + path)
+                self._append_text(tr("Running {path}", path=path))
                 self._run_code(Path(path).read_text(encoding="utf8"), path)
         elif control == "prompt" and event == "console_submit":
             self.history.append(value)

@@ -1,4 +1,9 @@
 {
+ "Running {path}": "Exécution de {path}",
+ "Run script": "Exécuter un script",
+ "Console": "Console",
+ "Diagnostics": "Diagnostics",
+ "Ready": "Prêt",
  "Preset": "Préréglage",
  "Scope": "Périmètre",
  "IFC profile": "Profil IFC",
