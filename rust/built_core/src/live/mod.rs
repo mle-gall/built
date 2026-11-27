@@ -9,6 +9,7 @@ mod drawn_profile;
 mod expr;
 mod file;
 mod geometry;
+mod hole;
 mod joints;
 pub(crate) mod junction;
 mod presets;
@@ -117,10 +118,11 @@ fn evaluate(
     row: &Row,
     active: &mut Option<String>,
     skipped: &mut Vec<(String, &'static str)>,
+    stamps: &mut repeat::MeshStamps,
 ) -> PyResult<&'static str> {
     let py = scene.py();
     if row.kind == "repeat" {
-        return repeat::evaluate(scene, t, row);
+        return repeat::evaluate(scene, t, row, stamps);
     }
     if row.kind == "cut" {
         return Ok("ok");
@@ -163,7 +165,7 @@ fn evaluate(
     let store = mesh.getattr("_store")?.cast_into::<PyMeshStore>()?;
     let mut resolved_path = None;
     let mut span_geometry = None;
-    let stamp = {
+    {
         let mut s = store.try_borrow_mut()?;
         let result = if row.kind == "cut_stack" {
             Ok(())
@@ -198,8 +200,7 @@ fn evaluate(
         if let Err(state) = result {
             return Ok(state);
         }
-        geometry::stamp(&s.inner)
-    };
+    }
     let body_cut = row.cuts.iter().any(|id| {
         t.rows.get(id).is_some_and(|r| {
             r.on != Some(false)
@@ -210,23 +211,28 @@ fn evaluate(
                             cut::Cutter::Body(_)
                                 | cut::Cutter::Repeat(_)
                                 | cut::Cutter::Section(_)
+                                | cut::Cutter::Hole(_)
                                 | cut::Cutter::Opening(_)
                         )
                     ))
         })
     });
-    let (mesh, stamp) = if body_cut {
+    let mesh = if body_cut {
         match cut::bodies(scene, t, row, mesh, active, skipped)? {
-            Ok(mesh) => {
-                let store = mesh.getattr("_store")?.cast_into::<PyMeshStore>()?;
-                let stamp = geometry::stamp(&store.try_borrow()?.inner);
-                (mesh, stamp)
-            }
+            Ok(mesh) => mesh,
             Err(state) => return Ok(state),
         }
     } else {
-        (mesh, stamp)
+        mesh
     };
+    let result_store = mesh.getattr("_store")?.cast_into::<PyMeshStore>()?;
+    let stamp = geometry::stamp(&result_store.try_borrow()?.inner);
+    if row.junction.is_some() {
+        stamps.insert(
+            mesh.as_ptr() as usize,
+            (mesh.clone().unbind(), stamp.clone()),
+        );
+    }
     let marker = PyDict::new(py);
     marker.set_item("row", &row.uid)?;
     if body_cut {
@@ -256,6 +262,10 @@ fn evaluate(
     Ok("ok")
 }
 fn run(scene: &Obj<'_>, t: &mut LiveTable, seeds: HashSet<String>) -> PyResult<()> {
+    static TIMING: OnceLock<bool> = OnceLock::new();
+    let timer = (!t.junctions.is_empty()
+        && *TIMING.get_or_init(|| std::env::var_os("BUILT_PERF").is_some()))
+    .then(std::time::Instant::now);
     let plan = t
         .plan(seeds.iter().cloned())
         .map_err(PyValueError::new_err)?;
@@ -265,6 +275,7 @@ fn run(scene: &Obj<'_>, t: &mut LiveTable, seeds: HashSet<String>) -> PyResult<(
         .flat_map(|id| [t.entry(id), Key::Row(id.clone())])
         .collect();
     let mut checked = HashSet::new();
+    let mut stamps = repeat::MeshStamps::new();
     for node in plan {
         if !dirty.contains(&node) {
             continue;
@@ -342,7 +353,7 @@ fn run(scene: &Obj<'_>, t: &mut LiveTable, seeds: HashSet<String>) -> PyResult<(
         let row = &t.rows[&uid];
         let mut active = None;
         let mut skipped = Vec::new();
-        let state = evaluate(scene, t, row, &mut active, &mut skipped)?;
+        let state = evaluate(scene, t, row, &mut active, &mut skipped, &mut stamps)?;
         let repeat = row.kind == "repeat";
         let cut_ids = row.cuts.clone();
         let initial = row.state.is_empty();
@@ -396,7 +407,7 @@ fn run(scene: &Obj<'_>, t: &mut LiveTable, seeds: HashSet<String>) -> PyResult<(
     for id in owners.into_iter().rev() {
         let Some(row) = t.rows.get(&id) else { continue };
         if let Some(g) = group(scene.py(), t, &row.owner) {
-            let stamp = repeat::stamp(&g)?;
+            let stamp = repeat::stamp_shared(&g, &mut stamps)?;
             let ext = metadata(&g)?;
             if !ext
                 .get_item(EXT)?
@@ -423,6 +434,12 @@ fn run(scene: &Obj<'_>, t: &mut LiveTable, seeds: HashSet<String>) -> PyResult<(
             row.state = if failure.is_some() { "failed" } else { "ok" }.into();
             row.joint.reason = failure.unwrap_or_default();
         }
+    }
+    if let Some(start) = timer {
+        eprintln!(
+            "Junction live evaluation {:.3} ms",
+            start.elapsed().as_secs_f64() * 1000.
+        );
     }
     Ok(())
 }
@@ -535,6 +552,9 @@ pub(crate) fn finish(
             .filter(|uid| !next.contains_key(*uid))
             .cloned()
             .collect();
+        if !t.junctions.is_empty() {
+            junction::forget_removed_parts(py, &mut t, &removed, &mut seeds)?;
+        }
         t.groups = Arc::new(next);
         for uid in added {
             let g = group(py, &t, &uid).expect("indexed placement");
@@ -581,6 +601,9 @@ pub(crate) fn finish(
                         seeds.insert(parent.clone());
                     }
                     junction::forget_content(&mut t, &row);
+                    if row.kind == "repeat" {
+                        junction::detach_holes(scene, &mut t, &row, false)?;
+                    }
                     if row.kind == "junction" {
                         junction::remove_descendants(&mut t, &id)?;
                         seeds.extend(std::mem::take(&mut t.pending));
@@ -1006,6 +1029,11 @@ impl Mutation {
                     t.insert(row.clone()).map_err(PyValueError::new_err)?;
                     if new_repeat {
                         let source = row.source.as_ref().unwrap();
+                        if let Some(junction) = t.owners.get(source)
+                            .filter(|id| t.junctions.contains(*id)).cloned()
+                        {
+                            junction::attach_holes(scene, &mut t, &junction, &row.uid)?;
+                        }
                         let users: Vec<_> = t.users(&Key::Placement(source.clone())).cloned().collect();
                         for uid in users {
                             let Some(mut cut) = t.rows.get(&uid).map(|r| (**r).clone()) else {
@@ -1042,6 +1070,9 @@ impl Mutation {
                 return Ok(());
             }
             Edit::Release(id) => {
+                if let Some(repeat) = t.rows.get(id).filter(|r| r.kind == "repeat").cloned() {
+                    junction::detach_holes(scene, &mut t, &repeat, true)?;
+                }
                 if let Some(j) = t.rows.get(id).filter(|r| r.kind == "junction").cloned() {
                     junction::release(scene, &mut t, &j)?;
                 }
@@ -1061,7 +1092,10 @@ impl Mutation {
                     // continue to use the baked result as their editable source.
                     t.insert((*row).clone()).map_err(PyValueError::new_err)?;
                     let later = target.cuts.split_off(at + 1);
-                    if evaluate(scene, &t, &target, &mut None, &mut Vec::new())? != "ok" {
+                    let state = evaluate(
+                        scene, &t, &target, &mut None, &mut Vec::new(), &mut repeat::MeshStamps::new(),
+                    )?;
+                    if state != "ok" {
                         return Err(PyValueError::new_err("Could not bake the cut"));
                     }
                     for uid in &target.cuts {
@@ -1648,6 +1682,7 @@ pub(crate) fn cut_labels(
                     cut::Cutter::Repeat(_) => "Repeat · cutter",
                     cut::Cutter::Section(_) => "section",
                     cut::Cutter::Opening(_) => "Opening",
+                    cut::Cutter::Hole(_) => "Hole",
                 };
                 Some((
                     id.clone(),

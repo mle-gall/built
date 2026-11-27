@@ -242,3 +242,218 @@ def test_owned_part_gets_a_stable_placement_and_releases_in_place(tmp_path):
     assert "junction" not in released and all_ids(assembly.children[0].mesh) == part_ids
     apply(h, "undo")
     assert junction(scene)["contents"][-1]["row"] == part["uid"]
+
+
+def test_detail_child_tracks_keys_and_depth_limit():
+    scene, history, _, _, parent_uid = setup()
+    detail = corner()
+    child = deepcopy(detail)
+    child["uid"] = "c081000000000031"
+    child["values"]["contents"] = []
+    detail["values"]["contents"] = [dict(key="nested", junction=dict(
+        detail=child["uid"], roles={"main": "@main", "joining": "@joining"}))]
+    apply(history, "preset_update", rows=[child, detail])
+    rows = {row["uid"]: row for row in live.live_rows(scene)}
+    nested = rows[parent_uid]["contents"][0]["junction"]
+    assert rows[nested]["parent"] == parent_uid
+    assert rows[nested]["roles"] == rows[parent_uid]["roles"]
+    parent = nested
+    for _ in range(6):
+        parent = apply(history, "junction_set", row=dict(
+            detail=child["uid"], parent=parent, key="nested", roles=rows[nested]["roles"]))["uid"]
+    revision = history.revision
+    result = commands.run(history, "junction_set", row=dict(
+        detail=child["uid"], parent=parent, key="nested", roles=rows[nested]["roles"]))
+    assert not result["ok"] and "8 levels" in str(result)
+    assert history.revision == revision
+    detail["values"]["contents"] = []
+    apply(history, "preset_update", rows=[detail])
+    assert [r["uid"] for r in live.live_rows(scene) if r["kind"] == "junction"] == [parent_uid]
+    assert not scene.groups_by_uid()[rows[parent_uid]["owner"]].children
+
+
+def knee_fixture(stage=3, bead=False, portal=False):
+    """Build the three knee storyboard states through the same History verbs."""
+    from tests.test_sketch_rows import member
+
+    scene = Scene()
+    history = History(scene)
+    if portal:
+        members = [member({"library": "en/he200a"}, [[0, 0, 0], [0, 0, 1.1]]),
+                   member({"library": "en/ipe240"}, [[0, 0, .8], [0, 1, 1.068]])]
+    else:
+        members = [member({"library": "en/he200a"}, [[0, 0, 0], [2, 0, 0]]),
+                   member({"library": "basic/timber"}, [[1, 0, 0], [1, 0, 1]])]
+    apply(history, "create_sweeps", sweeps=members)
+    column, beam = scene.groups
+    plate = next(p for p, _ in live.preset_catalog(scene) if p["name"] == "Plate")
+
+    def detail(n, name, roles, contents):
+        return dict(uid=f"c081{n:012x}", name=name, primitive="junction", pack="Project",
+                    rev=1, locks={}, record={"class": "IfcElementAssembly"},
+                    values=dict(meeting="parts", roles=dict.fromkeys(roles, {}), contents=contents))
+
+    # The head and bores start on the plate outer face, clear of the column web.
+    origin = [-55, -55, 0]
+    bolt = detail(18, "Bolt M16", ["ply_1", "ply_2"], [
+        dict(key="bolt", part={"fastener": {"d": 16, "clearance": 2, "grade": "8.8"},
+                               "at": {"frame": "@meet", "offset": origin}})])
+    weld = detail(19, "Fillet weld", ["a", "b"], [
+        dict(key="seam", part={"weld": {"throat": 4, "type": "fillet", "bead": bead}})])
+    root = detail(20, "End plate", ["main", "joining"], [
+        dict(key="end_cut", on="joining", row={"kind": "cut", "end": "start",
+             "operation": "trim", "cutter": {"plane": {}}, "anchor": {"ref": "@meet", "offset": 12}})])
+    root["values"]["meeting"] = "end_face"
+    root["values"]["params"] = [dict(key="plate_width", expr="joining.width + 150", unit="mm")]
+    if stage >= 2:
+        root["values"]["contents"].append(dict(key="plate", part={
+            "preset": plate["uid"], "fields": {"profile.params.width": "plate_width",
+            "profile.params.height": 300 if portal else 190, "thickness": 12}, "at": {"frame": "@meet"}}))
+    if stage >= 3:
+        root["values"]["contents"].extend([
+            dict(key="bolts", junction={"detail": bolt["uid"], "roles": {"ply_1": "@plate", "ply_2": "@main"},
+                 "repeat": {"rule": {"count": 2, "step": 110}, "run": "@meet.y",
+                            "nest": {"count": 2, "step": 110}}}),
+            dict(key="weld", junction={"detail": weld["uid"], "roles": {
+                "a": "@joining", "b": {"placement": "@plate", "face": "end"}}})])
+    apply(history, "preset_update", rows=[bolt, weld, root])
+    uid = apply(history, "junction_apply", detail=root["uid"], bindings={
+        "main": dict(placement=column.uid, face="flange_outer"),
+        "joining": dict(placement=beam.uid, end="start")})["uid"]
+    return scene, history, uid
+
+
+def test_knee_through_protocol(tmp_path):
+    scene, history, uid = knee_fixture()
+    rows = {r["uid"]: r for r in live.live_rows(scene)}
+    assert all(r["state"] == "ok" for r in rows.values()), [(r.get("key"), r["state"], r.get("reason")) for r in rows.values()]
+    groups = scene.groups_by_uid()
+    parts = {r["key"]: r for r in rows.values() if "key" in r}
+    assert groups[parts["plate"]["owner"]].ifc["class"] == "IfcPlate"
+    assert parts["plate"]["profile"]["params"]["width"] == 195
+    assert len([r for r in rows.values() if "hole" in r.get("cutter", {})]) == 2
+    bolts = groups[parts["bolts"]["owner"]]
+    copies = groups[parts["bolts:repeat"]["owner"]].children
+    assert len(copies) == 3 and all(c.children[0].mesh is bolts.children[0].mesh for c in copies)
+    assert bolts.children[0].ifc["predefined_type"] == "BOLT"
+    seam = groups[parts["weld"]["owner"]].children[0]
+    assert parts["weld"]["params"]["length"] == seam.ifc["length"]
+    assert abs(seam.ifc["length"] - 380) < .01 and len(seam.mesh.edges) == 4
+    path = tmp_path / "knee.built"
+    igz.save_scene(scene, path)
+    reopened = Scene()
+    igz.load_into(reopened, path)
+    assert all(r["state"] == "ok" for r in live.live_rows(reopened))
+    apply(history, "undo")
+    assert not any(r["kind"] == "junction" for r in live.live_rows(scene))
+    apply(history, "redo")
+    assert {r["uid"] for r in live.live_rows(scene)} == rows.keys()
+
+
+def test_component_glue_and_bead_records():
+    scene, history, parent = knee_fixture(bead=True)
+    groups = scene.groups_by_uid()
+    rows = {r["uid"]: r for r in live.live_rows(scene)}
+    weld = next(r for r in rows.values() if r.get("key") == "weld")
+    bead = groups[weld["owner"]].children[0]
+    assert len(bead.mesh.faces) == 12
+    glue = corner()
+    glue["uid"] = "c081000000000021"
+    glue["values"] = dict(meeting="parts", roles={"a": {}, "b": {}}, contents=[
+        dict(key="bond", part={"glue": {}}),
+        dict(key="bracket", part={"component": bead.uid, "at": {"frame": "@meet"}})])
+    apply(history, "preset_update", rows=[glue])
+    child = apply(history, "junction_set", row={"parent": parent, "key": "bond",
+                  "detail": glue["uid"], "roles": weld["roles"]})["uid"]
+    row = next(r for r in live.live_rows(scene) if r["uid"] == child)
+    bond, bracket = scene.groups_by_uid()[row["owner"]].children
+    assert bond.ifc["predefined_type"] == "GLUE" and abs(bond.ifc["area"] - 45 * 145) < .01
+    assert row["params"]["area"] == bond.ifc["area"]
+    assert not bond.mesh.faces
+    assert bead.mesh is bracket.mesh and bead.uid != bracket.uid
+
+
+def test_released_bolt_grid_keeps_holes_at_its_stations():
+    scene, history, uid = knee_fixture()
+    grid = next(r for r in live.live_rows(scene) if r["kind"] == "repeat")
+    apply(history, "live_release", uid=grid["uid"])
+    holes = [r["cutter"]["hole"] for r in live.live_rows(scene) if "hole" in r.get("cutter", {})]
+    assert len(holes) == 2
+    assert all(not h.get("repeat") and len(h["stations"]) == 3 for h in holes)
+    assert all(r["state"] == "ok" for r in live.live_rows(scene))
+    apply(history, "undo")
+    assert len(next(r for r in live.live_rows(scene) if r["uid"] == uid)["contents"]) == 5
+
+
+def test_removing_a_record_part_survives_detail_update():
+    scene, history, _ = knee_fixture()
+    weld = next(r for r in live.live_rows(scene) if r.get("key") == "weld")
+    part = scene.groups_by_uid()[weld["owner"]].children[0]
+    apply(history, "delete_placements", placements=[part.uid])
+    current = next(r for r in live.live_rows(scene) if r["uid"] == weld["uid"])
+    assert current["local"]["removed"] == ["seam"]
+    detail = next(p for p, _ in live.preset_catalog(scene) if p["uid"] == weld["detail"]["uid"])
+    apply(history, "preset_update", rows=[detail])
+    assert not scene.groups_by_uid()[weld["owner"]].children
+    assert all(r["state"] == "ok" for r in live.live_rows(scene))
+
+
+def test_fastener_resize_preserves_stations_and_refreshes_both_plies():
+    scene, history, _ = knee_fixture(portal=True)
+    rows = {r.get("key"): r for r in live.live_rows(scene)}
+    assembly = scene.groups_by_uid()[rows["bolts"]["owner"]]
+    grid = scene.groups_by_uid()[rows["bolts:repeat"]["owner"]]
+    bolt = assembly.children[0]
+    old_mesh = bolt.mesh
+    stations = [(c.uid, c.children[0].uid) for c in grid.children]
+    detail = next(p for p, _ in live.preset_catalog(scene) if p["uid"] == rows["bolts"]["detail"]["uid"])
+    detail["values"]["contents"][0]["part"]["fastener"]["d"] = 12
+    apply(history, "preset_update", rows=[detail])
+    assert bolt.ifc["d"] == 12 and bolt.mesh is not old_mesh
+    assert [(c.uid, c.children[0].uid) for c in grid.children] == stations
+    assert all(c.children[0].mesh is bolt.mesh for c in grid.children)
+    assert [r["cutter"]["hole"]["d"] for r in live.live_rows(scene)
+            if "hole" in r.get("cutter", {})] == [14, 14]
+    assert all(r["state"] == "ok" for r in live.live_rows(scene))
+    apply(history, "undo")
+    assert bolt.mesh is old_mesh
+
+
+def test_glue_only_counts_the_overlap_of_the_two_stock_faces():
+    scene, history, parent = knee_fixture(stage=2)
+    root = next(r for r in live.live_rows(scene) if r["uid"] == parent)
+    apply(history, "junction_set", row=dict(root, overrides={"plate_width": 20}))
+    rows = {r["uid"]: r for r in live.live_rows(scene)}
+    plate = next(r for r in rows.values() if r.get("key") == "plate")
+    glue = corner()
+    glue["uid"] = "c081000000000022"
+    glue["values"] = dict(meeting="parts", roles={"a": {}, "b": {}},
+                          contents=[dict(key="bond", part={"glue": {}})])
+    apply(history, "preset_update", rows=[glue])
+    child = apply(history, "junction_set", row=dict(parent=parent, key="bond", detail=glue["uid"],
+                  roles={"a": root["roles"]["joining"], "b": {"placement": plate["owner"], "face": "end"}}))["uid"]
+    row = next(r for r in live.live_rows(scene) if r["uid"] == child)
+    assert row["state"] == "ok" and abs(row["params"]["area"] - 20 * 145) < .01
+
+
+def test_moving_the_portal_knee_keeps_the_bolt_grid_and_weld(capfd):
+    import os
+    import re
+    from statistics import median
+
+    scene, history, uid = knee_fixture(portal=True)
+    rows = {r["key"]: r for r in live.live_rows(scene) if "key" in r}
+    grid = scene.groups_by_uid()[rows["bolts:repeat"]["owner"]]
+    stations = [g.uid for g in grid.children]
+    definition = grid.children[0].children[0].mesh
+    capfd.readouterr()
+    for i in range(21):
+        apply(history, "move_placements", placements=[scene.groups[1].uid],
+              delta=[.001 if i % 2 == 0 else -.001, 0, 0])
+    assert [g.uid for g in grid.children] == stations
+    assert all(g.children[0].mesh is definition for g in grid.children)
+    assert all(r["state"] == "ok" for r in live.live_rows(scene))
+    if os.environ.get("BUILT_PERF"):
+        samples = re.findall(r"Junction live evaluation ([\d.]+) ms", capfd.readouterr().err)
+        assert len(samples) == 21
+        print(f"One knee, median live evaluation {median(map(float, samples)):.3f} ms")
