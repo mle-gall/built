@@ -142,7 +142,8 @@ impl ViewportToolHost {
         Ok(Some(match verb {
             "grab" => {
                 let ctx = tool.getattr("_ctx")?;
-                let grabbed = transform_grab(tool, &ctx, "move")?;
+                let grabbed = super::move_hover::grip_grab(tool, "move")?
+                    || transform_grab(tool, &ctx, "move")?;
                 if grabbed {
                     gesture.borrow_mut().resident = TransformPose::begin(view, tool)?;
                     gesture.borrow_mut().close_array();

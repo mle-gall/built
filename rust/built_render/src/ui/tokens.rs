@@ -88,6 +88,17 @@ palette! {
 }
 
 #[cfg(test)]
+mod grip_tests {
+    /// The tool overlay (built_core) paints the box grips in the kit's GRIP.
+    #[test]
+    fn grip_marks_use_the_grip_token() {
+        let marks = include_str!("../../../built_core/src/tools/overlay_marks.rs");
+        let [r, g, b, _] = super::GRIP.to_array();
+        assert!(marks.contains(&format!("GRIP: u32 = 0x{r:02x}{g:02x}{b:02x}ff;")));
+    }
+}
+
+#[cfg(test)]
 mod axis_tests {
     /// The gizmo's axes match the drawing axes the model shows.
     #[test]
@@ -102,6 +113,12 @@ mod axis_tests {
         }
     }
 }
+
+/// What a Move or Rotate carries draws at this opacity (see_through.rs), so
+/// the snap behind it shows.
+pub const SEE_THROUGH: f32 = 0.35;
+/// The bounding-box grips of Move and Rotate (built_core overlay_marks GRIP).
+pub const GRIP: Color32 = ACCENT;
 
 /// The sheet shows the blurred scene with neutral colour and no panel rim.
 pub(crate) const SHEET_BLUR: f32 = 1.75;

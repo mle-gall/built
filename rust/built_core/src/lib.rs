@@ -450,6 +450,12 @@ fn built_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(tools::bevel_queries::bevel_targets, m)?)?;
     m.add_function(wrap_pyfunction!(tools::move_hover::track_move_grips, m)?)?;
     m.add_function(wrap_pyfunction!(tools::move_hover::rotation_handles, m)?)?;
+    m.add_function(wrap_pyfunction!(tools::move_hover::box_grip_points, m)?)?;
+    m.add_function(wrap_pyfunction!(tools::move_hover::clear, m)?)?;
+    m.add_function(wrap_pyfunction!(tools::move_hover::cycle_box_grips, m)?)?;
+    m.add_function(wrap_pyfunction!(tools::move_hover::grip_context, m)?)?;
+    m.add_function(wrap_pyfunction!(tools::move_hover::carried_box, m)?)?;
+    m.add_function(wrap_pyfunction!(tools::move_hover::carry_hides, m)?)?;
     m.add_function(wrap_pyfunction!(tools::move_hover::snap_exclusions, m)?)?;
     m.add_function(wrap_pyfunction!(tools::move_hover::moving_faces, m)?)?;
     m.add_function(wrap_pyfunction!(tools::plane_input::plane_input, m)?)?;

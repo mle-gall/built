@@ -2,6 +2,9 @@
 //! RotateHost callbacks on the live document.
 use super::*;
 
+/// The grip pick radius, as Move's.
+const GRIP_PX: f64 = 9.0;
+
 fn on_activate<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let tool = a.get_item(0)?;
@@ -22,6 +25,7 @@ fn on_deactivate<'py>(a: &Args<'py>) -> Reply<'py> {
     )?;
     tool.setattr("_axis_pick", none(py))?;
     tool.setattr("hover_point", none(py))?;
+    crate::tools::move_hover::clear(&tool)?;
     Ok(none(py))
 }
 fn cursor_plus<'py>(a: &Args<'py>) -> Reply<'py> {
@@ -67,11 +71,27 @@ fn host_copy_changed<'py>(a: &Args<'py>) -> Reply<'py> {
     viewport.call_method0("update")?;
     Ok(none(py))
 }
+/// The box grips show until the swing starts: before the centre and
+/// before the start point (both are taken on a grip, exactly).
+fn grips_wanted(tool: &Obj<'_>) -> PyResult<bool> {
+    Ok(tool.getattr("ref_point")?.is_none())
+}
 fn on_click<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let ctx = a.get_item(1)?;
+    let mut ctx = a.get_item(1)?;
     let tool = a.get_item(0)?;
-    tool.call_method1("_pointer_event", ("click", &ctx))?;
+    if grips_wanted(&tool)? && !tool.getattr("_hot_box")?.is_none() {
+        if tool.getattr("start_point")?.is_none() {
+            tool.setattr("_grip_pick", tool.getattr("_grip_groups")?)?;
+        }
+        ctx = crate::tools::move_hover::grip_context(&tool, &ctx)?;
+    }
+    let done = tool.call_method1("_pointer_event", ("click", &ctx));
+    tool.setattr("_grip_pick", none(py))?;
+    done?;
+    if !grips_wanted(&tool)? {
+        crate::tools::move_hover::clear(&tool)?;
+    }
     Ok(none(py))
 }
 fn host_pick_rotation<'py>(a: &Args<'py>) -> Reply<'py> {
@@ -81,7 +101,9 @@ fn host_pick_rotation<'py>(a: &Args<'py>) -> Reply<'py> {
     let viewport = a.get_item(1)?;
     let transform_grab = imported(py, "built_core")?.getattr("transform_grab")?;
     let ctx = tool.getattr("_ctx")?;
-    if !(transform_grab.call1((&tool, &ctx, "rotate"))?.is_truthy()?) {
+    if !crate::tools::move_hover::grip_grab(&tool, "rotate")?
+        && !(transform_grab.call1((&tool, &ctx, "rotate"))?.is_truthy()?)
+    {
         viewport.call_method1(
             "flash_status",
             (module.call_method1("tr", ("Select (or click) the geometry to rotate first",))?,),
@@ -115,8 +137,12 @@ fn host_rotation_angle<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn on_hover<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let ctx = a.get_item(1)?;
+    let mut ctx = a.get_item(1)?;
     let tool = a.get_item(0)?;
+    if grips_wanted(&tool)? {
+        crate::tools::move_hover::track_move_grips(&tool, &ctx, GRIP_PX, Some(false))?;
+        ctx = crate::tools::move_hover::grip_context(&tool, &ctx)?;
+    }
     tool.call_method1("_pointer_event", ("hover", &ctx))?;
     ctx.getattr("viewport")?.call_method0("update")?;
     Ok(none(py))
@@ -401,6 +427,12 @@ fn on_key<'py>(a: &Args<'py>) -> Reply<'py> {
     let modifiers = a.get_item(3)?;
     let tool = a.get_item(0)?;
     let viewport = a.get_item(1)?;
+    if key.eq(module.getattr("Qt")?.getattr("Key_Alt")?)?
+        && grips_wanted(&tool)?
+        && crate::tools::move_hover::cycle_box_grips(&tool, &viewport)?
+    {
+        return true.into_bound_py_any(py);
+    }
     if key.eq(module.getattr("Qt")?.getattr("Key_Control")?)? {
         return Ok(tool
             .call_method1(

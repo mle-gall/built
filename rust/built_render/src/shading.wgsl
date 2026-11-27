@@ -1,4 +1,5 @@
 override TEXTURED: bool = true;
+override SEE: bool = false;
 @group(2) @binding(0) var material_images: texture_2d_array<f32>;
 @group(2) @binding(1) var material_sampler: sampler;
 @group(2) @binding(2) var<storage, read> materials: array<vec4u>;
@@ -20,6 +21,9 @@ struct Out { @location(10) world: vec3f, @location(11) normal: vec3f, @location(
  let n = normalize(mat3x3f(cross(b,c),cross(c,a),cross(a,b))*normal);
  var o: Out; o.position = camera.vp*i.world*vec4f(pos,1);
  if camera.size.z == 4. && (i.info.z & 8u) == 0u { o.position = vec4f(2.,2.,2.,1.); }
+ // A carried row (see_through.rs) leaves the scene passes; only the
+ // see-through pass (SEE) draws it.
+ if !SEE && (i.info.z & 512u) != 0u { o.position = vec4f(2.,2.,2.,1.); }
  o.world = (i.world * vec4f(pos,1.)).xyz; o.normal = n;
  o.section_distance = dot(i.world * vec4f(pos,1.), style.section_plane);
  o.shade = select(0.62+0.38*abs(dot(n,normalize(vec3f(0.35,0.25,1.)))), 1., (i.info.z & 8u) != 0u);

@@ -33,6 +33,7 @@ BUDGET_MS = {
     "move_commit_200k": 60,
     "push_commit_200k": 144,
     "select_hover_200k": 3,      # median of a Select hover over the 200k mesh
+    "move_grip_hover": 3,        # median of a Move hover over groups: box grips, handles
     "select_all_view_frame": 100,  # the frame that shows a select-all's highlight
     "select_all_panel_frame": 50,  # worst frame while the panels catch up
 }
@@ -345,9 +346,47 @@ def test_big_model_interaction_budgets(tmp_path, model, x0):
         ms["move_commit_200k"] = min(moves)
         ms["push_commit_200k"] = statistics.median(pushes)
 
-    table = "\n".join(f"  {k:<24} {ms[k]:8.1f} ms  (budget {v} ms)" for k, v in BUDGET_MS.items())
+        # Move's hover over the yard of 3,000 parts and the nested blocks:
+        # the box grips and rotation handles come from the cached bounds.
+        if model is big_model:
+            ms["move_grip_hover"] = _grip_hovers(host, vp, view, move)
+
+    table = "\n".join(f"  {k:<24} {ms[k]:8.1f} ms  (budget {v} ms)" for k, v in BUDGET_MS.items() if k in ms)
     print("\nbig model budgets:\n" + table)
-    over = {k: round(ms[k], 1) for k, v in BUDGET_MS.items() if ms[k] >= v}
+    over = {k: round(ms[k], 1) for k, v in BUDGET_MS.items() if k in ms and ms[k] >= v}
     if over and _busy():
         pytest.skip(f"machine busy (load {os.getloadavg()[0]:.0f}); over budget: {over}\n{table}")
     assert not over, f"over budget: {over}\n{table}"
+
+
+def _grip_hovers(host, vp, view, move):
+    """Move's hover over the yard of 3,000 crates under one container: on
+    a crate (the grips) and between crates (inside the box, kept). The
+    offscreen host draws no pick IDs, so the group pick answers the yard
+    wherever the yard is; the rest of the hover (cached bounds, grips,
+    handles, their projection and hit test) runs as in the window."""
+    host.menu("tool:move")
+    vp.camera.set_view("top")
+    vp.camera.fit_to(V(-62, -202, 0), V(-30, -178, 1))
+    _settle(host)
+    tools = host.view.tools
+    tool = tools.tool
+    yard = next(g for g in vp.scene.groups if g.name == "Yard")
+    tools.pick_group = lambda x, y: yard
+    try:
+        move(V(-59.8, -199.8, .5))
+        _settle(host)
+        assert tool._grip_group is yard and len(tool._box_grips) == 8
+        grips = []
+        for i in range(60):
+            c, r = i % 20, (i * 7) % 14
+            gap = .75 if i % 2 else 0.
+            x, y = _px(view, V(-59.8 + 1.5 * c + gap, -199.8 + 1.5 * r + gap, .5))
+            start = time.perf_counter()
+            host.pointer("move", x, y, 0, 0, 0)
+            host.idle()
+            grips.append((time.perf_counter() - start) * 1e3)
+        assert tool._grip_group is yard
+    finally:
+        del tools.pick_group
+    return statistics.median(grips)

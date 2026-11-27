@@ -14,6 +14,7 @@ def prepare(tool):
     scene, history, native, updates = harness(tool)
     native.camera = OrbitCamera()
     native.pick_face_any = lambda *args: (None, None)
+    native.pick_group = lambda *args: None      # Move/Rotate box grips: none here
     return scene, history, native, updates
 
 

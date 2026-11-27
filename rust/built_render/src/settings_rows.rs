@@ -1170,6 +1170,10 @@ fn terrain_appearance(
     Ok(())
 }
 
+/// Settings › Modelling › «Rotation grips in Move» (read by the Move tool,
+/// built_core tools/move_hover.rs ROTATION_GRIPS_KEY).
+const MOVE_ROTATION_GRIPS: &str = "modelling/move_rotation_grips";
+
 /// `[(group id, caption, [Row])]` of a section (not Keyboard).
 pub const NDOF_SUPPORTED: bool = cfg!(any(target_os = "linux", target_os = "windows"));
 
@@ -1186,6 +1190,11 @@ pub fn section_groups<'py>(py: Python<'py>, env: &Bound<'py, PyAny>, section: &s
         "ai" => ai(py, env),
         "general" => general(py, env),
         "navigation" => navigation(py, env),
+        "modelling" => pref_page(py, env, section, vec![Binding::new(
+            "move_rotation_grips",
+            key_get(py, MOVE_ROTATION_GRIPS, obj(py, "1")?, Kind::Bool)?,
+            key_set(py, MOVE_ROTATION_GRIPS, Kind::Bool)?,
+        )]),
         "display" => display(py, env),
         "registry" => Ok(PyList::empty(py)),
         "ndof" if !NDOF_SUPPORTED => Ok(PyList::empty(py)),

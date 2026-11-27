@@ -37,6 +37,11 @@
       {"id": "dxf_unit", "kind": "choice", "label": "Suggested unit for DXF/DWG", "options": [["mm", "Millimetres"], ["cm", "Centimetres"], ["m", "Metres"], ["in", "Inches"], ["ft", "Feet"]], "default": "mm"}
     ]]
   ],
+  "modelling": [
+    ["tools", "Move and Rotate", [
+      {"id": "move_rotation_grips", "kind": "check", "label": "Rotation grips in Move", "default": true, "tip": "Red handles on the box of a hovered group or component: drag one to turn it about the box's centre."}
+    ]]
+  ],
   "navigation": [
     ["mouse", "Mouse", [
       {"id": "invert_wheel", "kind": "check", "label": "Invert wheel zoom", "default": false},
