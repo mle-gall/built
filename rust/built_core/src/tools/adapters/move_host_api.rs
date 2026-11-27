@@ -148,7 +148,9 @@ fn on_hover<'py>(a: &Args<'py>) -> Reply<'py> {
             .call_method1("on_hover", (&ctx,))?;
         return Ok(none(py));
     }
-    if tool.getattr("start_point")?.is_none() {
+    if tool.getattr("start_point")?.is_none()
+        && !tool.call_method1("_state", ("repeat_run",))?.is_truthy()?
+    {
         tool.call_method1("_track_grips", (&ctx,))?;
     }
     tool.call_method1(
@@ -260,6 +262,9 @@ fn on_cancel<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn rubber_band_lines<'py>(a: &Args<'py>) -> Reply<'py> {
     let tool = a.get_item(0)?;
+    if tool.call_method1("_state", ("repeat_run",))?.is_truthy()? {
+        return tool.getattr("_machine")?.call_method0("preview_lines");
+    }
     if !tool.getattr("_grip_rot")?.is_none() {
         return tool.getattr("_grip_rot")?.call_method0("rubber_band_lines");
     }
@@ -278,6 +283,21 @@ fn value_label<'py>(a: &Args<'py>) -> Reply<'py> {
     let grab: Obj<'py>;
     let hover: Obj<'py>;
     let tool = a.get_item(0)?;
+    if tool.call_method1("_state", ("repeat_run",))?.is_truthy()? {
+        let value = tool
+            .getattr("_machine")?
+            .call_method0("preview")?
+            .get_item("value")?;
+        if value.is_none() {
+            return Ok(none(py));
+        }
+        let point = value.get_item(0)?.extract::<[f64; 3]>()?;
+        return (
+            value.get_item(1)?,
+            crate::math::Vec3::from(glam::DVec3::from(point)),
+        )
+            .into_bound_py_any(py);
+    }
     if !tool.getattr("_grip_rot")?.is_none() {
         return tool.getattr("_grip_rot")?.call_method0("value_label");
     }
@@ -447,6 +467,14 @@ fn on_click<'py>(a: &Args<'py>) -> Reply<'py> {
     let ctx = a.get_item(1)?;
     let tool = a.get_item(0)?;
     let viewport = ctx.getattr("viewport")?;
+    if tool.call_method1("_state", ("repeat_run",))?.is_truthy()? {
+        tool.call_method1(
+            "_send",
+            (&viewport, tool.call_method1("_pointer", ("click", &ctx))?),
+        )?;
+        viewport.call_method0("update")?;
+        return Ok(none(py));
+    }
     if tool
         .getattr("_turn")?
         .call_method1("click", (&tool, &ctx))?

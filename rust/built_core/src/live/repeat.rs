@@ -701,6 +701,39 @@ pub(super) fn evaluate(scene: &Obj<'_>, t: &LiveTable, row: &Row) -> PyResult<&'
     Ok(if failed { "end_unresolved" } else { "ok" })
 }
 
+/// Place the handle on the member itself even when its origin is outside
+/// its geometry (a sweep can have its entire path offset from the origin).
+pub(super) fn grip(group: &Obj<'_>, owner_inverse: DMat4) -> PyResult<[f64; 3]> {
+    let mut pending = vec![group.clone()];
+    while let Some(g) = pending.pop() {
+        let store = g
+            .getattr("mesh")?
+            .getattr("_store")?
+            .cast_into::<PyMeshStore>()?;
+        let borrow = store.try_borrow()?;
+        let s = &borrow.inner;
+        if let Some(slot) = s.live_slots(Kind::Vertex).first() {
+            let local = s
+                .state
+                .frame
+                .definition_point(*s.state.vpos.get(*slot as usize));
+            let frame = owner_inverse * reference::frame(g.getattr("_doc_key")?.extract()?);
+            return Ok(frame.transform_point3(local.into()).to_array());
+        }
+        pending.extend(
+            g.getattr("children")?
+                .try_iter()?
+                .collect::<PyResult<Vec<_>>>()?,
+        );
+    }
+    Ok(
+        (owner_inverse * reference::frame(group.getattr("_doc_key")?.extract()?))
+            .w_axis
+            .truncate()
+            .to_array(),
+    )
+}
+
 /// The assembly itself is empty. Its stamp covers the instances and their
 /// transforms so a reader that edits a baked station makes the row stale.
 pub(super) fn stamp(owner: &Obj<'_>) -> PyResult<String> {

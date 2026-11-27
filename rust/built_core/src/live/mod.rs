@@ -1017,6 +1017,21 @@ fn live_repeat<'p>(scene: &Obj<'p>, owner: &str) -> PyResult<Obj<'p>> {
                         "owner_frame",
                         reference::frame(t.groups[owner]).to_cols_array(),
                     )?;
+                    if let (Some(source), Ok(last)) = (
+                        row.source
+                            .as_deref()
+                            .and_then(|uid| group(scene.py(), &t, uid)),
+                        g.getattr("children")?.get_item(-1),
+                    ) {
+                        let inverse = reference::frame(t.groups[owner]).inverse();
+                        result.set_item(
+                            "grips",
+                            [
+                                repeat::grip(&source, inverse)?,
+                                repeat::grip(&last, inverse)?,
+                            ],
+                        )?;
+                    }
                     for field in ["copies", "distinct", "stations"] {
                         if let Ok(value) = marker.get_item(field) {
                             result.set_item(field, value)?;

@@ -195,7 +195,7 @@ impl Tool for MoveTool {
 
     fn event(&mut self, ev: &ToolEvent, host: &mut dyn ToolHost) -> Reply {
         if let Some(row) = &self.run_edit {
-            let points = row["stations"].as_array();
+            let points = row.get("grips").unwrap_or(&row["stations"]).as_array();
             let frame = serde_json::from_value::<[f64; 16]>(row["owner_frame"].clone())
                 .ok()
                 .map(|m| glam::DMat4::from_cols_array(&m));
@@ -365,7 +365,7 @@ impl Tool for MoveTool {
         let mut out = Preview::default();
         if let Some(row) = &self.run_edit {
             if let (Some(stations), Ok(m)) = (
-                row["stations"].as_array(),
+                row.get("grips").unwrap_or(&row["stations"]).as_array(),
                 serde_json::from_value::<[f64; 16]>(row["owner_frame"].clone()),
             ) {
                 let frame = glam::DMat4::from_cols_array(&m);
@@ -407,6 +407,7 @@ impl Tool for MoveTool {
             "hover_point": pt(self.hover),
             "copy": self.copy,
             "repeat_count":self.repeat_count,
+            "repeat_run":self.run_edit.is_some(),
             "window": self.last.as_ref().map(|w| json!({"delta": j(w.delta), "token": w.token})),
         })
     }
