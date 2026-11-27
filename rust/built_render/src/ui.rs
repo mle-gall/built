@@ -238,7 +238,7 @@ pub struct Ui {
     /// The Tasks destination's composer, answers and pins (ui/tasks.rs).
     tasks: tasks::TaskPane,
     fix_rows: bool,
-    fix_rule: Option<(String, String)>,
+    fix_rule: Option<String>,
     /// The pointer shape the chrome asks for ("" or "resize_h").
     cursor_shape: &'static str,
     /// The Sheets workspace: while on, the page replaces the model (ui/sheets.rs).
@@ -2068,7 +2068,9 @@ impl Ui {
                         Destination::Project => {}
                     }
                     if self.fix_rows {
-                        kit::caption_plain(ui, self.fix_rule.as_ref().map_or("Delivery checks", |(label, _)| label.as_str()));
+                        let label = self.fix_rule.as_deref().unwrap_or("Delivery checks");
+                        kit::caption_plain(ui, label);
+                        export::status_fixes(ui, report, label, &mut actions);
                     }
                     if self.fix_rows && kit::quiet(ui, "← Back to Deliveries").clicked() {
                         self.fix_rows = false;
@@ -4231,15 +4233,31 @@ fn destination_round_trip_preserves_project_state_and_width() {
     assert_eq!(ui.take_actions(), ["tree:readiness\u{1f}1"]);
     ui.panels.set("readiness", serde_json::json!({
         "active": "d", "choices": [["d", "Handover"]], "ready": 0, "total": 3,
-        "rows": {"preview-tag:Walls": [3, 3]}, "items": {}, "notes": [],
+        "rows": {"preview-tag:Walls": [3, 3]}, "items": {}, "notes": ["Coverage detail"],
+        "checks": {
+            "*": {"unfiled/": ["Not filed", [{"path": ["a"]}, {"path": ["b"]}, {"path": ["c"]}]]},
+            "preview-tag:Walls": {"unfiled/": ["Not filed", [{"path": ["a"]}]]}
+        },
     }));
     let delivery = frame(&mut ui);
-    assert!(delivery.contains_key("Fix checklist") && delivery.contains_key("!"));
-    tree_click(&mut ui, delivery["Show 3 to fix"], egui::PointerButton::Primary);
+    for label in ["READY TO DELIVER", "⚠ 1 issue", "3 elements not filed", "What is checked", "KEPT", "Handover", "+ New", "!"] {
+        assert!(delivery.contains_key(label), "{label}");
+    }
+    assert!(!delivery.contains_key("Coverage detail"));
+    tree_click(&mut ui, delivery["What is checked"], egui::PointerButton::Primary);
+    assert!(frame(&mut ui).contains_key("Coverage detail"));
+    tree_click(&mut ui, delivery["Show ›"], egui::PointerButton::Primary);
     let narrowed = frame(&mut ui);
     assert!(narrowed.contains_key("Walls") && !narrowed.contains_key("Ceiling"));
     tree_click(&mut ui, narrowed["← Back to Deliveries"], egui::PointerButton::Primary);
     assert!(frame(&mut ui).contains_key("Handover"));
+    ui.panels.set("readiness", serde_json::json!({"ready": 0, "total": 0}));
+    let ready = frame(&mut ui);
+    assert!(ready.contains_key("✓ Ready") && ready.contains_key("No deliveries yet"));
+    assert!(!ready.contains_key("Show ›"));
+    ui.take_actions();
+    tree_click(&mut ui, ready["+ New"], egui::PointerButton::Primary);
+    assert!(ui.take_actions().iter().any(|action| action.contains("deliver:new")));
     ui.show_destination("project");
     assert!(frame(&mut ui).contains_key("Ceiling"));
     assert_eq!(column_rect(&ui).width(), width);
