@@ -107,6 +107,49 @@ def big_model(path):
     return path
 
 
+def painted_model(path, x0=0., n=GRID):
+    """An editable, welded import with shared paint rows and nested fittings."""
+    from pathlib import Path
+    from built_core.group import Group
+    from built_core.layers import Layer
+    from built_core.scene import Scene
+    from formats import igz
+    from tests.test_exact_edit import cylinder
+
+    scene = Scene()
+    scene.layers.extend([Layer("Panels"), Layer("Concealed", visible=False)])
+    mesh = scene.mesh
+    _grid(mesh, n, x0=x0)
+    texture = Path(__file__).resolve().parents[1] / "resources/textures/checker.png"
+    rows = []
+    for i in range(24):
+        rgb = (0.2 + i / 40, 0.65 - i / 60, 0.4)
+        row = dict(color=rgb, back=dict(color=rgb[::-1]), layer="Panels")
+        if i % 3 == 0:
+            row["texture"] = dict(path=str(texture), sw=2., sh=2.,
+                                  uvw=[.5, 0., 0., -x0 * .5, 0., .5, 0., .25])
+        rows.append(row)
+    rows.extend([dict(hidden=True), dict(layer="Concealed")])
+    mesh._attr_table.extend(rows)
+    for k, face in enumerate(mesh._store.keys("face")):
+        i, j = divmod(k, n)
+        row = (i + j) % 24
+        if i > n // 2 and j % 31 == 0:
+            row = 24 + i % 2
+        mesh._store.set_face_attr(face, row)
+    for edge in mesh._store.keys("edge")[::41]:
+        mesh._store.set_edge_flags(edge, 1)
+    fittings, _ = cylinder()
+    assembly = Group(name="Fittings")
+    for i in range(4):
+        part = Group(fittings.mesh, name=f"Sleeve {i}")
+        part.xform = _at(x0 + 20 + i * 4, 20, 0)
+        assembly.adopt([part])
+    scene.groups.append(assembly)
+    igz.save_scene(scene, path)
+    return path
+
+
 def _settle(host, rounds=3):
     for _ in range(rounds):
         host.idle()
@@ -135,8 +178,14 @@ def _busy():
 
 @pytest.mark.window
 @pytest.mark.slow
-def test_big_model_interaction_budgets(tmp_path):
-    source = big_model(tmp_path / "big.igz")
+@pytest.mark.parametrize("model,x0", [(big_model, 0.), (painted_model, 0.), (painted_model, 500000.)],
+                         ids=["assembly", "painted", "painted-far"])
+def test_big_model_interaction_budgets(tmp_path, model, x0):
+    source = (model(tmp_path / "big.igz") if model is big_model else
+              model(tmp_path / "big.igz", x0=x0))
+    def point(x, y, z=0.):
+        return V(x0 + x, y, z)
+
     ms = {}
     with open_test_host(tmp_path / "profile", width=1200, height=800) as host:
         win = host.window
@@ -171,12 +220,12 @@ def test_big_model_interaction_budgets(tmp_path):
         # Select's hover over the big mesh.
         host.menu("tool:select")
         vp.camera.set_view("top")
-        vp.camera.fit_to(V(0, 0, 0), V(40, 30, 0))
+        vp.camera.fit_to(point(0, 0, 0), point(40, 30, 0))
         _settle(host)
-        move(V(5.5, 5.5, 0))
+        move(point(5.5, 5.5, 0))
         hovers = []
         for i in range(60):
-            x, y = _px(view, V(5.0 + .37 * i % 30, 5.03 + .21 * (i % 5), 0))
+            x, y = _px(view, point(5.0 + .37 * i % 30, 5.03 + .21 * (i % 5), 0))
             start = time.perf_counter()
             host.pointer("move", x, y, 0, 0, 0)
             host.idle()
@@ -184,23 +233,23 @@ def test_big_model_interaction_budgets(tmp_path):
         ms["select_hover_200k"] = statistics.median(hovers)
 
         # Lines and erasures into the 200k-face mesh, each across three cells.
-        vp.camera.fit_to(V(0, 0, 0), V(12, 8, 0))
+        vp.camera.fit_to(point(0, 0, 0), point(12, 8, 0))
         _settle(host)
         lines, erasures = [], []
         for k in range(3):
             y = 2.5 + k
             host.menu("tool:line")
             _settle(host)
-            move(V(3.5, y, 0)); click(V(3.5, y, 0)); _settle(host)
-            move(V(6.5, y, 0)); _settle(host)
+            move(point(3.5, y, 0)); click(point(3.5, y, 0)); _settle(host)
+            move(point(6.5, y, 0)); _settle(host)
             faces = len(vp.scene.mesh.faces)
-            lines.append(timed(lambda: click(V(6.5, y, 0))))
+            lines.append(timed(lambda: click(point(6.5, y, 0))))
             assert len(vp.scene.mesh.faces) > faces          # the line cut cells
             _key(host, Qt.Key_Escape.value)
             host.menu("tool:eraser")
             _settle(host)
-            move(V(4.5, y, 0)); _settle(host)
-            x, yy = _px(view, V(4.5, y, 0))
+            move(point(4.5, y, 0)); _settle(host)
+            x, yy = _px(view, point(4.5, y, 0))
             host.pointer("press", x, yy, 1, 1, 0)
             _settle(host)
             edges = len(vp.scene.mesh.edges)
@@ -212,7 +261,7 @@ def test_big_model_interaction_budgets(tmp_path):
 
         # Select All: the viewport first, then the panels catch up.
         host.menu("tool:select")
-        vp.camera.fit_to(V(-160, -480, -1), V(460, 460, 2))
+        vp.camera.fit_to(point(-160, -480, -1), point(460, 460, 2))
         _settle(host)
         shown, worst = [], []
         for _ in range(2):
@@ -232,11 +281,11 @@ def test_big_model_interaction_budgets(tmp_path):
         ms["select_all_view_frame"] = min(shown)
         ms["select_all_panel_frame"] = min(worst)
 
-        vp.camera.fit_to(V(0, 0, 0), V(12, 8, 0))
+        vp.camera.fit_to(point(0, 0, 0), point(12, 8, 0))
         _settle(host)
         moves, pushes = [], []
         for k in range(3):
-            p = V(1 + k, 7, 0)
+            p = point(1 + k, 7, 0)
             q = V(p.x() + .3, p.y() + .2, 0)
             host.menu("tool:move")
             vertex = vp.scene.mesh.vertex_at(p)
@@ -251,7 +300,7 @@ def test_big_model_interaction_budgets(tmp_path):
             _key(host, Qt.Key_Escape.value)
 
         for k in range(3):
-            p = V(8.5 + k, 1.5, 0)
+            p = point(8.5 + k, 1.5, 0)
             q = V(p.x(), p.y() + .6, 0)
             host.menu("tool:pushpull")
             move(p)

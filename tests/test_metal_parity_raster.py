@@ -920,7 +920,8 @@ def test_filtered_face_has_no_colour_depth_or_reveal_geometry(native, grouped):
     np.testing.assert_array_equal(filtered, capture(native))
 
 
-def test_large_mesh_edits_match_a_fresh_pack_and_frame(native, monkeypatch):
+@pytest.mark.parametrize("painted", [False, True])
+def test_large_mesh_edits_match_a_fresh_pack_and_frame(native, monkeypatch, painted):
     from built_core import InstanceUpdates, Vec3, pack_scene
     from tests.test_big_model_budgets import _grid
     from tests.test_wgpu_updates import assert_matches_fresh_pack
@@ -928,6 +929,10 @@ def test_large_mesh_edits_match_a_fresh_pack_and_frame(native, monkeypatch):
     scene = Scene()
     mesh = scene.loose_mesh
     _grid(mesh, 182)
+    if painted:
+        mesh._attr_table.append(dict(color=(.4, .7, .9)))
+        for key in mesh._store.keys("face")[::3]:
+            mesh._store.set_face_attr(key, 0)
     packed = pack_scene(scene)
     updates = InstanceUpdates(scene, packed)
     packed.upload(native)
@@ -955,7 +960,39 @@ def test_large_mesh_edits_match_a_fresh_pack_and_frame(native, monkeypatch):
     mesh.add_face([Vec3(-1,0,0), Vec3(0,0,0), Vec3(0,1,0), Vec3(-1,1,0)])
     assert np.any(original != check())
     assert updates.face_ranges(mesh, [mesh.faces[0]]) == [(0, 0, 2)]
-    assert not mesh.faces[0].attrs
+    if painted:
+        mesh.faces[0].attrs["color"] = (.9, .2, .1)
+    else:
+        assert not mesh.faces[0].attrs
     mesh.faces[0].interior = True
     mesh.move_vertex(mesh.vertices[0], Vec3(.5,.5,.25))
     check()
+
+def test_painted_curved_edits_match_fresh_frames(native):
+    from built_core import InstanceUpdates, Vec3, pack_scene
+    from tests.test_big_model_budgets import _grid
+    from tests.test_exact_edit import cylinder
+    from tests.test_wgpu_updates import assert_matches_fresh_pack
+    from pathlib import Path
+
+    scene, _ = cylinder()
+    assert "corner_normals" in scene.mesh._store.display_arrays()
+    mesh = scene.mesh
+    _grid(mesh, 182, x0=-182.)
+    tex = str(Path(__file__).resolve().parents[1] / "resources/textures/checker.png")
+    row = dict(color=(.2,.4,.8), back=dict(color=(.8,.3,.2)),
+               texture=dict(path=tex, sw=2., sh=2., uvw=[.5,0.,0.,0.,0.,.5,0.,.25]))
+    mesh._attr_table.append(row)
+    for key in mesh._store.keys("face")[::3]:
+        mesh._store.set_face_attr(key, 0)
+    packed = pack_scene(scene)
+    updates = InstanceUpdates(scene, packed)
+    packed.upload(native)
+    corner = mesh.vertex_at(Vec3(-1., 1., 0.))
+    for delta in (.2, .4):
+        mesh.move_vertex(corner, Vec3(0., 0., delta))
+        updates.apply(*updates.diff(scene), native)
+        frame = capture(native)
+        assert_matches_fresh_pack(updates, scene)
+        pack_scene(scene).upload(native)
+        np.testing.assert_array_equal(frame, capture(native))
