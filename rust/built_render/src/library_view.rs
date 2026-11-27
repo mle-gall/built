@@ -101,8 +101,7 @@ const TYPES: [(&str, &str, &str); 4] = [
     ("materials", "Paint with it", "No materials yet."),
     ("components", "Place a copy", "No components yet."),
     ("families", "Place type", "Import a collection folder to browse its family types."),
-    ("profiles", "Use", "Profiles are coming: section outlines — steel shapes, mouldings, gaskets — \
-                         to extrude, or run along a path with Follow Me."),
+    ("profiles", "Use in Sweep", "No profiles in this collection."),
 ];
 
 fn kind(t: &str) -> (&'static str, &'static str, &'static str) {

@@ -7,6 +7,8 @@ use std::collections::BTreeMap;
 pub(super) struct Records {
     pub(super) editor: super::record_editor::Editor,
     pub rows: BTreeMap<Vec<String>, Row>,
+    sweep:Value,
+    sweep_editable:bool,
     total: usize,
     writable: Vec<String>,
     set_name: String,
@@ -31,6 +33,10 @@ impl Records {
     pub fn new(data: &Value, selection_count: usize) -> Self {
         let mut result = Self::default();
         for object in data.as_array().into_iter().flatten() {
+            if selection_count==1{
+                result.sweep=object["sweep"].clone();
+                result.sweep_editable=object["editable"]==true;
+            }
             result.total += 1;
             if object["editable"] == true {
                 result.writable.push(label(&object["uid"]).into());
@@ -83,6 +89,21 @@ impl Records {
         kit::disclosure(ui, "record identity", "Identity", true, |ui| {
             self.editor.identity(ui, out, layers)
         });
+        if let Some(row)=self.sweep.as_object(){
+            kit::disclosure(ui,"sweep record","Sweep",true,|ui|{
+                for (key,title) in [("profile_name","Profile"),("preset","Preset"),("attachment","Attachment"),("state","State")]{
+                    if let Some(value)=row.get(key).and_then(Value::as_str){kit::prop_row(ui,title,value);}
+                }
+                kit::prop_row(ui,"Rotation",&format!("{}°",self.sweep["rotation"]));
+                kit::prop_row(ui,"Mirror",if self.sweep["mirror"]==true{"On"}else{"Off"});
+                ui.add_enabled_ui(self.sweep_editable,|ui|ui.horizontal(|ui|{
+                    if self.sweep["path"]["points"].is_array() && self.sweep["path"]["ends"].is_null() && kit::quiet(ui,"Edit path").clicked(){
+                        send(out,"sweep.path",self.sweep["owner"].clone());
+                    }
+                    if kit::quiet(ui,"Release").clicked(){send(out,"sweep.release",self.sweep["owner"].clone());}
+                }));
+            });
+        }
         let ready = self.editor.ready();
         kit::disclosure(ui, "record psets", "Property sets", false, |ui| {
             ui.add_enabled_ui(ready, |ui| self.properties(ui, out))

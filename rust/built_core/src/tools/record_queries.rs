@@ -91,6 +91,33 @@ impl ViewportToolHost {
             | "tape_source" => self.paint_service(py, verb, arg)?,
             "edge_under" | "corner_edges" | "rounded_corners" | "two_edge_corners"
             | "vertex_degree" | "tangent_at" => self.arc_service(py, verb, arg)?,
+            "sweep_face_ref"=>{
+                let px:(f64,f64)=args(arg)?;
+                let Some(pair)=hit(view,"pick_face_placement",px)? else{return Ok(Some(Value::Null))};
+                let face=pair.get_item(0)?;let placement=pair.get_item(1)?;
+                if face.is_none(){return Ok(Some(Value::Null))}
+                let scene=view.getattr("scene")?;
+                let (mesh,path)=if placement.is_none(){(scene.getattr("mesh")?,Vec::new())}else{
+                    let owner=placement.getattr_opt("source_occurrence")?.unwrap_or(placement);
+                    (owner.getattr("mesh")?,scene.call_method1("occurrence_path",(&owner,))?.extract::<Vec<String>>()?)
+                };
+                let id=mesh.getattr("_store")?.call_method1("id_of",("face",face.getattr("key")?))?.extract()?;
+                json!({"path":path,"id":crate::element_ids::to_text('f',id)})
+            }
+            "sweep_picker" => {
+                py.import("built_render.wgpu_library")?.call_method1("open_library",(view.call_method0("window")?,"profiles",py.None(),"s:bundled"))?;
+                Value::Null
+            }
+            "sweep_edges" => {
+                let mut paths=Vec::new();
+                for e in view.getattr("scene")?.getattr("selection")?.try_iter()? {
+                    let e=e?;
+                    if let (Some(a),Some(b))=(e.getattr_opt("v0")?,e.getattr_opt("v1")?){
+                        paths.push([a.call_method0("position_tuple")?.extract::<P3>()?,b.call_method0("position_tuple")?.extract::<P3>()?]);
+                    }
+                }
+                json!(paths)
+            }
             "surface_path" => {
                 // A line over a curved face follows its surface (world
                 // points in and out; the store keeps them from its origin).

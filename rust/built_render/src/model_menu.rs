@@ -216,6 +216,7 @@ fn build_entries() -> Vec<MenuEntry> {
     // Draw and Tools: the tools you arm, then what runs at once.
     for (id, path, label, tool) in [
         ("tool:line", "Draw", "Line", "line"),
+        ("tool:sweep", "Draw", "Sweep", "sweep"),
         ("tool:line_on_surface", "Draw", "Line on Surface", "line_on_surface"),
         ("tool:freehand", "Draw", "Freehand", "freehand"),
         ("tool:geopath", "Draw", "Path", "geopath"),

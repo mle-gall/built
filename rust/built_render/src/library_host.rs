@@ -1477,9 +1477,22 @@ impl ProfilesProvider {
         "Profiles"
     }
 
-    #[classattr]
-    fn ready() -> bool {
-        false
+    fn items<'p>(&self,py:Python<'p>,_ctx:&Bound<'p,PyAny>)->PyResult<Bound<'p,PyAny>> {
+        let catalogue:serde_json::Value=serde_json::from_str(include_str!("../../../resources/profiles/starter.builtprofile")).expect("bundled profiles");
+        let items:Vec<_>=catalogue["sizes"].as_array().unwrap().iter().map(|s|serde_json::json!({
+            "key":s["key"],"name":s["label"],"short":s["standard"],"category":s["family"],
+            "source":"bundled","verbs":["apply"]
+        })).collect();
+        json(py)?.call_method1("loads",(serde_json::to_string(&items).unwrap(),))
+    }
+    #[pyo3(signature=(ctx,verb,item,_arg=""))]
+    fn run(&self,ctx:&Bound<'_,PyAny>,verb:&str,item:&Bound<'_,PyAny>,_arg:&str)->PyResult<()> {
+        if verb=="apply" {
+            let win=ctx.getattr("win")?;
+            win.call_method1("_activate_tool",("sweep",))?;
+            win.getattr("_tools")?.get_item("sweep")?.getattr("_machine")?.call_method1("set",("profile",item.get_item("key")?))?;
+        }
+        Ok(())
     }
 }
 

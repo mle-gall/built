@@ -752,7 +752,10 @@ fn cursor_value<'py>(a: &Args<'py>) -> Reply<'py> {
         py.import("views.document_interaction")?.getattr("DocumentInteraction")?.call_method1("_length_label_at", (&tools,))?
     };
     let display = tools.getattr_opt("view")?.unwrap_or_else(|| view.clone());
-    let at = if label.is_none() { none(py) } else { display.call_method1("_world_to_pixel", (label.get_item(1)?,))? };
+    let sweep=attr(&tool,"kind")?.eq("sweep")?;
+    let at = if sweep && !attr(&tool,"hover_point")?.is_none(){
+        display.call_method1("_world_to_pixel",(tool.getattr("hover_point")?,))?
+    }else if label.is_none() { none(py) } else { display.call_method1("_world_to_pixel", (label.get_item(1)?,))? };
     let history = attr(&attr(&win, "viewport")?, "history")?;
     let revision = match attr(&history, "revision")? {
         revision if revision.is_truthy()? => revision.call_method0("__int__")?,
@@ -776,7 +779,7 @@ fn cursor_value<'py>(a: &Args<'py>) -> Reply<'py> {
     } else {
         (caption, value)
     };
-    let shown = tr.call1((&caption,))?;
+    let shown = if sweep && !typing{tool.call_method1("_state",("chip",))?}else{tr.call1((&caption,))?};
     // The tool's refusal reads in the error colour (Fillet: a size that
     // does not fit the selection).
     let error = match tool.getattr_opt("value_error")? {

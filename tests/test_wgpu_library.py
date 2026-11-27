@@ -129,10 +129,12 @@ def test_a_scope_shows_its_items_sorted_and_a_search_shows_every_match():
                    ("Bundled · Wood", ["Ash", "Oak"]), ("Ride.igz · read-only", ["Rail"])]
 
 
-def test_providers_are_data_shaped_and_profiles_is_coming():
+def test_providers_are_data_shaped_and_profiles_have_sweep_actions():
     ids = [p.id for p in L.PROVIDERS]
     assert ids == ["materials", "components", "families", "profiles"]
-    assert not L.provider("profiles").ready and L.provider("profiles").empty
+    assert L.provider("profiles").ready
+    assert any(p["key"] == "en/ipe240" and "apply" in p["verbs"]
+               for p in L.provider("profiles").items(None))
     for p in L.PROVIDERS:
         for verb, label in p.verbs():
             assert isinstance(verb, str) and isinstance(label, str)

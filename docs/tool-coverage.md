@@ -13,6 +13,7 @@ registry. Regenerate it from that function after adding a tool.
 | --- | --- | --- | --- |
 | select | SelectTool | native | Rust state machine |
 | line | LineTool | native | Rust state machine |
+| sweep | SweepTool | native | Rust state machine |
 | line_on_surface | LineOnSurfaceTool | native | Rust state machine |
 | freehand | FreehandTool | native | Rust state machine |
 | rectangle | RectangleTool | native | Rust state machine, rubber_band_lines |
