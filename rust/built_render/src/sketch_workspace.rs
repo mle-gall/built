@@ -33,10 +33,9 @@ fn view_of<'p>(win: &Obj<'p>) -> PyResult<Obj<'p>> {
 }
 
 fn renderer<'p>(win: &Obj<'p>) -> PyResult<Option<Obj<'p>>> {
-    let view = view_of(win)?;
-    if view.is_none() {
-        return Ok(None);
-    }
+    // Headless windows (tests, scripts) have no document view.
+    let Some(doc) = win.getattr_opt("_doc")?.filter(|d| !d.is_none()) else { return Ok(None) };
+    let Some(view) = doc.getattr_opt("stand_in")?.filter(|v| !v.is_none()) else { return Ok(None) };
     Ok(view.getattr_opt("renderer")?.filter(|r| !r.is_none() && r.hasattr("ui_sketch_enter").unwrap_or(false)))
 }
 
@@ -394,11 +393,12 @@ pub fn action(win: &Obj<'_>, arg: &str) -> PyResult<()> {
 /// A window command while the sketch is up (⌘Z from the menu bar).
 pub fn command(win: &Obj<'_>, cmd: &str) -> PyResult<bool> {
     let Some(r) = renderer(win)? else { return Ok(false) };
-    if !r.call_method0("ui_sketch_shown")?.is_truthy()? {
+    // Only a real renderer answers with a bool (stand-ins answer anything).
+    if !r.call_method0("ui_sketch_shown")?.extract::<bool>().unwrap_or(false) {
         return Ok(false);
     }
     // Model tools wait until the sketch is left.
-    let took = cmd == "tool" || r.call_method1("ui_sketch_command", (cmd,))?.is_truthy()?;
+    let took = cmd == "tool" || r.call_method1("ui_sketch_command", (cmd,))?.extract::<bool>().unwrap_or(false);
     view_of(win)?.call_method0("update")?;
     Ok(took)
 }

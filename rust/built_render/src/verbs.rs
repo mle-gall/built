@@ -378,7 +378,6 @@ pub fn menu_rows(f: &Facts, kind: &str) -> Vec<Row> {
             if f.weldable { r.one(vec![e("weld_edges", "Weld Edges")]); }
             if faces {
                 r.one(vec![e("reverse", "Reverse faces"), e("orient", "Orient faces")]);
-                r.one(vec![e("sketchface", "Sketch on face")]);
                 r.family("Intersect", intersect());
                 r.one(vec![soften()]);
                 if edges && f.makes_faces {
@@ -389,7 +388,7 @@ pub fn menu_rows(f: &Facts, kind: &str) -> Vec<Row> {
                 r.one(vec![e("simplify", "Simplify mesh…")]);
                 r.family("Flip along", flip());
                 if !edges && f.faces == 1 {
-                    r.one(vec![ek("alignview", "Look at Face", "V")]);
+                    r.one(vec![ek("alignview", "Look at Face", "V"), e("sketchface", "Sketch on face")]);
                     if f.textured_face {
                         r.family("Texture", vec![e("texpos", "Position"), e("texreset", "Reset")]);
                     }
