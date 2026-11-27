@@ -117,7 +117,22 @@ impl Store {
     }
 
     pub(super) fn move_unjoined_slots(&mut self, source: &[Point], delta: Point) -> Option<Vec<u32>> {
+        // Most pointer moves address one grid cell. Reject distant vertices
+        // before computing three decimal rounding keys and hashing them.
+        // At the admitted magnitudes 0.001 covers the rounding interval
+        // and floating-point error by more than an order of magnitude.
+        let x_range = |cells: &HashSet<Cell>| {
+            let mut lo = f64::INFINITY;
+            let mut hi = f64::NEG_INFINITY;
+            for c in cells {
+                let x = f64::from_bits(c[0]);
+                lo = lo.min(x);
+                hi = hi.max(x);
+            }
+            (lo - 0.001)..=(hi + 0.001)
+        };
         let source: HashSet<_> = source.iter().copied().map(cell).collect();
+        let start_x = x_range(&source);
         let vertices = self.live_slots(Kind::Vertex);
         let mut moving = Vec::new();
         let mut landing = HashSet::new();
@@ -128,7 +143,7 @@ impl Store {
             if p.iter().any(|x| !x.is_finite() || x.abs() >= 1e11) {
                 return None;
             }
-            if source.contains(&cell(p)) {
+            if start_x.contains(&p[0]) && source.contains(&cell(p)) {
                 moving.push(v);
                 let dest = self.translated_position(p, delta);
                 if dest.iter().any(|x| !x.is_finite() || x.abs() >= 1e11) {
@@ -137,8 +152,11 @@ impl Store {
                 landing.insert(cell(dest));
             }
         }
+        let end_x = x_range(&landing);
         if vertices.iter().any(|&v| {
-            let position = cell(*self.state.vpos.get(v as usize));
+            let p = *self.state.vpos.get(v as usize);
+            if !end_x.contains(&p[0]) { return false; }
+            let position = cell(p);
             landing.contains(&position) && !source.contains(&position)
         }) {
             return None;

@@ -139,6 +139,12 @@ impl PyMeshStore {
     ) -> PyResult<Option<VertexResult>> {
         let mut work = Self::wrap(self.inner.clone());
         let paint = AttrChanges::new(owner)?;
+        // A Move requests texture carry even on an unpainted mesh. With
+        // no texture rows its position and landing checks are the ordinary
+        // untextured move, including a real weld at the destination.
+        let carry = carry && !(paint.table.is_empty()? && paint.own.iter().all(|(_, row)| {
+            row.cast::<PyDict>().is_ok_and(|d| !d.contains("texture").unwrap_or(true))
+        }));
         let mut landed = Vec::new();
         let mut folded = Vec::new();
         // This scan compares the actual post-rounding positions. If it succeeds,
@@ -192,6 +198,10 @@ impl PyMeshStore {
             } else {
                 ((false, 0, Vec::new()), HashSet::new())
             };
+            // This staged store starts from the live store. Its fold scan
+            // can update the last result using the moved vertices and any
+            // changed landing topology. Publish the cache with the edit.
+            *work.nonplanar.get_mut().unwrap() = self.nonplanar.get_mut().unwrap().clone();
             let Some((fold_bumps, folds)) =
                 work.fold_nonplanar(py, landing.clone(), 0.001, hypot)?
             else {
@@ -235,6 +245,9 @@ impl PyMeshStore {
         })?;
         paint.publish()?;
         self.inner = work.inner;
+        if delta.is_some() {
+            self.nonplanar = work.nonplanar;
+        }
         Ok(Some((moved, landed, folded, vec![], dirty)))
     }
 }
