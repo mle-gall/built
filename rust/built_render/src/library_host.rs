@@ -1811,6 +1811,7 @@ pub(crate) fn collection_form(win: &Bound<'_, PyAny>) -> PyResult<()> {
     kw.set_item("on_done", done)?;
     kw.set_item("validate", validate)?;
     let form = forms.getattr("Form")?.call(("Import collection", PyList::new(py, [folder,name])?), Some(&kw))?;
+    form.setattr("placement", "drawer")?;
     forms.call_method1("show", (win, form))?;
     Ok(())
 }

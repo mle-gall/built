@@ -785,6 +785,10 @@ impl Ui {
         self.sheet = Some(Sheet { title, body, tone, buttons });
     }
     pub fn place_form(&mut self, placement: &str) {
+        // A child prompt above a sheet must stay on top of that sheet.
+        if placement == "drawer" && (self.lsheet.open || self.sheets.shown) {
+            return;
+        }
         self.set_review(false);
         if placement == "inspector" {
             self.destination = Destination::Project;
@@ -1272,7 +1276,7 @@ impl Ui {
     fn over_chrome(&self, pos: Pos2) -> bool {
         // A choice or colour picker can extend beyond its parent panel.
         // Its next outside click dismisses it before the model takes input.
-        self.gallery.is_some() || self.menu_hits.len() > 1 || self.menu_hits.iter().any(|r| r.contains(pos)) || self.font_picker.is_some() || self.egui_popup_open() || self.hit.iter().any(|r| r.contains(pos))
+        self.dialog.is_some() || self.gallery.is_some() || self.menu_hits.len() > 1 || self.menu_hits.iter().any(|r| r.contains(pos)) || self.font_picker.is_some() || self.egui_popup_open() || self.hit.iter().any(|r| r.contains(pos))
             || self.gizmo.takes(pos)
             || self.ctx.layer_id_at(pos).is_some_and(|layer| self.panels.popup_layers.contains(&layer.id))
     }
@@ -1979,7 +1983,7 @@ impl Ui {
         let Some(mode) = self.drawer_mode() else { return };
         let bounds = self.drawer_bounds(ctx, screen);
         if mode == DrawerMode::Form {
-            self.draw_soften_preview(ctx, bounds);
+            self.draw_operation_preview(ctx, bounds);
         }
         kit::drawer(ctx, bounds, |ui| {
             let width = ui.available_width();

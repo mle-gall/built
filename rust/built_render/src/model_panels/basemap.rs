@@ -161,6 +161,7 @@ fn add(env: &Obj<'_>) -> PyResult<()> {
     let form = forms
         .getattr("Form")?
         .call((tr(py, "New XYZ source")?, fields), Some(&kw))?;
+    form.setattr("placement", "drawer")?;
     forms.call_method1("show", (env.getattr("win")?, form))?;
     Ok(())
 }

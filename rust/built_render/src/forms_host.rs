@@ -721,7 +721,9 @@ fn operation_form<'py>(py: Python<'py>, title: Py<PyAny>, model: Py<PyAny>, done
     let mut form = Form::make(py, title, PyList::empty(py).as_any(), note, None, obj(py, "ok")?, obj(py, "cancel")?, None, 480.0, Some(on_done), None, None, Some(validate), None)?;
     form.model = model;
     form.source = Source::Operation;
-    Bound::new(py, form)
+    let form = Bound::new(py, form)?;
+    form.setattr("placement", "drawer")?;
+    Ok(form)
 }
 
 /// The Browser's batch rename: the Rust preview, its validated targets
@@ -742,7 +744,9 @@ fn browser_rename_form<'py>(py: Python<'py>, window: Py<PyAny>, model: Py<PyAny>
     let mut form = Form::make(py, obj(py, tr(py, "Rename selected")?)?, PyList::empty(py).as_any(), None, Some(buttons.into_any()), obj(py, "ok")?, obj(py, "cancel")?, None, 520.0, Some(on_done), None, None, Some(validate), None)?;
     form.model = model;
     form.source = Source::Rename;
-    Bound::new(py, form)
+    let form = Bound::new(py, form)?;
+    form.setattr("placement", "drawer")?;
+    Ok(form)
 }
 
 // ---- on the window ----------------------------------------------------------------------
@@ -839,6 +843,7 @@ fn action(py: Python<'_>, win: &Bound<'_, PyAny>, arg: &str) -> PyResult<()> {
     let (kind, rest) = rest.split_once('\x1f').unwrap_or((rest, ""));
     let (fid, value) = rest.split_once('\x1f').unwrap_or((rest, ""));
     match kind {
+        "close" => { form.call_method0("close")?; }
         "v" => {
             form.call_method1("receive", (fid, value))?;
         }
@@ -947,6 +952,9 @@ fn field<'py>(py: Python<'py>, args: (&str, &str, Bound<'py, PyAny>, Bound<'py, 
 }
 
 fn post(py: Python<'_>, parent: &Bound<'_, PyAny>, form: Bound<'_, Form>) -> PyResult<()> {
+    if form.getattr_opt("placement")?.is_none() {
+        form.setattr("placement", "drawer")?;
+    }
     forms_mod(py)?.call_method1("show", (parent, form))?;
     Ok(())
 }

@@ -398,14 +398,17 @@ def test_soften_preview_tracks_the_slider_without_changing_the_document(native_w
     monkeypatch.setattr(chrome_forms, "show", lambda _, form: form_stack.append(form))
     monkeypatch.setattr(win.viewport, "_world_to_pixel", lambda point: (point.x(), point.y()))
     previews = []
+    placements = []
     display = SimpleNamespace(renderer=SimpleNamespace(
-        ui_set_dialog=lambda *args: None, ui_set_soften_preview=previews.append))
+        ui_set_dialog=lambda *args: None, ui_place_form=placements.append,
+        ui_set_soften_preview=previews.append))
     win._on_soften_edges()
     form = form_stack[-1]
     version = scene.version
     for value in ["0", "400"]:
         form.receive("slider", value)
         chrome_forms.before_frame(display, win)
+    assert placements == ["drawer", "drawer"]
     assert len(previews[0]) < len(previews[1])
     form.press("cancel")
     assert _soft(group.mesh) == 0

@@ -1037,11 +1037,14 @@ impl Ui {
         let command = mods & 8 != 0;
         match name {
             "Escape" => {
-                if self.lsheet.menu.is_none() && self.lsheet.head_menu.is_none()
+                // Export and Delivery stage their fields until the primary action.
+                // Escape discards the draft even when its name still has focus.
+                let editing = in_field && !matches!(self.lsheet.id().as_str(), "export" | "delivery");
+                if (editing || self.lsheet.choice_open()) && self.lsheet.menu.is_none() && self.lsheet.head_menu.is_none()
                     && self.lsheet.forms.values_mut().any(|d| d.escape_control(&self.ctx, &mut self.actions)) {
                     return true;
                 }
-                let (_, act) = self.lsheet.escape(in_field, in_search);
+                let (_, act) = self.lsheet.escape(editing, in_search);
                 match act {
                     Some(_) if !in_field && self.lsheet.id() == "scene-organiser" => { self.lsheet.set(None); }
                     Some(a) if a.is_empty() => self.ctx.memory_mut(|m| m.stop_text_input()),

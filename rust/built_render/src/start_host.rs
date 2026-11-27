@@ -894,11 +894,7 @@ fn action(py: Python<'_>, win: &Bound<'_, PyAny>, arg: &str) -> PyResult<()> {
         "show" => {
             show(win)?;
         }
-        "close" => {
-            if can_return(win) {
-                hide(win)?;
-            }
-        }
+        "close" => { hide(win)?; }
         "new" => {
             module.call_method1("new_model", (win,))?;
         }

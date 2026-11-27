@@ -98,7 +98,7 @@ def test_the_box_stays_on_screen(win, native_gpu_host):
     sc.selection.add(g)
     from built_render import chrome_forms
     with pytest.MonkeyPatch.context() as patch:
-        patch.setattr(chrome_forms, "ask_text", lambda *a, done, **kw: done("Caja"))
+        patch.setattr(chrome_forms, "show", lambda parent, form: form.press("ok"))
         win._on_make_component()
     assert g.is_component()
     assert on_face() == face                              # the report

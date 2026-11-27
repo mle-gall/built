@@ -27,6 +27,9 @@ class FakeRenderer:
     def ui_set_dialog(self, seq, title="", note="", width=420.0, fields=(), buttons=()):
         self.dialogs.append((seq, title, note, width, list(fields), list(buttons)))
 
+    def ui_place_form(self, placement):
+        self.placement = placement
+
     def ui_claims_key(self, name, mods=0):
         return True
 
@@ -332,3 +335,52 @@ def test_the_library_image_picker_follows_the_host(monkeypatch, tmp_path):
             return str(tmp_path / "wood.png"), flt
     monkeypatch.setattr(shell_files, "ShellFileDialog", Picker)
     assert wgpu_library._pick_image(None, "Base image") == str(tmp_path / "wood.png")
+
+
+@pytest.mark.parametrize("geometry,groups", [(True, 0), (False, 1), (True, 2)])
+def test_component_definition_without_replacing_selection(win, geometry, groups):
+    from built_core import Vec3
+    from built_core.group import Group
+    scene = win.viewport.scene
+    originals = [Group(name=f"Part {i}") for i in range(groups)]
+    if originals:
+        from built_core import Matrix4
+        originals[0].xform = Matrix4()
+        originals[0].component = False
+    scene.groups.extend(originals)
+    entities = originals.copy()
+    if geometry:
+        entities.append(scene.mesh.add_face([Vec3(0, 0, 0), Vec3(2, 0, 0), Vec3(0, 2, 0)]))
+    scene.select(entities)
+    win._on_make_component()
+    form = cf.current(win)
+    form.receive("text", "Spare")
+    form.receive("replace", "0")
+    form.press("ok")
+    assert list(scene.groups) == originals and all(not g.is_component() for g in originals)
+    assert set(scene.selection) == set(entities)
+    template, = scene.kept_components
+    assert template.is_component() and template.name == "Spare"
+    assert len(template.mesh.faces) == int(geometry)
+    if groups == 1:
+        assert template.mesh is not originals[0].mesh
+    if groups > 1:
+        assert all(copy.mesh is not original.mesh for copy in template.children for original in originals)
+        assert sorted(g.name for g in template.children) == sorted(g.name for g in originals)
+    win.viewport.history.undo()
+    assert not scene.kept_components
+
+
+def test_create_can_start_the_existing_axes_tool(win, monkeypatch):
+    from built_core.group import Group
+    scene = win.viewport.scene
+    group = Group(name="West wing")
+    scene.groups.append(group)
+    scene.select([group])
+    targets = []
+    monkeypatch.setattr(win, "_on_change_axes", targets.append)
+    win._on_make_component()
+    form = cf.current(win)
+    form.receive("axes", "1")
+    form.press("ok")
+    assert targets == [group] and group.is_component()

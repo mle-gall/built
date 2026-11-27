@@ -33,6 +33,13 @@ fn reason_color(index: u8) -> Color32 {
     }
 }
 
+fn join_preview(paint: &egui::Painter, marks: &[(u8, f32, f32)]) {
+    for &(reason, x, y) in marks {
+        let radius = if reason == 0 { 4.0 } else { 6.0 };
+        paint.circle(pos2(x, y), radius, reason_color(reason), Stroke::new(1.5_f32, INK));
+    }
+}
+
 /// For a choice, max holds the number of selectable leading entries.
 pub const LIMIT_CHOICES: u32 = 64;
 pub const DISABLED: u32 = 1;
@@ -177,8 +184,7 @@ impl Ui {
     pub(super) fn dialog_key(&mut self, name: &str, pressed: bool, mods: u8) -> bool {
         let Some(d) = self.dialog.as_mut() else { return false };
         if pressed && name == "Escape" {
-            if d.escape_control(&self.ctx, &mut self.actions) { return true; }
-            if let Some(id) = d.button_of(3) { self.actions.push(d.act("b", &id, None)); }
+            if d.choice_open.take().is_none() { self.actions.push(d.act("close", "", None)); }
             return true;
         }
         if pressed && mods & (2 | 8) != 0 && d.fields.iter().any(|f| f.8 & COMMIT_ON_BLUR != 0) {
@@ -220,9 +226,13 @@ impl Ui {
         true
     }
 
-    pub(super) fn draw_soften_preview(&self, ctx: &egui::Context, bounds: Rect) {
-        if let Some(lines) = self.dialog.as_ref().and_then(|d| d.soften_preview.as_ref()) {
-            let paint = ctx.layer_painter(egui::LayerId::background()).with_clip_rect(bounds);
+    pub(super) fn draw_operation_preview(&self, ctx: &egui::Context, bounds: Rect) {
+        let Some(d) = self.dialog.as_ref() else { return };
+        let paint = ctx.layer_painter(egui::LayerId::background()).with_clip_rect(bounds);
+        if let Some(marks) = &d.join_marks {
+            join_preview(&paint, marks);
+        }
+        if let Some(lines) = &d.soften_preview {
             for &(a, b) in lines {
                 paint.line_segment([a.into(), b.into()], Stroke::new(2_f32, ACCENT));
             }
@@ -231,12 +241,28 @@ impl Ui {
 
     pub(super) fn drawer_form(&mut self, ui: &mut egui::Ui) {
         let Some(d) = self.dialog.as_mut() else { return };
-        super::kit::caption_plain(ui, &d.title);
-        fields(ui, d, &mut self.actions);
+        ui.horizontal(|ui| {
+            super::kit::caption_plain(ui, &d.title);
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if super::kit::icon_button(ui, "×", &super::tr("Close")).clicked() {
+                    self.actions.push(d.act("close", "", None));
+                }
+            });
+        });
+        egui::ScrollArea::vertical().id_salt(&d.seq)
+            .max_height(ui.ctx().screen_rect().height() * 0.45)
+            .auto_shrink([false, true]).show(ui, |ui| {
+                if !d.note.is_empty() {
+                    ui.label(egui::RichText::new(&d.note).font(body()).color(DIM));
+                }
+                fields(ui, d, &mut self.actions);
+            });
         ui.horizontal(|ui| {
             for (id, label, hint, role) in &d.buttons {
-                let label = if role & 127 == 1 { "Apply" } else { label };
-                if ui.add_enabled_ui(role & 128 == 0, |ui| sheet_button(ui, label, hint, role & 127)).inner {
+                let label = if role & 127 == 1 && label == &super::tr("OK") {
+                    super::tr("Apply")
+                } else { label.clone() };
+                if ui.add_enabled_ui(role & 128 == 0, |ui| sheet_button(ui, &label, hint, role & 127)).inner {
                     self.actions.push(d.act("b", id, None));
                 }
             }
@@ -266,10 +292,7 @@ impl Ui {
                 let (all, _) = ui.allocate_exact_size(screen.size(), Sense::click_and_drag());
                 if let Some(marks) = &d.join_marks {
                     let paint = ui.painter().with_clip_rect(Rect::from_min_max(pos2(left, TOP_H), pos2(right, all.max.y)));
-                    for &(reason, x, y) in marks {
-                        let radius = if reason == 0 { 4.0 } else { 6.0 };
-                        paint.circle(pos2(x, y), radius, reason_color(reason), Stroke::new(1.5_f32, INK));
-                    }
+                    join_preview(&paint, marks);
                 } else {
                     ui.painter().rect_filled(Rect::from_min_max(pos2(all.min.x, TOP_H), all.max), CornerRadius::ZERO, SCRIM);
                 }
@@ -278,7 +301,14 @@ impl Ui {
                     glass(Surface::Raised).inner_margin(Margin::same(14)).show(ui, |ui| {
                         ui.set_width(w - 28.0);
                         ui.spacing_mut().item_spacing = vec2(0.0, SPACE_XS);
-                        ui.add(egui::Label::new(egui::RichText::new(&d.title).font(title_font()).color(INK)).wrap());
+                        ui.horizontal(|ui| {
+                            ui.label(egui::RichText::new(&d.title).font(title_font()).color(INK));
+                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                if super::kit::icon_button(ui, "×", &super::tr("Close")).clicked() {
+                                    out.push(d.act("close", "", None));
+                                }
+                            });
+                        });
                         if !d.note.is_empty() {
                             ui.add(egui::Label::new(egui::RichText::new(&d.note).font(body()).color(DIM)).wrap());
                         }

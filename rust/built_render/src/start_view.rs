@@ -570,7 +570,7 @@ impl<'a> View<'a> {
         }
         let links = [("libraries", "Library"), ("prefs", "Settings"), ("extensions", "Extensions"), ("help", "Help")];
         json!({
-            "id": "start", "title": "Start", "closable": st.back, "width": 1180.0, "backdrop_icon": backdrop,
+            "id": "start", "title": "Start", "closable": true, "width": 1180.0, "backdrop_icon": backdrop,
             "default_verb": if st.projects_tab && found.is_none() {"project"} else if found.is_none() {"new"} else {""},
             "tabs": [{"id":"models","label":"Models","on":!st.projects_tab},{"id":"projects","label":"Projects","on":st.projects_tab}],
             "verbs": verbs, "menus": [],

@@ -1006,7 +1006,7 @@ def test_native_mesh_units_and_model_menu(tmp_path, suffix):
         f"wait 600\nmenu open_path:{path}\nwait 300\nstate\nkey escape\nwait 200\nstate\n"
         f"menu open_path:{path}\nwait 250\nkey enter\nwait 700\nstate\n"
         "menu scene_add\nmenu scene_duplicate\nmenu export:obj\nwait 250\nstate\n"
-        "key escape\nwait 120\nkey escape\nwait 120\nkey escape\nwait 300\nstate\nquit\n")
+        "key escape\nwait 300\nstate\nquit\n")
     result = run([str(BIN), "--root", str(ROOT), "--venv", str(ROOT / ".venv"), "--new-instance",
                   "--size", "960x700", "--script", str(steps),
                   str(ROOT / "tests/fixtures/shell/slab-and-cube.igz")],
@@ -1248,3 +1248,42 @@ wait 250
         [0.02, 3, 0.5, "width", "cut", "vertices", None, True],
     ]
     assert launch(both) == defaults
+
+
+@pytest.mark.window
+@pytest.mark.window_size(1280, 800)
+def test_component_drawer_cancel_and_create(tmp_path):
+    model = tmp_path / "selection.built"
+    from formats.igz import save_scene
+    from built_core.scene import Scene
+    from tests.test_group_vs_component import _box_group
+    save_scene(Scene(groups=[_box_group(0, "North gallery")]), model)
+    venv = fixture_venv(tmp_path, """from built_render import Host
+original = Host.state
+def state(self):
+    sc = self.viewport.scene
+    return dict(original(self), selected=sorted(g.uid for g in sc.selection),
+                components=[g.name for g in sc.groups if g.is_component()],
+                revision=self.viewport.history.revision)
+Host.state = state
+""")
+    script = tmp_path / "steps"
+    script.write_text("wait 600\nmenu select_all\nwait 180\nstate\nkey g\nwait 250\nstate\n"
+                      "type Discarded\nclick 400 250\nkey escape\nwait 180\nstate\n"
+                      "key g\nwait 250\nclick 914 615\nwait 180\nstate\n"
+                      "key g\nwait 250\nclick 170 730\nwait 180\nstate\n"
+                      "key g\nwait 250\ntype Gallery\nwait 150\nkey enter\nwait 300\nstate\nquit\n")
+    result = run([BIN, "--new-instance", "--root", ROOT, "--venv", venv, "--size", "1280x800",
+                  "--script", script, model], settings=english(tmp_path / "profile"),
+                 capture_output=True, text=True, timeout=60)
+    log = result.stdout + result.stderr
+    assert result.returncode == 0, log
+    before, opened, escaped, closed, cancelled, applied = [json.loads(line.removeprefix("[built] state "))
+        for line in log.splitlines() if line.startswith("[built] state ")][:6]
+    assert opened["input"]["drawer_operation"], log
+    assert before["selected"] and before["selected"] == opened["selected"]
+    for dismissed in (escaped, closed, cancelled):
+        assert dismissed["selected"] == before["selected"] and dismissed["revision"] == before["revision"]
+        assert not dismissed["input"]["dialog"]
+    assert applied["components"] == before["components"] + ["Gallery"]
+    assert applied["revision"] == before["revision"] + 1 and not applied["input"]["dialog"]
