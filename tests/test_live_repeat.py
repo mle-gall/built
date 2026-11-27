@@ -237,3 +237,31 @@ def test_notched_adaptive_parts_match_the_boolean_kernel(tmp_path):
         if reference.xform is None:
             reference.xform = Matrix4()
         assert points(station) == points(reference)
+
+
+def test_failed_adaptive_intersections_keep_their_last_mesh_and_recover():
+    from built_core.history import History
+    from tests.test_live_cut import make_member
+
+    scene = Scene()
+    history = History(scene)
+    make_member(history, [[0, 0, 0], [0, 2, 0]])
+    make_member(history, [[-.2, 1, 0], [5, 1, 0]])
+    source, cutter = scene.groups
+    apply(history, "live_set", row=dict(kind="cut", uid="0000000000000d01", owner=source.uid,
+                                       operation="intersect", cutter={"body": cutter.uid}))
+    row = dict(repeat(source), run={"points": [[0, 0, 0], [4, 0, 0]]})
+    apply(history, "live_set", row=row)
+    assembly = scene.groups[-1]
+    good = [g.mesh for g in assembly.children]
+    identities = [g.uid for g in assembly.children]
+    recipe = next(r for r in queries.live_rows(scene) if r["kind"] == "sweep" and r["owner"] == cutter.uid)
+    recipe["path"]["points"][-1][0] = 2.5
+    apply(history, "live_set", row=recipe)
+    assert [bool(g.ext.get("built.repeat_state")) for g in assembly.children] == [False, False, True, True]
+    assert [g.mesh for g in assembly.children[2:]] == good[2:]
+    recipe["path"]["points"][-1][0] = 5
+    apply(history, "live_set", row=recipe)
+    assert not any(g.ext.get("built.repeat_state") for g in assembly.children)
+    assert [g.uid for g in assembly.children] == identities
+    assert all(r["state"] == "ok" for r in queries.live_rows(scene))

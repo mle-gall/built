@@ -644,8 +644,13 @@ pub(super) fn evaluate(scene: &Obj<'_>, t: &LiveTable, row: &Row) -> PyResult<&'
                     Err(state) => Err(state),
                 }
             } else {
-                let state = super::evaluate(scene, &local, recipe, &mut None, &mut Vec::new())?;
-                if state == "ok" {
+                let last_good = copy.getattr("mesh")?;
+                let mut skipped = Vec::new();
+                let state = super::evaluate(scene, &local, recipe, &mut None, &mut skipped)?;
+                if let Some((_, failure)) = skipped.first() {
+                    copy.setattr("mesh", last_good)?;
+                    Err(*failure)
+                } else if state == "ok" {
                     Ok(copy.getattr("mesh")?)
                 } else {
                     Err(state)
