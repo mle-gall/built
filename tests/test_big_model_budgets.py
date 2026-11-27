@@ -239,14 +239,15 @@ def test_big_model_interaction_budgets(tmp_path):
             p = V(1 + k, 7, 0)
             q = V(p.x() + .3, p.y() + .2, 0)
             host.menu("tool:move")
+            vertex = vp.scene.mesh.vertex_at(p)
+            before = vertex.position_tuple()
             move(p)
             click(p)
             _settle(host)
             move(q)
             _settle(host)
-            revision = vp.scene.mesh.revision
             moves.append(timed(lambda: click(q)))
-            assert vp.scene.mesh.revision > revision
+            assert vertex.position_tuple() != before
             _key(host, Qt.Key_Escape.value)
 
         for k in range(3):
