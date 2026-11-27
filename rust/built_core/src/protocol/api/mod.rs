@@ -72,7 +72,7 @@ use meth;
 const KEYS: &str =
     "mesh_key known_mesh resolve_mesh kind_of store_of element elements to_json_key from_json_key";
 const QUERIES: &str =
-    "live_rows sketch_profile mesh_info faces edges vertices selection select feed solid_report triangles face_set_volume resolve";
+    "junction_frames live_rows sketch_profile mesh_info faces edges vertices selection select feed solid_report triangles face_set_volume resolve";
 #[pyfunction(name = "__getattr__")]
 fn child<'p>(py: Python<'p>, name: &str) -> PyResult<Obj<'p>> {
     if matches!(name, "commands" | "records" | "queries" | "keys" | "feed") {
@@ -210,7 +210,16 @@ pub(crate) fn install(m: &Module<'_>, full: &str) -> PyResult<()> {
     Ok(())
 }
 const VERBS: &[&str] = &[
-    "preset_delete", "preset_update", "create_sweeps", "live_set", "live_release", "live_reevaluate", "sketch_commit",
+    "preset_delete",
+    "preset_update",
+    "junction_apply",
+    "junction_set",
+    "junction_release",
+    "create_sweeps",
+    "live_set",
+    "live_release",
+    "live_reevaluate",
+    "sketch_commit",
     "set_location",
     "set_model_units",
     "set_annotation_font",

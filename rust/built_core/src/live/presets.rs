@@ -34,6 +34,7 @@ pub(super) fn follower(row: &Row) -> Option<&str> {
     row.sweep
         .as_ref()
         .and_then(|s| s.preset_uid.as_deref())
+        .or_else(|| row.joint.detail["uid"].as_str())
         .or_else(|| row.repeat.repeat_preset.as_ref().map(|p| p.uid.as_str()))
 }
 
@@ -106,10 +107,22 @@ impl Preset {
         if self.uid.len() != 16
             || !self.uid.bytes().all(|c| c.is_ascii_hexdigit())
             || self.name.trim().is_empty()
-            || !matches!(self.primitive.as_str(), "sweep" | "cut" | "repeat")
+            || !matches!(
+                self.primitive.as_str(),
+                "sweep" | "cut" | "repeat" | "junction"
+            )
             || self.locks.values().any(|v| v != "free" && v != "fixed")
         {
             return Err(error("Invalid preset"));
+        }
+        if self.primitive == "junction" {
+            let params = self
+                .values
+                .get("params")
+                .and_then(Value::as_array)
+                .map(Vec::as_slice)
+                .unwrap_or(&[]);
+            expr::validate(params).map_err(error)?;
         }
         if self.primitive == "repeat"
             && self
@@ -235,6 +248,12 @@ pub fn update(scene: &Obj<'_>, t: &mut LiveTable, presets: &[Preset]) -> PyResul
                 return Err(error("Preset has an incompatible or stale follower"));
             }
             let mut row = (*row).clone();
+            if row.kind == "junction" {
+                junction::prepare(scene, t, &mut row, &p)?;
+                t.pending.insert(row.uid.clone());
+                t.insert(row).map_err(error)?;
+                continue;
+            }
             if row.kind == "repeat" {
                 apply_repeat(&mut row, &p, true)?;
                 if let Some(g) = group(scene.py(), t, &row.owner) {

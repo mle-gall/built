@@ -2,6 +2,9 @@
   "commands": [
     "preset_delete",
     "preset_update",
+    "junction_apply",
+    "junction_set",
+    "junction_release",
     "create_sweeps",
     "live_set",
     "live_release",

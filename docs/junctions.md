@@ -974,6 +974,31 @@ The demo beat (pass-6 storyboard: knees saved once and re-applied, purlin
 cleats across the Repeat, schedules and IFC) is the acceptance test for J0–J5
 together.
 
+### Exercising J0 through the protocol
+
+The cut-only Corner mitre fixture in `tests/test_live_junction.py` creates two
+timber sweeps and a project detail. Each trim uses `@meet` and binds its
+offset to `gap`, which follows `main.width / 45` in millimetres. Apply the
+saved detail to two existing members in one History step.
+
+```python
+reply = commands.run(history, "junction_apply", detail=detail_uid, bindings={
+    "main": {"placement": main_uid, "end": "end"},
+    "joining": {"placement": joining_uid, "end": "start"},
+})
+```
+
+The reply includes the new junction row uid. Read the saved role matrices
+with `junction_frames(scene, uid)`. Edit the row with `junction_set` and use
+`overrides` for a value on this use. Setting `detail` to `null` keeps its
+cuts and parameter values as a custom junction. `junction_release` accepts
+`uid` and an optional `deep` boolean as described in §7. J1 adds template
+expansion for parts and fasteners to the ownership and frame machinery.
+For a low-level owned sweep, pass `junction`, `key`, `profile` and `path`
+to `live_set`. The assembly creates the child placement. The row uid uses
+the content key and the placement uid uses the same key with `:owner`
+appended.
+
 ## 13. Risks
 
 | Risk | Mitigation |

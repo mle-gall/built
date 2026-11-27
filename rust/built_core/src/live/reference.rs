@@ -51,19 +51,38 @@ pub(super) fn origin(
             };
             return Ok(Some(local.inverse().transform_point3(DVec3::from(*p))));
         }
+        Reference::Frame { junction, frame } => {
+            return Ok(
+                super::junction::local_frame(table, &row.owner, junction, frame)
+                    .map(|m| m.w_axis.truncate()),
+            )
+        }
         Reference::Axis { sweep, at, point } => {
-            let Some(source) = table.rows.get(sweep).filter(|s| s.state == "ok") else {
+            let Some(source) = table.rows.get(sweep).filter(|s| {
+                s.state == "ok"
+                    || (s.kind == "sweep" && !matches!(s.state.as_str(), "stale" | "cycle"))
+            }) else {
                 return Ok(None);
             };
             let Some(host) = group(py, table, &source.owner) else {
                 return Ok(None);
             };
             if source.kind == "sweep" {
-                let p = host
-                    .getattr("ext")?
-                    .get_item(EXT)?
-                    .get_item("path")?
-                    .extract::<Vec<[f64; 3]>>()?;
+                let p = if let Some(s) = table.stock.get(sweep) {
+                    if s.state != "ok" {
+                        return Ok(None);
+                    }
+                    s.path.clone()
+                } else {
+                    let Some(p) = metadata(&host)?
+                        .get_item(EXT)?
+                        .and_then(|m| m.get_item("path").ok())
+                        .and_then(|v| v.extract::<Vec<[f64; 3]>>().ok())
+                    else {
+                        return Ok(None);
+                    };
+                    p
+                };
                 let len: f64 = p
                     .windows(2)
                     .map(|v| DVec3::from(v[0]).distance(v[1].into()))
@@ -232,7 +251,11 @@ pub(super) fn bind_frames(t: &mut LiveTable, uid: &str) -> bool {
                 Reference::Slot { .. } => continue,
                 Reference::Placement { placement } => t.groups.get(placement).copied(),
                 Reference::Element { path, .. } => resolve_path(path),
-                Reference::Axis { sweep, .. } | Reference::Row { row: sweep } => t
+                Reference::Frame {
+                    junction: sweep, ..
+                }
+                | Reference::Axis { sweep, .. }
+                | Reference::Row { row: sweep } => t
                     .rows
                     .get(sweep)
                     .and_then(|r| t.groups.get(&r.owner))
