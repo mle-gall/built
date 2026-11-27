@@ -88,20 +88,29 @@ pub(super) fn part_key(store: &Store) -> String {
 }
 fn content_hash(store: &Store, quantize: bool) -> String {
     let mut hash = Sha256::new();
+    // Adjacent generated elements normally share an origin. Resolve it once
+    // instead of locking the process origin table for every face corner.
+    let mut last = (u32::MAX, 0u64);
+    let mut logical = |kind, slot| {
+        let id = store.pid(kind, slot);
+        let index = eid::origin_index(id);
+        if index != last.0 {
+            last = (index, eid::origin_of(index).unwrap_or(0));
+        }
+        [last.1, eid::counter(id)]
+    };
+    let mut words = Vec::new();
+    let mut ranges: Vec<std::ops::Range<usize>> = Vec::new();
+    let mut bytes = Vec::new();
     for kind in Kind::ALL {
-        let mut records = Vec::new();
+        words.clear();
+        ranges.clear();
+        bytes.clear();
         for slot in store.live_slots(kind) {
-            let mut record = Vec::new();
-            let logical = |kind, slot| {
-                let id = store.pid(kind, slot);
-                [
-                    eid::origin_of(eid::origin_index(id)).unwrap_or(0),
-                    eid::counter(id),
-                ]
-            };
-            record.extend(logical(kind, slot));
+            let start = words.len();
+            words.extend(logical(kind, slot));
             match kind {
-                Kind::Vertex => record.extend(
+                Kind::Vertex => words.extend(
                     store
                         .state
                         .frame
@@ -123,24 +132,25 @@ fn content_hash(store: &Store, quantize: bool) -> String {
                         .get(slot as usize)
                         .map(|v| logical(Kind::Vertex, v));
                     ends.sort();
-                    record.extend(ends.into_iter().flatten());
+                    words.extend(ends.into_iter().flatten());
                 }
                 Kind::Face => {
                     for ring in store.face_rings(slot) {
-                        record.push(ring.len() as u64);
-                        record.extend(ring.into_iter().flat_map(|v| logical(Kind::Vertex, v)));
+                        words.push(ring.len() as u64);
+                        words.extend(ring.into_iter().flat_map(|v| logical(Kind::Vertex, v)));
                     }
                 }
             }
-            records.push(record);
+            ranges.push(start..words.len());
         }
-        records.sort();
-        hash.update((records.len() as u64).to_le_bytes());
-        for record in records {
-            for n in record {
-                hash.update(n.to_le_bytes());
+        ranges.sort_unstable_by(|a, b| words[a.clone()].cmp(&words[b.clone()]));
+        bytes.extend_from_slice(&(ranges.len() as u64).to_le_bytes());
+        for range in &ranges {
+            for word in &words[range.clone()] {
+                bytes.extend_from_slice(&word.to_le_bytes());
             }
         }
+        hash.update(&bytes);
     }
     format!(
         "{:016x}",

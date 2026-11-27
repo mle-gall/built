@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "snake_case")]
 pub enum Cutter {
     Plane(Plane),
+    Hole(hole::Hole),
     Bisector(String),
     Body(String),
     Repeat(String),
@@ -129,6 +130,14 @@ pub(super) fn attach(scene: &Obj<'_>, t: &mut LiveTable, row: &mut Row) -> PyRes
             }
             row.inputs.push(Reference::Row { row: uid.clone() });
         }
+        Some(Cutter::Hole(h)) if op == "subtract" && h.valid() => {
+            if let Some(uid) = &h.repeat {
+                if !t.repeats.contains(uid) {
+                    return Err(PyValueError::new_err("Missing hole Repeat"));
+                }
+                row.inputs.push(Reference::Row { row: uid.clone() });
+            }
+        }
         Some(Cutter::Opening(o)) if op == "subtract" => {
             row.inputs.push(Reference::Placement {
                 placement: o.fill.clone(),
@@ -209,7 +218,13 @@ pub(super) fn end_planes(
         if row.on == Some(false)
             || matches!(
                 row.cutter,
-                Some(Cutter::Body(_) | Cutter::Section(_) | Cutter::Opening(_) | Cutter::Repeat(_))
+                Some(
+                    Cutter::Hole(_)
+                        | Cutter::Body(_)
+                        | Cutter::Section(_)
+                        | Cutter::Opening(_)
+                        | Cutter::Repeat(_)
+                )
             )
         {
             continue;
@@ -464,6 +479,22 @@ fn operand<'p>(
                     * reference::frame(t.groups[uid]),
             )
         }
+        Some(Cutter::Hole(h)) => {
+            let Some(pose) = h.pose(scene, t, cut)? else {
+                return Ok(Err("ref_lost"));
+            };
+            let tool = py.import("built_core.mesh")?.call_method0("Mesh")?;
+            let dst = tool.getattr("_store")?.cast_into::<PyMeshStore>()?;
+            let src = mesh.getattr("_store")?.cast_into::<PyMeshStore>()?;
+            if let Err(state) = h.tool(
+                &mut dst.try_borrow_mut()?.inner,
+                &src.try_borrow()?.inner,
+                pose,
+            ) {
+                return Ok(Err(state));
+            }
+            (tool, pose)
+        }
         Some(Cutter::Opening(opening)) => {
             let m = py.import("built_core.mesh")?.call_method0("Mesh")?;
             let handle = m.getattr("_store")?.cast_into::<PyMeshStore>()?;
@@ -523,11 +554,12 @@ fn operand<'p>(
         }
         _ => return Ok(Err("unsupported")),
     };
-    if let Some(anchor) = cut
-        .anchor
-        .as_ref()
-        .filter(|_| !matches!(cut.cutter, Some(Cutter::Plane(_) | Cutter::Section(_))))
-    {
+    if let Some(anchor) = cut.anchor.as_ref().filter(|_| {
+        !matches!(
+            cut.cutter,
+            Some(Cutter::Hole(_) | Cutter::Plane(_) | Cutter::Section(_))
+        )
+    }) {
         let Some(point) = reference::origin(scene, t, &anchor.reference, cut)? else {
             return Ok(Err("ref_lost"));
         };
@@ -573,7 +605,13 @@ pub(super) fn live_openings<'p>(
                 && !matches!(cut.operation.as_deref(), None | Some("trim" | "subtract")))
             || !(matches!(
                 cut.cutter,
-                Some(Cutter::Body(_) | Cutter::Section(_) | Cutter::Opening(_) | Cutter::Repeat(_))
+                Some(
+                    Cutter::Hole(_)
+                        | Cutter::Body(_)
+                        | Cutter::Section(_)
+                        | Cutter::Opening(_)
+                        | Cutter::Repeat(_)
+                )
             ) || all_operations
                 && target.kind == "cut_stack"
                 && matches!(cut.cutter, Some(Cutter::Plane(_))))
@@ -655,9 +693,93 @@ pub(super) fn bodies<'p>(
         if !(target.kind == "cut_stack" && matches!(cut.cutter, Some(Cutter::Plane(_))))
             && !matches!(
                 cut.cutter,
-                Some(Cutter::Body(_) | Cutter::Section(_) | Cutter::Opening(_) | Cutter::Repeat(_))
+                Some(
+                    Cutter::Hole(_)
+                        | Cutter::Body(_)
+                        | Cutter::Section(_)
+                        | Cutter::Opening(_)
+                        | Cutter::Repeat(_)
+                )
             )
         {
+            continue;
+        }
+        if let Some(Cutter::Hole(h)) = &cut.cutter {
+            *active = Some(id.clone());
+            if !h.valid() {
+                return Ok(Err("invalid_hole"));
+            }
+            let Some(pose) = h.pose(scene, t, cut)? else {
+                return Ok(Err("ref_lost"));
+            };
+            if target.kind == "cut_stack" {
+                if let Some(source) = source(scene, target.source.as_deref().unwrap_or(""))? {
+                    if mesh.is(&source.getattr("mesh")?) {
+                        mesh = py.import("copy")?.call_method1("deepcopy", (&mesh,))?;
+                    }
+                }
+            }
+            let mut stations = vec![(id.clone(), pose)];
+            stations.extend(
+                h.stations
+                    .iter()
+                    .map(|(key, m)| (key.clone(), pose * DMat4::from_cols_array(m))),
+            );
+            if let Some(uid) = &h.repeat {
+                let Some(r) = t.rows.get(uid) else {
+                    return Ok(Err("ref_lost"));
+                };
+                let loaded_layout;
+                let layout = if let Some(layout) = t.stock.get(uid).and_then(|s| s.layout.as_ref())
+                {
+                    layout
+                } else {
+                    loaded_layout = match repeat::layout(scene, t, r)? {
+                        Ok(layout) => layout,
+                        Err(state) => return Ok(Err(state)),
+                    };
+                    &loaded_layout
+                };
+                let into_target = reference::frame(t.groups[&target.owner]).inverse()
+                    * reference::frame(t.groups[&r.owner]);
+                for (i, _, copy) in &layout.poses {
+                    let delta = into_target * *copy * layout.base.inverse() * into_target.inverse();
+                    stations.push((format!("{id}/{i}"), delta * pose));
+                }
+            }
+            for (key, m) in stations {
+                let dst = mesh.getattr("_store")?.cast_into::<PyMeshStore>()?;
+                match h.drill(&mut dst.try_borrow_mut()?.inner, m, &key) {
+                    Ok(true) => continue,
+                    Ok(false) => (),
+                    Err(state) => return Ok(Err(state)),
+                }
+                let mut single = (**cut).clone();
+                let mut tool_hole = h.clone();
+                tool_hole.frame = Some(m.to_cols_array());
+                tool_hole.repeat = None;
+                single.anchor = None;
+                single.cutter = Some(Cutter::Hole(tool_hole));
+                let tool = match operand(scene, t, target, &single, &mesh)? {
+                    Ok(tool) => tool,
+                    Err(s) => return Ok(Err(s)),
+                };
+                let cls = py.import("built_core.group")?.getattr("Group")?;
+                let subject = cls.call1((&mesh,))?;
+                let mut misses = Vec::new();
+                match crate::solids::body_stack(
+                    &subject,
+                    vec![(key, "subtract".into(), 0., tool)],
+                    &mut None,
+                    &mut misses,
+                )? {
+                    Ok(result) => mesh = result,
+                    Err(s) => return Ok(Err(s)),
+                }
+                if let Some((_, state)) = misses.first() {
+                    skipped.push((id.clone(), *state));
+                }
+            }
             continue;
         }
         if let Some(Cutter::Repeat(uid)) = &cut.cutter {

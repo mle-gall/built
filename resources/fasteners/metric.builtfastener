@@ -1,0 +1,15 @@
+{
+  "units": "mm",
+  "bolts": ["ISO 4014", "ISO 4017"],
+  "nut": "ISO 4032",
+  "washer": "ISO 7089",
+  "sizes": [
+    {"d": 8, "flats": 13, "head": 5.3, "nut": 6.8, "washer_od": 16, "washer_id": 8.4, "washer_t": 1.6, "pitch": 1.25},
+    {"d": 10, "flats": 16, "head": 6.4, "nut": 8.4, "washer_od": 20, "washer_id": 10.5, "washer_t": 2, "pitch": 1.5},
+    {"d": 12, "flats": 18, "head": 7.5, "nut": 10.8, "washer_od": 24, "washer_id": 13, "washer_t": 2.5, "pitch": 1.75},
+    {"d": 16, "flats": 24, "head": 10, "nut": 14.8, "washer_od": 30, "washer_id": 17, "washer_t": 3, "pitch": 2},
+    {"d": 20, "flats": 30, "head": 12.5, "nut": 18, "washer_od": 37, "washer_id": 21, "washer_t": 3, "pitch": 2.5},
+    {"d": 24, "flats": 36, "head": 15, "nut": 21.5, "washer_od": 44, "washer_id": 25, "washer_t": 4, "pitch": 3}
+  ],
+  "lengths": [16,20,25,30,35,40,45,50,55,60,65,70,75,80,90,100,110,120,130,140,150,160,180,200]
+}

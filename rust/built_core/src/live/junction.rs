@@ -1,6 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //! Junctions read member stock and own ordinary recipe rows.
 use super::*;
+mod fastener;
+mod grid;
+pub(super) use grid::{attach_holes, detach_holes};
+mod parts;
+mod seam;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
@@ -464,6 +469,7 @@ fn geometry(scene: &Obj<'_>, t: &LiveTable, j: &Row) -> PyResult<Option<(Frames,
         }
         let aim = b.pos - a.pos - b.axis * 0.001;
         let choices: &[&str] = match face {
+            Some("end") => return Some((a.pos, a.axis)),
             Some("flange_outer") => &["top", "bottom"],
             Some("web_left") => &["web_left"],
             Some("web_right") => &["web_right"],
@@ -496,6 +502,7 @@ fn geometry(scene: &Obj<'_>, t: &LiveTable, j: &Row) -> PyResult<Option<(Frames,
     let delta = a.pos - b.pos;
     let (meet, z) = match j.joint.meeting.as_deref() {
         Some("corner") => ((a.pos + b.pos) * 0.5, (a.axis - b.axis).normalize_or_zero()),
+        Some("parts") if main == "ply_1" => (a.pos, a.axis),
         Some("end_end" | "parts") => ((a.pos + b.pos) * 0.5, a.axis),
         Some("crossing") => {
             let dot = a.axis.dot(b.axis);
@@ -525,7 +532,9 @@ fn geometry(scene: &Obj<'_>, t: &LiveTable, j: &Row) -> PyResult<Option<(Frames,
     let Some(m) = pose(
         meet,
         z,
-        if b.axis.cross(z).length_squared() > 1e-12 {
+        if j.joint.meeting.as_deref() == Some("parts") && main == "ply_1" {
+            a.across
+        } else if b.axis.cross(z).length_squared() > 1e-12 {
             b.axis
         } else {
             a.axis
@@ -597,6 +606,28 @@ fn geometry(scene: &Obj<'_>, t: &LiveTable, j: &Row) -> PyResult<Option<(Frames,
         for frame in frames.values_mut() {
             for v in &mut frame[4..7] {
                 *v = -*v;
+            }
+        }
+    }
+    for (name, b) in bindings.iter().filter(|(name, _)| name.starts_with("ply_")) {
+        if let Some(r) = b["row"].as_str().and_then(|id| t.rows.get(id)) {
+            let is_plate = r
+                .sweep
+                .as_ref()
+                .and_then(|s| s.preset_uid.as_deref())
+                .and_then(|uid| presets::lookup(t, uid))
+                .is_some_and(|p| p.record.get("class") == Some(&json!("IfcPlate")));
+            let field = if is_plate {
+                "length"
+            } else {
+                match b["face"].as_str() {
+                    Some("flange_outer") => "flange",
+                    Some("web_left" | "web_right") => "web",
+                    _ => continue,
+                }
+            };
+            if let Some(n) = dims.get(&format!("{name}.{field}")).copied() {
+                dims.insert(format!("{name}.thickness"), n);
             }
         }
     }
@@ -758,7 +789,7 @@ pub(super) fn evaluate(scene: &Obj<'_>, t: &mut LiveTable, uid: &str) -> PyResul
                         json!({"criterion":"expression","message":e}),
                     );
                 }
-                Ok((params, limited)) => {
+                Ok((mut params, limited)) => {
                     let mut changes = BTreeMap::new();
                     for bind in row.joint.bindings.as_array().into_iter().flatten() {
                         let id = bind["row"]
@@ -777,7 +808,8 @@ pub(super) fn evaluate(scene: &Obj<'_>, t: &mut LiveTable, uid: &str) -> PyResul
                             .entry(id.to_string())
                             .or_insert_with(|| json!(child));
                         *obj.pointer_mut(path)
-                            .ok_or_else(|| err("Missing bound field"))? = json!(value);
+                            .ok_or_else(|| err("Missing bound field"))? =
+                            json!(value * bind["scale"].as_f64().unwrap_or(1.));
                     }
                     for (id, v) in changes {
                         if v != json!(&t.rows[&id]) {
@@ -786,8 +818,16 @@ pub(super) fn evaluate(scene: &Obj<'_>, t: &mut LiveTable, uid: &str) -> PyResul
                             t.rows.insert(id, Arc::new(r));
                         }
                     }
+                    let part_result = parts::place(scene, t, &row, &mut params, &dims);
+                    fields_changed |= matches!(part_result, Ok(true));
                     row.joint.params = json!(params);
-                    if limited {
+                    if let Err(error) = part_result {
+                        set_reason(
+                            &mut row,
+                            "failed",
+                            json!({"criterion":"part","message":error.to_string()}),
+                        );
+                    } else if limited {
                         set_reason(&mut row, "failed", json!({"criterion":"limit"}));
                     } else {
                         set_reason(&mut row, "ok", Value::Null);
@@ -830,6 +870,10 @@ fn expand_field(
         for (k, val) in obj {
             expand_field(val, &format!("{path}/{k}"), row, id, bindings)?;
         }
+    } else if let Some(array) = v.as_array_mut() {
+        for (i, value) in array.iter_mut().enumerate() {
+            expand_field(value, &format!("{path}/{i}"), row, id, bindings)?;
+        }
     } else if let Some(s) = v.as_str() {
         if let Some(frame) = s.strip_prefix('@') {
             *v = if path == "/end" {
@@ -847,10 +891,21 @@ fn expand_field(
             };
         } else if matches!(
             path,
-            "/offset" | "/anchor/offset" | "/clearance" | "/cutter/plane/angle"
+            "/cutter/hole/frame/12"
+                | "/cutter/hole/frame/13"
+                | "/cutter/hole/frame/14"
+                | "/cutter/hole/d"
+                | "/offset"
+                | "/anchor/offset"
+                | "/clearance"
+                | "/cutter/plane/angle"
         ) {
             bindings.push(json!({"row":id,"field":path,"param":s}));
-            *v = json!(0.);
+            *v = if path == "/cutter/hole/d" {
+                json!(1.)
+            } else {
+                json!(0.)
+            };
         }
     }
     Ok(())
@@ -872,6 +927,18 @@ pub(super) fn prepare(
     row: &mut Row,
     p: &presets::Preset,
 ) -> PyResult<()> {
+    let mut ancestor = row.joint.parent.as_deref();
+    let mut levels = 1;
+    while let Some(uid) = ancestor {
+        levels += 1;
+        if levels > 8 {
+            return Err(err("Junctions can nest up to 8 levels"));
+        }
+        ancestor = t
+            .rows
+            .get(uid)
+            .and_then(|parent| parent.joint.parent.as_deref());
+    }
     if let Some(defs) = p.values.get("params").and_then(Value::as_array) {
         let mut defs = defs.clone();
         for d in &mut defs {
@@ -1002,13 +1069,7 @@ pub(super) fn prepare(
     let mut contents = Vec::new();
     let mut bindings = Vec::new();
     let mut keep = HashSet::new();
-    for item in p
-        .values
-        .get("contents")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-    {
+    for item in &fastener::contents(row, p)? {
         let key = item["key"]
             .as_str()
             .filter(|k| !k.is_empty() && *k != "owner")
@@ -1022,6 +1083,90 @@ pub(super) fn prepare(
         let uid = id(&row.uid, key);
         if !keep.insert(uid.clone()) {
             return Err(err("Duplicate junction content key"));
+        }
+        if let Some(spec) = item.get("part") {
+            let item = parts::prepare(scene, t, row, key, spec, &mut bindings)?;
+            if item.get("row").is_none() {
+                let uid = item["placement"]
+                    .as_str()
+                    .ok_or_else(|| err("Missing part placement"))?;
+                let g = group(scene.py(), t, uid).ok_or_else(|| err("Missing junction part"))?;
+                let ext = metadata(&g)?;
+                ext.set_item(
+                    "built.junction_part",
+                    to_py(scene.py(), &json!({"junction":row.uid,"key":key}))?,
+                )?;
+                g.setattr("ext", ext)?;
+            }
+            contents.push(item);
+            continue;
+        }
+        if let Some(spec) = item.get("junction") {
+            let mut child_roles = spec["roles"].clone();
+            for binding in child_roles
+                .as_object_mut()
+                .ok_or_else(|| err("Missing child roles"))?
+                .values_mut()
+            {
+                let extra = binding.as_object().cloned();
+                let name = binding
+                    .as_str()
+                    .or_else(|| binding["placement"].as_str())
+                    .and_then(|s| s.strip_prefix('@'))
+                    .ok_or_else(|| err("Expected child role reference"))?;
+                *binding = if let Some(role) = row.joint.roles.get(name) {
+                    role.clone()
+                } else {
+                    let owner = id(&row.uid, &format!("{name}:owner"));
+                    if !t.groups.contains_key(&owner) {
+                        return Err(err("Missing child role part"));
+                    }
+                    json!({"placement":owner})
+                };
+                for (k, v) in extra
+                    .into_iter()
+                    .flatten()
+                    .filter(|(k, _)| k != "placement")
+                {
+                    binding[k] = v;
+                }
+            }
+            let mut child: Row = serde_json::from_value(json!({
+                "kind":"junction","uid":uid,"junction":row.uid,"parent":row.uid,"key":key,
+                "detail":spec["detail"],"roles":child_roles,"overrides":spec["params"]
+            }))
+            .map_err(err)?;
+            if let Some(old) = t.rows.get(&uid) {
+                child.joint.local = old.joint.local.clone();
+                child.joint.contents = old.joint.contents.clone();
+            }
+            for (param, value) in child.joint.overrides.as_object_mut().into_iter().flatten() {
+                if value.is_string() {
+                    bindings.push(
+                        json!({"row":uid,"field":format!("/overrides/{param}"),"param":value}),
+                    );
+                    *value = json!(0.);
+                }
+            }
+            // The child resolves its assembly and ancestor chain through the table.
+            t.insert(row.clone()).map_err(err)?;
+            let preset = detail(t, &child)?;
+            prepare(scene, t, &mut child, &preset)?;
+            contents.push(local_content(&child));
+            t.insert(child.clone()).map_err(err)?;
+            if let Some(spec) = spec.get("repeat").filter(|_| {
+                !row.joint.local["removed"]
+                    .as_array()
+                    .is_some_and(|v| v.contains(&json!(format!("{key}:repeat"))))
+            }) {
+                let grid = grid::prepare(scene, t, row, &child, spec, &mut bindings)?;
+                if !keep.insert(grid.uid.clone()) {
+                    return Err(err("Duplicate grid key"));
+                }
+                contents.push(local_content(&grid));
+            }
+            t.pending.insert(uid);
+            continue;
         }
         let on = item["on"].as_str().ok_or_else(|| err("Missing cut role"))?;
         let target = placement(&row.joint.roles[on])
@@ -1057,10 +1202,42 @@ pub(super) fn prepare(
             }
         }
         let mut cut: Row = serde_json::from_value(v).map_err(err)?;
+        if let (Some(cut::Cutter::Hole(h)), Some(cut::Cutter::Hole(old))) = (
+            &mut cut.cutter,
+            t.rows.get(&uid).and_then(|r| r.cutter.as_ref()),
+        ) {
+            h.repeat.clone_from(&old.repeat);
+            h.stations.clone_from(&old.stations);
+        }
         cut::attach(scene, t, &mut cut)?;
         t.insert(cut).map_err(err)?;
         t.pending.insert(uid.clone());
         contents.push(json!({"key":key,"row":uid}));
+    }
+    for old in row
+        .joint
+        .contents
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|c| {
+            c.get("component").is_some()
+                || c.get("fastener").is_some()
+                || c.get("weld").is_some()
+                || c.get("glue").is_some()
+        })
+    {
+        if !contents.iter().any(|c| c["key"] == old["key"]) {
+            if let Some(uid) = old["placement"].as_str() {
+                if let Some(g) = group(scene.py(), t, uid) {
+                    group(scene.py(), t, &row.owner)
+                        .ok_or_else(|| err("Missing junction assembly"))?
+                        .getattr("children")?
+                        .call_method1("remove", (g,))?;
+                    Arc::make_mut(&mut t.groups).remove(uid);
+                }
+            }
+        }
     }
     for uid in t.owned.get(&row.uid).cloned().unwrap_or_default() {
         if !keep.contains(&uid)
@@ -1068,7 +1245,23 @@ pub(super) fn prepare(
                 .as_array()
                 .is_some_and(|a| a.contains(&json!(uid)))
         {
-            remove_cut(t, &uid)?;
+            if let Some(child) = t.rows.get(&uid).filter(|r| r.kind != "cut").cloned() {
+                if child.kind == "repeat" {
+                    detach_holes(scene, t, &child, false)?;
+                }
+                remove_descendants(t, &uid)?;
+                let assembly = group(scene.py(), t, &row.owner)
+                    .ok_or_else(|| err("Missing junction assembly"))?;
+                if let Some(part) = group(scene.py(), t, &child.owner) {
+                    assembly
+                        .getattr("children")?
+                        .call_method1("remove", (part,))?;
+                }
+                Arc::make_mut(&mut t.groups).remove(&child.owner);
+                t.remove(&uid);
+            } else {
+                remove_cut(t, &uid)?;
+            }
         }
     }
     // A plain solid acquires a stock source when its first cut is attached.
@@ -1120,6 +1313,17 @@ pub(super) fn release(scene: &Obj<'_>, t: &mut LiveTable, j: &Row) -> PyResult<(
                 if let Some(cut::Cutter::Plane(p)) = &mut r.cutter {
                     p.origin = m.w_axis.truncate().to_array();
                     p.normal = Some(m.z_axis.truncate().normalize().to_array());
+                }
+                if let Some(cut::Cutter::Hole(h)) = &mut r.cutter {
+                    let base = h
+                        .frame
+                        .as_ref()
+                        .map(DMat4::from_cols_array)
+                        .unwrap_or(DMat4::IDENTITY);
+                    h.frame = Some(
+                        (m * base * DMat4::from_translation(DVec3::Z * anchor.offset / 1000.))
+                            .to_cols_array(),
+                    );
                 }
                 r.offset = Some(anchor.offset);
                 r.anchor = None;
@@ -1241,6 +1445,42 @@ fn local_content(row: &Row) -> Value {
     }
 }
 
+pub(super) fn forget_removed_parts(
+    py: Python<'_>,
+    t: &mut LiveTable,
+    removed: &[String],
+    seeds: &mut HashSet<String>,
+) -> PyResult<()> {
+    for uid in removed {
+        let Some(g) = group(py, t, uid) else { continue };
+        let Some(part) = metadata(&g)?.get_item("built.junction_part")? else {
+            continue;
+        };
+        let parent: String = part.get_item("junction")?.extract()?;
+        let key: String = part.get_item("key")?.extract()?;
+        if *uid != id(&parent, &format!("{key}:owner")) {
+            continue;
+        }
+        let Some(j) = t.rows.get_mut(&parent) else {
+            continue;
+        };
+        let j = Arc::make_mut(j);
+        let Some(contents) = j.joint.contents.as_array_mut() else {
+            continue;
+        };
+        if contents.iter().any(|c| c["placement"] == *uid) {
+            contents.retain(|c| c["placement"] != *uid);
+            let mut removed = j.joint.local["removed"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default();
+            removed.push(json!(key));
+            j.joint.local["removed"] = json!(removed);
+            seeds.insert(parent);
+        }
+    }
+    Ok(())
+}
 pub(super) fn forget_content(t: &mut LiveTable, row: &Row) {
     let owner = row.junction.as_ref().or(row.joint.parent.as_ref());
     let Some(parent) = owner.and_then(|id| t.rows.get_mut(id)) else {

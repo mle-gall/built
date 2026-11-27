@@ -183,7 +183,7 @@ fn points(scene: &Obj<'_>, t: &LiveTable, row: &Row) -> PyResult<Option<Vec<DVec
         .map(|p| p.into_iter().map(DVec3::from).collect()))
 }
 
-fn freeze_children(copy: &Obj<'_>, source: &Obj<'_>, parent: &str) -> PyResult<()> {
+pub(super) fn freeze_children(copy: &Obj<'_>, source: &Obj<'_>, parent: &str) -> PyResult<()> {
     if source
         .getattr("ext")?
         .get_item("link")
@@ -277,6 +277,52 @@ pub(super) fn layout(
     let source_uid = row.source.as_ref().unwrap();
     let base =
         reference::frame(t.groups[&row.owner]).inverse() * reference::frame(t.groups[source_uid]);
+    if let Some(grid) = row.repeat.rule.get("grid") {
+        let Some(frame) = row.repeat.run["junction"]
+            .as_str()
+            .zip(row.repeat.run["frame"].as_str())
+            .and_then(|(j, f)| junction::local_frame(t, &row.owner, j, f))
+        else {
+            return Ok(Err("ref_lost"));
+        };
+        let count = |k: &str| {
+            grid[k]
+                .as_f64()
+                .filter(|v| v.fract() == 0. && (1. ..=10000.).contains(v))
+                .map(|v| v as usize)
+        };
+        let Some((rows, cols)) = count("rows").zip(count("columns")) else {
+            return Ok(Err("invalid_rule"));
+        };
+        let pitch = grid["pitch"].as_f64().unwrap_or(0.) / 1000.;
+        let gauge = grid["gauge"].as_f64().unwrap_or(0.) / 1000.;
+        if rows * cols > 10000 || (rows > 1 && pitch <= 0.) || (cols > 1 && gauge <= 0.) {
+            return Ok(Err("invalid_rule"));
+        }
+        let mut poses = Vec::with_capacity(rows * cols - 1);
+        for col in 0..cols {
+            for r in 0..rows {
+                if r == 0 && col == 0 {
+                    continue;
+                }
+                let (mut x, mut y) = (col as f64 * gauge, r as f64 * pitch);
+                if row.repeat.run["axis"] == "x" {
+                    std::mem::swap(&mut x, &mut y);
+                }
+                let offset = frame.transform_vector3(DVec3::new(x, y, 0.));
+                poses.push((
+                    col * 10000 + r,
+                    offset.length(),
+                    DMat4::from_translation(offset) * base,
+                ));
+            }
+        }
+        return Ok(Ok(Layout {
+            base,
+            poses,
+            host_count: 0,
+        }));
+    }
     let polar = row.repeat.run.get("polar");
     let mut path = Vec::new();
     let mut axis = DVec3::Z;
@@ -421,7 +467,7 @@ pub(super) fn layout(
         host_count: path.len(),
     }))
 }
-pub(super) fn evaluate(scene: &Obj<'_>, t: &LiveTable, row: &Row) -> PyResult<&'static str> {
+pub(super) fn evaluate(scene: &Obj<'_>, t: &LiveTable, row: &Row, stamps: &mut MeshStamps) -> PyResult<&'static str> {
     let py = scene.py();
     let Some(source) = row.source.as_deref().and_then(|s| group(py, t, s)) else {
         return Ok("ref_lost");
@@ -591,10 +637,46 @@ pub(super) fn evaluate(scene: &Obj<'_>, t: &LiveTable, row: &Row) -> PyResult<&'
         .and_then(|uid| group(py, t, uid));
     let leaf = source.getattr("children")?.is_empty()? && nested_source.is_none();
     let source_mesh = source.getattr("mesh")?;
+    // Grid stations instance the bolt assembly. Its fastener definition
+    // and record can change while the assembly keeps the same station IDs.
+    let grid_part =
+        if row.repeat.rule.get("grid").is_some() && source.getattr("children")?.len()? == 1 {
+            let part = source.getattr("children")?.get_item(0)?;
+            part.getattr("children")?.is_empty()?.then_some(part)
+        } else {
+            None
+        };
     for &(i, distance, pose) in &layout.poses {
         offsets.push(pose.w_axis.truncate().to_array());
         let uid = eid::derived_uid(&format!("built:repeat:v1:{}:{i}", row.uid));
-        let copy = if let Some(existing) = old.get(&uid).filter(|_| leaf) {
+        let reused = if let Some((existing, part)) = old.get(&uid).zip(grid_part.as_ref()) {
+            let children = existing.getattr("children")?;
+            if children.len()? == 1 {
+                let copy = children.get_item(0)?;
+                let expected = eid::derived_uid(&format!(
+                    "built:repeat:v1:{uid}:{}",
+                    part.getattr("uid")?.extract::<String>()?
+                ));
+                if copy.getattr("uid")?.eq(expected)? {
+                    for key in ["mesh", "xform", "ifc", "name"] {
+                        let value = part.getattr(key)?;
+                        if !copy.getattr(key)?.eq(&value)? {
+                            copy.setattr(key, value)?;
+                        }
+                    }
+                    Some(existing.clone())
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        let copy = if let Some(existing) = reused {
+            existing
+        } else if let Some(existing) = old.get(&uid).filter(|_| leaf) {
             if source_recipe.is_none() {
                 existing.setattr("mesh", &source_mesh)?;
             }
@@ -691,7 +773,7 @@ pub(super) fn evaluate(scene: &Obj<'_>, t: &LiveTable, row: &Row) -> PyResult<&'
             } else {
                 let last_good = copy.getattr("mesh")?;
                 let mut skipped = Vec::new();
-                let state = super::evaluate(scene, &local, recipe, &mut None, &mut skipped)?;
+                let state = super::evaluate(scene, &local, recipe, &mut None, &mut skipped, stamps)?;
                 if let Some((_, failure)) = skipped.first() {
                     copy.setattr("mesh", last_good)?;
                     Err(*failure)
@@ -745,7 +827,11 @@ pub(super) fn evaluate(scene: &Obj<'_>, t: &LiveTable, row: &Row) -> PyResult<&'
         usize::from(!copies.is_empty())
     };
     let ext = metadata(&owner)?;
-    let stamp = stamp(&owner)?;
+    let stamp = if row.junction.is_some() {
+        stamp_shared(&owner, stamps)?
+    } else {
+        stamp(&owner)?
+    };
     ext.set_item(EXT,to_py(py,&json!({"row":row.uid,"stamp":stamp,"copies":copies.len(),"distinct":distinct,"stations":offsets}))?)?;
     owner.setattr("ext", ext)?;
     Ok(if failed { "end_unresolved" } else { "ok" })
@@ -787,9 +873,15 @@ pub(super) fn grip(group: &Obj<'_>, owner_inverse: DMat4) -> PyResult<[f64; 3]> 
 /// The assembly itself is empty. Its stamp covers the instances and their
 /// transforms so a reader that edits a baked station makes the row stale.
 pub(super) fn stamp(owner: &Obj<'_>) -> PyResult<String> {
+    stamp_shared(owner, &mut HashMap::new())
+}
+
+// Keep each stamped mesh alive while its Python object address is a cache key.
+pub(super) type MeshStamps = HashMap<usize, (Py<PyAny>, String)>;
+
+pub(super) fn stamp_shared(owner: &Obj<'_>, seen: &mut MeshStamps) -> PyResult<String> {
     use sha2::{Digest, Sha256};
     let mut hash = Sha256::new();
-    let mut seen = HashMap::new();
     let mut pending = vec![owner.clone()];
     while let Some(g) = pending.pop() {
         hash.update(g.getattr("uid")?.extract::<String>()?.as_bytes());
@@ -805,10 +897,10 @@ pub(super) fn stamp(owner: &Obj<'_>) -> PyResult<String> {
             std::collections::hash_map::Entry::Vacant(e) => {
                 let store = mesh.getattr("_store")?.cast_into::<PyMeshStore>()?;
                 let digest = geometry::stamp(&store.try_borrow()?.inner);
-                e.insert(digest)
+                e.insert((mesh.clone().unbind(), digest))
             }
         };
-        hash.update(digest.as_bytes());
+        hash.update(digest.1.as_bytes());
         let kids = g.getattr("children")?;
         hash.update((kids.len()? as u64).to_le_bytes());
         pending.extend(kids.try_iter()?.collect::<PyResult<Vec<_>>>()?);

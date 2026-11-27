@@ -102,6 +102,36 @@
       }
     },
     {
+      "uid": "732730a077d0b9f2",
+      "name": "Plate",
+      "pack": "Steel",
+      "primitive": "sweep",
+      "rev": 1,
+      "values": {
+        "profile": {
+          "library": "basic/flat",
+          "params": {
+            "width": 180,
+            "height": 240
+          }
+        },
+        "attachment": "centre"
+      },
+      "record": {
+        "class": "IfcPlate",
+        "predefined_type": "SHEET",
+        "material": "S355",
+        "object_type": "Plate"
+      },
+      "naming": "PL-{n}",
+      "node": "Plates",
+      "locks": {
+        "profile": "free",
+        "material": "free",
+        "class": "fixed"
+      }
+    },
+    {
       "uid": "0d988538e2d3c915",
       "name": "Wide flange beam",
       "pack": "Steel AISC",

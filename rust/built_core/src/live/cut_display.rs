@@ -119,6 +119,20 @@ fn outline(
                 grips.push(("angle", centre + y));
             }
         }
+        Cutter::Hole(h) => {
+            let Some(m) = h.pose(scene, t, row)? else {
+                return Ok(None);
+            };
+            centre = m.w_axis.truncate();
+            normal = m.z_axis.truncate().normalize();
+            radius = h.d / 2000.;
+            let ring = h.ring(radius, 0., m);
+            lines.extend(
+                ring.iter()
+                    .zip(ring.iter().cycle().skip(1))
+                    .map(|(a, b)| [(*a).into(), (*b).into()]),
+            );
+        }
         Cutter::Section(uid) => {
             let Some(section) = t.rows.get(uid) else {
                 return Ok(None);
