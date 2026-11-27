@@ -3850,6 +3850,6 @@
  "Animate camera moves": "Animar los movimientos de cámara",
  "Standard views, Look at Face, Zoom Extents, Zoom Selection and scene changes glide into place in a quarter second; off, they jump.": "Las vistas estándar, Mirar la cara, Zoom extensión, Zoom a la selección y los cambios de escena se deslizan en un cuarto de segundo; desactivado, saltan.",
  "Click the new origin or type X;Y;Z.": "Haz clic en el nuevo origen o escribe X;Y;Z.",
- "Click along red or type its angle in the drawing plane.": "Haz clic en la dirección del eje rojo o escribe su ángulo en el plano de dibujo.",
- "Click toward green or type its tilt about red.": "Haz clic en la dirección del eje verde o escribe su inclinación alrededor del eje rojo."
+ "Click along red or type its angle in the drawing plane.": "Señala el eje rojo o introduce su ángulo en el plano.",
+ "Click toward green or type its tilt about red.": "Señala el eje verde o introduce su giro sobre el rojo."
 }
