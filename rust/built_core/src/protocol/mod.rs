@@ -18,6 +18,7 @@ mod mesh_tools;
 mod recovery;
 mod recover_round;
 mod recover_profile;
+mod recover_cut;
 mod document;
 mod drawing;
 mod materials;

@@ -261,6 +261,41 @@ fn import_file(
     simplify: &str,
     label: Option<&Bound<'_, PyAny>>,
 ) -> PyResult<bool> {
+    import_prepared(win,path,kind,scale,simplify,label,None)
+}
+
+#[pyfunction]
+fn confirm_step(
+    win: &Bound<'_, PyAny>,
+    scene: &Bound<'_, PyAny>,
+    path: &Bound<'_, PyAny>,
+    shown: &Bound<'_, PyAny>,
+    prepared: &Bound<'_, PyAny>,
+    answer: &str,
+) -> PyResult<bool> {
+    if answer != "import" || !win.getattr("viewport")?.getattr("scene")?.is(scene) {
+        return Ok(false);
+    }
+    import_prepared(
+        win,
+        path,
+        "step",
+        1.,
+        "principal",
+        Some(shown),
+        Some(prepared),
+    )
+}
+
+fn import_prepared(
+    win: &Bound<'_, PyAny>,
+    path: &Bound<'_, PyAny>,
+    kind: &str,
+    scale: f64,
+    simplify: &str,
+    label: Option<&Bound<'_, PyAny>>,
+    accepted: Option<&Bound<'_, PyAny>>,
+) -> PyResult<bool> {
     let py = win.py();
     let shown = label.unwrap_or(path);
     let name = shown.getattr("name")?.extract::<String>()?;
@@ -286,21 +321,22 @@ fn import_file(
     let params = PyDict::new(py);
     let mut make_faces = false;
     if kind == "step" {
-        let prepared = match py.import("built_core.formats.step")?.call_method1("prepare_step", (path,)) {
+        let prepared = if let Some(p)=accepted{p.clone()}else{match py.import("built_core.formats.step")?.call_method1("prepare_step", (path,)) {
             Ok(p) => p,
             Err(e) => {
                 dialogs.call_method1("critical", (win, &title, e.value(py).str()?))?;
                 return Ok(false);
             }
-        };
+        }};
         let problems = prepared.get_item("problems")?.extract::<Vec<String>>()?;
-        if !problems.is_empty() {
+        if !problems.is_empty() && accepted.is_none() {
             let buttons = PyList::new(py, [("cancel", translated(py, "Cancel", None)?), ("import", translated(py,"Import available bodies", None)?)])?;
             let kw = PyDict::new(py);
             kw.set_item("cancel", "cancel")?;
             kw.set_item("default", "cancel")?;
-            let answer = dialogs.call_method("ask", (win, translated(py,"Import partial STEP model?",None)?, problems.join("\n"), buttons),Some(&kw))?;
-            if !answer.eq("import")? { return Ok(false); }
+            let done=py.import("functools")?.call_method1("partial",(wrap_pyfunction!(confirm_step,py)?,win,win.getattr("viewport")?.getattr("scene")?,path,shown,&prepared))?;
+            dialogs.call_method("ask_later", (win, translated(py,"Import partial STEP model?",None)?, problems.join("\n"), buttons,done),Some(&kw))?;
+            return Ok(false);
         }
         params.set_item("accept_partial", !problems.is_empty())?;
         params.set_item("prepared", prepared)?;
@@ -456,66 +492,243 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
 }
 
 #[pyfunction]
-fn recover_selection(win:&Bound<'_,PyAny>,faceted:bool)->PyResult<()>{
-    let py=win.py();
-    let vp=win.getattr("viewport")?;
-    let scene=vp.getattr("scene")?;
-    let history=vp.getattr("history")?;
-    let api=py.import("built_core.command_protocol")?;
-    let face=py.import("built_core.store_mesh")?.getattr("FaceView")?;
-    let keys=PyList::empty(py);
-    for e in scene.getattr("selection")?.try_iter()?{
-        let e=e?;
-        if e.is_instance(&face)?{keys.append(e.getattr("key")?)?;}
-    }
-    if keys.is_empty(){
-        vp.call_method1("flash_status",(translated(py,"Select faces in the active editing context",None)?,4000))?;
-        return Ok(())
+fn recover_selection(win: &Bound<'_, PyAny>, faceted: bool) -> PyResult<()> {
+    let py = win.py();
+    let vp = win.getattr("viewport")?;
+    let scene = vp.getattr("scene")?;
+    let history = vp.getattr("history")?;
+    let api = py.import("built_core.command_protocol")?;
+    let targets = selection_targets(&scene)?;
+    if targets.is_empty() {
+        vp.call_method1(
+            "flash_status",
+            (
+                translated(py, "Select faces or groups to process", None)?,
+                4000,
+            ),
+        )?;
+        return Ok(());
     }
     if faceted {
-        let result=api.call_method1("make_faceted",(&history,&keys))?;
-        if !result.get_item("ok")?.is_truthy()?{
-            vp.call_method1("flash_status",(result.get_item("error")?.str()?,6000))?;
+        let cmds = PyList::empty(py);
+        for (_, mesh, keys) in &targets {
+            cmds.append(api.call_method1("_plan_facets", (mesh, keys))?)?;
+        }
+        let result = api.call_method1("execute", (&history, compound(py, &cmds)?))?;
+        if !result.get_item("ok")?.is_truthy()? {
+            vp.call_method1("flash_status", (result.get_item("error")?.str()?, 6000))?;
         }
     } else {
         let title = translated(py, "Recover exact geometry", None)?;
-        let done = py.import("functools")?.call_method1("partial",
-            (wrap_pyfunction!(preview_recovery, py)?, win, &history, scene.getattr("mesh")?, keys))?;
-        py.import("built_render.chrome_forms")?.call_method1("ask_number",
-            (win, title, translated(py,"Fit tolerance (mm)",None)?, 0.1, 0.000001, 1e9, 6, done))?;
+        let done = py.import("functools")?.call_method1(
+            "partial",
+            (
+                wrap_pyfunction!(preview_recovery, py)?,
+                win,
+                &history,
+                &scene,
+                targets,
+            ),
+        )?;
+        py.import("built_render.chrome_forms")?.call_method1(
+            "ask_number",
+            (
+                win,
+                title,
+                translated(py, "Fit tolerance (mm)", None)?,
+                0.1,
+                0.000001,
+                1e9,
+                6,
+                done,
+            ),
+        )?;
     }
     vp.call_method0("update")?;
     Ok(())
 }
 
-#[pyfunction]
-fn preview_recovery(win:&Bound<'_,PyAny>,history:&Bound<'_,PyAny>,mesh:&Bound<'_,PyAny>,keys:&Bound<'_,PyAny>,millimetres:Option<f64>)->PyResult<()> {
-    let Some(mm)=millimetres else{return Ok(())};
-    let py=win.py();
-    let vp=win.getattr("viewport")?;
-    if !vp.getattr("scene")?.getattr("mesh")?.is(mesh) {return Ok(())}
-    let api=py.import("built_core.command_protocol")?;
-    let dialogs=py.import("built_render.chrome_dialogs")?;
-    let title=translated(py,"Recover exact geometry",None)?;
-    let report=match api.call_method1("recover_exact_geometry",(history,keys,mm/1000.)) {
-        Ok(r)=>r, Err(e)=>{dialogs.call_method1("information",(win,title,e.value(py).str()?))?;return Ok(())}
-    };
-    let mut detail=Vec::new();
-    for row in report.get_item("parts")?.try_iter()? {
-        let row=row?;
-        let vars=PyDict::new(py);
-        for k in ["first_face","method","faces","planar_faces","curved_supports","max_residual_m","input_volume_m3","output_volume_m3"] {
-            let v=row.get_item(k)?;
-            vars.set_item(k,if v.is_none(){translated(py,"Open selection",None)?}else{v})?;
+type RecoveryTargets<'p> = Vec<(String, Bound<'p, PyAny>, Bound<'p, PyList>)>;
+fn selection_targets<'p>(scene: &Bound<'p, PyAny>) -> PyResult<RecoveryTargets<'p>> {
+    let py = scene.py();
+    let face = py.import("built_core.store_mesh")?.getattr("FaceView")?;
+    let group = py.import("built_core.group")?.getattr("Group")?;
+    let mut targets = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    let mut groups = Vec::new();
+    let loose = PyList::empty(py);
+    for item in scene.getattr("selection")?.try_iter()? {
+        let item = item?;
+        if item.is_instance(&face)? {
+            loose.append(item.getattr("key")?)?;
+        } else if item.is_instance(&group)? {
+            groups.push(item);
         }
-        detail.push(message(py,"Face {first_face} · {method} · {faces} faces\nPlanar faces: {planar_faces} · Curved supports: {curved_supports}\nMaximum residual: {max_residual_m} m\nInput volume (m³): {input_volume_m3}\nOutput volume (m³): {output_volume_m3}",&vars)?);
-        detail.extend(row.get_item("untouched")?.extract::<Vec<String>>()?);
     }
-    let buttons=PyList::new(py,[("cancel",translated(py,"Cancel",None)?),("apply",translated(py,"Apply",None)?)])?;
-    let kw=PyDict::new(py);kw.set_item("cancel","cancel")?;kw.set_item("default","cancel")?;
-    if dialogs.call_method("ask",(win,title,detail.join("\n\n"),buttons),Some(&kw))?.eq("apply")? {
-        let result=api.call_method1("recover_exact_geometry",(history,keys,mm/1000.,false))?;
-        if !result.get_item("ok")?.is_truthy()? {vp.call_method1("flash_status",(result.get_item("error")?.str()?,6000))?;}
+    while let Some(g) = groups.pop() {
+        let mesh = g.getattr("mesh")?;
+        if seen.insert(mesh.as_ptr() as usize) {
+            let keys = PyList::empty(py);
+            for f in mesh.getattr("faces")?.try_iter()? {
+                keys.append(f?.getattr("key")?)?;
+            }
+            if !keys.is_empty() {
+                targets.push((g.getattr("name")?.extract()?, mesh, keys));
+            }
+        }
+        for child in g.getattr("children")?.try_iter()? {
+            groups.push(child?)
+        }
+    }
+    let mesh = scene.getattr("mesh")?;
+    if !loose.is_empty() && !seen.contains(&(mesh.as_ptr() as usize)) {
+        targets.push((String::new(), mesh, loose));
+    }
+    Ok(targets)
+}
+fn compound<'p>(py: Python<'p>, commands: &Bound<'p, PyList>) -> PyResult<Bound<'p, PyAny>> {
+    if commands.len() == 1 {
+        return commands.get_item(0);
+    }
+    py.import("built_core.history")?
+        .call_method1("CompoundCommand", (commands,))
+}
+
+#[pyfunction]
+fn preview_recovery<'p>(
+    win: &Bound<'p, PyAny>,
+    history: &Bound<'p, PyAny>,
+    scene: &Bound<'p, PyAny>,
+    targets: RecoveryTargets<'p>,
+    millimetres: Option<f64>,
+) -> PyResult<()> {
+    let Some(mm) = millimetres else { return Ok(()) };
+    let py = win.py();
+    let vp = win.getattr("viewport")?;
+    if !vp.getattr("scene")?.is(scene) {
+        return Ok(());
+    }
+    let api = py.import("built_core.command_protocol")?;
+    let dialogs = py.import("built_render.chrome_dialogs")?;
+    let title = translated(py, "Recover exact geometry", None)?;
+    let mut detail = Vec::new();
+    let cmds = PyList::empty(py);
+    let revisions = PyList::empty(py);
+    for (name, mesh, keys) in targets {
+        let (report, cmd): (Bound<'_, PyAny>, Bound<'_, PyAny>) =
+            match api.call_method1("_plan_recovery", (&mesh, keys, mm / 1000.)) {
+                Ok(r) => r.extract()?,
+                Err(e) => {
+                    dialogs.call_method1("information", (win, title, e.value(py).str()?))?;
+                    return Ok(());
+                }
+            };
+        if report.get_item("faces")?.is_truthy()? {
+            cmds.append(cmd)?;
+        }
+        revisions.append((&mesh, mesh.getattr("_store")?.getattr("revision")?))?;
+        if !name.is_empty() {
+            detail.push(name);
+        }
+        for row in report.get_item("parts")?.try_iter()? {
+            let row = row?;
+            let vars = PyDict::new(py);
+            for k in [
+                "first_face",
+                "method",
+                "faces",
+                "planar_faces",
+                "curved_supports",
+                "max_residual_m",
+                "input_volume_m3",
+                "output_volume_m3",
+            ] {
+                let v = row.get_item(k)?;
+                vars.set_item(
+                    k,
+                    if v.is_none() {
+                        translated(py, "Open selection", None)?
+                    } else {
+                        v
+                    },
+                )?;
+            }
+            detail.push(message(py,"Face {first_face} · {method} · {faces} faces\nPlanar faces: {planar_faces} · Curved supports: {curved_supports}\nMaximum residual: {max_residual_m} m\nInput volume (m³): {input_volume_m3}\nOutput volume (m³): {output_volume_m3}",&vars)?);
+            detail.extend(row.get_item("untouched")?.extract::<Vec<String>>()?);
+        }
+    }
+    if cmds.is_empty() {
+        dialogs.call_method1("information", (win, title, detail.join("\n")))?;
+        return Ok(());
+    }
+    let buttons = PyList::new(
+        py,
+        [
+            ("cancel", translated(py, "Cancel", None)?),
+            ("apply", translated(py, "Apply", None)?),
+        ],
+    )?;
+    let kw = PyDict::new(py);
+    kw.set_item("cancel", "cancel")?;
+    kw.set_item("default", "cancel")?;
+    let done = py.import("functools")?.call_method1(
+        "partial",
+        (
+            wrap_pyfunction!(apply_recovery, py)?,
+            win,
+            history,
+            scene,
+            revisions,
+            compound(py, &cmds)?,
+        ),
+    )?;
+    dialogs.call_method(
+        "ask_later",
+        (win, title, detail.join("\n\n"), buttons, done),
+        Some(&kw),
+    )?;
+    Ok(())
+}
+
+#[pyfunction]
+fn apply_recovery(
+    win: &Bound<'_, PyAny>,
+    history: &Bound<'_, PyAny>,
+    scene: &Bound<'_, PyAny>,
+    revisions: Vec<(Bound<'_, PyAny>, u64)>,
+    command: &Bound<'_, PyAny>,
+    answer: &str,
+) -> PyResult<()> {
+    if answer != "apply" {
+        return Ok(());
+    }
+    let py = win.py();
+    let vp = win.getattr("viewport")?;
+    if !vp.getattr("scene")?.is(scene) {
+        return Ok(());
+    }
+    for (mesh, revision) in revisions {
+        if mesh
+            .getattr("_store")?
+            .getattr("revision")?
+            .extract::<u64>()?
+            != revision
+        {
+            vp.call_method1(
+                "flash_status",
+                (
+                    translated(py, "Selection changed after recovery preview", None)?,
+                    6000,
+                ),
+            )?;
+            return Ok(());
+        }
+    }
+    let result = py
+        .import("built_core.command_protocol")?
+        .call_method1("execute", (history, command))?;
+    if !result.get_item("ok")?.is_truthy()? {
+        vp.call_method1("flash_status", (result.get_item("error")?.str()?, 6000))?;
     }
     vp.call_method0("update")?;
     Ok(())

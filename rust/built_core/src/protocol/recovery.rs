@@ -121,6 +121,8 @@ fn fit(st: &Store, slots: &[u32], tolerance: f64) -> PyResult<Fit> {
 
 #[pyclass(frozen)]
 struct Edit {
+    mesh: Py<PyAny>,
+    patch: Option<std::sync::Arc<crate::store::native::NativePatch>>,
     arcs: Vec<Vec<(u32, crate::store::source_arcs::ArcBinding)>>,
     revision: u64,
     slots: Vec<u32>,
@@ -129,7 +131,7 @@ struct Edit {
 #[pymethods]
 impl Edit {
     fn __call__(&self, scene: &Obj<'_>) -> PyResult<()> {
-        let mesh = scene.getattr("mesh")?;
+        let mesh = self.mesh.bind(scene.py());
         let handle = mesh.getattr("_store")?.cast_into::<PyMeshStore>()?;
         let mut held = handle.try_borrow_mut()?;
         if held.inner.revision != self.revision {
@@ -167,6 +169,11 @@ impl Edit {
             }
             st.revision += 1;
         }
+        if let Some(p) = &self.patch {
+            st.state.exact.native = Some(p.clone());
+            st.revision += 1;
+            st.check().map_err(PyValueError::new_err)?;
+        }
         held.inner = st;
         drop(held);
         mesh.call_method0("_bump")?;
@@ -181,16 +188,29 @@ fn recover_exact_geometry<'p>(
     tolerance: f64,
     preview: bool,
 ) -> Reply<'p> {
-    let py = history.py();
-    let h = history
-        .getattr("scene")?
-        .getattr("mesh")?
-        .getattr("_store")?
-        .cast_into::<PyMeshStore>()?;
+    let mesh = history.getattr("scene")?.getattr("mesh")?;
+    let (report, command) = plan_recovery(&mesh, faces, tolerance)?;
+    if !preview {
+        if report.get_item("faces")?.unwrap().extract::<usize>()? == 0 {
+            return Err(PyValueError::new_err("No verified faces"));
+        }
+        report.update(execute(history, &command)?.as_mapping())?;
+    }
+    Ok(report)
+}
+#[pyfunction(name = "_plan_recovery")]
+fn plan_recovery<'p>(
+    mesh: &Obj<'p>,
+    faces: &Obj<'p>,
+    tolerance: f64,
+) -> PyResult<(Bound<'p, PyDict>, Obj<'p>)> {
+    let py = mesh.py();
+    let h = mesh.getattr("_store")?.cast_into::<PyMeshStore>()?;
     let st = h.try_borrow()?;
     let slots = slots(&st.inner, faces)?;
     let mut remaining: HashSet<_> = slots.iter().copied().collect();
     let mut parts = Vec::new();
+    let mut patch = None;
     let mut planes = Vec::new();
     let mut arcs = Vec::new();
     let mut reasons = Vec::new();
@@ -231,6 +251,16 @@ fn recover_exact_geometry<'p>(
             part.max_residual = round.residual;
             arcs.extend(round.rings);
             curved = round.supports;
+        } else if let Some(cut) = part
+            .volume
+            .and_then(|v| super::recover_cut::fit(&st.inner, &component, v, tolerance))
+        {
+            method = "Circular cylinder with planar mitre cuts";
+            output = Some(cut.volume);
+            part.max_residual = cut.residual;
+            part.faces.retain(|(f, _)| cut.caps.contains(f));
+            patch = Some(cut.patch);
+            curved = 1;
         }
         let row = PyDict::new(py);
         row.set_item("first_face", st.inner.pid(Kind::Face, root))?;
@@ -254,23 +284,16 @@ fn recover_exact_geometry<'p>(
         max_residual = max_residual.max(part.max_residual);
     }
     let edit = Edit {
+        mesh: mesh.clone().unbind(),
+        patch,
         slots,
         arcs,
         revision: st.inner.revision,
         planes: Some(planes),
     };
     drop(st);
-    let report = if preview {
-        PyDict::new(py)
-    } else {
-        if count == 0 {
-            return Err(PyValueError::new_err("No verified planar faces"));
-        }
-        execute(
-            history,
-            &history_command(py, "SnapshotMutation", (Bound::new(py, edit)?,))?,
-        )?
-    };
+    let report = PyDict::new(py);
+    let command = history_command(py, "SnapshotMutation", (Bound::new(py, edit)?, mesh))?;
     report.set_item("parts", parts)?;
     report.set_item("method", methods.join(", "))?;
     report.set_item("faces", count)?;
@@ -278,30 +301,36 @@ fn recover_exact_geometry<'p>(
     report.set_item("input_volume_m3", total_input)?;
     report.set_item("output_volume_m3", total_output)?;
     report.set_item("untouched", reasons)?;
-    Ok(report)
+    Ok((report, command))
 }
 #[pyfunction]
 fn make_faceted<'p>(history: &Obj<'p>, faces: &Obj<'p>) -> Reply<'p> {
-    let py = history.py();
-    let h = history
-        .getattr("scene")?
-        .getattr("mesh")?
-        .getattr("_store")?
-        .cast_into::<PyMeshStore>()?;
+    let mesh = history.getattr("scene")?.getattr("mesh")?;
+    execute(history, &plan_facets(&mesh, faces)?)
+}
+#[pyfunction(name = "_plan_facets")]
+fn plan_facets<'p>(mesh: &Obj<'p>, faces: &Obj<'p>) -> PyResult<Obj<'p>> {
+    let py = mesh.py();
+    let h = mesh.getattr("_store")?.cast_into::<PyMeshStore>()?;
     let st = h.try_borrow()?;
     let edit = Edit {
+        mesh: mesh.clone().unbind(),
+        patch: None,
         revision: st.inner.revision,
         slots: slots(&st.inner, faces)?,
         planes: None,
         arcs: vec![],
     };
-    drop(st);
-    execute(
-        history,
-        &history_command(py, "SnapshotMutation", (Bound::new(py, edit)?,))?,
-    )
+    if st.inner.state.exact.native.is_some() && edit.slots.len() != st.inner.n(Kind::Face) {
+        return Err(PyValueError::new_err(
+            "Select all faces of the exact patch to make it faceted",
+        ));
+    }
+    history_command(py, "SnapshotMutation", (Bound::new(py, edit)?, mesh))
 }
 pub(super) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(plan_recovery, m)?)?;
+    m.add_function(wrap_pyfunction!(plan_facets, m)?)?;
     m.add_function(wrap_pyfunction!(recover_exact_geometry, m)?)?;
     m.add_function(wrap_pyfunction!(make_faceted, m)?)?;
     Ok(())
