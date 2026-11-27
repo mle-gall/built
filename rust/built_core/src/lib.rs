@@ -23,6 +23,7 @@ mod general_settings;
 mod document_insert;
 mod kept_components;
 mod annotation_anchor;
+mod live;
 pub mod element_ids;
 mod file_ids;
 mod coordinate_frame;

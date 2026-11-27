@@ -97,6 +97,7 @@ pub(super) fn execute<'py>(
         if let Some(tags)=tag_objects {
             tags.apply(&scene)?;
         }
+        if depth == 1 { crate::live::finish(&scene, document)?; }
         doc.call_method0("commit")
     })();
     // Publish only after user callbacks finished. In particular a callback must

@@ -42,6 +42,7 @@ tiny-skia = { version = "0.11", default-features = false, features = ["std", "si
 ab_glyph = "0.2"
 roxmltree = "0.20"
 regex = "1.12"
+im = "15"
 
 [features]
 extension-module = ["pyo3/extension-module"]
