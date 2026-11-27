@@ -153,3 +153,25 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod change_tests {
+    use super::*;
+    use crate::store::{edit::Change, Store, Weld};
+    #[test]
+    fn only_the_bound_face_is_modified() {
+        let mut store = Store::empty(20, Weld::default());
+        let face = store
+            .add_face(
+                &[vec![[0., 0., 0.], [1., 0., 0.], [0., 1., 0.]]],
+                &mut Change::default(),
+            )
+            .unwrap();
+        let before = store.state.clone();
+        store.state.exact.inherit(Kind::Face, face, 0);
+        let diff = store.state.changes_since(&before);
+        assert_eq!(diff.modified[2], vec![store.key(Kind::Face, face)]);
+        assert!(diff.modified[1].is_empty());
+        assert!(!store.state.same_as(&before));
+    }
+}
