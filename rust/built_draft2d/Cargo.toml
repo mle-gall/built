@@ -1,0 +1,15 @@
+[package]
+name = "built_draft2d"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-or-later"
+publish = false
+
+# Exact 2D drafting shared by the Sketch workspace (built_render), sketch
+# recipe rows (built_core::live) and, later, Sheets: lines, arcs, circles,
+# trim, extend, fillet, offset, driving dimensions, regions, import cleanup.
+[dependencies]
+glam = { version = "0.29.3", features = ["serde"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+roxmltree = "0.20"
