@@ -91,7 +91,7 @@ pub(crate) fn bundled_materials(resources: std::path::PathBuf, language: &str) -
                 continue;
             };
             let path = textures.join("library").join(file);
-            let text = name.replace(['_', '-'], " ");
+            let text = item["label"].as_str().unwrap_or(name).replace(['_', '-'], " ");
             let mut letters = text.trim().chars();
             let label: String = letters
                 .next()
@@ -279,6 +279,7 @@ pub(crate) fn material_inspector(
         act("apply", "Paint with it")
     };
     let mut actions = vec![paint, act("select", "Select uses")];
+    if !painting { actions.push(("lib:browse:materials".into(), "Browse all…".into())); }
     if focused && !painting {
         actions.push(("lib:done".into(), "Done".into()));
     }
@@ -317,7 +318,7 @@ pub(crate) fn material_inspector(
     let pbr = &data["pbr"];
     // Emission alone does not turn the PBR surface on.
     let enabled = pbr.as_object().is_some_and(|m| m.keys().any(|k| !k.starts_with("emission")));
-    let mut surface = vec![("PBR surface".into(), switch("pbr", "Off|On", enabled))];
+    let mut surface = vec![("Physical surface".into(), switch("pbr", "Off|On", enabled))];
     let mut maps = vec![];
     if enabled {
         for (id, caption, map, limit) in [
@@ -390,7 +391,6 @@ pub(crate) fn material_inspector(
     let mut sections = vec![
         ("Material".into(), base),
         ("Actions".into(), actions),
-        ("Surface".into(), surface),
     ];
     if !maps.is_empty() {
         sections.push(("Actions".into(), maps));
@@ -405,12 +405,13 @@ pub(crate) fn material_inspector(
             field("picker", "finish", &json!((selected, options)).to_string()),
         ),
     ];
+    look.extend(surface);
     look.extend(emission);
     look.push((
         "Used by".into(),
         format!("{uses} object{}", if uses == 1 { "" } else { "s" }),
     ));
-    sections.push(("Look".into(), look));
+    sections.push(("Finish".into(), look));
     sections.push((
         "Actions".into(),
         vec![

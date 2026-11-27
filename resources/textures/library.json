@@ -1084,6 +1084,7 @@
     {
      "file": "wood/pine.jpg",
      "name": "Pine",
+     "label": "Amber pine",
      "sw": 0.4,
      "sh": 0.8,
      "author": "Emmanuel Puybaret",
@@ -1124,6 +1125,7 @@
     {
      "file": "wood/oak.jpg",
      "name": "Oak",
+     "label": "Grey oak",
      "sw": 0.4,
      "sh": 0.8,
      "author": "Emmanuel Puybaret",
@@ -1132,6 +1134,7 @@
     {
      "file": "wood/oak_2.jpg",
      "name": "Oak",
+     "label": "Brown oak",
      "sw": 0.4,
      "sh": 0.8,
      "author": "Emmanuel Puybaret",
@@ -1156,6 +1159,7 @@
     {
      "file": "wood/oak_3.jpg",
      "name": "Oak",
+     "label": "Golden oak",
      "sw": 0.4,
      "sh": 0.8,
      "author": "Emmanuel Puybaret",
@@ -1212,6 +1216,7 @@
     {
      "file": "wood/pine_2.jpg",
      "name": "Pine",
+     "label": "Pale knotty pine",
      "sw": 0.6,
      "sh": 0.6,
      "author": "Scopia",

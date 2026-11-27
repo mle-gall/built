@@ -2034,6 +2034,9 @@ impl LibrarySheet {
         let online = out.get_item("online")?.is_truthy()?;
         sheet.call_method1("search", (out.get_item("search")?,))?;
         sheet.getattr("menus")?.call_method1("append", (out.get_item("sort")?,))?;
+        if prov_id == "materials" {
+            sheet.getattr("menus")?.call_method1("append", (out.get_item("show")?,))?;
+        }
         let faceted=prov_id=="components" && !online;
         if faceted {
             st.set_item("component_facets", out.get_item("side")?)?;

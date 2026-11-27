@@ -141,4 +141,4 @@ def test_the_editor_shows_emission_with_a_map_slot():
     rows = {label: value for _, items in sections for label, value in items}
     assert rows["Emission"].endswith("#ff0000") and rows["Strength"].endswith("\x1d2")
     assert rows["Emission map"] == "glow.png" and "Metallic" not in rows
-    assert rows["PBR surface"].endswith("\x1d0")
+    assert rows["Physical surface"].endswith("\x1d0")

@@ -124,9 +124,10 @@ def test_scopes_categories_search_and_sort(win):
     assert not any(s.get("on") for s in sh["side"])                   # no side row while searching
     act(win, "search", "")
     act(win, "side", "s:model")
-    act(win, "headmenu", "sort", "facet:image")
+    assert [m["id"] for m in frame(win)["menus"]][:2] == ["sort", "show"]
+    act(win, "headmenu", "show", "facet:image")
     assert tiles(frame(win)) == []                                    # no image bases in this model
-    act(win, "headmenu", "sort", "facet:all")
+    act(win, "headmenu", "show", "facet:all")
     act(win, "headmenu", "sort", "used")
     assert L._state(win.view)["sort"] == "used"
     assert frame(win)["menus"][0]["label"] == "Sort: Most used"
@@ -145,7 +146,7 @@ def test_the_editor_applies_edits_and_sliders_when_they_settle(win, monkeypatch)
     assert L._hex(sc.materials["Beech"].color) == "#336699"
     L.edit_field(win, view, "pbr:Beech", "On")
     assert sc.materials["Beech"].pbr == {"metallic": 0., "roughness": .5}
-    rows = dict(L.inspector(view,win)[1])["Surface"]
+    rows = dict(L.inspector(view,win)[1])["Finish"]
     assert "slider" in dict(rows)["Roughness"]
     before = win.viewport.history.revision
     L.edit_field(win, view, "percent_roughness:Beech", "62")
@@ -165,7 +166,7 @@ def test_the_editor_sets_emission_colour_strength_and_map(win, monkeypatch):
     frame(win)
     act(win, "verb", "edit")
     view, sc = win.view, win.viewport.scene
-    look = dict(dict(L.inspector(view, win)[1])["Look"])
+    look = dict(dict(L.inspector(view, win)[1])["Finish"])
     assert look["Emission"].endswith("#000000") and "Strength" in look
     before = win.viewport.history.revision
     L.edit_field(win, view, "emission:Beech", "#ff8000")
@@ -178,7 +179,7 @@ def test_the_editor_sets_emission_colour_strength_and_map(win, monkeypatch):
     monkeypatch.setattr(L, "_pick_image", lambda w, title: picked.append(title) or "/x/glow.png")
     L.action(win, view, "map:m:Beech:emission_map")
     assert picked == ["Emission map"] and sc.materials["Beech"].pbr["emission_map"] == {"path": "/x/glow.png"}
-    look = dict(dict(L.inspector(view, win)[1])["Look"])
+    look = dict(dict(L.inspector(view, win)[1])["Finish"])
     assert look["Emission map"] == "glow.png"
     win.viewport.history.undo()
     win.viewport.history.undo()

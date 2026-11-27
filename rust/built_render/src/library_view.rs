@@ -563,10 +563,11 @@ pub(crate) fn sheet_rows(inp: &Input, mut native: Option<&mut RowGroups>) -> Val
     let label = SORTS.iter().find(|s| s.0 == st.sort).map_or("Name", |s| s.1);
     let facet = format!("facet:{}", if st.facet.is_empty() { "all" } else { &st.facet });
     let mut options: Vec<Value> = SORTS.iter().map(|(i, l)| verb(i, l, "", i64::from(*i == st.sort))).collect();
-    if t == "materials" {
-        options.push(verb("-", "", "", 0));
-        options.extend(FACETS.iter().map(|(i, l)| verb(i, l, "", i64::from(*i == facet))));
-    }
+    let show = (t == "materials").then(|| {
+        let options: Vec<_> = FACETS.iter().map(|(id, label)| verb(id, label, "", i64::from(*id == facet))).collect();
+        let label = FACETS.iter().find(|(id, _)| *id == facet).unwrap_or(&FACETS[0]).1;
+        json!({"id":"show", "label":format!("Show: {label}"), "on":facet, "options":options})
+    });
     if t=="components" { options[1]["label"]=json!("Copies"); }
     let label=if t=="components" && st.sort=="used" {"Copies"}else{label};
     let sort = json!({"id": "sort", "label": format!("Sort: {label}"), "on": st.sort, "options": options});
@@ -626,7 +627,7 @@ pub(crate) fn sheet_rows(inp: &Input, mut native: Option<&mut RowGroups>) -> Val
     };
     let blocks = cursor.as_deref().and_then(|k| inp.items.iter().find(|e| e.key == k))
         .map(|e| detail(inp, e, &mut thumbs)).unwrap_or_default();
-    json!({"scope": if faceted {"s:all"} else {&scope}, "tokens":tokens, "matches":faceted.then(||shown.iter().map(|e|&e.key).collect::<Vec<_>>()), "online": online, "searching": search, "search": format!("Search all {t}"), "sort": sort,
+    json!({"scope": if faceted {"s:all"} else {&scope}, "tokens":tokens, "matches":faceted.then(||shown.iter().map(|e|&e.key).collect::<Vec<_>>()), "online": online, "searching": search, "search": format!("Search all {t}"), "sort": sort, "show": show,
            "side": side, "content": content, "groups": groups, "type_actions": faceted || (!search && scope.starts_with("s:model")),
            "cursor": cursor, "detail": blocks, "thumbs": thumbs})
 }
@@ -772,7 +773,8 @@ mod tests {
         assert_eq!(v["groups"][0]["tiles"][0]["sub"], "colour · used by 2");
         assert_eq!(v["groups"][0]["tiles"][0]["on"], true);
         assert_eq!(v["detail"][2]["rows"][0], json!(["Used by", "2 objects", ""]));
-        assert_eq!(v["sort"]["options"].as_array().unwrap().len(), 7);
+        assert_eq!(v["sort"]["options"].as_array().unwrap().len(), SORTS.len());
+        assert_eq!(v["show"]["options"].as_array().unwrap().len(), FACETS.len());
         assert_eq!(file_stem("/x/0123456789abcdef-oak.png"), "oak.png");
     }
 }

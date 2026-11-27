@@ -172,7 +172,7 @@ def test_the_material_inspector_sets_and_clears_the_finish(native_host):
 
     def picker():
         _, sections = material_inspector(scene.materials[name], 0)
-        encoded = dict(dict(sections)["Look"])["Finish"]
+        encoded = dict(dict(sections)["Finish"])["Finish"]
         kind, field, data = encoded.lstrip("\x1d").split("\x1d")
         assert (kind, field) == ("picker", "libmat:finish:" + name)
         return json.loads(data)
