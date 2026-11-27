@@ -417,8 +417,16 @@ fn mesh_centre(py: Python<'_>, mesh: &Obj<'_>) -> PyResult<Option<[f64; 3]>> {
     let frame = if stored { mesh.getattr("_store")?.getattr("frame_origin")?.extract::<[f64; 3]>()? } else { [0.; 3] };
     let pos = if !source.is_none() {
         source.get_item("pos")?
-    } else if stored && !store.is_none() {
+    } else if stored && !store.is_none() && !store.hasattr("position_box")? {
         store.call_method0("arrays")?.get_item("pos")?
+    } else if stored && !store.is_none() {
+        // The live vertices' box straight off the store (min and max do
+        // not depend on the list order the dense arrays would copy).
+        let got: Option<([f64; 3], [f64; 3])> = store.call_method0("position_box")?.extract()?;
+        return Ok(Some(match got {
+            Some((low, high)) => std::array::from_fn(|k| (low[k] + high[k]) / 2. + frame[k]),
+            None => frame,
+        }));
     } else {
         return Ok(None);
     };

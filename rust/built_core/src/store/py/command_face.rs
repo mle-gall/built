@@ -114,8 +114,7 @@ impl PyMeshStore {
         let mut swaps = false;
         if divide {
             let (holding, inside) = if scan {
-                crate::scans::MeshScan::from_state(work.inner.state.clone(), 0)
-                    .drawn_face_candidates(py, slot)?
+                self.drawn_face_candidates(&work.inner, slot)?
             } else {
                 let all = work.inner.live_slots(Kind::Face);
                 (all.clone(), all)

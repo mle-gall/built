@@ -383,12 +383,20 @@ fn source_arrays<'py>(
             if hidden_tags.as_ref().is_some_and(|tags| !tags.is_empty()) {
                 stored_edge_layers = Some(field("layer")?);
             }
+            let exact = arrays.contains("face_owner")?;
+            // A plain store's dense face attributes are its own column:
+            // given, they spare a pass over every face's key when no face
+            // has attributes of its own.
+            let kw = PyDict::new(py);
+            if !exact {
+                kw.set_item("face_attr", field("face_attr")?)?;
+            }
             let columns = py
                 .import("built_core")?
                 .getattr("store_views")?
-                .call_method1("attr_columns", (mesh, overrides.as_ref()))?;
+                .call_method("attr_columns", (mesh, overrides.as_ref()), Some(&kw))?;
             let mut attr = columns.get_item(1)?;
-            if arrays.contains("face_owner")? {
+            if exact {
                 attr = np
                     .call_method1("asarray", (&attr,))?
                     .get_item(field("face_owner")?)?;
@@ -399,11 +407,7 @@ fn source_arrays<'py>(
                 field("ring_sizes")?,
                 field("ring_counts")?,
                 field("edges")?,
-                field("flags")?.bitand(if arrays.contains("face_owner")? {
-                    15
-                } else {
-                    7
-                })?,
+                field("flags")?.bitand(if exact { 15 } else { 7 })?,
                 columns.get_item(0)?,
                 attr,
             )

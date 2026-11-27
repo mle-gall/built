@@ -53,6 +53,7 @@ pub(crate) mod drawing_plane;
 pub(crate) mod drawing_edges;
 pub mod edit;
 pub(crate) mod edge_index;
+pub mod face_index;
 pub(crate) mod geometry;
 pub(crate) mod frame;
 pub mod explode;
@@ -346,6 +347,31 @@ impl Store {
             }
         }
         out
+    }
+}
+
+impl State {
+    /// `Store::edges_at` of this state.
+    pub(crate) fn edges_at(&self, v: u32) -> DiskIter<'_> {
+        DiskIter { st: self, v, e: *self.vedge.get(v as usize) }
+    }
+
+    /// An element's place in its list (`Order`): ascending in list order.
+    pub(crate) fn list_rank(&self, kind: keys::Kind, slot: u32) -> u64 {
+        match &self.order[kind as usize].explicit {
+            None => u64::from(slot),
+            Some(x) => u64::from(*x.at.get(slot as usize)),
+        }
+    }
+
+    /// `Store::edge_faces` of this state.
+    pub(crate) fn edge_faces(&self, e: u32) -> &[u32] {
+        let inc = self.efaces.get(e as usize);
+        if inc.len <= 2 {
+            &inc.a[..inc.len as usize]
+        } else {
+            self.ef_spill.get(inc.a[0] as usize)
+        }
     }
 }
 

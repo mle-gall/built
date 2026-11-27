@@ -42,7 +42,11 @@ fn store_source<'p>(
         snap.call_method0("display_arrays")?
     } else {
         super::exact::forget(packed, code)?;
-        snap.call_method0("arrays")?
+        // Positions and edges only: the faces are the bake's, not read here.
+        let kw = PyDict::new(py);
+        kw.set_item("incidence", false)?;
+        kw.set_item("faces", false)?;
+        snap.call_method("arrays", (), Some(&kw))?
     };
     let source = PyDict::new(py);
     for (name, col) in [

@@ -88,6 +88,31 @@ pub(crate) fn attr_columns<'py>(
             return Ok((table.into_any(), fa.call_method0("copy")?));
         }
     }
+    if let (Some(v), None) = (face_attr, overrides) {
+        // Only the faces with attributes of their own: found by key, in
+        // face order (the order the loop below appends them to the table).
+        let fa = v.call_method0("copy")?;
+        let store = mesh.getattr("_store")?;
+        let st = PyMeshStore::read(&store)?;
+        let data = &st.inner;
+        let dense = data.state.order[Kind::Face as usize].dense_of_slot(&data.state.slots[Kind::Face as usize]);
+        let mut hits = Vec::new();
+        for (key, attr) in own.iter() {
+            if attr.is_none() {
+                continue;
+            }
+            let Ok(key) = key.extract::<u128>() else { continue };
+            if let Some(slot) = data.slot(Kind::Face, key) {
+                hits.push((dense[slot as usize], attr));
+            }
+        }
+        hits.sort_by_key(|h| h.0);
+        for (i, attr) in hits {
+            fa.set_item(i, table.len())?;
+            table.append(attr)?;
+        }
+        return Ok((table.into_any(), fa));
+    }
     let entries = rows(mesh)?;
     let fa = if let Some(v) = face_attr {
         v.call_method0("copy")?

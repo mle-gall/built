@@ -108,22 +108,17 @@ impl Store {
     /// the first corner, the farthest one and the one spanning the widest
     /// triangle), so the verdicts are Python's bit for bit.
     pub fn nonplanar_faces(&self, tolerance: f64) -> Vec<u32> {
+        self.live_slots(Kind::Face).into_iter().filter(|&f| self.nonplanar(f, tolerance)).collect()
+    }
+
+    /// Whether face `f` (live) is one `nonplanar_faces` lists.
+    pub(crate) fn nonplanar(&self, f: u32, tolerance: f64) -> bool {
         let st = &self.state;
-        let mut out = Vec::new();
         let mut pts: Vec<[f64; 3]> = Vec::new();
-        for f in self.live_slots(Kind::Face) {
-            pts.clear();
-            for ring in self.face_rings(f) {
-                pts.extend(ring.iter().map(|&v| *st.vpos.get(v as usize)));
-            }
-            if pts.len() <= 3 {
-                continue;
-            }
-            if !is_planar(&pts, tolerance) {
-                out.push(f);
-            }
+        for ring in self.face_rings(f) {
+            pts.extend(ring.iter().map(|&v| *st.vpos.get(v as usize)));
         }
-        out
+        pts.len() > 3 && !is_planar(&pts, tolerance)
     }
 
     /// Live slots of a kind, in list order.

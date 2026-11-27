@@ -35,6 +35,13 @@ impl Store {
     }
 
     pub fn dense(&self) -> Dense {
+        self.dense_parts(true, true)
+    }
+
+    /// `dense`, leaving the edges' faces (`incidence`) and the faces'
+    /// arrays (`faces`) empty when not asked for: a reader of positions and
+    /// edges alone skips most of the remap.
+    pub fn dense_parts(&self, incidence: bool, faces: bool) -> Dense {
         let st = &self.state;
         let [dv, _de, df] = self.dense_maps();
         let mut d = Dense::default();
@@ -49,10 +56,18 @@ impl Store {
             d.curve.push(*st.ecurve.get(e as usize));
             let l = *st.elayer.get(e as usize);
             d.layer.push(if l == NONE { -1 } else { l as i64 });
-            for &f in self.edge_faces(e) {
-                d.ef_face.push(df[f as usize] as i64);
+            if incidence {
+                for &f in self.edge_faces(e) {
+                    d.ef_face.push(df[f as usize] as i64);
+                }
+                d.ef_start.push(d.ef_face.len() as i64);
             }
-            d.ef_start.push(d.ef_face.len() as i64);
+        }
+        if !incidence {
+            d.ef_start.clear();
+        }
+        if !faces {
+            return d;
         }
         for f in st.order[Kind::Face as usize].live(&st.slots[Kind::Face as usize]) {
             let r = *st.frings.get(f as usize);

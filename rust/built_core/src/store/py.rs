@@ -21,7 +21,7 @@ use super::edit::Change;
 use super::keys::Kind;
 use super::stitch::{Merge, Plan};
 use super::topo::OpError;
-use super::{Snapshot, Store, Weld};
+use super::{Snapshot, State, Store, Weld};
 use std::borrow::Cow;
 use std::sync::{Arc, Mutex};
 use numpy::ndarray::Array2;
@@ -89,6 +89,16 @@ pub struct PyMeshStore {
     /// The edges' BVH for the edges near the cursor (`nearest_edges`),
     /// brought up to the current state on use.
     edge_index: Mutex<Option<Arc<super::edge_index::EdgeIndex>>>,
+    /// The last drawing scan made of this store (`MeshScan::from_store`):
+    /// the next one is carried over from it (`MeshScan::refreshed`).
+    scan_seed: Mutex<Option<Py<crate::scans::MeshScan>>>,
+    /// The faces' box tree for the drawing commands' searches
+    /// (`face_query`), brought up to the state asked about on use.
+    face_index: Mutex<Option<Arc<super::face_index::FaceIndex>>>,
+    /// `nonplanar_faces` of the last state asked about (with its
+    /// tolerance), refreshed from the diff: a move re-tests only the faces
+    /// it touched.
+    nonplanar: Mutex<Option<(State, u64, Vec<u32>)>>,
 }
 
 /// An occurrence uses the same keys and generation floors as its definition.
@@ -318,7 +328,96 @@ impl PyMeshStore {
     }
 
     fn wrap(inner: Store) -> Self {
-        Self { inner, cache: Mutex::new(Default::default()), edge_index: Mutex::new(None) }
+        Self { inner, cache: Mutex::new(Default::default()), edge_index: Mutex::new(None), scan_seed: Mutex::new(None),
+               face_index: Mutex::new(None), nonplanar: Mutex::new(None) }
+    }
+
+    /// `Store::nonplanar_faces` of this store's state, in list order: the
+    /// last answer kept, the faces changed since (and those at a moved
+    /// vertex) tested again.
+    pub(crate) fn nonplanar_faces_now(&self, tolerance: f64) -> Vec<u32> {
+        let st = &self.inner;
+        let mut memo = self.nonplanar.lock().unwrap();
+        let fresh = || st.nonplanar_faces(tolerance);
+        let faces = match memo.take() {
+            Some((base, tol, faces)) if tol == tolerance.to_bits() && base.ns == st.state.ns => {
+                let ch = st.state.changes_since(&base);
+                let slot = |key: u128| super::keys::split_key(key).map(|(_, _, _, s)| s);
+                let mut touched: std::collections::BTreeSet<u32> = std::collections::BTreeSet::new();
+                for &key in ch.created[2].iter().chain(&ch.removed[2]).chain(&ch.modified[2]) {
+                    touched.extend(slot(key));
+                }
+                for &key in &ch.moved {
+                    if let Some(v) = slot(key).filter(|&v| st.state.slots[0].alive(v)) {
+                        for e in st.edges_at(v) {
+                            touched.extend(st.edge_faces(e).iter().copied());
+                        }
+                    }
+                }
+                if touched.len() > 4096 + st.n(Kind::Face) / 16 {
+                    fresh()
+                } else {
+                    let faces_live = &st.state.slots[2];
+                    let mut out: Vec<u32> = faces.into_iter().filter(|f| !touched.contains(f) && faces_live.alive(*f)).collect();
+                    out.extend(touched.into_iter().filter(|&f| faces_live.alive(f) && st.nonplanar(f, tolerance)));
+                    out.sort_unstable_by_key(|&f| (st.state.list_rank(Kind::Face, f), f));
+                    out
+                }
+            }
+            _ => fresh(),
+        };
+        *memo = Some((st.state.clone(), tolerance.to_bits(), faces.clone()));
+        faces
+    }
+
+    /// The live faces of `store` (this store or a staged copy of it) whose
+    /// outer box answers `query` for the window `w`, in list order: what a
+    /// drawing scan of that state answers, from the box tree kept here.
+    pub(crate) fn face_query(&self, store: &Store, w: crate::scans::Box6,
+                             query: super::face_index::Query) -> Vec<u32> {
+        self.face_index_for(store).faces(store, w, query)
+    }
+
+    /// The box tree brought up to `store`. Kept for the next call only when
+    /// `store` is this store's own: a staged copy shares this store's
+    /// revision numbers (two copies can reach the same one with different
+    /// contents), so a tree refreshed to one must not answer for another.
+    fn face_index_for(&self, store: &Store) -> Arc<super::face_index::FaceIndex> {
+        let mut slot = self.face_index.lock().unwrap();
+        let own = match slot.as_ref() {
+            Some(index) => index.refresh(&self.inner),
+            None => Arc::new(super::face_index::FaceIndex::build(&self.inner)),
+        };
+        *slot = Some(own.clone());
+        if std::ptr::eq(store, &self.inner) { own } else { own.refresh(store) }
+    }
+
+    /// `MeshScan::drawn_face_candidates` of the face `slot` just added to
+    /// `store` (a staged copy of this store), from the box tree.
+    pub(crate) fn drawn_face_candidates(&self, store: &Store, slot: u32) -> PyResult<(Vec<u32>, Vec<u32>)> {
+        self.face_index_for(store)
+            .drawn_candidates(store, slot)
+            .ok_or_else(|| PyValueError::new_err("drawn face is absent from its scan"))
+    }
+
+    /// The drawing scan of `state` (this store's, or a staged state made
+    /// from it), carried over from the last scan of this store when it
+    /// can be, and kept as the next one's seed.
+    pub(crate) fn scan_of(&self, py: Python<'_>, state: State) -> PyResult<Py<crate::scans::MeshScan>> {
+        // A small mesh's scan is rebuilt in no time: none is kept for it.
+        const SEED_PAST: usize = 4096;
+        let seeded = state.slots[Kind::Face as usize].live >= SEED_PAST;
+        let seed = self.scan_seed.lock().unwrap().as_ref().filter(|_| seeded).map(|s| s.clone_ref(py));
+        let carried = seed.and_then(|s| s.bind(py).try_borrow_mut().ok().and_then(|mut old| old.refreshed(state.clone())));
+        let scan = match carried {
+            Some(scan) => scan,
+            None => py.detach(|| crate::scans::MeshScan::from_state(state, 0)),
+        };
+        let scan = Py::new(py, scan)?;
+        let kept = seeded.then(|| scan.clone_ref(py));
+        let old = std::mem::replace(&mut *self.scan_seed.lock().unwrap(), kept);
+        drop(old);
+        Ok(scan)
     }
 
     fn order_of(&self, k: Kind) -> (Arc<Vec<u32>>, Arc<Vec<u32>>) {
@@ -1038,11 +1137,32 @@ impl PyMeshStore {
         Ok(Some((out, names)))
     }
 
+    /// `(low, high)` corners of the live vertices' box, in the store's own
+    /// frame, or None without vertices: `arrays()["pos"]`'s min and max
+    /// without the dense copy of every array.
+    fn position_box(&self, py: Python<'_>) -> Option<([f64; 3], [f64; 3])> {
+        let st = &self.inner.state;
+        py.detach(|| {
+            let mut out: Option<([f64; 3], [f64; 3])> = None;
+            for v in st.slots[Kind::Vertex as usize].live_slots() {
+                let p = *st.vpos.get(v as usize);
+                let (lo, hi) = out.get_or_insert((p, p));
+                for k in 0..3 {
+                    lo[k] = lo[k].min(p[k]);
+                    hi[k] = hi[k].max(p[k]);
+                }
+            }
+            out
+        })
+    }
+
     /// Every array of the `Plan` at once, as a dict: pos, edges, flags,
     /// curve, layer, corners, ring_sizes, ring_counts, ef_start, ef_face,
-    /// face_attr (one remap pass for all of them).
-    fn arrays<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
-        let d = py.detach(|| self.inner.dense());
+    /// face_attr (one remap pass for all of them). `incidence=False`
+    /// leaves ef_start / ef_face empty, `faces=False` the face arrays too.
+    #[pyo3(signature = (incidence = true, faces = true))]
+    fn arrays<'py>(&self, py: Python<'py>, incidence: bool, faces: bool) -> PyResult<Bound<'py, PyDict>> {
+        let d = py.detach(|| self.inner.dense_parts(incidence, faces));
         dense_dict(py, d)
     }
 
@@ -1050,7 +1170,8 @@ impl PyMeshStore {
     #[pyo3(signature=(bake=false))]
     fn display_arrays<'py>(&self, py: Python<'py>, bake: bool) -> PyResult<Bound<'py, PyDict>> {
         let Some(patch) = &self.inner.state.exact.native else {
-            return self.arrays(py);
+            // The resident baker reads no edge's faces.
+            return self.arrays(py, !bake, true);
         };
         let mesh = patch.mesh().map_err(PyValueError::new_err)?;
         let logical = self.inner.dense();
@@ -1681,9 +1802,8 @@ impl PyMeshStore {
 
     /// Keys of the faces `fold_nonplanar_faces` would fold, list order.
     fn nonplanar_faces(&self, py: Python<'_>, tolerance: f64) -> Vec<u128> {
-        let st = &self.inner;
-        let slots = py.detach(|| st.nonplanar_faces(tolerance));
-        slots.into_iter().map(|f| st.key(Kind::Face, f)).collect()
+        let slots = py.detach(|| self.nonplanar_faces_now(tolerance));
+        slots.into_iter().map(|f| self.inner.key(Kind::Face, f)).collect()
     }
 
     /// `Edge.soft` / `hidden` / `flat` as format-3 bits (soft 1, hidden 2,
@@ -2554,7 +2674,7 @@ impl PyMeshStore {
     ) -> PyResult<Option<(usize, Vec<(u128, Vec<u128>)>)>> {
         use pyo3::types::PySet;
         let h = crate::hypot_of(hypot)?;
-        let faces = self.inner.nonplanar_faces(tolerance);
+        let faces = self.nonplanar_faces_now(tolerance);
         if faces.is_empty() {
             return Ok(Some((0, vec![])));
         }
@@ -4370,9 +4490,10 @@ impl PyStoreSnapshot {
     }
 
     /// The `Plan` arrays of the snapshot (see `MeshStore.arrays`).
-    fn arrays<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+    #[pyo3(signature = (incidence = true, faces = true))]
+    fn arrays<'py>(&self, py: Python<'py>, incidence: bool, faces: bool) -> PyResult<Bound<'py, PyDict>> {
         let r = reader(&self.inner);
-        let d = py.detach(|| r.dense());
+        let d = py.detach(|| r.dense_parts(incidence, faces));
         dense_dict(py, d)
     }
 
@@ -4467,3 +4588,32 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
 #[path = "fillet_preview.rs"]
 pub(crate) mod fillet_preview;
+
+#[cfg(test)]
+mod incremental_query_tests {
+    use super::*;
+    use crate::store::edit::Change;
+
+    #[test]
+    fn the_kept_nonplanar_faces_are_the_fresh_ones() {
+        let mut st = Store::empty(9, Weld::default());
+        for i in 0..30 {
+            for j in 0..30 {
+                let (x, y) = (i as f64, j as f64);
+                st.add_face(&[vec![[x, y, 0.0], [x + 1.0, y, 0.0], [x + 1.0, y + 1.0, 0.0], [x, y + 1.0, 0.0]]], &mut Change::default()).unwrap();
+            }
+        }
+        let mut store = PyMeshStore::wrap(st);
+        let tol = 1e-6;
+        assert!(store.nonplanar_faces_now(tol).is_empty());
+        // Lift corners: the faces around them bend, then some flatten again.
+        for (k, v) in [40u32, 41, 300, 40].into_iter().enumerate() {
+            store.inner.move_vertex(v, [0.0, 0.0, if k == 3 { -0.5 } else { 0.5 }]);
+            assert_eq!(store.nonplanar_faces_now(tol), store.inner.nonplanar_faces(tol));
+        }
+        let f = store.inner.live_slots(Kind::Face)[100];
+        store.inner.remove_face(f, &mut Change::default());
+        assert_eq!(store.nonplanar_faces_now(tol), store.inner.nonplanar_faces(tol));
+        assert!(!store.nonplanar_faces_now(tol).is_empty());
+    }
+}

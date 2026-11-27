@@ -182,6 +182,45 @@ impl DrawingGraph {
         }
     }
 
+    /// Edge `i` (ending at `a` and `b`) out of the graph.
+    pub fn remove(&mut self, i: usize, [a, b]: [Point; 2]) {
+        let (u, v) = (key(a), key(b));
+        if u == v {
+            return;
+        }
+        for n in [u, v] {
+            if let Some(list) = self.0.get_mut(&n) {
+                list.retain(|e| e.0 != i);
+                if list.is_empty() {
+                    self.0.remove(&n);
+                }
+            }
+        }
+    }
+
+    /// Edge `i` into the graph, each end's list kept in `rank` order: the
+    /// order `append` meets edges in when the graph is built afresh, so a
+    /// search walks a patched graph as it would a fresh one.
+    pub fn insert(&mut self, i: usize, [a, b]: [Point; 2], rank: impl Fn(usize) -> u64) {
+        let (u, v) = (key(a), key(b));
+        if u == v {
+            return;
+        }
+        let r = rank(i);
+        for (n, p) in [(u, b), (v, a)] {
+            let list = self.0.entry(n).or_default();
+            let at = list.partition_point(|e| rank(e.0) < r);
+            list.insert(at, (i, p));
+        }
+    }
+
+    #[cfg(test)]
+    pub fn sorted(&self) -> Vec<(Node, Vec<(usize, Point)>)> {
+        let mut out: Vec<_> = self.0.iter().map(|(k, v)| (*k, v.clone())).collect();
+        out.sort_by(|a, b| a.0.cmp(&b.0));
+        out
+    }
+
     pub fn cycles(
         &self,
         a: Point,

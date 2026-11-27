@@ -70,52 +70,7 @@ fn prepare(
             }
         }
     }
-    let mut edge_list = Vec::with_capacity(edges.len() + c.len());
-    let mut edge_flags = Vec::with_capacity(edges.len() + c.len());
-    let mut seen: HashMap<(u32, u32), usize, std::hash::BuildHasherDefault<FastHash>> =
-        HashMap::with_capacity_and_hasher(edges.len() + c.len() / 2, Default::default());
-    let mut insert = |a: u32, b: u32, flag: u8| -> Option<usize> {
-        if a == b {
-            return None;
-        }
-        let key = (a.min(b), a.max(b));
-        Some(match seen.get(&key) {
-            Some(&i) => {
-                edge_flags[i] |= flag;
-                i
-            }
-            None => {
-                seen.insert(key, edge_list.len());
-                edge_list.push([a, b]);
-                edge_flags.push(flag);
-                edge_list.len() - 1
-            }
-        })
-    };
-    for (e, f) in edges.iter().zip(flags) {
-        insert(e[0], e[1], *f);
-    }
-    // (edge, face) for every ring side, faces ascending: the adjacency the
-    // smooth normals read, without a list per edge.
-    let mut sides: Vec<(u32, u32)> = Vec::with_capacity(c.len());
-    let mut face_rings: Vec<(usize, usize)> = Vec::with_capacity(counts.len());
-    let (mut r, mut k) = (0, 0);
-    for (f, &count) in counts.iter().enumerate() {
-        let (first_ring, first_corner) = (r, k);
-        for _ in 0..count {
-            let n = sizes[r] as usize;
-            let ring = &c[k..k + n];
-            for i in 0..n {
-                let (a, b) = (ring[i], ring[(i + 1) % n]);
-                if let Some(edge) = insert(a, b, 0) {
-                    sides.push((edge as u32, f as u32));
-                }
-            }
-            k += n;
-            r += 1;
-        }
-        face_rings.push((first_ring, first_corner));
-    }
+    let (edge_list, edge_flags, sides, face_rings) = edge_table(p.len(), edges, flags, c, sizes, counts);
     // Triangulation is per face: in parallel for a large prototype.
     let geometry = |f: usize| {
         let (mut r, mut k) = face_rings[f];
@@ -207,6 +162,102 @@ fn prepare(
         edges,
         bounds,
     }
+}
+
+/// What the bake reads off the edges and rings: the distinct vertex pairs
+/// (the edges first, in order, then ring sides no edge has, as first met)
+/// with their flags or-ed over repeats, each ring side as `(pair, face)`
+/// in face order, and where each face's rings start. Vertex pairs are
+/// matched through buckets by lower vertex, not a hash table (the table's
+/// misses were most of a 200k-face prototype's bake).
+#[allow(clippy::type_complexity)]
+fn edge_table(n_vertices: usize, edges: &[[u32; 2]], flags: &[u8], c: &[u32], sizes: &[i64], counts: &[i64])
+    -> (Vec<[u32; 2]>, Vec<u8>, Vec<(u32, u32)>, Vec<(usize, usize)>) {
+    const SKIP: u32 = u32::MAX;
+    // The stream of pairs: every edge, then every ring side.
+    let m = edges.len() + c.len();
+    let mut ends: Vec<[u32; 2]> = Vec::with_capacity(m);
+    ends.extend_from_slice(edges);
+    let mut face_of: Vec<u32> = Vec::with_capacity(c.len());
+    let mut face_rings: Vec<(usize, usize)> = Vec::with_capacity(counts.len());
+    let (mut r, mut k) = (0, 0);
+    for (f, &count) in counts.iter().enumerate() {
+        face_rings.push((r, k));
+        for _ in 0..count {
+            let n = sizes[r] as usize;
+            let ring = &c[k..k + n];
+            for i in 0..n {
+                ends.push([ring[i], ring[(i + 1) % n]]);
+                face_of.push(f as u32);
+            }
+            k += n;
+            r += 1;
+        }
+    }
+    // Bucket the stream by lower vertex, in stream order.
+    let mut start = vec![0u32; n_vertices + 1];
+    for &[a, b] in &ends {
+        if a != b {
+            start[a.min(b) as usize + 1] += 1;
+        }
+    }
+    for v in 0..n_vertices {
+        start[v + 1] += start[v];
+    }
+    let mut fill = start.clone();
+    let mut bucket = vec![0u32; start[n_vertices] as usize];
+    for (i, &[a, b]) in ends.iter().enumerate() {
+        if a != b {
+            let lo = a.min(b) as usize;
+            bucket[fill[lo] as usize] = i as u32;
+            fill[lo] += 1;
+        }
+    }
+    // Each item's first occurrence of its pair.
+    let mut first = vec![SKIP; m];
+    let hi = |i: u32| ends[i as usize][0].max(ends[i as usize][1]);
+    let mut wide: HashMap<u32, u32, std::hash::BuildHasherDefault<FastHash>> = HashMap::default();
+    for v in 0..n_vertices {
+        let items = &bucket[start[v] as usize..start[v + 1] as usize];
+        if items.len() > 64 {
+            // A vertex many sides meet at (a fan's apex): by table.
+            wide.clear();
+            for &i in items {
+                first[i as usize] = *wide.entry(hi(i)).or_insert(i);
+            }
+            continue;
+        }
+        for (j, &i) in items.iter().enumerate() {
+            let h = hi(i);
+            let earlier = items[..j].iter().find(|&&e| hi(e) == h);
+            first[i as usize] = earlier.map_or(i, |&e| first[e as usize]);
+        }
+    }
+    // Pairs numbered as first met; flags or-ed onto the first.
+    let mut id = vec![SKIP; m];
+    let mut edge_list = Vec::new();
+    let mut edge_flags: Vec<u8> = Vec::new();
+    for i in 0..m {
+        let f = first[i];
+        if f == SKIP {
+            continue;
+        }
+        if f as usize == i {
+            id[i] = edge_list.len() as u32;
+            edge_list.push(ends[i]);
+            edge_flags.push(flags.get(i).copied().unwrap_or(0));
+        } else {
+            id[i] = id[f as usize];
+            if let Some(&flag) = flags.get(i).filter(|_| i < edges.len()) {
+                edge_flags[id[i] as usize] |= flag;
+            }
+        }
+    }
+    let sides = (edges.len()..m)
+        .filter(|&i| id[i] != SKIP)
+        .map(|i| (id[i], face_of[i - edges.len()]))
+        .collect();
+    (edge_list, edge_flags, sides, face_rings)
 }
 
 fn fill(p: &[V3], prepared: &Prepared, bytes: &mut [u8], indices: &mut [u32]) {
@@ -356,7 +407,25 @@ pub fn bake_scene<'py>(
     let h = crate::hypot_of(hypot)?;
     // Borrowed read-only NumPy slices stay alive throughout this synchronous call.
     let (bytes, indices, bounds, table, materials) = py.detach(|| {
-        let prepared: Vec<_> = offsets
+        // One prototype (a rebake) runs here, not on a pool thread: under a
+        // busy machine each hand-off cost more than the work it moved.
+        let one = offsets.len() == 2;
+        let prepare_pair = |pair: &[[usize; 5]]| {
+            let (a, b) = (pair[0], pair[1]);
+            prepare(
+                &pts[a[0]..b[0]],
+                &corners[a[1]..b[1]],
+                &s[a[2]..b[2]],
+                &f[a[3]..b[3]],
+                &colors[a[3]..b[3]],
+                &hidden[a[3]..b[3]],
+                &edges[a[4]..b[4]],
+                &flags[a[4]..b[4]],
+                h,
+                retain_hidden,
+            )
+        };
+        let prepared: Vec<_> = if one { vec![prepare_pair(&offsets)] } else { offsets
             .par_windows(2)
             .map(|pair| {
                 let (a, b) = (pair[0], pair[1]);
@@ -374,7 +443,7 @@ pub fn bake_scene<'py>(
                 );
                 result
             })
-            .collect();
+            .collect() };
         let total: usize = prepared
             .iter()
             .map(|p| p.triangles.len() * 3 + p.edges.len() * 2)
@@ -410,8 +479,14 @@ pub fn bake_scene<'py>(
             jobs.push((i, p, dst, idx));
             first += n;
         }
-        jobs.into_par_iter()
-            .for_each(|(i, p, dst, idx)| fill(&pts[offsets[i][0]..offsets[i + 1][0]], p, dst, idx));
+        if one {
+            for (i, p, dst, idx) in jobs {
+                fill(&pts[offsets[i][0]..offsets[i + 1][0]], p, dst, idx);
+            }
+        } else {
+            jobs.into_par_iter()
+                .for_each(|(i, p, dst, idx)| fill(&pts[offsets[i][0]..offsets[i + 1][0]], p, dst, idx));
+        }
         // Legacy callers reserve alpha 254 for matching backs. The parity
         // path keeps opacity in alpha and carries all backs in material rows.
         if !retain_hidden {
@@ -505,6 +580,88 @@ pub fn bake_scene<'py>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The hash-table edge table `edge_table` replaced, as a reference.
+    #[allow(clippy::type_complexity)]
+    fn edge_table_by_hash(edges: &[[u32; 2]], flags: &[u8], c: &[u32], sizes: &[i64], counts: &[i64])
+        -> (Vec<[u32; 2]>, Vec<u8>, Vec<(u32, u32)>, Vec<(usize, usize)>) {
+        let mut edge_list = Vec::new();
+        let mut edge_flags: Vec<u8> = Vec::new();
+        let mut seen: HashMap<(u32, u32), usize> = HashMap::new();
+        let mut insert = |a: u32, b: u32, flag: u8| -> Option<usize> {
+            if a == b {
+                return None;
+            }
+            let key = (a.min(b), a.max(b));
+            Some(match seen.get(&key) {
+                Some(&i) => {
+                    edge_flags[i] |= flag;
+                    i
+                }
+                None => {
+                    seen.insert(key, edge_list.len());
+                    edge_list.push([a, b]);
+                    edge_flags.push(flag);
+                    edge_list.len() - 1
+                }
+            })
+        };
+        for (e, f) in edges.iter().zip(flags) {
+            insert(e[0], e[1], *f);
+        }
+        let mut sides = Vec::new();
+        let mut face_rings = Vec::new();
+        let (mut r, mut k) = (0, 0);
+        for (f, &count) in counts.iter().enumerate() {
+            face_rings.push((r, k));
+            for _ in 0..count {
+                let n = sizes[r] as usize;
+                let ring = &c[k..k + n];
+                for i in 0..n {
+                    if let Some(edge) = insert(ring[i], ring[(i + 1) % n], 0) {
+                        sides.push((edge as u32, f as u32));
+                    }
+                }
+                k += n;
+                r += 1;
+            }
+        }
+        (edge_list, edge_flags, sides, face_rings)
+    }
+
+    #[test]
+    fn the_bucketed_edge_table_is_the_hashed_one() {
+        // Pseudo-random rings over 50 vertices, repeated and reversed
+        // edges, degenerate sides, rings with holes.
+        let mut x = 12345u64;
+        let mut next = |n: u32| {
+            x = x.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            ((x >> 33) % n as u64) as u32
+        };
+        for _ in 0..50 {
+            let edges: Vec<[u32; 2]> = (0..40).map(|_| [next(50), next(50)]).collect();
+            let flags: Vec<u8> = (0..40).map(|_| next(16) as u8).collect();
+            let (mut c, mut sizes, mut counts) = (Vec::new(), Vec::new(), Vec::new());
+            for _ in 0..30 {
+                let rings = 1 + next(2) as i64;
+                counts.push(rings);
+                for _ in 0..rings {
+                    let n = 3 + next(4) as i64;
+                    sizes.push(n);
+                    c.extend((0..n).map(|_| next(50)));
+                }
+            }
+            assert_eq!(edge_table(50, &edges, &flags, &c, &sizes, &counts),
+                       edge_table_by_hash(&edges, &flags, &c, &sizes, &counts));
+        }
+        // A fan of 300 triangles around vertex 0.
+        let c: Vec<u32> = (1..=300).flat_map(|i| [0, i, i % 300 + 1]).collect();
+        let (sizes, counts) = (vec![3i64; 300], vec![1i64; 300]);
+        let edges: Vec<[u32; 2]> = (1..=300).map(|i| [0, i]).collect();
+        let flags = vec![1u8; 300];
+        assert_eq!(edge_table(301, &edges, &flags, &c, &sizes, &counts),
+                   edge_table_by_hash(&edges, &flags, &c, &sizes, &counts));
+    }
     #[test]
     fn only_soft_shared_corners_receive_fan_normals() {
         let pts = [

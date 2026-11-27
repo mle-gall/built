@@ -95,7 +95,7 @@ impl State {
             same_key
                 && (a.fattr.get(i) != b.fattr.get(i)
                     || a.fflags.get(i) != b.fflags.get(i)
-                    || rings(a, s) != rings(b, s))
+                    || !same_rings(a, b, s))
         });
         for kind in [Kind::Edge, Kind::Face] {
             let k = kind as usize;
@@ -194,17 +194,45 @@ fn edge_faces(st: &State, e: u32) -> &[u32] {
     }
 }
 
-fn rings(st: &State, f: u32) -> Vec<u32> {
-    let r = *st.frings.get(f as usize);
-    let mut out = Vec::new();
-    let mut c = r.corner_start as usize;
-    for k in 0..r.n_rings as usize {
-        let size = *st.ring_sizes.get(r.ring_start as usize + k) as usize;
-        out.push(size as u32);
-        out.extend((0..size).map(|j| *st.corners.get(c + j)));
-        c += size;
+/// Whether chunks `start..start + n` of both columns are the same
+/// allocations (then the entries are equal unread).
+fn range_shared<T: Clone>(x: &CowVec<T>, y: &CowVec<T>, start: usize, n: usize) -> bool {
+    n == 0 || (start / CHUNK..=(start + n - 1) / CHUNK).all(|c| x.same_chunk(y, c))
+}
+
+/// `rings(a, f) == rings(b, f)` without building either: unread where the
+/// face points at the same pool range in chunks both states share (an
+/// edit appends to the pool, so most of it is still shared), compared
+/// entry by entry otherwise.
+fn same_rings(a: &State, b: &State, f: u32) -> bool {
+    let (ra, rb) = (*a.frings.get(f as usize), *b.frings.get(f as usize));
+    if ra.n_rings != rb.n_rings {
+        return false;
     }
-    out
+    let n = ra.n_rings as usize;
+    if ra.ring_start == rb.ring_start
+        && ra.corner_start == rb.corner_start
+        && range_shared(&a.ring_sizes, &b.ring_sizes, ra.ring_start as usize, n)
+    {
+        let total: usize = (0..n).map(|k| *a.ring_sizes.get(ra.ring_start as usize + k) as usize).sum();
+        if range_shared(&a.corners, &b.corners, ra.corner_start as usize, total) {
+            return true;
+        }
+    }
+    let (mut ca, mut cb) = (ra.corner_start as usize, rb.corner_start as usize);
+    for k in 0..n {
+        let size = *a.ring_sizes.get(ra.ring_start as usize + k);
+        if size != *b.ring_sizes.get(rb.ring_start as usize + k) {
+            return false;
+        }
+        let size = size as usize;
+        if (0..size).any(|j| a.corners.get(ca + j) != b.corners.get(cb + j)) {
+            return false;
+        }
+        ca += size;
+        cb += size;
+    }
+    true
 }
 
 #[cfg(test)]

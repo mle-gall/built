@@ -11,6 +11,7 @@ pub(crate) use plane::{command_rebuild_plane, command_rebuild_planar, RebuiltPla
 pub(crate) use vertices::{command_move_vertices, command_transform_vertices, MovedVertices, VertexResult};
 pub(crate) use erase::{command_erase_cleanup, command_erase_selection, command_heal_overlaps, Healed};
 use pyo3::{prelude::*, types::PyDict};
+use super::keys::Kind;
 
 pub(crate) struct DrawnEdge {
     pub(crate) key: Option<u128>,
@@ -168,10 +169,28 @@ fn candidate_keys(mesh: &Bound<'_, PyAny>, selection: Candidates<'_>) -> PyResul
         Candidates::Segments(segments) => (1..=256).contains(&segments.len()),
     };
     if use_scan {
-        let scan = mesh
-            .py()
-            .import("built_core.scan_index")?
-            .call_method1("scan", (mesh,))?;
+        // A store's own faces: its box tree answers as a scan would.
+        let api = mesh.py().import("built_core.scan_index")?;
+        let store = mesh.getattr("_store")?;
+        if api.call_method0("enabled")?.is_truthy()? && store.cast::<super::py::PyMeshStore>().is_ok() {
+            use super::face_index::Query;
+            let st = super::py::PyMeshStore::read(&store)?;
+            let window = |(lo, hi): ((f64, f64, f64), (f64, f64, f64))| [lo.0, lo.1, lo.2, hi.0, hi.1, hi.2];
+            let slots = match selection {
+                Candidates::Loop(points) => st.face_query(&st.inner, window(key_window(points)), Query::Within),
+                Candidates::Segments(segments) => {
+                    let mut found = std::collections::BTreeSet::new();
+                    for segment in segments {
+                        for f in st.face_query(&st.inner, window(key_window(segment)), Query::Meeting) {
+                            found.insert((st.inner.state.list_rank(Kind::Face, f), f));
+                        }
+                    }
+                    found.into_iter().map(|(_, f)| f).collect()
+                }
+            };
+            return Ok(slots.into_iter().map(|f| st.inner.key(Kind::Face, f)).collect());
+        }
+        let scan = api.call_method1("scan", (mesh,))?;
         if !scan.is_none() {
             let native = scan.getattr("native")?;
             let rows: Vec<u32> = match selection {

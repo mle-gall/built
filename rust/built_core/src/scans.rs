@@ -50,23 +50,23 @@ pub(crate) const EFACES: u8 = 32;
 pub(crate) const FFLAGS: u8 = 64;
 
 /// Outer-loop box of a face / box of an edge: `[lo; hi]`.
-type Box6 = [f64; 6];
+pub(crate) type Box6 = [f64; 6];
 
 /// A face's plane as `Face.normal()` makes it, in f64.
-#[derive(Clone, Copy)]
-struct Plane {
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct Plane {
     /// First outer corner.
-    o: [f64; 3],
+    pub(crate) o: [f64; 3],
     /// Unit Newell normal of the outer loop, `(0, 0, 1)` when degenerate.
-    n: [f64; 3],
+    pub(crate) n: [f64; 3],
     /// Farthest outer corner from that plane, plus slack: a point Python
     /// projects inside the face lies within the face's box grown by this
     /// (and the loop's own distance to the plane).
-    reach: f64,
+    pub(crate) reach: f64,
     /// Newell vector so short that Python's float32 length may fall on the
     /// other side of its 1e-9 guard (and pick ``(0, 0, 1)``): no plane
     /// query may leave this face out.
-    vague: bool,
+    pub(crate) vague: bool,
 }
 
 #[pyclass(module = "built_core", name = "MeshScan")]
@@ -248,7 +248,9 @@ impl MeshScan {
         s
     }
 
-    /// Ordered candidate slots for the two containment tests of AddFace.
+    /// Ordered candidate slots for the two containment tests of AddFace
+    /// (now `FaceIndex::drawn_candidates`, held to this one by its test).
+    #[cfg(test)]
     pub(crate) fn drawn_face_candidates(
         &mut self, py: Python<'_>, slot: u32,
     ) -> PyResult<(Vec<u32>, Vec<u32>)> {
@@ -357,10 +359,7 @@ impl MeshScan {
 
     fn fboxes(&mut self) -> &Vec<Box6> {
         if self.fbox.is_none() {
-            let mut out = Vec::with_capacity(self.n_faces());
-            for f in 0..self.n_faces() {
-                out.push(box_of(self.face_corners(f).iter().map(|&v| &self.pos[v as usize])));
-            }
+            let out = (0..self.n_faces()).map(|f| self.face_box(f)).collect();
             self.fbox = Some(out);
         }
         self.fbox.as_ref().unwrap()
@@ -368,11 +367,7 @@ impl MeshScan {
 
     fn eboxes(&mut self) -> &Vec<Box6> {
         if self.ebox.is_none() {
-            let out = self
-                .ends
-                .iter()
-                .map(|[a, b]| box_of([&self.pos[*a as usize], &self.pos[*b as usize]].into_iter()))
-                .collect();
+            let out = (0..self.n_edges()).map(|e| self.edge_box(e)).collect();
             self.ebox = Some(out);
         }
         self.ebox.as_ref().unwrap()
@@ -381,40 +376,24 @@ impl MeshScan {
     /// Per face: its plane (see [`Plane`]).
     fn fplanes(&mut self) -> &Vec<Plane> {
         if self.fplane.is_none() {
-            let mut out = Vec::with_capacity(self.n_faces());
-            for f in 0..self.n_faces() {
-                let c = self.face_corners(f);
-                let o = c.first().map(|&v| self.pos[v as usize]).unwrap_or([0.0; 3]);
-                let mut n = [0.0f64, 0.0, 1.0];
-                let mut vague = false;
-                if c.len() >= 3 {
-                    let (mut nx, mut ny, mut nz) = (0.0f64, 0.0f64, 0.0f64);
-                    for i in 0..c.len() {
-                        let p = self.pos[c[i] as usize];
-                        let q = self.pos[c[(i + 1) % c.len()] as usize];
-                        nx += (p[1] - q[1]) * (p[2] + q[2]);
-                        ny += (p[2] - q[2]) * (p[0] + q[0]);
-                        nz += (p[0] - q[0]) * (p[1] + q[1]);
-                    }
-                    let len = (nx * nx + ny * ny + nz * nz).sqrt();
-                    vague = len < 1e-8;
-                    if len >= 1e-9 {
-                        n = [nx / len, ny / len, nz / len];
-                    }
-                }
-                let mut reach = 0.0f64;
-                let mut diag = 0.0f64;
-                for &v in c {
-                    let (d, span) = dot_rel(&self.pos[v as usize], &o, &n);
-                    reach = reach.max(d.abs());
-                    diag = diag.max(span);
-                }
-                reach += slack(diag);
-                out.push(Plane { o, n, reach, vague });
-            }
+            let out = (0..self.n_faces()).map(|f| self.face_plane(f)).collect();
             self.fplane = Some(out);
         }
         self.fplane.as_ref().unwrap()
+    }
+
+    fn face_box(&self, f: usize) -> Box6 {
+        box_of(self.face_corners(f).iter().map(|&v| &self.pos[v as usize]))
+    }
+
+    fn face_plane(&self, f: usize) -> Plane {
+        let c = self.face_corners(f);
+        plane_at(c.len(), |i| self.pos[c[i] as usize])
+    }
+
+    fn edge_box(&self, e: usize) -> Box6 {
+        let [a, b] = self.ends[e];
+        box_of([&self.pos[a as usize], &self.pos[b as usize]].into_iter())
     }
 
     /// Edges by the topology key cell of their ends (`built_core.topology._key`:
@@ -462,6 +441,47 @@ impl MeshScan {
         }
         self.ecells.as_ref().unwrap()
     }
+}
+
+/// A face's outer-loop box from its corners' positions.
+pub(crate) fn face_box(pts: &[[f64; 3]]) -> Box6 {
+    box_of(pts.iter())
+}
+
+/// A face's plane (see [`Plane`]) from its outer corners' positions.
+pub(crate) fn face_plane(pts: &[[f64; 3]]) -> Plane {
+    plane_at(pts.len(), |i| pts[i])
+}
+
+/// The plane of an outer loop of `n` corners at `at(i)`.
+fn plane_at(n_corners: usize, at: impl Fn(usize) -> [f64; 3]) -> Plane {
+    let o = if n_corners > 0 { at(0) } else { [0.0; 3] };
+    let mut n = [0.0f64, 0.0, 1.0];
+    let mut vague = false;
+    if n_corners >= 3 {
+        let (mut nx, mut ny, mut nz) = (0.0f64, 0.0f64, 0.0f64);
+        for i in 0..n_corners {
+            let p = at(i);
+            let q = at((i + 1) % n_corners);
+            nx += (p[1] - q[1]) * (p[2] + q[2]);
+            ny += (p[2] - q[2]) * (p[0] + q[0]);
+            nz += (p[0] - q[0]) * (p[1] + q[1]);
+        }
+        let len = (nx * nx + ny * ny + nz * nz).sqrt();
+        vague = len < 1e-8;
+        if len >= 1e-9 {
+            n = [nx / len, ny / len, nz / len];
+        }
+    }
+    let mut reach = 0.0f64;
+    let mut diag = 0.0f64;
+    for i in 0..n_corners {
+        let (d, span) = dot_rel(&at(i), &o, &n);
+        reach = reach.max(d.abs());
+        diag = diag.max(span);
+    }
+    reach += slack(diag);
+    Plane { o, n, reach, vague }
 }
 
 fn box_of<'a>(pts: impl Iterator<Item = &'a [f64; 3]>) -> Box6 {
@@ -548,10 +568,9 @@ impl MeshScan {
     /// The scan of a store's current state, in list order (the
     /// `MeshStore.arrays()` indices), outer loops only.
     #[staticmethod]
-    fn from_store(py: Python<'_>, store: PyRef<'_, PyMeshStore>) -> Self {
+    fn from_store(py: Python<'_>, store: PyRef<'_, PyMeshStore>) -> PyResult<Py<MeshScan>> {
         let state = store.inner.state.clone();
-        drop(store);
-        py.detach(move || Self::from_state(state, 0))
+        store.scan_of(py, state)
     }
 
     /// The scan of a Python mesh from its three lists (``mesh.vertices``,
@@ -779,14 +798,19 @@ impl MeshScan {
         both: bool,
     ) -> PyResult<Vec<Vec<[f64; 3]>>> {
         self.need(py, EDGES)?;
+        // A store-backed scan's graph names edges by slot, so the next
+        // revision's scan can carry it over (`refreshed`).
+        let backed = self.state.is_some();
+        let id = |i: usize, live: &[u32]| if backed { live[i] as usize } else { i };
         let graph = self.graph.get_or_insert_with(|| {
             let mut graph = crate::store::drawing::DrawingGraph::default();
             for (i, ends) in self.ends.iter().enumerate() {
-                graph.append(i, ends.map(|v| self.pos[v as usize]));
+                graph.append(id(i, &self.live[1]), ends.map(|v| self.pos[v as usize]));
             }
             graph
         });
-        Ok(graph.cycles(a, b, removed.into_iter().collect(), extra, limit, both))
+        let dead = removed.into_iter().filter(|&i| i < self.ends.len()).map(|i| id(i, &self.live[1])).collect();
+        Ok(graph.cycles(a, b, dead, extra, limit, both))
     }
 
     /// Edges with an end whose topology key cell may be ``cell``:
@@ -928,6 +952,102 @@ impl MeshScan {
 }
 
 impl MeshScan {
+    /// The scan of `state`, a later (or earlier) state of this scan's
+    /// store: its arrays read afresh (`from_state`, a few ms however big),
+    /// what this scan derived from them carried over for every face and
+    /// edge the edit left as it was — boxes, planes and the drawing graph,
+    /// the costly parts to rebuild. The result answers as the fresh scan.
+    /// None when nothing can be carried (Python-backed, push/pull parts,
+    /// another namespace, or an edit too big for it to pay).
+    pub(crate) fn refreshed(&mut self, state: State) -> Option<MeshScan> {
+        let old = self.state.as_ref()?;
+        if self.lists.is_some() || old.ns != state.ns || self.pos.len() != self.n_listed || self.have != ALL {
+            return None;
+        }
+        if self.fbox.is_none() && self.fplane.is_none() && self.ebox.is_none() && self.graph.is_none() {
+            return None;
+        }
+        let ch = state.changes_since(old);
+        let slot_of = |key: u128| crate::store::keys::split_key(key).map(|(_, _, _, s)| s);
+        let st = &state;
+        let n_v = st.slots[0].len();
+        let mut dirty_e = vec![false; st.slots[1].len().max(old.slots[1].len())];
+        let mut dirty_f = vec![false; st.slots[2].len().max(old.slots[2].len())];
+        let mut count = 0usize;
+        for (k, dirty) in [(1usize, &mut dirty_e), (2, &mut dirty_f)] {
+            for &key in ch.created[k].iter().chain(&ch.removed[k]).chain(&ch.modified[k]) {
+                if let Some(x) = slot_of(key) {
+                    dirty[x as usize] = true;
+                    count += 1;
+                }
+            }
+        }
+        // Edges and faces at a moved vertex: same indices, new geometry.
+        for &key in &ch.moved {
+            let Some(v) = slot_of(key) else { continue };
+            if (v as usize) >= n_v || !st.slots[0].alive(v) {
+                continue;
+            }
+            for e in st.edges_at(v) {
+                dirty_e[e as usize] = true;
+                count += 1;
+                for &f in st.edge_faces(e) {
+                    dirty_f[f as usize] = true;
+                }
+            }
+        }
+        if count > 4096 + (self.ends.len() + self.n_faces()) / 8 {
+            return None;
+        }
+        let mut s = MeshScan::from_state(state.clone(), 0);
+        if s.pos.len() != s.n_listed {
+            return None;
+        }
+        // This scan's index of each new edge / face left as it was.
+        let carried = |old_live: &[u32], new_live: &[u32], n_old: usize, dirty: &[bool]| -> Vec<u32> {
+            let mut at = vec![NONE; n_old];
+            for (i, &x) in old_live.iter().enumerate() {
+                at[x as usize] = i as u32;
+            }
+            new_live.iter().map(|&x| if dirty[x as usize] { NONE } else { at.get(x as usize).copied().unwrap_or(NONE) }).collect()
+        };
+        let edge_was = carried(&self.live[1], &s.live[1], old.slots[1].len(), &dirty_e);
+        if self.fbox.is_some() || self.fplane.is_some() {
+            let face_was = carried(&self.live[2], &s.live[2], old.slots[2].len(), &dirty_f);
+            if let Some(old_box) = &self.fbox {
+                s.fbox = Some(face_was.iter().enumerate()
+                    .map(|(j, &i)| if i == NONE { s.face_box(j) } else { old_box[i as usize] }).collect());
+            }
+            if let Some(old_plane) = &self.fplane {
+                s.fplane = Some(face_was.iter().enumerate()
+                    .map(|(j, &i)| if i == NONE { s.face_plane(j) } else { old_plane[i as usize] }).collect());
+            }
+        }
+        if let Some(old_box) = &self.ebox {
+            s.ebox = Some(edge_was.iter().enumerate()
+                .map(|(j, &i)| if i == NONE { s.edge_box(j) } else { old_box[i as usize] }).collect());
+        }
+        // The drawing graph, by edge slot: the old one's lists lose the
+        // edges this edit changed and gain them back where they now are.
+        if let Some(mut graph) = self.graph.take() {
+            let st = s.state.as_ref().unwrap();
+            for (i, &e) in self.live[1].iter().enumerate() {
+                if dirty_e[e as usize] {
+                    graph.remove(e as usize, self.ends[i].map(|d| self.pos[d as usize]));
+                }
+            }
+            for (j, &e) in s.live[1].iter().enumerate() {
+                if edge_was[j] == NONE {
+                    let ends = s.ends[j].map(|d| s.pos[d as usize]);
+                    graph.remove(e as usize, ends);
+                    graph.insert(e as usize, ends, |x| st.list_rank(Kind::Edge, x as u32));
+                }
+            }
+            s.graph = Some(graph);
+        }
+        Some(s)
+    }
+
     /// Read the parts ``what`` of a Python-backed scan from its objects.
     fn need(&mut self, py: Python<'_>, what: u8) -> PyResult<()> {
         let missing = what & !self.have;
@@ -1151,5 +1271,107 @@ impl MeshScan {
                 d.abs() <= tol + slack(span)
             })
             .collect()
+    }
+}
+
+#[cfg(test)]
+impl MeshScan {
+    pub(crate) fn faces_within_rows(&mut self, py: Python<'_>, w: Box6) -> Vec<u32> {
+        self.faces_within(py, (w[0], w[1], w[2]), (w[3], w[4], w[5])).unwrap()
+    }
+    pub(crate) fn faces_meeting_rows(&mut self, py: Python<'_>, w: Box6) -> Vec<u32> {
+        self.faces_meeting(py, (w[0], w[1], w[2]), (w[3], w[4], w[5])).unwrap()
+    }
+    pub(crate) fn faces_holding_rows(&mut self, py: Python<'_>, w: Box6, pad: f64) -> Vec<u32> {
+        self.faces_holding(py, (w[0], w[1], w[2]), (w[3], w[4], w[5]), pad).unwrap()
+    }
+}
+
+#[cfg(test)]
+mod refresh_tests {
+    use super::*;
+    use crate::store::edit::Change;
+    use crate::store::{Store, Weld};
+
+    fn quad(st: &mut Store, x: f64, y: f64) -> u32 {
+        let ring = vec![[x, y, 0.0], [x + 1.0, y, 0.0], [x + 1.0, y + 1.0, 0.0], [x, y + 1.0, 0.0]];
+        st.add_face(&[ring], &mut Change::default()).unwrap()
+    }
+
+    /// Every array and derived part of `a` and `b`, the graph's lists too.
+    fn same(a: &mut MeshScan, b: &mut MeshScan) {
+        assert_eq!(a.pos, b.pos);
+        assert_eq!(a.n_listed, b.n_listed);
+        assert_eq!(a.ends, b.ends);
+        assert_eq!(a.enf, b.enf);
+        assert_eq!(a.eflag, b.eflag);
+        assert_eq!(a.fstart, b.fstart);
+        assert_eq!(a.corners, b.corners);
+        assert_eq!(a.live, b.live);
+        assert_eq!(a.vdense, b.vdense);
+        assert_eq!(a.fboxes(), b.fboxes());
+        assert_eq!(a.fplanes(), b.fplanes());
+        assert_eq!(a.eboxes(), b.eboxes());
+        let graph = |s: &mut MeshScan| {
+            if s.graph.is_none() {
+                let mut g = crate::store::drawing::DrawingGraph::default();
+                for (i, ends) in s.ends.iter().enumerate() {
+                    g.append(s.live[1][i] as usize, ends.map(|v| s.pos[v as usize]));
+                }
+                s.graph = Some(g);
+            }
+            s.graph.as_ref().unwrap().sorted()
+        };
+        assert_eq!(graph(a), graph(b));
+    }
+
+    #[test]
+    fn a_carried_scan_is_the_fresh_one() {
+        let mut st = Store::empty(9, Weld::default());
+        for i in 0..12 {
+            for j in 0..12 {
+                quad(&mut st, i as f64, j as f64);
+            }
+        }
+        let mut scan = MeshScan::from_state(st.state.clone(), 0);
+        let check = |st: &Store, scan: &mut MeshScan| {
+            // Derive everything on the old scan so the carried copy has it.
+            scan.fboxes();
+            scan.fplanes();
+            scan.eboxes();
+            if scan.graph.is_none() {
+                let mut g = crate::store::drawing::DrawingGraph::default();
+                for (i, ends) in scan.ends.iter().enumerate() {
+                    g.append(scan.live[1][i] as usize, ends.map(|v| scan.pos[v as usize]));
+                }
+                scan.graph = Some(g);
+            }
+            let mut carried = scan.refreshed(st.state.clone()).expect("a small edit carries");
+            let mut fresh = MeshScan::from_state(st.state.clone(), 0);
+            same(&mut carried, &mut fresh);
+            *scan = carried;
+        };
+        // A line across cells: edges split, a face added over others.
+        let e = st.find_edge(0, 1).unwrap();
+        st.split_edge(e, [0.5, 0.0, 0.0], &mut Change::default()).unwrap();
+        check(&st, &mut scan);
+        let s0 = st.snapshot();
+        let f = (0..st.state.slots[2].len() as u32).find(|&f| st.state.slots[2].alive(f)).unwrap();
+        st.remove_face(f, &mut Change::default());
+        check(&st, &mut scan);
+        st.move_vertex(5, [0.0, 0.0, 0.25]);
+        check(&st, &mut scan);
+        quad(&mut st, 30.0, 30.0);
+        check(&st, &mut scan);
+        let e = st.find_edge(5, 6).or_else(|| st.find_edge(6, 5));
+        if let Some(e) = e {
+            st.remove_edge(e, &mut Change::default());
+            check(&st, &mut scan);
+            st.relink_edge(e, &mut Change::default()).unwrap();
+            check(&st, &mut scan);
+        }
+        // Undo back past all of it.
+        st.restore(&s0, None).unwrap();
+        check(&st, &mut scan);
     }
 }
