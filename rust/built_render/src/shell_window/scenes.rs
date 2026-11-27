@@ -60,11 +60,13 @@ impl ShellScenes {
             return Ok(());
         }
         let secs = if animate {
-            win.call_method0("_active_view")?
+            let transition: f64 = win.call_method0("_active_view")?
                 .getattr("scene")?
                 .getattr("animation")?
                 .call_method0("glide_seconds")?
-                .extract()?
+                .extract()?;
+            // Scene Transitions off: the quarter-second camera move.
+            if transition > 0.0 { transition } else { crate::native_view_actions::camera_motion(slf.py())? }
         } else {
             0.0
         };
