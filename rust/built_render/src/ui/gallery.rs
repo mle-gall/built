@@ -643,6 +643,9 @@ impl Gallery {
         sub(ui, pos2(x, y), "Value field");
         put(ui, Rect::from_min_size(pos2(x, y + 18.), vec2(180., 40.)), down(), |ui| value_pill(ui, "Length", "2.35 m", true, false));
         put(ui, Rect::from_min_size(pos2(x, y + 62.), vec2(180., 40.)), down(), |ui| value_pill(ui, "Length", "2.35 m", false, true));
+        // A refused value (Fillet: the size does not fit), in the error colour.
+        put(ui, Rect::from_min_size(pos2(x + 190., y + 62.), vec2(300., 40.)), down(),
+            |ui| value_pill_tone(ui, "Radius", "Radius too large: 9.5 mm fits.", false, false, true));
         // The keystroke overlay for recordings (keycast.rs).
         let chips = [
             crate::keycast::Chip { keys: "R".into(), tool: "Rectangle".into(), typed: false },

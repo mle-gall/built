@@ -777,9 +777,15 @@ fn cursor_value<'py>(a: &Args<'py>) -> Reply<'py> {
         (caption, value)
     };
     let shown = tr.call1((&caption,))?;
+    // The tool's refusal reads in the error colour (Fillet: a size that
+    // does not fit the selection).
+    let error = match tool.getattr_opt("value_error")? {
+        Some(flag) => flag.is_truthy()?,
+        None => false,
+    };
     if at.is_none() {
         let shown = if typing { shown } else { "".into_bound_py_any(py)? };
-        renderer.call_method1("ui_set_cursor_value", (shown, &value, typing, py.None(), py.None(), py.None(), &revision))?;
+        renderer.call_method1("ui_set_cursor_value", (shown, &value, typing, py.None(), py.None(), py.None(), &revision, error))?;
         return Ok(none(py));
     }
     let (dx, dy) = chrome_offset(&display)?;
@@ -819,7 +825,7 @@ fn cursor_value<'py>(a: &Args<'py>) -> Reply<'py> {
         }
     }
     let beside = if top >= 68. { top - 24. } else { bottom + 24. };
-    renderer.call_method1("ui_set_cursor_value", (shown, &value, typing, x, beside, start, &revision))?;
+    renderer.call_method1("ui_set_cursor_value", (shown, &value, typing, x, beside, start, &revision, error))?;
     Ok(none(py))
 }
 

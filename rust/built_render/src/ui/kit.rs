@@ -1404,7 +1404,13 @@ pub mod organisms {
     /// on raised glass. Typing shows an accent edge and a caret; a committed
     /// value reads back with a check until the next action.
     pub fn value_pill(ui: &mut egui::Ui, caption: &str, value: &str, typing: bool, committed: bool) {
-        let edge = if typing { ACCENT } else { EDGE };
+        value_pill_tone(ui, caption, value, typing, committed, false);
+    }
+
+    /// `value_pill`; `error`: the value is a refusal (a size that does not
+    /// fit), edged and written in the error colour.
+    pub fn value_pill_tone(ui: &mut egui::Ui, caption: &str, value: &str, typing: bool, committed: bool, error: bool) {
+        let edge = if error { ERROR } else if typing { ACCENT } else { EDGE };
         glass(Surface::Raised)
             .stroke(Stroke::new(1.0_f32, edge))
             .corner_radius(CornerRadius::same(R_CONTROL))
@@ -1415,7 +1421,8 @@ pub mod organisms {
                     if !caption.is_empty() {
                         ui.label(egui::RichText::new(caption).font(meta()).color(FAINT));
                     }
-                    let v = ui.label(egui::RichText::new(value).font(title_font()).color(if typing { BRIGHT } else { INK }));
+                    let v = ui.label(egui::RichText::new(value).font(title_font())
+                        .color(if error { ERROR } else if typing { BRIGHT } else { INK }));
                     if typing {
                         // A drawn caret: the "▏" glyph read as an "l" after a unit.
                         let x = v.rect.max.x + 2.0;
