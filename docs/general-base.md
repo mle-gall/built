@@ -714,8 +714,8 @@ Interfaces lanes 1 and 3 build on:
   `profile_open` (draft2d), then `drawn_profile::outline` decides what a
   sweep needs (`multiple_regions`, `invalid_profile`); users of a failed
   sketch are left as they were (`unchanged`), or marked `profile_open`
-  when they have no result yet. Releasing a sketch removes the row; its
-  sweeps keep their geometry as `profile_missing`.
+  when they have no result yet. Releasing a sketch removes the row; each
+  sweep that used it keeps a frozen copy (see the follow-up notes below).
 - **Verbs.** `sketch_commit(row)` (protocol command; Done is one History
   step; a row without `uid` gets one), `sketch_profile(scene, uid)`
   (query), `command_protocol.sketch_plane(scene, face, path=None)` (plane
@@ -777,3 +777,45 @@ faces and adds the reason to the export report. Subtractions carry a void
 relationship. Hosted windows and doors reuse the opening GUID for their fill
 relationship. STEP retains certified analytic trims, including the elliptical
 boundary of a cylindrical member cut by an oblique plane.
+
+## Notes from the sketch follow-ups (feat/sketch-followups)
+
+- **Entering.** Library › Profiles has *New profile…* and *Import drawing…*
+  in its header; the new Library › Sections tab (drawn sections: the
+  Library's `use: section` files as *My library*, this model's section rows
+  as *In this model*) has *New section…*; Enter or a double-click edits a
+  section. The Sweep picker (L) ends with *Other sources*: Pick a face
+  (Alt-click), Draw a profile… (D), Import DXF, DWG, SVG…. Draw › New
+  Profile…, Draw › New Section… and File › Import › Drawing into a Sketch
+  (`sketch:new`, `sketch:new:section`, `import:sketch`) are in the menu bar
+  and command search. Import pickers go through `import:sketch` (and
+  `import:sweep_sketch` from the picker); scripts and tests use
+  `sketch:import:<path>`.
+- **Sweep › D** (`sketch:sweep`): the workspace on a new profile; Done
+  commits the sketch row (one step) and returns to the armed Sweep tool with
+  it in the chip (the chip names a drawn profile by its name); Cancel
+  returns too; a profile that is not closed yet is saved and Sweep keeps
+  its profile, with a warning.
+- **A member's profile** (`sketch:member[:<placement uid>]`): a double-click
+  on a swept member's section face (an end cap, square or mitred:
+  `record_queries::is_cap`) or right-click › *Edit profile*. A drawn member
+  opens its sketch row (Done updates every user in one step); a catalogue
+  size opens as an exact drawing (`profile_sketch(key)`: lines, one arc per
+  root fillet, circles for round tubes) and Done runs
+  `sketch_commit(row, adopt=[sweep row uid])`: the new sketch row and the
+  member re-pointed to it in one History step.
+- **Release of a sketch** gives each sweep that used it its own copy: a
+  document-local sketch row with `frozen: true` (and no plane), the sweep's
+  `profile.sketch` pointing to it, all in the release step. Users stay
+  `ok`, never `profile_missing`; undo restores the shared row and the
+  links. Frozen copies are not offered as project profiles (Library,
+  Sweep picker); editing one keeps it frozen and moves only its member.
+- **DWG.** `tests/fixtures/sketch/plate-mm.dwg` is `plate-mm.dxf` written by
+  LibreDWG 0.14.8597 `dxf2dwg` (see `tests/fixtures/sketch/SOURCES.md`).
+  Without `dwg2dxf` the import says so (info toast, no workspace); a
+  converter failure is an error toast with LibreDWG's reason. The vendored
+  `vendor/libredwg/bin/dwg2dxf` is a Linux binary; on a Mac checkout the
+  converter comes from the release build or the PATH.
+- **Rectangle.** Its opposite corner infers no axis from its first corner
+  (that made a line on the red axis), and while values are typed the
+  preview is the typed `w; h` rectangle towards the cursor's quadrant.
