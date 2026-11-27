@@ -33,6 +33,7 @@ BUDGET_MS = {
     "move_commit_200k": 60,
     "push_commit_200k": 144,
     "select_hover_200k": 3,      # median of a Select hover over the 200k mesh
+    "move_grip_hover": 3,        # median of a Move hover over groups: box grips, handles
     "select_all_view_frame": 100,  # the frame that shows a select-all's highlight
     "select_all_panel_frame": 50,  # worst frame while the panels catch up
 }
@@ -344,6 +345,27 @@ def test_big_model_interaction_budgets(tmp_path, model, x0):
             _key(host, Qt.Key_Escape.value)
         ms["move_commit_200k"] = min(moves)
         ms["push_commit_200k"] = statistics.median(pushes)
+
+        # Move's hover over the yard of 3,000 parts and the nested blocks:
+        # the box grips and rotation handles come from the cached bounds.
+        host.menu("tool:move")
+        vp.camera.set_view("top")
+        vp.camera.fit_to(V(-170, -205, 0), V(35, 45, 2))
+        _settle(host)
+        tool = host.view.tool
+        move(V(-59.7, -199.7, .3))
+        _settle(host)
+        assert tool._grip_group is not None and tool._box_grips
+        grips = []
+        for i in range(60):
+            p = (V(-59.7 + (i * 1.5) % 60, -199.7 + 1.5 * (i % 7), .3) if i % 2
+                 else V(-59.7 - 22 * (i % 4), .3 + 2 * (i % 9), .6))
+            x, y = _px(view, p)
+            start = time.perf_counter()
+            host.pointer("move", x, y, 0, 0, 0)
+            host.idle()
+            grips.append((time.perf_counter() - start) * 1e3)
+        ms["move_grip_hover"] = statistics.median(grips)
 
     table = "\n".join(f"  {k:<24} {ms[k]:8.1f} ms  (budget {v} ms)" for k, v in BUDGET_MS.items())
     print("\nbig model budgets:\n" + table)

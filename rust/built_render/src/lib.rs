@@ -150,6 +150,7 @@ mod faces;
 mod scene_upload;
 use scene_upload::{SceneUpload, PrototypeArrays};
 mod xray;
+mod see_through;
 mod ao;
 mod resident_readback;
 use numpy::PyReadonlyArray1;
@@ -311,6 +312,8 @@ struct Renderer {
     host_context: preview::Preview,
     ghost_geometry: preview::Preview,
     ghost_objects: preview::Preview,
+    /// The rows a Move or Rotate carries, drawn translucent (see_through.rs).
+    see_through: see_through::SeeThrough,
     surface: Option<wgpu::Surface<'static>>,
     device: wgpu::Device,
     queue: wgpu::Queue,
@@ -420,7 +423,7 @@ fn grown_capacity(current: usize, needed: usize) -> usize {
 const TASK_REVIEW_FLAG: u32 = 256;
 
 fn merge_instance_flags(old: u32, incoming: u32) -> u32 {
-    (old & (6 | 64 | 128 | TASK_REVIEW_FLAG)) | (incoming & 9)
+    (old & (6 | 64 | 128 | TASK_REVIEW_FLAG | see_through::SEE_FLAG)) | (incoming & 9)
 }
 
 fn texture(d: &wgpu::Device, w: u32, h: u32, format: wgpu::TextureFormat) -> wgpu::Texture {
@@ -928,6 +931,7 @@ impl Renderer {
             host_context,
             ghost_geometry,
             ghost_objects,
+            see_through: see_through::SeeThrough::new(&device, format),
             references: references::References::new(samples.clone(), &device, format),
             sun,
             capture_next: false,
@@ -1085,6 +1089,9 @@ impl Renderer {
     }
     /// Packed little-endian arrays; reject malformed uploads before reaching wgpu.
     fn set_scene(&mut self, prototypes: PrototypeArrays<'_>, instances: PyReadonlyArray1<'_, u8>) -> PyResult<()> {
+        // New rows: whatever was carried is no longer these row numbers.
+        self.see_through.ids.clear();
+        self.see_through.prepare(&self.device, &[], &[], 0);
         let raw = instances.as_slice()?;
         let limit = self.device.limits().max_storage_buffer_binding_size as usize;
         if raw.len() > limit || prototypes.2.as_slice()?.len() > limit {
@@ -1605,6 +1612,10 @@ impl Renderer {
             }
             self.queue.write_buffer(&s.template, 0, &gpu_commands(&s.template_data, s.p as usize, false));
             self.queue.write_buffer(&s.hard_template, 0, &gpu_commands(&s.template_data, s.p as usize, true));
+            if !self.see_through.ids.is_empty() {
+                let soft = self.look.data[6][0] > 0.;
+                self.see_through.prepare(&self.device, &s.rows, &gpu_commands(&s.template_data, s.p as usize, !soft), s.p as usize);
+            }
         }
         Ok(())
     }
@@ -1668,6 +1679,31 @@ impl Renderer {
             }
         }
         Ok(())
+    }
+    /// The rows a Move or Rotate carries: they draw translucent over the
+    /// scene, leave no depth or pick ID in it, and an empty list (the end
+    /// of the carry, Esc) puts them back as they were.
+    fn set_see_through(&mut self, ids: Vec<usize>) -> PyResult<()> {
+        let Some(s) = &mut self.scene else { return Ok(()) };
+        let mut ids: Vec<u32> = ids.into_iter().filter(|&i| i < s.n as usize).map(|i| i as u32).collect();
+        ids.sort_unstable();
+        ids.dedup();
+        if ids == self.see_through.ids {
+            return Ok(());
+        }
+        for (first, end) in see_through::mark(&mut s.flags, &mut s.rows, &self.see_through.ids, &ids) {
+            self.queue.write_buffer(&s.inst, first as u64 * 80, &s.rows[first*80..end*80]);
+        }
+        self.see_through.ids = ids;
+        let soft = self.look.data[6][0] > 0.;
+        self.see_through.prepare(&self.device, &s.rows, &gpu_commands(&s.template_data, s.p as usize, !soft), s.p as usize);
+        self.pick_read = PickRead::DIRTY; self.scene_epoch += 1;
+        self.sun.invalidate();
+        Ok(())
+    }
+    #[getter]
+    fn see_through_rows(&self) -> Vec<u32> {
+        self.see_through.ids.clone()
     }
     /// Edit context bits are independent of visibility, selection and tint.
     fn set_rest(&mut self, rows: Vec<usize>, mode: &str) -> PyResult<()> {
@@ -2441,6 +2477,13 @@ impl Renderer {
         if self.look.data[9][0] > 0. && self.material_transparency && self.style != 1 && self.style != 4 {
             if msaa { self.aa.resolve_depth(&self.device, &mut e, &depth, None); }
             self.transparency.draw(&mut e, &color, Some(&depth), s, self.multi, tq);
+        }
+        if self.see_through.active() {
+            if msaa { self.aa.resolve_depth(&self.device, &mut e, &depth, None); }
+            self.see_through.draw(&self.device, &mut e, &color, &depth, see_through::SceneBuffers {
+                camera: &self.camera, style: &self.look.buffer, inst: &s.inst, edge_records: &s.edge_records,
+                viewpoints: &s.viewpoints, vertex: &s.vertex, index: &s.index, quad_index: &s.quad_index,
+            }, &self.textures);
         }
         self.lines.draw_tool(&mut e, &color);
         let color = target.create_view(&Default::default());

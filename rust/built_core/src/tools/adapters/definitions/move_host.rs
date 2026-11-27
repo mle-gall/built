@@ -29,9 +29,8 @@ fn move_host_init<'py>(a: &Args<'py>) -> Reply<'py> {
     tool.setattr("_ctx", none(py))?;
     tool.setattr("_move_gesture", module.getattr("MoveGesture")?.call0()?)?;
     tool.call_method0("_clear_sets")?;
-    tool.setattr("_grip_group", none(py))?;
-    tool.setattr("_grips", PyList::empty(py).into_any())?;
-    tool.setattr("_hot_grip", none(py))?;
+    crate::tools::move_hover::clear(&tool)?;
+    tool.setattr("_grip_set", 0)?;
     tool.setattr("_turn", module.getattr("GripTurn")?.call0()?)?;
     Ok(none(py))
 }

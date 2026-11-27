@@ -19,6 +19,8 @@ fn rotate_host_init<'py>(a: &Args<'py>) -> Reply<'py> {
     tool.setattr("_sel_edges", PyList::empty(py).into_any())?;
     tool.setattr("_base_segments", module.getattr("CopyWire")?.call0()?)?;
     tool.setattr("_gesture", module.getattr("MatrixGesture")?.call0()?)?;
+    crate::tools::move_hover::clear(&tool)?;
+    tool.setattr("_grip_set", 0)?;
     Ok(none(py))
 }
 pub(super) fn install(module: &Bound<PyModule>) -> PyResult<()> {
@@ -28,6 +30,11 @@ pub(super) fn install(module: &Bound<PyModule>) -> PyResult<()> {
         attrs.set_item("__module__", module.name()?)?;
         attrs.set_item("accepts_angle_ratio", true)?;
         attrs.set_item("accepts_array", true)?;
+        attrs.set_item("overlay_kind", "rotate")?;
+        attrs.set_item(
+            "draw_overlay",
+            py.import("tools.overlay_painter")?.getattr("draw_overlay")?,
+        )?;
         let cls = define(
             module,
             "RotateHost",

@@ -84,6 +84,14 @@ fn on_key<'py>(a: &Args<'py>) -> Reply<'py> {
             .getattr("_grip_rot")?
             .call_method1("on_key", (&viewport, &key, &modifiers));
     }
+    // Alt (Option on the Mac) steps the box grips to the next set while
+    // they show on a selected object; ⌘/Ctrl stays the copy key.
+    if key.eq(module.getattr("Qt")?.getattr("Key_Alt")?)?
+        && tool.getattr("start_point")?.is_none()
+        && crate::tools::move_hover::cycle_box_grips(&tool, &viewport)?
+    {
+        return true.into_bound_py_any(py);
+    }
     if key.eq(module.getattr("Qt")?.getattr("Key_Control")?)? {
         tool.call_method1("_send", (&viewport, fields!(py; "type" => "key", "key" => "Control", "mods" => module.call_method1("_mods", (&modifiers,))?).into_any(),))?;
         tool.call_method1("_copy_changed", (&viewport,))?;
@@ -341,10 +349,7 @@ fn drag_plane<'py>(a: &Args<'py>) -> Reply<'py> {
 }
 fn clear_grips<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
-    let tool = a.get_item(0)?;
-    tool.setattr("_grip_group", none(py))?;
-    tool.setattr("_grips", PyList::empty(py).into_any())?;
-    tool.setattr("_hot_grip", none(py))?;
+    crate::tools::move_hover::clear(&a.get_item(0)?)?;
     Ok(none(py))
 }
 fn track_grips<'py>(a: &Args<'py>) -> Reply<'py> {
@@ -449,6 +454,15 @@ fn on_click<'py>(a: &Args<'py>) -> Reply<'py> {
     {
         return Ok(none(py));
     }
+    // A box grip under the cursor: pick the object (or the selection the
+    // grips stand for) up by the grip itself.
+    let mut ctx = ctx;
+    if !tool.getattr("_hot_box")?.is_none() && tool.getattr("start_point")?.is_none() {
+        let groups = tool.getattr("_grip_groups")?;
+        ctx = crate::tools::move_hover::grip_context(&tool, &ctx)?;
+        crate::tools::move_hover::clear(&tool)?;
+        tool.setattr("_grip_pick", groups)?;
+    }
     tool.setattr("_ctx", &ctx)?;
     let action = (|| -> Reply<'py> {
         tool.call_method1(
@@ -458,6 +472,7 @@ fn on_click<'py>(a: &Args<'py>) -> Reply<'py> {
         Ok(none(py))
     })();
     tool.setattr("_ctx", none(py))?;
+    tool.setattr("_grip_pick", none(py))?;
     action?;
     tool.call_method1("_after", (&viewport,))?;
     Ok(none(py))

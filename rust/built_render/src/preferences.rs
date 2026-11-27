@@ -432,6 +432,7 @@ pub fn edit_ai_connection(st: &Bound<'_, PyAny>, key: &str, value: &str, detect:
 
 const SECTIONS: &[(&str, &str, &str, &str)] = &[
     ("general", "General", "mac", ""),
+    ("modelling", "Modelling", "mac", "How the modelling tools behave."),
     (
         "navigation",
         "Navigation",

@@ -30,6 +30,52 @@ fn attr<'py>(o: &Obj<'py>, name: &str) -> Reply<'py> {
 fn some<'py>(o: &Obj<'py>, name: &str) -> PyResult<Option<Obj<'py>>> {
     Ok(o.getattr_opt(name)?.filter(|v| !v.is_none()))
 }
+/// While Move or Rotate carries groups and they stand between the eye and
+/// the point carried to (the grip taken or the snap under the cursor), they
+/// draw see-through (see_through.rs), so that point shows; in front of them,
+/// back home (a copy parks the original) or for any other tool, they draw
+/// as they are.
+fn carry_see_through<'py>(s: &Obj<'py>, matrix: &Obj<'py>) -> PyResult<()> {
+    let py = s.py();
+    let view = s.getattr("view")?;
+    let Some(renderer) = some(&view, "renderer")? else { return Ok(()) };
+    if !renderer.hasattr("set_see_through")? {
+        return Ok(());
+    }
+    let tool = s.getattr("tool")?;
+    let mut hides = false;
+    if matches!(class_name(&tool)?.as_str(), "MoveTool" | "RotateTool")
+        && !matrix.call_method0("isIdentity")?.is_truthy()?
+    {
+        let core = py.import("built_core")?;
+        let groups = s.getattr("_moving_groups")?;
+        let cached = own_dict(s)?.get_item("_see_box")?;
+        let bounds = match cached.filter(|c| c.get_item(0).is_ok_and(|g| g.is(&groups))) {
+            Some(c) => c.get_item(1)?,
+            None => {
+                let b = core.call_method1("carried_box", (s, &groups))?;
+                s.setattr("_see_box", (&groups, &b))?;
+                b
+            }
+        };
+        let mut target = attr(&tool, "hover_point")?;
+        if target.is_none() {
+            if let Some(turn) = some(&tool, "_grip_rot")? {
+                target = attr(&turn, "hover_point")?;
+            }
+        }
+        if let Some(camera) = some(s, "camera")? {
+            let pose: Vec<f64> = matrix.call_method0("data")?.extract()?;
+            hides = core
+                .call_method1("carry_hides", (camera.call_method0("eye")?, &target, &bounds, pose))?
+                .is_truthy()?;
+        }
+    }
+    let rows = if hides { s.getattr("ids")?.call_method0("tolist")? } else { PyList::empty(py).into_any() };
+    renderer.call_method1("set_see_through", (rows,))?;
+    Ok(())
+}
+
 fn class_name(o: &Obj<'_>) -> PyResult<String> {
     Ok(o.get_type().name()?.to_string())
 }
@@ -1390,6 +1436,7 @@ impl MeshToolAccess {
             let rows = s.getattr("_instance_preview")?.call_method1("transformed", (&transform,))?
                 .call_method1("view", (original.getattr("dtype")?,))?;
             s.call_method1("write_rows", (rows,))?;
+            carry_see_through(slf.as_any(), matrix)?;
         }
         if let Some(renderer) = some(s, "_loose_deform")? {
             renderer.call_method1("pose_tool_geometry", (transform,))?;
@@ -1400,6 +1447,12 @@ impl MeshToolAccess {
     fn end_groups_preview(slf: &Bound<'_, Self>) -> PyResult<()> {
         let py = slf.py();
         let s = slf.as_any();
+        if let Some(renderer) = some(&s.getattr("view")?, "renderer")? {
+            if renderer.hasattr("set_see_through")? {
+                renderer.call_method1("set_see_through", (PyList::empty(py),))?;
+            }
+        }
+        s.setattr("_see_box", py.None())?;
         let clipboard = own_dict(s)?.call_method1("pop", ("_clipboard_renderer", py.None()))?;
         if !clipboard.is_none() {
             clipboard.call_method0("end_group_feedback")?;

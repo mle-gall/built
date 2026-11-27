@@ -171,6 +171,50 @@ fn texture(m: &mut Marks, tool: &Bound<'_, PyAny>, view: &Bound<'_, PyAny>) -> P
     }
     Ok(())
 }
+/// The bounding-box grips' colour: the kit's ACCENT (ui/tokens.rs GRIP).
+pub const GRIP: u32 = 0x6aa5ffff;
+/// Hidden behind geometry, grips dim to this alpha and stay pickable.
+pub const GRIP_HIDDEN_ALPHA: u32 = 0x66;
+
+/// The hovered object's box in its own axes, and the grips of the current
+/// set on it (the hot one larger; those behind geometry dimmed).
+fn box_grips(m: &mut Marks, tool: &Bound<'_, PyAny>, view: &Bound<'_, PyAny>) -> PyResult<()> {
+    let Some(obb) = tool.getattr_opt("_grip_box")?.filter(|b| !b.is_none()) else {
+        return Ok(());
+    };
+    let grips = tool.getattr("_box_grips")?;
+    if !grips.is_truthy()? {
+        return Ok(());
+    }
+    let camera = Projection::from_view(view)?;
+    let axes = obb.get_item(0)?;
+    let axes = [xyz(&axes.get_item(0)?)?, xyz(&axes.get_item(1)?)?, xyz(&axes.get_item(2)?)?];
+    let (lo, hi) = (xyz(&obb.get_item(1)?)?, xyz(&obb.get_item(2)?)?);
+    let corner = |i: usize| {
+        let t = DVec3::new((i & 1) as f64, ((i >> 1) & 1) as f64, ((i >> 2) & 1) as f64);
+        let c = lo + (hi - lo) * t;
+        axes[0] * c.x + axes[1] * c.y + axes[2] * c.z
+    };
+    let line = GRIP & 0xffffff00 | 0x8c;
+    for [a, b] in super::record_queries::BOX_EDGES {
+        if let (Some(p), Some(q)) = (camera.pixel(corner(a))?, camera.pixel(corner(b))?) {
+            m.line([p, q], line, 1., &[]);
+        }
+    }
+    let hot = tool.getattr("_hot_box")?.extract::<Option<usize>>()?;
+    for (i, g) in grips.try_iter()?.enumerate() {
+        let p = xyz(&g?)?;
+        let Some(px) = camera.pixel(p)? else { continue };
+        let dim = |c: u32| if hidden(view, p).unwrap_or(false) { c & 0xffffff00 | GRIP_HIDDEN_ALPHA } else { c };
+        if hot == Some(i) {
+            m.at("rect", px, 5., dim(GRIP), 2., Some(dim(WHITE)));
+        } else {
+            m.at("rect", px, 3.5, dim(WHITE), 1.2, Some(dim(GRIP)));
+        }
+    }
+    Ok(())
+}
+
 #[pyfunction]
 pub fn tool_overlay_marks(
     kind: &str,
@@ -189,8 +233,13 @@ pub fn tool_overlay_marks(
             }
         }
         "move" => {
+            // Grips belong to the hover before a grab, never to the carry.
+            let idle = tool.getattr("_grip_rot")?.is_none() && tool.getattr("start_point")?.is_none();
             let grips = tool.getattr("_grips")?;
-            if tool.getattr("_grip_rot")?.is_none() && grips.is_truthy()? {
+            if idle {
+                box_grips(&mut m, tool, view)?;
+            }
+            if idle && grips.is_truthy()? {
                 let hot = tool.getattr("_hot_grip")?.extract::<Option<usize>>()?;
                 let camera = Projection::from_view(view)?;
                 for (i, g) in grips.try_iter()?.enumerate() {
@@ -199,6 +248,11 @@ pub fn tool_overlay_marks(
                         m.cross(p, r, 0xdc2828ff, width);
                     }
                 }
+            }
+        }
+        "rotate" => {
+            if tool.getattr("ref_point")?.is_none() {
+                box_grips(&mut m, tool, view)?;
             }
         }
         "tape" => {

@@ -18,6 +18,7 @@ struct EdgePlacement { eye: vec4f, transform: mat4x4f }
  let first = vertex / 4u;
  let edge = edges[first];
  let id = survivors[index];
+ if !SEE && (inst[id].info.z & 512u) != 0u { var carried: EdgeOut; carried.position = vec4f(0.,0.,2.,1.); return carried; }
  let k = vertex % 4u;
  let end = k >= 2u;
  let side_bit = k == 1u || k == 2u;
