@@ -72,7 +72,12 @@ impl Body {
         ))
     }
 
-    pub fn add(&self, b: &mut StepBuilder, part: Part, name: &str) -> Result<f64, String> {
+    pub fn add(
+        &self,
+        b: &mut StepBuilder,
+        part: Part,
+        name: &str,
+    ) -> Result<crate::Measure, String> {
         let mut vertices = Vec::with_capacity(self.points.len());
         for p in &self.points {
             vertices.push(
@@ -124,8 +129,12 @@ impl Body {
                     .map_err(|e| e.to_string())?,
             );
         }
-        if !volume.is_finite() || volume <= 0. || edges.values().any(|r| !r.3) {
-            return Err("solid requires an outward closed shell".into());
+        if faces.is_empty() {
+            return Err("empty shell".into());
+        }
+        let closed = edges.values().all(|r| r.3);
+        if closed && (!volume.is_finite() || volume <= 0.) {
+            return Err("invalid closed shell orientation or volume".into());
         }
         let mut reached = HashSet::new();
         let mut stack = vec![0];
@@ -137,8 +146,30 @@ impl Body {
         if reached.len() != faces.len() {
             return Err("multiple shells in one planar body".into());
         }
-        b.solid(part, name, faces).map_err(|e| e.to_string())?;
-        Ok(volume)
+        if closed {
+            b.solid(part, name, faces).map_err(|e| e.to_string())?;
+            Ok(crate::Measure::Volume(volume))
+        } else {
+            crate::sheet::add(b, part, name, faces).map_err(|e| e.to_string())?;
+            Ok(crate::Measure::Area(self.area()?))
+        }
+    }
+    pub fn area(&self) -> Result<f64, String> {
+        let mut area = 0.;
+        for rings in &self.faces {
+            let (p, _) = self.plane(rings)?;
+            let z = DVec3::from(p.axis);
+            for ring in rings {
+                let origin = self.points[ring[0]];
+                for pair in ring[1..].windows(2) {
+                    area += 0.5
+                        * z.dot(
+                            (self.points[pair[0]] - origin).cross(self.points[pair[1]] - origin),
+                        );
+                }
+            }
+        }
+        Ok(area)
     }
 
     pub fn from_solid(solid: Solid<'_>, metres: f64) -> Result<Self, String> {
@@ -146,6 +177,13 @@ impl Body {
         if !shell.is_closed() || solid.voids().next().is_some() {
             return Err("unsupported shell arrangement".into());
         }
+        Self::from_shell(shell, sense, metres)
+    }
+    pub fn from_shell(
+        shell: step_io::scene::Shell<'_>,
+        sense: Orientation,
+        metres: f64,
+    ) -> Result<Self, String> {
         let mut body = Body::default();
         let mut vertices = HashMap::new();
         for face in shell.faces() {

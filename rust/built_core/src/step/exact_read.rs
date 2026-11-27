@@ -139,6 +139,15 @@ fn uv(s: &Surface, p: DVec3) -> Result<DVec2> {
     let (frame, cyl) = match s {
         Surface::Plane { frame } => (frame, false),
         Surface::Cylinder { frame, .. } => (frame, true),
+        Surface::Cone {
+            frame, half_angle, ..
+        } => {
+            let d = p - frame.origin;
+            return Ok(DVec2::new(
+                d.dot(frame.y()).atan2(d.dot(frame.reference)),
+                d.dot(frame.axis) / half_angle.cos(),
+            ));
+        }
         _ => return Err("unsupported surface trim"),
     };
     let d = p - frame.origin;
@@ -152,7 +161,6 @@ fn uv(s: &Surface, p: DVec3) -> Result<DVec2> {
 }
 
 pub(super) fn rows(model: &StepModel, solid: Solid<'_>, metres: f64, tol: f64) -> Result<Rows> {
-    let geom = Geometry { model, metres };
     if solid.voids().next().is_some() {
         return Err("void shell import unavailable");
     }
@@ -160,6 +168,16 @@ pub(super) fn rows(model: &StepModel, solid: Solid<'_>, metres: f64, tol: f64) -
     if !shell.is_closed() {
         return Err("open solid shell");
     }
+    shell_rows(model, shell, sense, metres, tol)
+}
+pub(super) fn shell_rows(
+    model: &StepModel,
+    shell: built_step::step_io::scene::Shell<'_>,
+    sense: Orientation,
+    metres: f64,
+    tol: f64,
+) -> Result<Rows> {
+    let geom = Geometry { model, metres };
     let mut t = Topology::default();
     t.tolerance = tol;
     let mut rows = Rows::default();
@@ -179,6 +197,17 @@ pub(super) fn rows(model: &StepModel, solid: Solid<'_>, metres: f64, tol: f64) -
                 SurfaceKind::Cylindrical(p) => Surface::Cylinder {
                     frame: geom.surface_frame(&p.position)?,
                     radius: p.radius * metres,
+                },
+                SurfaceKind::Conical(p) => Surface::Cone {
+                    frame: geom.surface_frame(&p.position)?,
+                    radius: p.radius * metres,
+                    half_angle: p.semi_angle
+                        * model
+                            .scene()
+                            .units()
+                            .angle
+                            .ok_or("missing angle unit")?
+                            .to_si,
                 },
                 _ => return Err("unsupported STEP surface"),
             };
@@ -240,7 +269,7 @@ pub(super) fn rows(model: &StepModel, solid: Solid<'_>, metres: f64, tol: f64) -
                 let curve = &rows.curves[e.curve as usize];
                 let projected = matches!(support, Surface::Plane { .. })
                     && !matches!(curve, Curve::Line { .. });
-                if let Surface::Cylinder { frame, .. } = support {
+                if let Surface::Cylinder { frame, .. } | Surface::Cone { frame, .. } = support {
                     if let Some(last) = ring.last() {
                         a.x += ((last.uv[1].x - a.x) / TAU).round() * TAU
                     }
@@ -281,7 +310,13 @@ pub(super) fn rows(model: &StepModel, solid: Solid<'_>, metres: f64, tol: f64) -
             loops,
         });
     }
-    if t.faces.is_empty() || incidence.values().any(|v| v.len() != 2 || v[0] == v[1]) {
+    if t.faces.is_empty()
+        || incidence.values().any(|v| match v.as_slice() {
+            [_] => shell.is_closed(),
+            [a, b] => a == b,
+            _ => true,
+        })
+    {
         return Err("inconsistent closed shell incidence");
     }
     rows.topology = Some(t);
@@ -293,16 +328,22 @@ mod tests {
     use super::*;
     #[test]
     fn admitted_cylinder_contains_two_distinct_seam_uses() {
-        let bytes=include_bytes!("../../../../tests/fixtures/step/capped-cylinder.step");
-        let exchange=built_step::read(bytes).unwrap();
-        let scene=exchange.model.scene();
-        let units=scene.units();
-        let m=units.length.unwrap().to_si;
-        let rows=rows(&exchange.model,scene.all_solids().next().unwrap(),m,units.precision.unwrap()*m).unwrap();
-        let patch=crate::store::native::NativePatch::new(rows).unwrap();
-        let wall=&patch.topology().faces[0].loops[0];
-        assert_eq!(wall[1].edge,wall[3].edge);
-        assert_ne!(wall[1].uv,wall[3].uv);
+        let bytes = include_bytes!("../../../../tests/fixtures/step/capped-cylinder.step");
+        let exchange = built_step::read(bytes).unwrap();
+        let scene = exchange.model.scene();
+        let units = scene.units();
+        let m = units.length.unwrap().to_si;
+        let rows = rows(
+            &exchange.model,
+            scene.all_solids().next().unwrap(),
+            m,
+            units.precision.unwrap() * m,
+        )
+        .unwrap();
+        let patch = crate::store::native::NativePatch::new(rows).unwrap();
+        let wall = &patch.topology().faces[0].loops[0];
+        assert_eq!(wall[1].edge, wall[3].edge);
+        assert_ne!(wall[1].uv, wall[3].uv);
         assert!(!patch.mesh().unwrap().triangles.is_empty());
     }
 }

@@ -56,6 +56,20 @@ fn missing_name_offset(source: &[u8]) -> Option<usize> {
 }
 
 pub mod planar;
+mod sheet;
+#[derive(Clone, Copy, Debug)]
+pub enum Measure {
+    Volume(f64),
+    Area(f64),
+}
+impl Measure {
+    fn ordered(self) -> (u8, f64) {
+        match self {
+            Self::Volume(v) => (0, v),
+            Self::Area(a) => (1, a),
+        }
+    }
+}
 
 use std::io::Write;
 use std::path::Path;
@@ -72,7 +86,7 @@ pub struct Definition<B = planar::Body> {
 /// before replacing an existing destination, including for in-place conversions.
 pub fn write_document(definitions: &[Definition], path: &Path) -> Result<(), String> {
     write_checked(definitions, path, 1e-7, planar::Body::add, |_, s, m| {
-        planar::Body::from_solid(s, m)?.volume()
+        Ok(Measure::Volume(planar::Body::from_solid(s, m)?.volume()?))
     })
 }
 
@@ -80,8 +94,8 @@ pub fn write_checked<B>(
     definitions: &[Definition<B>],
     path: &Path,
     uncertainty_mm: f64,
-    add: impl Fn(&B, &mut step_io::StepBuilder, step_io::build::Part, &str) -> Result<f64, String>,
-    measure: impl Fn(&StepModel, step_io::scene::Solid<'_>, f64) -> Result<f64, String>,
+    add: impl Fn(&B, &mut step_io::StepBuilder, step_io::build::Part, &str) -> Result<Measure, String>,
+    measure: impl Fn(&StepModel, step_io::scene::Solid<'_>, f64) -> Result<Measure, String>,
 ) -> Result<(), String> {
     let mut builder = step_io::StepBuilder::new_with(&step_io::build::UnitsInput {
         uncertainty: uncertainty_mm,
@@ -142,8 +156,20 @@ pub fn write_checked<B>(
     for solid in scene.all_solids() {
         restored.push(measure(&check.0, solid, metres)?);
     }
-    volumes.sort_by(f64::total_cmp);
-    restored.sort_by(f64::total_cmp);
+    for sheet in scene.all_surface_models() {
+        for (shell, sense) in sheet.shells() {
+            restored.push(Measure::Area(
+                planar::Body::from_shell(shell, sense, metres)?.area()?,
+            ));
+        }
+    }
+    let order = |a: &Measure, b: &Measure| {
+        let (ak, av) = a.ordered();
+        let (bk, bv) = b.ordered();
+        ak.cmp(&bk).then_with(|| av.total_cmp(&bv))
+    };
+    volumes.sort_by(order);
+    restored.sort_by(order);
     if !check.1.dropped.is_empty()
         || scene.all_product_definitions().count() != parts.len()
         || scene
@@ -152,10 +178,11 @@ pub fn write_checked<B>(
             .sum::<usize>()
             != definitions.iter().map(|d| d.children.len()).sum::<usize>()
         || restored.len() != volumes.len()
-        || restored
-            .iter()
-            .zip(&volumes)
-            .any(|(a, b)| !a.is_finite() || (a - b).abs() > 1e-21_f64.max(1e-7 * b.abs()))
+        || restored.iter().zip(&volumes).any(|(a, b)| {
+            let (ak, a) = a.ordered();
+            let (bk, b) = b.ordered();
+            ak != bk || !a.is_finite() || (a - b).abs() > 1e-21_f64.max(1e-7 * b.abs())
+        })
     {
         return Err("STEP reopen verification failed".into());
     }

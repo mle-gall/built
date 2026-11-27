@@ -3,6 +3,7 @@ mod exact_read;
 mod exact_write;
 use exact_write::Geometry;
 mod import;
+mod rim_solid;
 use crate::math::mat;
 use crate::store::py::PyMeshStore;
 use built_step::{planar::Body, step_io::build::Frame, Definition};
@@ -20,6 +21,10 @@ fn bodies(mesh: &Bound<'_, PyAny>) -> PyResult<Vec<Geometry>> {
     let s = &borrow.inner;
     if let Some(patch) = &s.state.exact.native {
         return Ok(vec![Geometry::Exact(patch.clone())]);
+    }
+    if s.state.exact.arcs.is_some() {
+        let patch = rim_solid::recover(s).map_err(bad)?;
+        return Ok(vec![Geometry::Exact(std::sync::Arc::new(patch))]);
     }
     let d = s.dense();
     if d.ef_start.windows(2).any(|w| w[0] == w[1]) {
@@ -50,6 +55,9 @@ fn bodies(mesh: &Bound<'_, PyAny>) -> PyResult<Vec<Geometry>> {
     let mut adjacent = vec![Vec::new(); faces.len()];
     for range in d.ef_start.windows(2) {
         let fs = &d.ef_face[range[0] as usize..range[1] as usize];
+        if fs.len() > 2 {
+            return Err(bad("nonmanifold STEP edge"));
+        }
         if let [a, b] = fs {
             adjacent[*a as usize].push(*b as usize);
             adjacent[*b as usize].push(*a as usize);
@@ -181,7 +189,9 @@ fn save_step(scene: &Bound<'_, PyAny>, path: PathBuf) -> PyResult<()> {
                 &path,
                 tol * 1000.,
                 |g, b, p, name| g.add(b, p, name, tol),
-                |m, s, scale| exact_write::reopened(m, s, scale, tol),
+                |m, s, scale| {
+                    exact_write::reopened(m, s, scale, tol).map(built_step::Measure::Volume)
+                },
             )
         })
         .map_err(bad)

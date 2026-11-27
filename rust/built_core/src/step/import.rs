@@ -108,7 +108,20 @@ pub(super) fn prepare_step(py: Python<'_>, path: PathBuf) -> PyResult<Bound<'_, 
         );
     let mut units = None;
     for context in contexts {
-        if units.replace(context).is_some_and(|u| u != context) {
+        if units.replace(context).is_some_and(|previous| {
+            previous.len() != context.len()
+                || !previous.iter().all(|a| {
+                    context.iter().any(|b| {
+                        a == b
+                            || match (a, b) {
+                                (m::UnitRef::Complex(x), m::UnitRef::Complex(y)) => {
+                                    model[*x] == model[*y]
+                                }
+                                _ => false,
+                            }
+                    })
+                })
+        }) {
             return Err(bad("multiple distinct STEP unit contexts"));
         }
     }
@@ -155,6 +168,27 @@ pub(super) fn prepare_step(py: Python<'_>, path: PathBuf) -> PyResult<Bound<'_, 
                 }
             }
         }
+        for sheet in def.surface_models() {
+            owned.insert(sheet.key());
+            for (shell, sense) in sheet.shells() {
+                let tol = scene.units().precision.unwrap_or(1e-6) * metres;
+                let result = super::exact_read::shell_rows(model, shell, sense, metres, tol)
+                    .and_then(|r| crate::store::native::NativePatch::new(r).map(|_| ()))
+                    .map_err(bad)
+                    .and_then(|_| Body::from_shell(shell, sense, metres).map_err(bad))
+                    .and_then(|body| make_mesh(py, &body, true));
+                match result {
+                    Ok(mesh) => {
+                        meshes.push(mesh);
+                        exact += 1
+                    }
+                    Err(e) => {
+                        rejected += 1;
+                        problems.push(format!("{name} ({:?}): {e}", shell.key()));
+                    }
+                }
+            }
+        }
         let mut children = Vec::new();
         for occurrence in def.occurrences() {
             let Some((child, mut rows)) = occurrence
@@ -183,7 +217,10 @@ pub(super) fn prepare_step(py: Python<'_>, path: PathBuf) -> PyResult<Bound<'_, 
         missing += 1;
         problems.push(format!("Unresolved solid {:?}", solid.key()));
     }
-    for sheet in scene.all_surface_models() {
+    for sheet in scene
+        .all_surface_models()
+        .filter(|s| !owned.contains(&s.key()))
+    {
         rejected += 1;
         problems.push(format!("Unsupported sheet {:?}", sheet.key()));
     }

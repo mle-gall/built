@@ -59,7 +59,7 @@ impl Geometry {
         part: Part,
         name: &str,
         tol: f64,
-    ) -> Result<f64, String> {
+    ) -> Result<built_step::Measure, String> {
         let Self::Exact(p) = self else {
             let Self::Facets(body) = self else {
                 unreachable!()
@@ -102,6 +102,11 @@ impl Geometry {
                 Surface::Cylinder { frame: f, radius } => {
                     SurfaceInput::Cylinder(frame(f), radius * 1000.)
                 }
+                Surface::Cone {
+                    frame: f,
+                    radius,
+                    half_angle,
+                } => SurfaceInput::Cone(frame(f), radius * 1000., *half_angle),
                 _ => return Err("unsupported STEP face support".into()),
             };
             let mut bounds = Vec::new();
@@ -127,7 +132,7 @@ impl Geometry {
             return Err("STEP solid requires a closed, oriented shell".into());
         }
         b.solid(part, name, faces).map_err(|e| e.to_string())?;
-        volume(&p.rows, tol)
+        Ok(built_step::Measure::Volume(volume(&p.rows, tol)?))
     }
 }
 pub(super) fn reopened(model: &StepModel, s: Solid<'_>, m: f64, tol: f64) -> Result<f64, String> {

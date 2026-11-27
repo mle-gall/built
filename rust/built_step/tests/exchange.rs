@@ -64,12 +64,12 @@ fn repeated_occurrence_closed_volume_and_bounds() {
     assert_eq!(offsets, [0, 2000]);
 }
 #[test]
-fn open_shell_does_not_replace_destination() {
+fn inconsistent_winding_does_not_replace_destination() {
     let fixture = tempfile::tempdir().unwrap();
     let path = fixture.path().join("original.step");
     std::fs::write(&path, b"original").unwrap();
     let mut open = tetrahedron();
-    open.faces.pop();
+    open.faces[0][0].reverse();
     let def = Definition {
         name: "incomplete".into(),
         bodies: vec![open],
@@ -77,4 +77,31 @@ fn open_shell_does_not_replace_destination() {
     };
     assert!(write_document(&[def], &path).is_err());
     assert_eq!(std::fs::read(path).unwrap(), b"original");
+}
+
+#[test]
+fn open_planar_sheet_has_a_surface_model_and_no_solid() {
+    let tmp = tempfile::tempdir().unwrap();
+    let path = tmp.path().join("sheet.stp");
+    let d = Definition {
+        name: "sheet".into(),
+        bodies: vec![Body {
+            points: vec![DVec3::ZERO, DVec3::X, DVec3::Y],
+            faces: vec![vec![vec![0, 1, 2]]],
+        }],
+        children: vec![],
+    };
+    write_document(&[d], &path).unwrap();
+    let exchange = read(&std::fs::read(path).unwrap()).unwrap();
+    let scene = exchange.model.scene();
+    assert_eq!(scene.all_solids().count(), 0);
+    assert_eq!(
+        scene
+            .all_product_definitions()
+            .next()
+            .unwrap()
+            .surface_models()
+            .count(),
+        1
+    );
 }
