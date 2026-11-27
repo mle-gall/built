@@ -140,6 +140,8 @@ mod navigation;
 mod depth_resolve;
 mod depth;
 mod backend;
+mod align;
+mod edge_memo;
 mod edges;
 mod faces;
 mod scene_upload;
@@ -192,6 +194,9 @@ struct Scene {
     /// goes back there while it fits: appending each one grew the buffers by
     /// the whole prototype per edit (56 MB for a 200k-face mesh).
     replaced: std::collections::HashMap<usize, [usize; 6]>,
+    /// Big prototypes' edge expansions, patched by their next rebake
+    /// (`edge_memo`), the most recently rebaked last.
+    edge_memos: Vec<(usize, edge_memo::Memo)>,
     vertex: wgpu::Buffer,
     index: wgpu::Buffer,
     commands: wgpu::Buffer,
@@ -1170,6 +1175,7 @@ impl Renderer {
             vertex_bytes: v.len(),
             index_data: face_ix,
             replaced: std::collections::HashMap::new(),
+            edge_memos: Vec::new(),
             flags: instances
                 .chunks_exact(80)
                 .map(|r| u32::from_le_bytes(r[72..76].try_into().unwrap()))
@@ -1221,8 +1227,41 @@ impl Renderer {
         }
         let source = [Command { count: faces, instances: 0, first: 0, base: 0, start: 0 },
             Command { count: ix.len() as u32/4-faces, instances: 0, first: faces, base: 0, start: 0 }];
-        let (edge, expanded_ix, mut commands) = edges::expand(v, ix, bytemuck::cast_slice(&source), 1).map_err(PyValueError::new_err)?;
-        let (face, indices, shifts) = faces::compact(v, &expanded_ix, &mut commands, 1);
+        // A big prototype as the bake gives it (one vertex per index, in
+        // order) keeps its expansion: the next rebake patches it, and only
+        // the bytes that moved are uploaded when it goes back in place.
+        let trivial = (faces as usize) / 3 >= edge_memo::KEEP_PAST && ix.len() / 4 == v.len() / 28
+            && faces % 3 == 0 && (ix.len() / 4 - faces as usize) % 2 == 0
+            && ix.chunks_exact(4).enumerate().all(|(i, c)| u32::from_le_bytes(c.try_into().unwrap()) == i as u32);
+        let mut patch = None;
+        let mut kept = None;
+        let (edge, commands, face, indices, shifts) = if trivial {
+            let held = s.edge_memos.iter().position(|m| m.0 == id).map(|at| s.edge_memos.remove(at).1);
+            let mut memo = match held {
+                Some(mut memo) => match memo.update(v, faces as usize) {
+                    Some(changes) => {
+                        patch = Some(changes);
+                        memo
+                    }
+                    None => edge_memo::Memo::build(v, faces as usize),
+                },
+                None => edge_memo::Memo::build(v, faces as usize),
+            };
+            let records = memo.records.len() / 48;
+            let commands: Vec<u8> = bytemuck::cast_slice(&[
+                Command { count: faces, instances: 0, first: 0, base: 0, start: 0 },
+                Command { count: (records * 6) as u32, instances: 0, first: 0, base: 0, start: (memo.hard * 6) as u32 },
+            ]).to_vec();
+            let out = (std::mem::take(&mut memo.records), commands, std::borrow::Cow::Borrowed(&v[..faces as usize * 28]),
+                       std::borrow::Cow::Borrowed(&ix[..faces as usize * 4]), vec![0i64]);
+            kept = Some(memo);
+            out
+        } else {
+            s.edge_memos.retain(|m| m.0 != id);
+            let (edge, expanded_ix, mut commands) = edges::expand(v, ix, bytemuck::cast_slice(&source), 1).map_err(PyValueError::new_err)?;
+            let (face, indices, shifts) = faces::compact(v, &expanded_ix, &mut commands, 1);
+            (edge, commands, std::borrow::Cow::Owned(face), std::borrow::Cow::Owned(indices), shifts)
+        };
         let lengths = [face.len()/28, indices.len()/4, edge.len()/48];
         let reuse = s.replaced.get(&id).copied().filter(|a| lengths[0] <= a[1] && lengths[1] <= a[3] && lengths[2] <= a[5]);
         let (vertex_base, index_base, edge_base) = match reuse {
@@ -1256,9 +1295,25 @@ impl Renderer {
         s.face_ranges = face_ranges(&s.material_data, s.p);
         s.material_shifts[id] = vertex_base as i64 + shifts[0];
         s.prototype_data[id*32..(id+1)*32].copy_from_slice(bounds);
+        // Back in its own range after a patched expansion: only what moved
+        // goes up (the face vertices and records that differ from those
+        // already there, the indices past the old ones).
+        let ranged = match (&patch, reuse) {
+            (Some(record_changes), Some(_)) => {
+                let old = &s.index_data[index_base*4..index_base*4+indices.len()];
+                let first = old.chunks_exact(4).zip(indices.chunks_exact(4)).position(|(a, b)| a != b).map_or(indices.len(), |i| i*4);
+                Some((vec![0..face.len()], first..indices.len(), record_changes.clone()))
+            }
+            _ => None,
+        };
         if reuse.is_some() {
             s.index_data[index_base*4..index_base*4+indices.len()].copy_from_slice(&indices);
-            s.edge_data[edge_base*48..edge_base*48+edge.len()].copy_from_slice(&edge);
+            match &ranged {
+                Some((_, _, records)) => for r in records {
+                    s.edge_data[edge_base*48+r.start..edge_base*48+r.end].copy_from_slice(&edge[r.clone()]);
+                },
+                None => s.edge_data[edge_base*48..edge_base*48+edge.len()].copy_from_slice(&edge),
+            }
         } else {
             s.replaced.insert(id, [vertex_base, slack[0], index_base, slack[1], edge_base, slack[2]]);
             s.vertex_bytes += slack[0]*28;
@@ -1268,12 +1323,23 @@ impl Renderer {
             s.edge_data.resize(s.edge_data.len() + (slack[2]-lengths[2])*48, 0);
         }
         for (target, length, usage, offset, addition) in [
-            (&mut s.vertex, s.vertex_bytes, wgpu::BufferUsages::VERTEX, vertex_base*28, face.as_slice()),
-            (&mut s.index, s.index_data.len(), wgpu::BufferUsages::INDEX, index_base*4, indices.as_slice()),
+            (&mut s.vertex, s.vertex_bytes, wgpu::BufferUsages::VERTEX, vertex_base*28, &face[..]),
+            (&mut s.index, s.index_data.len(), wgpu::BufferUsages::INDEX, index_base*4, &indices[..]),
             (&mut s.edge_records, s.edge_data.len(), wgpu::BufferUsages::STORAGE, edge_base*48, edge.as_slice())] {
             if length as u64 > target.size() {
                 *target = grown_buffer(&self.device, &self.queue, target, offset,
                     grown_capacity(target.size() as usize, length), usage);
+            }
+            if let Some((vertices, index_tail, records)) = &ranged {
+                let parts: Vec<std::ops::Range<usize>> = match usage {
+                    wgpu::BufferUsages::VERTEX => vertices.clone(),
+                    wgpu::BufferUsages::INDEX => vec![index_tail.clone()],
+                    _ => records.clone(),
+                };
+                for r in parts.into_iter().filter(|r| r.start < r.end) {
+                    self.queue.write_buffer(target, (offset + r.start) as u64, &addition[r]);
+                }
+                continue;
             }
             if !addition.is_empty() { self.queue.write_buffer(target, offset as u64, addition); }
         }
@@ -1311,6 +1377,14 @@ impl Renderer {
         s.profile_draw = bind(&self.device, &self.profile_top.get_bind_group_layout(0), &[&self.camera, &s.inst, &s.survivors, &s.edge_records, &s.viewpoints]);
         self.aa.bind_scene(&self.device, &self.camera, &s.inst, &s.survivors, &self.look.buffer, &s.edge_records, &s.viewpoints);
         self.pick_read = PickRead::DIRTY; self.scene_epoch += 1;
+        if let Some(mut memo) = kept {
+            memo.records = edge;
+            let s = self.scene.as_mut().expect("the scene just written");
+            s.edge_memos.push((id, memo));
+            if s.edge_memos.len() > 2 {
+                s.edge_memos.remove(0);
+            }
+        }
         Ok(())
     }
 
