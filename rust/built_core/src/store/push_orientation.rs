@@ -151,7 +151,7 @@ mod tests {
     use crate::store::edit::Change;
 
     #[test]
-    fn retained_face_probes_match_a_new_scan_after_slot_reuse() {
+    fn retained_face_probes_match_a_new_scan_after_a_move_and_slot_reuse() {
         let mut store = Store::empty(15, Default::default());
         let mut change = Change::default();
         let face = |x: f64, z: f64| vec![[x, 0., z], [x + 1., 0., z], [x, 2., z]];
@@ -168,6 +168,7 @@ mod tests {
             true,
         )
         .unwrap();
+        store.move_vertex(1, [0.125, 0., 0.5]);
         store.remove_face(3, &mut change);
         store.add_face(&[face(3., 2.)], &mut change).unwrap();
         let scan = scan(&store);

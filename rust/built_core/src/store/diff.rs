@@ -209,14 +209,34 @@ impl State {
         changed
     }
 
-    /// A geometry cache also needs unchanged coordinates and ring pools.
-    /// A coordinate edit takes the full geometry route.
+    /// Changed loops and faces touching moved vertices. Unrelated rows keep
+    /// their cached triangles and planes across positional edits.
     pub(super) fn changed_face_geometry(&self, before: &Self) -> Option<Vec<u32>> {
-        (self.ns == before.ns && self.frame == before.frame
-            && same_prefix(&self.vpos, &before.vpos)
-            && same_prefix(&self.corners, &before.corners)
-            && same_prefix(&self.ring_sizes, &before.ring_sizes))
-            .then(|| self.changed_face_slots(before, true))
+        if self.ns != before.ns || self.frame != before.frame
+            || !same_prefix(&self.corners, &before.corners)
+            || !same_prefix(&self.ring_sizes, &before.ring_sizes)
+        {
+            return None;
+        }
+        let mut dirty = self.changed_face_slots(before, true);
+        let mut moved = 0;
+        for (c, (now, old)) in self.vpos.chunks().zip(before.vpos.chunks()).enumerate() {
+            if self.vpos.same_chunk(&before.vpos, c) { continue; }
+            for (i, (p, q)) in now.iter().zip(old).enumerate() {
+                let v = (c * CHUNK + i) as u32;
+                if p == q || !self.slots[0].alive(v) { continue; }
+                moved += 1;
+                if moved > 4096 { return None; }
+                for e in self.edges_at(v) {
+                    dirty.extend_from_slice(self.edge_faces(e));
+                }
+            }
+        }
+        if moved > 0 {
+            dirty.sort_unstable();
+            dirty.dedup();
+        }
+        Some(dirty)
     }
 }
 
