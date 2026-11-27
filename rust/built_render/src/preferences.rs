@@ -459,6 +459,7 @@ const SECTIONS: &[(&str, &str, &str, &str)] = &[
     ("ai", "AI", "mac", "The assistant's provider is kept on this Mac; model access applies to the model in front."),
     ("blender", "Blender", "mac", "Used for the next render."),
     ("modelling", "Modelling", "mac", "How the modelling tools behave."),
+    ("library", "Library", "mac", "Where saved materials, components, profiles, presets and styles go."),
     (
         "units",
         "Units",

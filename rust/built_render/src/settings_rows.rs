@@ -1196,7 +1196,7 @@ pub fn section_groups<'py>(py: Python<'py>, env: &Bound<'py, PyAny>, section: &s
             key_set(py, MOVE_ROTATION_GRIPS, Kind::Bool)?,
         )]),
         "display" => display(py, env),
-        "registry" => Ok(PyList::empty(py)),
+        "registry" | "library" => Ok(PyList::empty(py)),
         "ndof" if !NDOF_SUPPORTED => Ok(PyList::empty(py)),
         "ndof" => ndof(py, env),
         "units" => _units(env),

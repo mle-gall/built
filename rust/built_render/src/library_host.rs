@@ -1157,7 +1157,7 @@ impl ComponentsProvider {
             let mut v = if gs.is_empty() {
                 vec!["apply", "replace", "rename", "-", "unkeepfile"]
             } else {
-                vec!["apply", "edit", "select", "replace", "-", "rename", if kept.is_none() { "keepfile" } else { "unkeepfile" }, "-", "delete"]
+                vec!["apply", "edit", "select", "replace", "-", "rename", if kept.is_none() { "keepfile" } else { "unkeepfile" }, "save", "-", "delete"]
             };
             if linked { v.retain(|id|matches!(*id,"apply"|"select")); }
             let definition = gs.first().unwrap_or(&kept);
@@ -1200,6 +1200,9 @@ impl ComponentsProvider {
                 ("thumb", thumb),
                 ("verbs", verbs(py, &["apply"])?),
             ])?)?;
+        }
+        for row in destinations::py_items(py, Some(&scene), &["components"])? {
+            out.append(row)?;
         }
         for manifest in collections::manifests()? {
             for original in manifest["items"].as_array().into_iter().flatten() {
@@ -1359,6 +1362,16 @@ impl ComponentsProvider {
             "keepfile" | "unkeepfile" => {
                 win.call_method1("keep_component", (&definition, verb == "keepfile"))?;
             }
+            "save" => {
+                // Its definition in a .built of its own, carried by the saved item.
+                let uid = definition.getattr("uid")?.str()?.to_string();
+                let id = crate::library_store::stable_id(&format!("component:{uid}"));
+                let folder = std::env::temp_dir().join(format!("built-component-{}", crate::library_store::new_id()));
+                let file = destinations::component_file(py, &definition, &folder)?;
+                let label = if name.is_truthy()? { name.str()?.to_string() } else { "Component".to_owned() };
+                destinations::save_to_library(&win, "components", &label, r#"{"file":"component.built"}"#, Some(id), 1, "", None, None,
+                                              Some(vec![("component.built".into(), file)]), Some(vec!["model".into()]), None)?;
+            }
             "delete" => {
                 let n = gs.len();
                 ask(&ctx.getattr("view")?, ("delete", "components", key.clone()), &format!("Delete every copy of “{}”?", name.str()?),
@@ -1468,6 +1481,61 @@ impl FamiliesProvider {
     }
 }
 
+/// Display styles: Built's own, then the saved ones wherever they are.
+#[pyclass(module = "built_render.wgpu_library", extends = LibraryProvider, dict)]
+pub struct StylesProvider;
+
+#[pymethods]
+impl StylesProvider {
+    #[new]
+    fn new() -> PyClassInitializer<Self> {
+        PyClassInitializer::from(LibraryProvider).add_subclass(StylesProvider)
+    }
+
+    #[classattr]
+    fn id() -> &'static str {
+        "styles"
+    }
+
+    #[classattr]
+    fn label() -> &'static str {
+        "Styles"
+    }
+
+    fn items<'py>(&self, py: Python<'py>, ctx: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyList>> {
+        let out = PyList::empty(py);
+        for style in py.import("built_core.style")?.getattr("BUILTIN_STYLES")?.try_iter()? {
+            let style = style?;
+            let name: String = style.getattr("name")?.extract()?;
+            out.append(item(py, &[
+                ("key", s(py, &format!("style:{name}"))),
+                ("name", s(py, &name)),
+                ("label", s(py, &crate::settings_rows::tr(py, &name)?)),
+                ("source", s(py, "bundled")),
+                ("category", s(py, "")),
+                ("hex", s(py, &_hex(&style.getattr("background")?)?)),
+                ("verbs", verbs(py, &["apply"])?),
+            ])?)?;
+        }
+        let scene = ctx.getattr_opt("scene")?;
+        for row in destinations::py_items(py, scene.as_ref(), &["styles"])? {
+            out.append(row)?;
+        }
+        Ok(out)
+    }
+
+    #[pyo3(signature = (ctx, verb, item, _arg=""))]
+    fn run(&self, py: Python<'_>, ctx: &Bound<'_, PyAny>, verb: &str, item: &Bound<'_, PyAny>, _arg: &str) -> PyResult<()> {
+        if verb == "apply" {
+            let style = py.import("built_core.style")?.call_method1("style_by_name", (item.get_item("name")?,))?;
+            if !style.is_none() {
+                ctx.getattr("win")?.call_method1("set_active_style", (style,))?;
+            }
+        }
+        Ok(())
+    }
+}
+
 /// Section outlines (steel shapes, extrusion and sweep profiles) to
 /// draw, extrude and run along a path.
 #[pyclass(module = "built_render.wgpu_library", extends = LibraryProvider, dict)]
@@ -1559,7 +1627,13 @@ impl ProfilesProvider {
             // Drawn profiles open in the Sketch workspace (sketch_workspace.rs).
             let key:String=item.get_item("key")?.extract()?;
             let win=ctx.getattr("win")?;
-            if let Some(file)=key.strip_prefix("local:") {
+            if key.starts_with("lib:") {
+                let (Some((dest,kind,id)),scene)=(destinations::parse_key(&key),ctx.getattr("scene")?) else {return Ok(())};
+                if let Some(l)=destinations::entries(ctx.py(),Some(&scene),&[kind.as_str()])?.into_iter().find(|l|l.dest.key==dest && l.entry.id==id) {
+                    let arg=serde_json::json!({"id":l.entry.id,"rev":l.entry.rev,"data":l.entry.data}).to_string();
+                    crate::sketch_workspace::enter(&win,"library",&arg)?;
+                }
+            } else if let Some(file)=key.strip_prefix("local:") {
                 let path=Self::saved_directory()?.join(file);
                 crate::sketch_workspace::enter(&win,"open",&path.to_string_lossy())?;
             } else if let Some(uid)=key.strip_prefix("sketch:") {
@@ -3103,6 +3177,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     sub.add_class::<FamiliesProvider>()?;
     sub.add_class::<ProfilesProvider>()?;
     sub.add_class::<PresetsProvider>()?;
+    sub.add_class::<StylesProvider>()?;
     sub.add_class::<LibrarySheet>()?;
     sub.add("PROVIDERS", vec![
         Bound::new(py, MaterialsProvider::new())?.into_any(),
@@ -3110,6 +3185,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
         Bound::new(py, FamiliesProvider::new())?.into_any(),
         Bound::new(py, ProfilesProvider::new())?.into_any(),
         Bound::new(py, PresetsProvider::new())?.into_any(),
+        Bound::new(py, StylesProvider::new())?.into_any(),
     ])?;
     for f in [
         wrap_pyfunction!(_hex, &sub)?,

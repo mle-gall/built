@@ -157,6 +157,9 @@ pub struct Block {
 #[serde(default)]
 pub struct Item {
     pub component_source: String,
+    /// Where a library item lives ("My library", a shared library): a chip
+    /// on its tile, a word on its row.
+    pub place: String,
     pub toggle: Option<bool>,
     pub id: String,
     pub label: String,
@@ -794,6 +797,9 @@ impl Draw<'_> {
                 ui.painter().circle_filled(c, 8.0, ACCENT);
                 ui.painter().text(c, egui::Align2::CENTER_CENTER, "✓", meta(), BRIGHT);
             }
+            if !it.place.is_empty() {
+                kit::source_chip(ui.painter(), pic, &it.place);
+            }
             if !it.badge.is_empty() {
                 let g = ui.painter().layout_no_wrap(it.badge.clone(), meta(), INK);
                 let br = Rect::from_min_size(pic.right_top() + vec2(-g.size().x - 14.0, 6.0), vec2(g.size().x + 8.0, 16.0));
@@ -889,6 +895,12 @@ impl Draw<'_> {
                 let g = fit(ui, &it.right, meta(), FAINT, w * 0.3, 1);
                 right_x -= g.size().x;
                 ui.painter().galley(pos2(right_x, r.center().y - g.size().y / 2.0), g, FAINT);
+                right_x -= 12.0;
+            }
+            if !it.place.is_empty() && it.component_source.is_empty() {
+                let g = fit(ui, &it.place, meta(), DIM, w * 0.25, 1);
+                right_x -= g.size().x;
+                ui.painter().galley(pos2(right_x, r.center().y - g.size().y / 2.0), g, DIM);
                 right_x -= 12.0;
             }
             let ink = if it.dim { FAINT } else { INK };

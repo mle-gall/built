@@ -118,8 +118,13 @@ fn bucket(e: &Item) -> &str {
 }
 
 pub(super) fn source(e: &Item) -> &str {
+    if !e.source_label.is_empty() && e.source != "model" {
+        return &e.source_label;
+    }
     match e.source.as_str() {
         "model" => "This model",
+        "project" => "This project",
+        s if s.starts_with("shared:") => &s[7..],
         "linked" => e
             .file
             .as_deref()
@@ -286,12 +291,19 @@ pub(super) fn index<'a>(items: &'a [Item], st: &Browse) -> Index<'a> {
             "right":counts.get(&(if field=="is" {"usage"} else {field},value)).copied().unwrap_or(0).to_string()})
     };
     let mut side = vec![caption("Source")];
-    for (id, name) in [
-        ("model", "This model"),
-        ("linked", "Linked files"),
-        ("mine", "My library"),
-        ("bundled", "Bundled"),
-    ] {
+    let mut sources: Vec<(String, String)> = vec![("model".into(), "This model".into()), ("linked".into(), "Linked files".into())];
+    if items.iter().any(|e| e.source == "project") {
+        sources.push(("project".into(), "This project".into()));
+    }
+    sources.push(("mine".into(), "My library".into()));
+    for e in items.iter().filter(|e| e.source.starts_with("shared:")) {
+        if !sources.iter().any(|s| s.0 == e.source) {
+            sources.push((e.source.clone(), source(e).to_owned()));
+        }
+    }
+    sources.push(("bundled".into(), "Bundled".into()));
+    for (id, name) in &sources {
+        let (id, name) = (id.as_str(), name.as_str());
         side.push(row("source", id, name, 0));
         if id == "linked" {
             let mut visible = 0;

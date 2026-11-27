@@ -8,11 +8,14 @@
 //! - `import:<path>`: a DXF or SVG file (DWG through the LibreDWG bridge)
 //!   into a new sketch with the clean-up list;
 //! - `open:<path>`: a Library `.builtprofile`;
-//! - `edit:<uid>`: a sketch row of this model.
+//! - `edit:<uid>`: a sketch row of this model;
+//! - `library:<json>`: a saved Library profile or section (its id is kept,
+//!   so saving it again is its next revision).
 //!
 //! Done runs `sketch_commit`: the row and every user of it in one History
-//! step. Save to Library writes a `.builtprofile` into the user's Library
-//! (`<data>/Built/profiles/<Profiles|Sections>/`).
+//! step. Save to Library opens the shared Save to Library drawer
+//! (library_host/destinations.rs); `save_profile` still writes the older
+//! `.builtprofile` folder for scripts.
 use pyo3::{
     exceptions::PyValueError,
     prelude::*,
@@ -189,9 +192,25 @@ pub fn enter(win: &Obj<'_>, how: &str, arg: &str) -> PyResult<bool> {
     let py = win.py();
     let vp = win.getattr("viewport")?;
     let scene = vp.getattr("scene")?;
+    if !matches!(how, "done" | "cancel") {
+        win.setattr("_library_sketch", py.None())?;
+    }
     match how {
         // Scripts and other surfaces leave it as the top bar's buttons do.
         "done" | "cancel" => command(win, how),
+        "library" => {
+            // A saved Library item: `{"id", "rev", "data"}` (its profile file).
+            let item: serde_json::Value = serde_json::from_str(arg).map_err(|e| PyValueError::new_err(e.to_string()))?;
+            let file = built_draft2d::file::ProfileFile::parse(&item["data"].to_string()).map_err(PyValueError::new_err)?;
+            let Some(sketch) = file.sketch else { return Ok(false) };
+            let section = file.usage == built_draft2d::Use::Section;
+            let crumbs = vec![tr(py, "Library"), tr(py, if section { "Sections" } else { "Profiles" })];
+            let entered = enter_with(win, serde_json::json!({"sketch": sketch.to_json(), "crumbs": crumbs}))?;
+            if entered {
+                win.setattr("_library_sketch", (item["id"].as_str().unwrap_or_default(), item["rev"].as_u64().unwrap_or(1)))?;
+            }
+            Ok(entered)
+        }
         "new" => enter_with(win, serde_json::json!({"use": if arg == "section" { "section" } else { "profile" }})),
         "face" | "section" => {
             // `arg`: empty for the selected face, or `<uid>/<uid>…|f:<id>`
@@ -370,20 +389,14 @@ pub fn action(win: &Obj<'_>, arg: &str) -> PyResult<()> {
             win.call_method1("notify", ("info", tr(py, "Sketch discarded"), actions))?;
         }
         "save" => {
+            // The shared Save to Library drawer: a profile or a section by its use.
             let file = built_draft2d::file::ProfileFile::parse(payload).map_err(PyValueError::new_err)?;
             let section = file.usage == built_draft2d::Use::Section;
-            match save_profile(payload) {
-                Ok(path) => {
-                    let text = format!("{} {} › {}", file.name, tr(py, "saved to Library"), tr(py, if section { "Sections" } else { "Profiles" }));
-                    if let Some(r) = renderer(win)? {
-                        r.call_method1("ui_sketch_message", (&text,))?;
-                    }
-                    win.setattr("_last_profile_path", path)?;
-                }
-                Err(e) => {
-                    win.call_method1("notify", ("error", format!("{}: {}", tr(py, "Could not save to the Library"), e.value(py))))?;
-                }
-            }
+            let data: serde_json::Value = serde_json::from_str(&file.to_string()).map_err(|e| PyValueError::new_err(e.to_string()))?;
+            // The item it was opened from keeps its id; else one per name, as before.
+            let opened = win.getattr_opt("_library_sketch")?.filter(|v| !v.is_none()).map(|v| v.extract::<(String, u64)>()).transpose()?;
+            let (id, rev) = opened.unwrap_or_else(|| (crate::library_store::legacy_profile_id(std::path::Path::new(&built_draft2d::file::file_name(&file.name))), 1));
+            crate::library_host::destinations::save_to_library(win, if section { "sections" } else { "profiles" }, &file.name, &data.to_string(), Some(id), rev, "", None, None, None, None, None)?;
         }
         _ => {}
     }

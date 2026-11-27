@@ -361,6 +361,15 @@ pub(crate) fn items(py: Python<'_>, scene: Option<&Bound<'_, PyAny>>, kinds: &[&
                 let mut sketch = e.data["sketch"].clone();
                 sketch["name"] = json!(e.name);
                 row["sketch"] = sketch;
+                let mut v = verbs.clone();
+                if e.kind == "sections" {
+                    // The Cut tool takes presets: a section opens as its drawing.
+                    v.retain(|x| *x != "apply");
+                    v.insert(0, "edit");
+                } else if writable {
+                    v.insert(1, "edit");
+                }
+                row["verbs"] = json!(v);
             }
             "presets" => {
                 let mut p = e.data.clone();
@@ -670,11 +679,14 @@ fn apply(ctx: &Bound<'_, PyAny>, item: &Bound<'_, PyAny>, kind: &str, entry: &st
             let recipe = item.get_item("recipe")?;
             lib(py)?.getattr("_pick_paint")?.call((&win,), Some(&[("recipe", recipe)].into_py_dict(py)?))?;
         }
-        "profiles" | "sections" => {
-            let tool = if kind == "sections" { "cut" } else { "sweep" };
-            win.call_method1("_activate_tool", (tool,))?;
-            let machine = win.getattr("_tools")?.get_item(tool)?.getattr("_machine")?;
+        "profiles" => {
+            win.call_method1("_activate_tool", ("sweep",))?;
+            let machine = win.getattr("_tools")?.get_item("sweep")?.getattr("_machine")?;
             machine.call_method1("set", ("sketch", item.get_item("sketch")?))?;
+        }
+        "sections" => {
+            let arg = json!({"id": entry.id, "rev": entry.rev, "data": entry.data}).to_string();
+            crate::sketch_workspace::enter(&win, "library", &arg)?;
         }
         "presets" => {
             let p = item.get_item("preset")?;
@@ -695,6 +707,25 @@ fn apply(ctx: &Bound<'_, PyAny>, item: &Bound<'_, PyAny>, kind: &str, entry: &st
         _ => flash(ctx, "This kind is used from its own tool")?,
     }
     Ok(())
+}
+
+/// Saved styles by name (the model's first), for the Display panel.
+pub(crate) fn style_entries(py: Python<'_>, scene: Option<&Bound<'_, PyAny>>) -> PyResult<Vec<store::Entry>> {
+    let mut out: Vec<store::Entry> = Vec::new();
+    for l in entries(py, scene, &["styles"])? {
+        if !out.iter().any(|e| e.name == l.entry.name) {
+            out.push(l.entry);
+        }
+    }
+    Ok(out)
+}
+
+/// A saved style as a `Style`, by name.
+pub(crate) fn style_named<'py>(py: Python<'py>, scene: Option<&Bound<'py, PyAny>>, name: &str) -> PyResult<Option<Bound<'py, PyAny>>> {
+    let Some(e) = style_entries(py, scene)?.into_iter().find(|e| e.name == name) else { return Ok(None) };
+    let style = py.import("built_core.style")?.getattr("Style")?.call_method1("from_dict", (to_py(py, &e.data)?,))?;
+    style.setattr("name", &e.name)?;
+    Ok(Some(style))
 }
 
 // ---- verbs between destinations --------------------------------------------------------------
