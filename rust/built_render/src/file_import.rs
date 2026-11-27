@@ -193,6 +193,9 @@ fn load_file(
                 backend.call_method1("apply_payload", (scene, payload))?,
             )?;
         }
+        "step" => {
+            py.import("built_core.formats.step")?.call_method1("apply_step", (scene, params.get_item("prepared")?, params.get_item("accept_partial")?))?;
+        }
         "stl" => {
             py.import("built_core.formats.stl")?
                 .call_method1("add_stl_mesh", (scene, path, params.get_item("target")?))?;
@@ -267,6 +270,7 @@ fn import_file(
         "rfa" => "Import .rfa family failed",
         "obj" => "Import OBJ failed",
         "stl" => "Import STL failed",
+        "step" => "Import STEP failed",
         "dae" => "Import DAE failed",
         "glb" => "Import glTF/GLB failed",
         "dxf" if label.is_some() => "Import DWG failed",
@@ -281,6 +285,26 @@ fn import_file(
     let dialogs = py.import("built_render.chrome_dialogs")?;
     let params = PyDict::new(py);
     let mut make_faces = false;
+    if kind == "step" {
+        let prepared = match py.import("built_core.formats.step")?.call_method1("prepare_step", (path,)) {
+            Ok(p) => p,
+            Err(e) => {
+                dialogs.call_method1("critical", (win, &title, e.value(py).str()?))?;
+                return Ok(false);
+            }
+        };
+        let problems = prepared.get_item("problems")?.extract::<Vec<String>>()?;
+        if !problems.is_empty() {
+            let buttons = PyList::new(py, [("cancel", translated(py, "Cancel", None)?), ("import", translated(py,"Import available bodies", None)?)])?;
+            let kw = PyDict::new(py);
+            kw.set_item("cancel", "cancel")?;
+            kw.set_item("default", "cancel")?;
+            let answer = dialogs.call_method("ask", (win, translated(py,"Import partial STEP model?",None)?, problems.join("\n"), buttons),Some(&kw))?;
+            if !answer.eq("import")? { return Ok(false); }
+        }
+        params.set_item("accept_partial", !problems.is_empty())?;
+        params.set_item("prepared", prepared)?;
+    }
     if kind == "dxf" {
         let backend = py.import("built_core.formats.dxf_in")?;
         let source = match backend.call_method1("prepare_import", (path,)) {
@@ -391,7 +415,18 @@ fn import_file(
         win.call_method0("statusBar")?
             .call_method1("showMessage", (msg, 8000))?;
     } else {
-        report_import(win, &name, offset.as_ref())?;
+        if kind == "step" {
+            let p = params.get_item("prepared")?.unwrap();
+            for k in ["exact","faceted","rejected","missing"] { args.set_item(k,p.get_item(k)?)?; }
+            let mut text=message(py,"Imported {name}: {exact} exact, {faceted} faceted, {rejected} rejected, {missing} missing",&args)?;
+            if p.get_item("synthetic_file_name")?.is_truthy()? {
+                text.push_str(" · ");
+                text.push_str(&translated(py,"Supplied missing STEP file name",None)?.extract::<String>()?);
+            }
+            win.call_method0("statusBar")?.call_method1("showMessage",(text,8000))?;
+        } else {
+            report_import(win, &name, offset.as_ref())?;
+        }
     }
     if let Some(lines) = result.get_item("report")? {
         let lines = lines.extract::<Vec<String>>()?;
@@ -409,6 +444,7 @@ fn import_file(
     Ok(true)
 }
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(recover_selection,m)?)?;
     m.add_function(wrap_pyfunction!(run_import, m)?)?;
     m.add_function(wrap_pyfunction!(prepare_import, m)?)?;
     m.add_function(wrap_pyfunction!(import_file, m)?)?;
@@ -417,4 +453,51 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(dxf_failure, m)?)?;
     m.add_function(wrap_pyfunction!(dxf_options, m)?)?;
     Ok(())
+}
+
+#[pyfunction]
+fn recover_selection(win:&Bound<'_,PyAny>,faceted:bool)->PyResult<()>{
+    let py=win.py();
+    let vp=win.getattr("viewport")?;
+    let scene=vp.getattr("scene")?;
+    let history=vp.getattr("history")?;
+    let api=py.import("built_core.command_protocol")?;
+    let face=py.import("built_core.store_mesh")?.getattr("FaceView")?;
+    let keys=PyList::empty(py);
+    for e in scene.getattr("selection")?.try_iter()?{
+        let e=e?;
+        if e.is_instance(&face)?{keys.append(e.getattr("key")?)?;}
+    }
+    if keys.is_empty(){
+        vp.call_method1("flash_status",(translated(py,"Select faces in the active editing context",None)?,4000))?;
+        return Ok(())
+    }
+    if faceted {
+        let result=api.call_method1("make_faceted",(&history,&keys))?;
+        if !result.get_item("ok")?.is_truthy()?{
+            vp.call_method1("flash_status",(result.get_item("error")?.str()?,6000))?;
+        }
+    }else{
+        let dialogs=py.import("built_render.chrome_dialogs")?;
+        let title=translated(py,"Recover exact geometry",None)?;
+        let report=match api.call_method1("recover_exact_geometry",(&history,&keys)){
+            Ok(p)=>p,Err(e)=>{dialogs.call_method1("information",(win,title,e.value(py).str()?))?;return Ok(())}
+        };
+        let vars=PyDict::new(py);
+        for k in ["faces","max_residual_m","input_volume_m3","output_volume_m3"]{
+            let v=report.get_item(k)?;
+            vars.set_item(k,if v.is_none(){translated(py,"Open selection",None)?}else{v})?;
+        }
+        let mut detail=message(py,"Planar supports · {faces} faces\nMaximum residual: {max_residual_m} m\nInput volume (m³): {input_volume_m3}\nOutput volume (m³): {output_volume_m3}",&vars)?;
+        for reason in report.get_item("untouched")?.extract::<Vec<String>>()?{detail.push('\n');detail.push_str(&reason);}
+        let buttons=PyList::new(py,[("cancel",translated(py,"Cancel",None)?),("apply",translated(py,"Apply",None)?)])?;
+        let kw=PyDict::new(py);kw.set_item("cancel","cancel")?;kw.set_item("default","cancel")?;
+        if dialogs.call_method("ask",(win,title,detail,buttons),Some(&kw))?.eq("apply")?{
+            let result=api.call_method1("recover_exact_geometry",(&history,&keys,0.0001,false))?;
+            if !result.get_item("ok")?.is_truthy()?{
+                vp.call_method1("flash_status",(result.get_item("error")?.str()?,6000))?;
+            }
+        }
+    }
+    vp.call_method0("update")?;Ok(())
 }

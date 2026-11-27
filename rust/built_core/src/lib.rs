@@ -218,6 +218,7 @@ mod object_weld;
 mod object_merge;
 mod panic_log;
 mod sheets;
+mod step;
 mod stl;
 mod alignment;
 mod formats;

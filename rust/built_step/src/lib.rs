@@ -61,9 +61,9 @@ use std::io::Write;
 use std::path::Path;
 use step_io::build::Frame;
 
-pub struct Definition {
+pub struct Definition<B = planar::Body> {
     pub name: String,
-    pub bodies: Vec<planar::Body>,
+    pub bodies: Vec<B>,
     /// Direct child definitions with rigid, definition-local placements in metres.
     pub children: Vec<(usize, Frame)>,
 }
@@ -71,12 +71,28 @@ pub struct Definition {
 /// Writes planar solids, one product per definition. Validate the file on disk
 /// before replacing an existing destination, including for in-place conversions.
 pub fn write_document(definitions: &[Definition], path: &Path) -> Result<(), String> {
-    let mut builder = step_io::StepBuilder::new();
+    write_checked(definitions, path, 1e-7, planar::Body::add, |_, s, m| {
+        planar::Body::from_solid(s, m)?.volume()
+    })
+}
+
+pub fn write_checked<B>(
+    definitions: &[Definition<B>],
+    path: &Path,
+    uncertainty_mm: f64,
+    add: impl Fn(&B, &mut step_io::StepBuilder, step_io::build::Part, &str) -> Result<f64, String>,
+    measure: impl Fn(&StepModel, step_io::scene::Solid<'_>, f64) -> Result<f64, String>,
+) -> Result<(), String> {
+    let mut builder = step_io::StepBuilder::new_with(&step_io::build::UnitsInput {
+        uncertainty: uncertainty_mm,
+        ..Default::default()
+    })
+    .map_err(|e| e.to_string())?;
     let parts: Vec<_> = definitions.iter().map(|d| builder.part(&d.name)).collect();
     let mut volumes = Vec::new();
     for (definition, &part) in definitions.iter().zip(&parts) {
         for body in &definition.bodies {
-            volumes.push(body.add(&mut builder, part, &definition.name)?);
+            volumes.push(add(body, &mut builder, part, &definition.name)?);
         }
         for (child, at) in &definition.children {
             let &child = parts.get(*child).ok_or("invalid occurrence target")?;
@@ -124,7 +140,7 @@ pub fn write_document(definitions: &[Definition], path: &Path) -> Result<(), Str
     let metres = scene.units().length.ok_or("missing length unit")?.to_si;
     let mut restored = Vec::new();
     for solid in scene.all_solids() {
-        restored.push(planar::Body::from_solid(solid, metres)?.volume()?);
+        restored.push(measure(&check.0, solid, metres)?);
     }
     volumes.sort_by(f64::total_cmp);
     restored.sort_by(f64::total_cmp);

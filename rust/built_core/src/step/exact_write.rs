@@ -1,0 +1,140 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+use crate::{
+    exact::{Curve, Frame, Rows, Surface},
+    store::native::NativePatch,
+};
+use built_step::{
+    planar::Body,
+    step_io::{
+        build::{CurveInput, FaceBoundInput, Frame as OutputFrame, Part, SurfaceInput},
+        scene::Solid,
+        Orientation, StepBuilder, StepModel,
+    },
+};
+use glam::DVec3;
+use std::{collections::HashMap, sync::Arc};
+
+pub(super) enum Geometry {
+    Facets(Body),
+    Exact(Arc<NativePatch>),
+}
+
+fn frame(f: &Frame) -> OutputFrame {
+    OutputFrame {
+        origin: (f.origin * 1000.).to_array(),
+        axis: f.axis.to_array(),
+        ref_dir: f.reference.to_array(),
+    }
+}
+fn orient(rev: bool) -> Orientation {
+    if rev {
+        Orientation::Reversed
+    } else {
+        Orientation::Forward
+    }
+}
+fn volume(rows: &Rows, tolerance: f64) -> Result<f64, String> {
+    let mut t = rows.topology.clone().ok_or("missing topology")?;
+    t.tolerance = tolerance;
+    let mesh = t.mesh(rows)?;
+    let base = DVec3::from(*mesh.points.first().ok_or("empty solid")?);
+    let volume = mesh
+        .triangles
+        .iter()
+        .map(|tri| {
+            let [a, b, c] = tri.map(|i| DVec3::from(mesh.points[i]) - base);
+            a.dot(b.cross(c)) / 6.
+        })
+        .sum::<f64>();
+    if !volume.is_finite() || volume <= 0. {
+        return Err("nonpositive shell volume".into());
+    }
+    Ok(volume)
+}
+
+impl Geometry {
+    pub(super) fn add(
+        &self,
+        b: &mut StepBuilder,
+        part: Part,
+        name: &str,
+        tol: f64,
+    ) -> Result<f64, String> {
+        let Self::Exact(p) = self else {
+            let Self::Facets(body) = self else {
+                unreachable!()
+            };
+            return body.add(b, part, name);
+        };
+        let t = p.topology();
+        let mut vertices = HashMap::new();
+        for (&id, point) in &t.vertices {
+            vertices.insert(
+                id,
+                b.vertex((*point * 1000.).to_array())
+                    .map_err(|e| e.to_string())?,
+            );
+        }
+        let mut edges = HashMap::new();
+        for e in &t.edges {
+            let curve = match &p.rows.curves[e.curve as usize] {
+                Curve::Line { direction, .. } => CurveInput::LineAlong(direction.to_array()),
+                Curve::Circle { frame: f, radius } => CurveInput::Circle(frame(f), radius * 1000.),
+                Curve::Ellipse {
+                    frame: f,
+                    major,
+                    minor,
+                } => CurveInput::Ellipse(frame(f), major * 1000., minor * 1000.),
+                _ => return Err("unsupported STEP boundary curve".into()),
+            };
+            let [a, z] = e.vertices;
+            edges.insert(
+                e.id,
+                b.edge(vertices[&a], vertices[&z], curve)
+                    .map_err(|e| e.to_string())?,
+            );
+        }
+        let mut faces = Vec::new();
+        let mut uses = HashMap::<u64, Vec<bool>>::new();
+        for f in &t.faces {
+            let surface = match &p.rows.surfaces[f.surface as usize] {
+                Surface::Plane { frame: f } => SurfaceInput::Plane(frame(f)),
+                Surface::Cylinder { frame: f, radius } => {
+                    SurfaceInput::Cylinder(frame(f), radius * 1000.)
+                }
+                _ => return Err("unsupported STEP face support".into()),
+            };
+            let mut bounds = Vec::new();
+            for (i, ring) in f.loops.iter().enumerate() {
+                let mut coedges = Vec::new();
+                for c in ring {
+                    let id = c.edge.ok_or("unsupported singular bound")?;
+                    uses.entry(id).or_default().push(c.reversed);
+                    coedges.push((edges[&id], orient(c.reversed)));
+                }
+                bounds.push(FaceBoundInput {
+                    edges: coedges,
+                    outer: i == 0,
+                    orientation: Orientation::Forward,
+                })
+            }
+            faces.push(
+                b.face(surface, orient(f.reversed), bounds)
+                    .map_err(|e| e.to_string())?,
+            );
+        }
+        if uses.len() != edges.len() || uses.values().any(|v| v.len() != 2 || v[0] == v[1]) {
+            return Err("STEP solid requires a closed, oriented shell".into());
+        }
+        b.solid(part, name, faces).map_err(|e| e.to_string())?;
+        volume(&p.rows, tol)
+    }
+}
+pub(super) fn reopened(model: &StepModel, s: Solid<'_>, m: f64, tol: f64) -> Result<f64, String> {
+    if let Ok(body) = Body::from_solid(s, m) {
+        return body.volume();
+    }
+    let rows = super::exact_read::rows(model, s, m, tol)?;
+    let patch = NativePatch::new(rows)?;
+    volume(&patch.rows, tol)
+}

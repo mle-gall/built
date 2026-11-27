@@ -16,7 +16,7 @@ pub struct Body {
 }
 
 impl Body {
-    fn plane(&self, rings: &[Vec<usize>]) -> Result<(Frame, f64), String> {
+    pub fn plane(&self, rings: &[Vec<usize>]) -> Result<(Frame, f64), String> {
         if rings.is_empty() {
             return Err("face without bounds".into());
         }

@@ -203,6 +203,13 @@ fn import_picture(win: &Bound<'_, PyAny>) -> PyResult<()> {
     )
 }
 #[pyfunction]
+fn pick_step_file(win: &Bound<'_, PyAny>) -> PyResult<()> {
+    if let Some(path) = file_picker(win, "getOpenFileName", "Import STEP", "", "STEP (*.step *.stp);;All files (*)")? {
+        win.py().import("built_render")?.call_method1("import_file", (win, path, "step"))?;
+    }
+    Ok(())
+}
+#[pyfunction]
 fn pick_mesh_file(win: &Bound<'_, PyAny>, stl: bool) -> PyResult<()> {
     let (title, filter) = if stl {
         ("Import STL", "STL mesh (*.stl);;All files (*)")
@@ -544,6 +551,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(place_figure, m)?)?;
     m.add_function(wrap_pyfunction!(choose_billboard, m)?)?;
     m.add_function(wrap_pyfunction!(import_picture, m)?)?;
+    m.add_function(wrap_pyfunction!(pick_step_file, m)?)?;
     m.add_function(wrap_pyfunction!(pick_mesh_file, m)?)?;
     m.add_function(wrap_pyfunction!(ask_mesh_units, m)?)?;
     m.add_function(wrap_pyfunction!(choose_image_export, m)?)?;

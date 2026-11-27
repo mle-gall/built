@@ -68,6 +68,7 @@ pub(super) fn register_formats(m: &Bound<'_, PyModule>) -> PyResult<()> {
     gltf_maps::register(m)?;
     gltf_mesh::register(m)?;
     gltf_write::register(m)?;
+    crate::step::register(m)?;
     stl::register(m)?;
     alignment::register(m)?;
     survey_pixels::register(m)?;

@@ -454,6 +454,7 @@ impl DeliverySteps {
             "dae" => py
                 .import("built_core.formats.dae")?
                 .call_method1("save_dae", (model, path))?,
+            "step" => py.import("built_core.formats.step")?.call_method1("save_step", (model, path))?,
             "stl" => py.import("built_core.formats.stl")?.call_method1(
                 "save_stl",
                 (model, path, opts.call_method1("get", ("unit", "mm"))?),

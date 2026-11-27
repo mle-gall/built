@@ -15,6 +15,7 @@ mod guides;
 mod paste;
 mod profile_tools;
 mod mesh_tools;
+mod recovery;
 mod document;
 mod drawing;
 mod materials;
@@ -211,6 +212,7 @@ pub(crate) fn register(root: &Bound<'_, PyModule>) -> PyResult<()> {
     paint_place::register(&m)?;
     solids::register(&m)?;
     guides::register(&m)?;
+    recovery::register(&m)?;
     profile_tools::register(&m)?;
     inspectors::register(&m)?;
     mesh_tools::register(&m)?;

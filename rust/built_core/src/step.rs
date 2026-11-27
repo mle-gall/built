@@ -1,0 +1,195 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+mod exact_read;
+mod exact_write;
+use exact_write::Geometry;
+mod import;
+use crate::math::mat;
+use crate::store::py::PyMeshStore;
+use built_step::{planar::Body, step_io::build::Frame, Definition};
+use glam::{DMat4, DVec3};
+use pyo3::{exceptions::PyValueError, prelude::*};
+use std::{collections::HashMap, path::PathBuf};
+
+fn bad(e: impl ToString) -> PyErr {
+    PyValueError::new_err(e.to_string())
+}
+
+fn bodies(mesh: &Bound<'_, PyAny>) -> PyResult<Vec<Geometry>> {
+    let store = mesh.getattr("_store")?.cast_into::<PyMeshStore>()?;
+    let borrow = store.try_borrow()?;
+    let s = &borrow.inner;
+    if let Some(patch) = &s.state.exact.native {
+        return Ok(vec![Geometry::Exact(patch.clone())]);
+    }
+    let d = s.dense();
+    if d.ef_start.windows(2).any(|w| w[0] == w[1]) {
+        return Err(bad("STEP solid contains loose edges"));
+    }
+    if d.ring_counts.is_empty() {
+        return Ok(vec![]);
+    }
+    let mut points = d.corners.into_iter();
+    let mut sizes = d.ring_sizes.into_iter();
+    let faces: Vec<Vec<Vec<usize>>> = d
+        .ring_counts
+        .iter()
+        .map(|&n| {
+            sizes
+                .by_ref()
+                .take(n as usize)
+                .map(|len| {
+                    points
+                        .by_ref()
+                        .take(len as usize)
+                        .map(|i| i as usize)
+                        .collect()
+                })
+                .collect()
+        })
+        .collect();
+    let mut adjacent = vec![Vec::new(); faces.len()];
+    for range in d.ef_start.windows(2) {
+        let fs = &d.ef_face[range[0] as usize..range[1] as usize];
+        if let [a, b] = fs {
+            adjacent[*a as usize].push(*b as usize);
+            adjacent[*b as usize].push(*a as usize);
+        }
+    }
+    let mut seen = vec![false; faces.len()];
+    let mut bodies = Vec::new();
+    for root in 0..faces.len() {
+        if seen[root] {
+            continue;
+        }
+        let mut body = Body::default();
+        let mut stack = vec![root];
+        let mut vertices = HashMap::new();
+        while let Some(f) = stack.pop() {
+            if std::mem::replace(&mut seen[f], true) {
+                continue;
+            }
+            stack.extend(&adjacent[f]);
+            body.faces.push(
+                faces[f]
+                    .iter()
+                    .map(|r| {
+                        r.iter()
+                            .map(|&v| {
+                                *vertices.entry(v).or_insert_with(|| {
+                                    body.points.push(DVec3::from(
+                                        s.state.frame.definition_point(d.pos[v]),
+                                    ));
+                                    body.points.len() - 1
+                                })
+                            })
+                            .collect()
+                    })
+                    .collect(),
+            );
+        }
+        bodies.push(Geometry::Facets(body));
+    }
+    Ok(bodies)
+}
+
+fn placement(m: DMat4) -> PyResult<Frame> {
+    let [x, y, z, t] = m.to_cols_array_2d().map(|a| DVec3::new(a[0], a[1], a[2]));
+    if !m.is_finite()
+        || m.row(3) != glam::DVec4::W
+        || (x.cross(y) - z).length() > 1e-12
+        || (y - z.cross(x)).length() > 1e-12
+    {
+        return Err(bad("STEP occurrence requires a rigid placement"));
+    }
+    Ok(Frame {
+        origin: t.to_array(),
+        axis: z.to_array(),
+        ref_dir: x.to_array(),
+    })
+}
+fn children(
+    groups: &Bound<'_, PyAny>,
+    defs: &mut Vec<Definition<Geometry>>,
+    meshes: &mut HashMap<usize, usize>,
+    parent: usize,
+    depth: u32,
+) -> PyResult<()> {
+    if depth > 256 {
+        return Err(bad("STEP assembly nesting limit exceeded"));
+    }
+    for g in groups.try_iter()? {
+        let g = g?;
+        let mesh = g.getattr("mesh")?;
+        let nested = g.getattr("children")?;
+        let key = mesh.as_ptr() as usize;
+        let leaf = nested.len()? == 0;
+        let known = leaf.then(|| meshes.get(&key).copied()).flatten();
+        let id = if let Some(id) = known {
+            id
+        } else {
+            let id = defs.len();
+            defs.push(Definition {
+                name: g.getattr("name")?.extract()?,
+                bodies: bodies(&mesh)?,
+                children: vec![],
+            });
+            if leaf {
+                meshes.insert(key, id);
+            } else {
+                children(&nested, defs, meshes, id, depth + 1)?;
+            }
+            id
+        };
+        let xf = g.getattr("xform")?;
+        let matrix = if xf.is_none() {
+            DMat4::IDENTITY
+        } else {
+            mat(&xf)?
+        };
+        defs[parent].children.push((id, placement(matrix)?));
+    }
+    Ok(())
+}
+
+#[pyfunction]
+fn save_step(scene: &Bound<'_, PyAny>, path: PathBuf) -> PyResult<()> {
+    let mut defs = vec![Definition {
+        name: "Model".into(),
+        bodies: bodies(&scene.getattr("loose_mesh")?)?,
+        children: vec![],
+    }];
+    children(
+        &scene.getattr("groups")?,
+        &mut defs,
+        &mut HashMap::new(),
+        0,
+        0,
+    )?;
+    scene
+        .py()
+        .detach(|| {
+            let tol = defs
+                .iter()
+                .flat_map(|d| &d.bodies)
+                .filter_map(|g| match g {
+                    Geometry::Exact(p) => Some(p.topology().tolerance),
+                    _ => None,
+                })
+                .fold(1e-10_f64, f64::max);
+            built_step::write_checked(
+                &defs,
+                &path,
+                tol * 1000.,
+                |g, b, p, name| g.add(b, p, name, tol),
+                |m, s, scale| exact_write::reopened(m, s, scale, tol),
+            )
+        })
+        .map_err(bad)
+}
+
+pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(import::prepare_step, m)?)?;
+    m.add_function(wrap_pyfunction!(import::apply_step, m)?)?;
+    m.add_function(wrap_pyfunction!(save_step, m)?)?;
+    Ok(())
+}

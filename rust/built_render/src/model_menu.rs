@@ -91,6 +91,7 @@ fn build_entries() -> Vec<MenuEntry> {
     // File
     add("recover_discarded", "File", "Recover a Discarded Auto-Save…", "", Window("_on_recover_discarded"));
     add("import:obj", "File ▸ Import", "Wavefront OBJ (.obj)…", "", Window("_on_import_obj"));
+    add("import:step", "File ▸ Import", "STEP (.step, .stp)…", "", Window("_on_import_step"));
     add("import:stl", "File ▸ Import", "STL (.stl)…", "", Window("_on_import_stl"));
     for (id, label, method) in [
         ("import:photomesh", "Photogrammetric Mesh (WebODM)…", "_on_import_photomesh"),
@@ -107,6 +108,7 @@ fn build_entries() -> Vec<MenuEntry> {
         ("export:ifc", "IFC (.ifc)…", "ifc"),
         ("export:glb", "glTF (.glb)…", "glb"),
         ("export:dae", "COLLADA (.dae)…", "dae"),
+        ("export:step", "STEP (.step)…", "step"),
         ("export:stl", "STL (.stl)…", "stl"),
         ("export:obj", "Wavefront OBJ (.obj)…", "obj"),
     ] {
@@ -117,6 +119,8 @@ fn build_entries() -> Vec<MenuEntry> {
     add("export:dxf", "File ▸ Export", "Current View as DXF…", "", Export("dxf"));
     add("export:video", "File ▸ Export", "Scenes as Video…", "", Window("export_video"));
     add("export_igz", "File ▸ Export", "Save a Copy as .igz (IngeTrazo)…", "", Shell);
+    add("recover_exact", "Tools", "Recover exact geometry…", "", Window("_on_recover_exact"));
+    add("make_faceted", "Tools", "Make faceted", "", Window("_on_make_faceted"));
     // Edit
     for (id, label, keys, method) in [
         ("repeat_last_command", "Repeat Last Command", "Shift+R", "repeat_last_command"),

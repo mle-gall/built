@@ -44,6 +44,7 @@ pub(super) fn install_codec_modules(package: &Bound<'_, PyModule>) -> PyResult<(
                 ("survey_offset", "survey_offset"),
             ][..],
         ),
+        ("step", "STEP exchange.", &[("save_step", "save_step"), ("prepare_step","prepare_step"), ("apply_step","apply_step")][..]),
         (
             "stl",
             "STL scripting and worker API.",

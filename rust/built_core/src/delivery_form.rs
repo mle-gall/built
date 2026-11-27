@@ -8,9 +8,10 @@ use pyo3::prelude::*;
 use serde_json::{json, Map, Value};
 use std::path::Path;
 
-pub const FORMATS: [&str; 8] = ["ifc", "dxf", "glb", "obj", "dae", "svg", "pdf", "stl"];
-pub const PACKAGE_OUTPUTS: [(&str, &str, &str); 6] = [
+pub const FORMATS: [&str; 9] = ["ifc", "dxf", "glb", "obj", "dae", "svg", "pdf", "stl", "step"];
+pub const PACKAGE_OUTPUTS: [(&str, &str, &str); 7] = [
     ("ifc", "Model + IDS report", "model.ifc"),
+    ("step", "STEP geometry", "model.step"),
     ("pdf", "Sheet set", "sheets.pdf"),
     ("dxf", "Drawings", "drawings.dxf"),
     ("bcf", "Task topics", "topics.bcfzip"),
