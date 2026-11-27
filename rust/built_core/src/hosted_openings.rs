@@ -300,17 +300,24 @@ fn update(scene: &Obj, g: &Obj, remove: bool) -> PyResult<()> {
         }
     }
     if !remove {
-        let Ok(r) = rect(p, world).and_then(|r| if valid(r, &cuts) { Ok(r) } else { Err(err()) })
-        else {
+        let candidate = rect(p, world).ok().filter(|r| valid(*r, &cuts));
+        let changed = guid.is_some() && crate::live::wall_faces_changed(&wall)?;
+        if candidate.is_none() || changed {
+            let reason = if changed {
+                "wall_faces"
+            } else {
+                "opening_overlap"
+            };
             if let Some(relative) = optional(&host, "relative")? {
-                if crate::live::opening_conflict(scene, &wall, g)? {
+                if crate::live::opening_conflict(scene, &wall, g, reason)? {
                     let last = pose(&wall)? * DMat4::from_cols_array(&relative.extract()?);
                     g.setattr("xform", crate::math::Matrix4::from(last))?;
                     return Ok(());
                 }
             }
             return Err(err());
-        };
+        }
+        let r = candidate.unwrap();
         let entry = PyDict::new(py);
         if let Some(id) = guid {
             entry.set_item("guid", id)?;

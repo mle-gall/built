@@ -311,7 +311,28 @@ pub(super) fn resize(
     Ok(Ok(true))
 }
 
-pub(crate) fn opening_conflict(scene: &Obj<'_>, wall: &Obj<'_>, fill: &Obj<'_>) -> PyResult<bool> {
+pub(crate) fn wall_faces_changed(wall: &Obj<'_>) -> PyResult<bool> {
+    let Some(expected) = metadata(wall)?
+        .get_item(EXT)?
+        .and_then(|m| m.get_item("stamp").ok())
+        .and_then(|s| s.extract::<String>().ok())
+    else {
+        return Ok(false);
+    };
+    let mesh = wall
+        .getattr("mesh")?
+        .getattr("_store")?
+        .cast_into::<PyMeshStore>()?;
+    let actual = super::super::geometry::stamp(&mesh.try_borrow()?.inner);
+    Ok(expected != actual)
+}
+
+pub(crate) fn opening_conflict(
+    scene: &Obj<'_>,
+    wall: &Obj<'_>,
+    fill: &Obj<'_>,
+    criterion: &str,
+) -> PyResult<bool> {
     let Some(mut t) = current(scene.py(), root(scene)?) else {
         return Ok(false);
     };
@@ -323,7 +344,7 @@ pub(crate) fn opening_conflict(scene: &Obj<'_>, wall: &Obj<'_>, fill: &Obj<'_>) 
     };
     let row = Arc::make_mut(row);
     row.state = "failed".into();
-    row.joint.reason = serde_json::json!({"criterion":"opening_overlap","role":"hosted"});
+    row.joint.reason = serde_json::json!({"criterion":criterion,"role":if criterion=="wall_faces" {"host"} else {"hosted"}});
     put(scene, t)?;
     Ok(true)
 }

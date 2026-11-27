@@ -12,7 +12,7 @@ mod geometry;
 mod hole;
 mod joints;
 pub(crate) mod junction;
-pub(crate) use junction::hosting::opening_conflict;
+pub(crate) use junction::hosting::{opening_conflict,wall_faces_changed};
 mod presets;
 pub(crate) mod profile;
 mod reference;

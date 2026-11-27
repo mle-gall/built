@@ -750,7 +750,10 @@ fn outside_role(
 
 pub(super) fn evaluate(scene: &Obj<'_>, t: &mut LiveTable, uid: &str) -> PyResult<bool> {
     let mut row = (*t.rows[uid]).clone();
-    if row.joint.reason["criterion"] == "opening_overlap" {
+    if matches!(
+        row.joint.reason["criterion"].as_str(),
+        Some("opening_overlap" | "wall_faces")
+    ) {
         return Ok(false);
     }
     let before = (
