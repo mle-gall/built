@@ -178,3 +178,21 @@ def test_off_support_intersection_leaves_only_affected_facets_unbound():
     assert len(touched) == 2
     assert all(not st.exact_face(f.key) for f in touched)
     assert all(st.exact_face(f.key) for f in walls if f not in touched)
+
+
+def test_trim_keeps_bound_cutter_in_document(tmp_path):
+    cutter = body("cylinder")
+    plate = _box(-2., -2., .25, 2., 2., 1.75, BLUE)
+    before = exact(cutter.mesh)
+    scene = Scene()
+    scene.groups += [cutter, plate]
+    history = History(scene)
+    history.execute(solids.SolidOperationCommand("trim", [cutter, plate]))
+    assert cutter in scene.groups and plate not in scene.groups
+    assert exact(cutter.mesh) == before
+    path = tmp_path / "trim.built"
+    igz.save_scene(scene, path)
+    reopened = Scene()
+    igz.load_into(reopened, path)
+    assert exact(reopened.groups[0].mesh) == before
+    assert solids.solid_volume(reopened.groups[1]) == pytest.approx(19.5)
