@@ -42,6 +42,14 @@ fn bodies(mesh: &Bound<'_, PyAny>) -> PyResult<Vec<Geometry>> {
             .map(|p| Geometry::Exact(std::sync::Arc::new(p)))
             .collect());
     }
+    if s.state.exact.curved.is_some() {
+        // Store curves on two different faceted faces can be valid for just
+        // one of their supports. Write an analytic shell only when its shared
+        // trims also certify as a whole; the editable polygons remain usable.
+        if let Ok(patches) = bands::recover(s) {
+            return Ok(patches.into_iter().map(|p| Geometry::Exact(std::sync::Arc::new(p))).collect());
+        }
+    }
     let d = s.dense();
     if d.ef_start.windows(2).any(|w| w[0] == w[1]) {
         return Err(bad("STEP solid contains loose edges"));

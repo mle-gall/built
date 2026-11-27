@@ -922,7 +922,7 @@ impl Support {
 }
 
 /// Validate editable facet trims in the support's unwrapped parameter space.
-pub(crate) fn trim_region(s: &Support, rings: &[Vec<DVec3>], tol: f64) -> Option<()> {
+pub(crate) fn trim_region(s: &Support, rings: &[Vec<DVec3>], tol: f64) -> Option<Vec<Vec<DVec2>>> {
     let periodic = s.periodic();
     let mut uv_rings: Vec<Vec<DVec2>> = Vec::new();
     let mut previous: Option<DVec2> = None;
@@ -1003,7 +1003,8 @@ pub(crate) fn trim_region(s: &Support, rings: &[Vec<DVec3>], tol: f64) -> Option
         previous = uv_ring.first().copied();
         uv_rings.push(uv_ring);
     }
-    super::validate_polygon(&uv_rings).ok()
+    super::validate_polygon(&uv_rings).ok()?;
+    Some(uv_rings)
 }
 
 #[cfg(test)]

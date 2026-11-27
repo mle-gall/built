@@ -197,37 +197,11 @@ pub(super) fn rectangle(
     let [f] = t.faces.as_slice() else {
         return Ok(None);
     };
-    let [ring] = f.loops.as_slice() else {
+    let Some((corners, origin, _, _)) = rectangle_corners(f, rows) else {
         return Ok(None);
     };
-    let [a, b, c, d] = ring.as_slice() else {
-        return Ok(None);
-    };
-    if ring.iter().any(|u| u.projected) {
-        return Ok(None);
-    }
+    let [_, _, c, _] = corners;
     let surface = &rows.surfaces[f.surface as usize];
-    if !matches!(
-        surface,
-        Surface::Spline { .. }
-            | Surface::Extrusion { .. }
-            | Surface::Revolution { .. }
-            | Surface::Torus { .. }
-            | Surface::Sphere { .. }
-    ) {
-        return Ok(None);
-    }
-    let origin = a.uv[0];
-    let u = a.uv[1] - origin;
-    let v = b.uv[1] - b.uv[0];
-    if u.dot(v).abs() > 1e-13 * u.length() * v.length()
-        || u.x.abs().min(u.y.abs()) > 1e-13 * u.length()
-        || v.x.abs().min(v.y.abs()) > 1e-13 * v.length()
-        || c.uv[1].distance(origin + v) > 1e-13
-        || d.uv[1].distance(origin) > 1e-13
-    {
-        return Ok(None);
-    }
     let lo = origin.min(c.uv[0]);
     let hi = origin.max(c.uv[0]);
     let bound = surface.acceleration(&rows.curves, lo, hi)?;
@@ -256,6 +230,152 @@ pub(super) fn rectangle(
         ids.push(verts[&e.vertices[1]]);
         m.edge_samples.insert(e.id, ids);
     }
+    let edges = std::mem::take(&mut m.edge_samples);
+    grid(&mut m, f, rows, &edges, &verts, n, tol)?;
+    m.edge_samples = edges;
+    Ok(Some(m))
+}
+
+/// Return both parameter axes in boundary order, including reversed uses.
+fn rectangle_corners<'a>(
+    f: &'a Face,
+    rows: &Rows,
+) -> Option<([&'a Coedge; 4], DVec2, DVec2, DVec2)> {
+    let [ring] = f.loops.as_slice() else {
+        return None;
+    };
+    let [a, b, c, d] = ring.as_slice() else {
+        return None;
+    };
+    if ring.iter().any(|u| u.projected) {
+        return None;
+    }
+    let surface = &rows.surfaces[f.surface as usize];
+    if !matches!(
+        surface,
+        Surface::Spline { .. }
+            | Surface::Extrusion { .. }
+            | Surface::Revolution { .. }
+            | Surface::Torus { .. }
+            | Surface::Sphere { .. }
+    ) {
+        return None;
+    }
+    let origin = a.uv[0];
+    let u = a.uv[1] - origin;
+    let v = b.uv[1] - b.uv[0];
+    if u.dot(v).abs() > 1e-13 * u.length() * v.length()
+        || u.x.abs().min(u.y.abs()) > 1e-13 * u.length()
+        || v.x.abs().min(v.y.abs()) > 1e-13 * v.length()
+        || c.uv[1].distance(origin + v) > 1e-13
+        || d.uv[1].distance(origin) > 1e-13
+    {
+        return None;
+    }
+    Some(([a, b, c, d], origin, u, v))
+}
+
+/// A toroidal facet has two curved directions. Adjacent trims have to
+/// use the same samples as each other and as any planar cut face.
+pub(super) fn torus_grids(
+    t: &Topology,
+    rows: &Rows,
+    tol: f64,
+    grid_counts: &HashMap<u64, usize>,
+    counts: &mut HashMap<u64, usize>,
+) -> Result<std::collections::HashMap<u64, usize>> {
+    let mut neighbours: HashMap<u64, Vec<u64>> = HashMap::new();
+    let mut face_edges = Vec::new();
+    let mut required: HashMap<u64, usize> = HashMap::new();
+    for f in &t.faces {
+        let surface = &rows.surfaces[f.surface as usize];
+        if !matches!(surface, Surface::Torus { .. }) {
+            continue;
+        }
+        let Some((uses, origin, u, v)) = rectangle_corners(f, rows) else {
+            continue;
+        };
+        let [Some(a), Some(b), Some(c), Some(d)] = uses.map(|e| e.edge) else {
+            continue;
+        };
+        let bound = surface.acceleration(&rows.curves, origin, origin + u + v)?;
+        // The barycentric variance on an interval of width w is at most
+        // w²/4. Taylor's bound for a toroidal grid cell is therefore
+        // acceleration/(8 n²), including the mixed derivative term.
+        // Reserve the other half of the deflection for boundary residuals.
+        let n = super::patch::divisions(bound, tol * 4.)?.max(surface.angular_steps(
+            origin,
+            origin + u + v,
+            t.normal_tolerance,
+        )?);
+        for id in [a, b, c, d] {
+            neighbours.entry(id).or_default().push(a);
+            neighbours.entry(a).or_default().push(id);
+            let edge_min = *grid_counts.get(&id).ok_or("missing trim edge")?;
+            let count = required.entry(id).or_default();
+            *count = (*count).max(n).max(edge_min);
+        }
+        face_edges.push((f.id, a));
+    }
+    if face_edges.is_empty() {
+        return Ok(HashMap::new());
+    }
+    let regular: std::collections::HashSet<_> = face_edges.iter().map(|&(f, _)| f).collect();
+    for f in &t.faces {
+        if regular.contains(&f.id)
+            || matches!(rows.surfaces[f.surface as usize], Surface::Plane { .. })
+        {
+            continue;
+        }
+        for id in f.loops.iter().flatten().filter_map(|c| c.edge) {
+            if let Some(n) = required.get_mut(&id) {
+                *n = (*n).max(counts[&id]);
+            }
+        }
+    }
+    for &(_, start) in &face_edges {
+        if !neighbours.contains_key(&start) {
+            continue;
+        }
+        let mut stack = vec![start];
+        let mut component = Vec::new();
+        let mut n = 1;
+        while let Some(id) = stack.pop() {
+            if let Some(adjacent) = neighbours.remove(&id) {
+                stack.extend(adjacent);
+                component.push(id);
+                n = n.max(required[&id]);
+            }
+        }
+        for edge in component {
+            counts.insert(edge, n);
+        }
+    }
+    Ok(face_edges
+        .into_iter()
+        .map(|(f, e)| (f, counts[&e]))
+        .collect())
+}
+
+pub(super) fn grid(
+    m: &mut Mesh,
+    f: &Face,
+    rows: &Rows,
+    edges: &std::collections::BTreeMap<u64, Vec<usize>>,
+    verts: &HashMap<u64, usize>,
+    n: usize,
+    tol: f64,
+) -> Result<()> {
+    let ([a, b, c, d], origin, u, v) =
+        rectangle_corners(f, rows).ok_or("invalid rectangular trim")?;
+    if m.points
+        .len()
+        .saturating_add(n.saturating_sub(1).saturating_pow(2))
+        > 4_000_000
+    {
+        return Err("tessellation vertex budget exceeded");
+    }
+    let surface = &rows.surfaces[f.surface as usize];
     let uv = |i: usize, j: usize| origin + u * (i as f64 / n as f64) + v * (j as f64 / n as f64);
     let mut previous = Vec::new();
     for j in 0..=n {
@@ -276,7 +396,7 @@ pub(super) fn rectangle(
             };
             let id = if let Some((e, h)) = side {
                 match e.edge {
-                    Some(id) => m.edge_samples[&id][if e.reversed { n - h } else { h }],
+                    Some(id) => edges[&id][if e.reversed { n - h } else { h }],
                     None => verts[&e.pole.unwrap()],
                 }
             } else {
@@ -285,20 +405,20 @@ pub(super) fn rectangle(
                 id
             };
             if p.distance(m.points[id].into()) > tol / 2. {
-                return Ok(None);
+                return Err("grid boundary disagrees with support");
             }
             current.push(id);
         }
         if j > 0 {
             for i in 0..n {
                 triangle(
-                    &mut m,
+                    m,
                     f,
                     [previous[i], previous[i + 1], current[i + 1]],
                     [uv(i, j - 1), uv(i + 1, j - 1), uv(i + 1, j)],
                 );
                 triangle(
-                    &mut m,
+                    m,
                     f,
                     [previous[i], current[i + 1], current[i]],
                     [uv(i, j - 1), uv(i + 1, j), uv(i, j)],
@@ -307,7 +427,7 @@ pub(super) fn rectangle(
         }
         previous = current;
     }
-    Ok(Some(m))
+    Ok(())
 }
 
 /// Triangulate an axis-aligned band directly between the two ordered rim

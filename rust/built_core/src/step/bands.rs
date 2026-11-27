@@ -42,7 +42,9 @@ impl Builder<'_> {
             return Ok((id, (ends[0] != from) ^ rev));
         }
         let pure = self.st.state.exact.arcs.as_ref().and_then(|a| a.get(&e));
-        let (curve, mut interval) = if let Some(a) = pure {
+        let (curve, mut interval) = if let Some(binding) = self.st.curved_edge(e) {
+            (binding.curve.clone(), binding.interval)
+        } else if let Some(a) = pure {
             (
                 Curve::Circle {
                     frame: (*a.frame).clone(),
@@ -122,6 +124,10 @@ impl Builder<'_> {
                 let (id, reversed) = self.edge(e, v)?;
                 curved |= self
                     .st
+                    .curved_edge(e)
+                    .is_some_and(|b| !matches!(b.curve, Curve::Line { .. }));
+                curved |= self
+                    .st
                     .state
                     .exact
                     .arcs
@@ -144,6 +150,54 @@ impl Builder<'_> {
             }
         }
         self.face(Surface::Plane { frame }, loops, false);
+        Ok(())
+    }
+    fn bound_face(&mut self, f: u32, support: &crate::exact::bound::Support) -> Result<()> {
+        let rings = self.st.face_rings(f);
+        let points: Vec<Vec<_>> = rings
+            .iter()
+            .map(|r| r.iter().map(|&v| self.point(v)).collect())
+            .collect();
+        let charts =
+            crate::exact::bound::trim_region(support, &points, TOL).ok_or("invalid bound trim")?;
+        let mut loops = Vec::new();
+        for (ring, uv) in rings.iter().zip(&charts) {
+            if ring.len() != uv.len() {
+                return Err("singular bound trim");
+            }
+            let mut uses = Vec::new();
+            for (i, &v) in ring.iter().enumerate() {
+                let j = (i + 1) % ring.len();
+                let e = self.st.find_edge(v, ring[j]).ok_or("missing trim edge")?;
+                let (id, reversed) = self.edge(e, v)?;
+                uses.push(Coedge {
+                    edge: Some(id),
+                    pole: None,
+                    reversed,
+                    projected: false,
+                    uv: [uv[i], uv[j]],
+                    tolerance: TOL,
+                });
+            }
+            loops.push(uses);
+        }
+        let outer = &charts[0];
+        let reversed = outer
+            .iter()
+            .zip(outer.iter().cycle().skip(1))
+            .map(|(a, b)| (*a - outer[0]).perp_dot(*b - outer[0]))
+            .sum::<f64>()
+            < 0.;
+        let mut surface = support.surface.clone();
+        if let Surface::Extrusion { generator, .. } | Surface::Revolution { generator, .. } =
+            &mut surface
+        {
+            *generator = self.rows.curves.len() as u32;
+            self.rows
+                .curves
+                .push(support.generator.clone().ok_or("missing generator")?);
+        }
+        self.face(surface, loops, reversed);
         Ok(())
     }
     fn band(
@@ -320,7 +374,9 @@ fn component(st: &Store, faces: Vec<u32>) -> Result<NativePatch> {
     }
     let mut visited = HashSet::new();
     for f in faces {
-        if quads.contains_key(&f) {
+        if let Some(support) = st.curved_face(f) {
+            b.bound_face(f, support)?;
+        } else if quads.contains_key(&f) {
             if !visited.contains(&f) {
                 b.band(f, &quads, &mut visited)?;
             }
