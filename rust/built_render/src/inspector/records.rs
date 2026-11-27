@@ -88,15 +88,19 @@ impl Records {
     ) {
         if let Some(row)=self.sweep.as_object(){
             kit::disclosure(ui,"sweep record","Sweep",true,|ui|{
-                let visible=(ui.clip_rect().right()-ui.cursor().min.x-8.).max(1.);
-                ui.set_width(ui.available_width().min(visible));
-                for (key,title) in [("profile_name","Profile"),("preset","Preset"),("attachment","Attachment"),("state","State")]{
-                    if let Some(value)=row.get(key).and_then(Value::as_str){kit::prop_row(ui,title,value);}
+                let property = |ui: &mut egui::Ui, name: &str, value: &str| {
+                    kit::property_control(ui, name, |ui| { ui.label(value); });
+                };
+                for (key, title) in [("profile_name", "Profile"), ("preset", "Preset"), ("attachment", "Attachment"), ("state", "State")] {
+                    if let Some(value) = row.get(key).and_then(Value::as_str) {
+                        property(ui, title, value);
+                    }
                 }
-                kit::prop_row(ui,"Rotation",&format!("{}°",self.sweep["rotation"]));
-                kit::prop_row(ui,"Mirror",if self.sweep["mirror"]==true{"On"}else{"Off"});
-                if let Some(path)=self.sweep["resolved_points"].as_array() {
-                    kit::prop_row(ui,"Path",&format!("{} spans",path.len().saturating_sub(1)+usize::from(self.sweep["path"]["closed"]==true)));
+                property(ui, "Rotation", &format!("{}°", self.sweep["rotation"]));
+                property(ui, "Mirror", if self.sweep["mirror"] == true { "On" } else { "Off" });
+                if let Some(path) = self.sweep["resolved_points"].as_array() {
+                    let count = path.len().saturating_sub(1) + usize::from(self.sweep["path"]["closed"] == true);
+                    property(ui, "Path", &format!("{count} {}", if count == 1 { "span" } else { "spans" }));
                     if path.len()>2{
                         let current=usize::from(self.sweep["corner"]=="butt");
                         let mut selected=current;
