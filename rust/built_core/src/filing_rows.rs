@@ -119,8 +119,9 @@ pub(crate) fn refresh_unfiled(scene: &Obj<'_>, tree: &Obj<'_>) -> PyResult<bool>
 }
 
 struct Catalogue<'py> {
-    cuts: HashMap<String,Vec<(String,String,bool)>>,
-    repeats: HashMap<String,String>,
+    junctions: HashMap<String, Vec<(String, String, String)>>,
+    cuts: HashMap<String, Vec<(String, String, bool)>>,
+    repeats: HashMap<String, String>,
     scene: Obj<'py>,
     tree: Obj<'py>,
     nodes: Obj<'py>,
@@ -326,13 +327,34 @@ impl<'py> Catalogue<'py> {
                 return Ok(());
             }
         }
-        let cuts=if self.cuts.is_empty(){None}else{self.cuts.get(&g.getattr("uid")?.extract::<String>()?)};
-        r.1[7] = (kids.is_truthy()? || cuts.is_some()) as i64;
+        let cuts = if self.cuts.is_empty() {
+            None
+        } else {
+            self.cuts.get(&g.getattr("uid")?.extract::<String>()?)
+        };
+        let junctions = if self.junctions.is_empty() {
+            None
+        } else {
+            self.junctions.get(&g.getattr("uid")?.extract::<String>()?)
+        };
+        r.1[7] = (kids.is_truthy()? || cuts.is_some() || junctions.is_some()) as i64;
         r.1[8] = open as i64;
         rows.push(r);
         if open {
-            for (id,label,on) in cuts.into_iter().flatten() {
-                rows.push(crate::project_tree::cut_row(id,label,*on,d+1));
+            for (path, name, state) in junctions.into_iter().flatten() {
+                rows.push(row(
+                    format!("g:{path}"),
+                    name.clone(),
+                    state,
+                    "group",
+                    d + 1,
+                    3,
+                    0,
+                    0,
+                ));
+            }
+            for (id, label, on) in cuts.into_iter().flatten() {
+                rows.push(crate::project_tree::cut_row(id, label, *on, d + 1));
             }
             let max = self.cap(&key);
             if self.filter.is_empty() {
@@ -564,8 +586,9 @@ pub(crate) fn filing_rows<'py>(
         Ok(text(cls)?.trim_start_matches("Ifc").to_string())
     };
     let mut c = Catalogue {
-        cuts:crate::live::cut_labels(&scene)?,
-        repeats:crate::live::repeat_labels(&scene)?,
+        junctions: crate::live::junction::labels(&scene)?,
+        cuts: crate::live::cut_labels(&scene)?,
+        repeats: crate::live::repeat_labels(&scene)?,
         scene,
         tree: tree.clone(),
         nodes: nodes.clone(),

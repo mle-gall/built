@@ -871,12 +871,35 @@ fn selection_box_vertices<'py>(a: &Args<'py>) -> Reply<'py> {
     (key, cache.get_item("vertices")?).into_bound_py_any(py)
 }
 
-pub(super) fn cutter_primitives<'py>(view:&Obj<'py>,scene:&Obj<'py>)->Reply<'py>{
-    let py=view.py();
-    let result=empty(py);
-    let all=attr_flag(scene,"show_all_cutters",false)?;
-    if !all && !scene.getattr("selection")?.is_truthy()? {return Ok(result.into_any());}
-    let items=py.import("built_core.command_protocol")?.call_method1("live_cut_display",(scene,))?;
+pub(super) fn cutter_primitives<'py>(view: &Obj<'py>, scene: &Obj<'py>) -> Reply<'py> {
+    let py = view.py();
+    let result = empty(py);
+    let all = attr_flag(scene, "show_all_cutters", false)?;
+    if !all && !scene.getattr("selection")?.is_truthy()? {
+        return Ok(result.into_any());
+    }
+    let api = py.import("built_core.command_protocol")?;
+    for marker in api.call_method1("junction_markers", (scene,))?.try_iter()? {
+        let marker = marker?;
+        let pixel = view.call_method1("_world_to_pixel", (vec3(py, &marker.get_item(0)?)?,))?;
+        if let Ok((x, y)) = pixel.extract::<(f64, f64)>() {
+            let points = [
+                (x - 5., y),
+                (x, y - 5.),
+                (x + 5., y),
+                (x, y + 5.),
+                (x - 5., y),
+            ];
+            let color = if marker.get_item(1)?.is_truthy()? {
+                crate::ui::tokens::OK
+            } else {
+                crate::ui::tokens::WARN
+            };
+            let color = format!("#{:02x}{:02x}{:02x}", color.r(), color.g(), color.b());
+            result.append(primitive(py, ("polyline", points, color, 2.), None)?)?;
+        }
+    }
+    let items = api.call_method1("live_cut_display", (scene,))?;
     for item in items.try_iter()? {
         let item=item?;
         for ab in item.get_item("lines")?.try_iter()? {
