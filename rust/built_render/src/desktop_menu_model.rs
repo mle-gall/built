@@ -194,6 +194,8 @@ pub const GROUPS: &[(&str, &[Row])] = &[
             Row::Separator,
             Row::Entry("tool:tape"),
             Row::Entry("tool:protractor"),
+            Row::Entry("tool:change_axes"),
+            Row::Sub("Drawing Axes"),
             Row::Entry("tool:dimension"),
             Row::Entry("tool:text"),
             Row::Entry("text3d"),

@@ -1006,9 +1006,8 @@ pub(super) fn install(module: &Bound<PyModule>) -> PyResult<()> {
         let attrs = PyDict::new(py);
         attrs.set_item("__module__", module.name()?)?;
         attrs.set_item("kind", "change_axes")?;
-        attrs.set_item("shortcut", none(py))?;
-        attrs.set_item("description", none(py))?;
         attrs.set_item("target", none(py))?;
+        attrs.set_item("align_face", false)?;
         attrs.set_item(
             "start_point",
             module.getattr("_point_property")?.call1(("start_point",))?,

@@ -184,3 +184,34 @@ def test_a_component_made_inside_is_placed_on_the_contexts_axes():
     got = sorted((round(v.position.x(), 4), round(v.position.y(), 4))
                  for v in world_mesh(g).vertices)
     assert got == sorted((round(p.x(), 4), round(p.y(), 4)) for p in pts)
+
+
+def test_typed_world_axes_control_viewport_inference_and_arrow_lock():
+    from tests.controller_surface import ControllerSurface
+    from tools.change_axes import ChangeAxesTool
+    from tools.rust_tools import LineTool
+    from built_core.snap import _detect_axis_alignment
+
+    vp = ControllerSurface(None)
+    vp.resize(1000, 700)
+    vp.camera.set_aspect(1000, 700)
+    vp.camera.set_view("top")
+    vp.camera.target = V(2, 1)
+    vp.camera.distance = 12
+    tool = ChangeAxesTool()
+    tool.on_activate(vp)
+    assert tool.on_value(vp, (2., 1., 0.))
+    assert tool.on_value(vp, 30.)
+    assert tool.on_value(vp, 0.)
+    vp._sync_axes()
+    origin = V(2, 1)
+    red = V(math.cos(math.pi/6), 0.5)
+    assert _detect_axis_alignment(origin, origin + red, 3.) == "x"
+    line = LineTool()
+    vp.active_tool = line
+    line.start_point = origin
+    vp.axis_lock = "x"
+    vp._last_mouse_pos = QPointF(*vp._world_to_pixel(V(3.5, 3)))
+    vp._refresh_snap()
+    along = (vp.last_snap.point - origin).normalized()
+    assert _close(along, red) or _close(along, -red)

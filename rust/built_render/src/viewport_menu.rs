@@ -1064,6 +1064,12 @@ fn context_menu_open_at<'py>(view: &Bound<'py, PyAny>, x: f64, y: f64) -> PyResu
         PyList::new(view.py(), items(&source.getattr("scene")?.getattr("selection")?)?)?
     };
     let mut menu = build(&win, Some(view), Some(sel.as_any()), locked_image.as_ref(), locked_group.as_ref())?;
+    if picked.is_none() && locked_image.is_none() && locked_group.is_none() && crate::axes_commands::hit(view, &source.getattr("scene")?, x,y)? {
+        menu.kind = "drawing_axes".into();
+        menu.title = "Drawing Axes".into();
+        menu.subtitle.clear();
+        menu.rows = entries(verbs::menu_rows(&menu.facts, &menu.kind));
+    }
     menu.at = (x, y);
     present(view, menu).map(Some)
 }

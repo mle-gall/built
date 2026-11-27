@@ -44,7 +44,7 @@ fn axes_state<'py>(a: &Args<'py>) -> Reply<'py> {
     let (scene, camera, source) = (a.get_item(0)?, a.get_item(1)?, a.get_item(2)?);
     let origin: Vec<f64> = a.get_item(3)?.try_iter()?.map(|value| value?.extract()).collect::<PyResult<_>>()?;
     let frame = scene.getattr("drawing_frame")?;
-    let mut visible = scene.getattr("show_axes")?.is_truthy()? || !frame.is_none();
+    let mut visible = scene.getattr("show_axes")?.is_truthy()? || !attr(&scene, "edit_group")?.is_none();
     if !source.is_none() {
         visible = visible && source.getattr("plano_style")?.is_none() && source.getattr("style_override")?.is_none();
     }
