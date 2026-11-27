@@ -25,6 +25,10 @@ pub enum Reference {
         #[serde(default)]
         point: Option<String>,
     },
+    Frame {
+        junction: String,
+        frame: String,
+    },
     Slot {
         slot: String,
     },
@@ -105,6 +109,14 @@ pub struct Row {
     pub curves: Option<serde_json::Value>,
     #[serde(flatten)]
     pub sketch_fields: SketchFields,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub junction: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key: Option<String>,
+    #[serde(flatten)]
+    pub joint: super::junction::Fields,
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub frames: super::junction::Frames,
     pub kind: String,
     #[serde(flatten)]
     pub repeat: super::repeat::Fields,
@@ -170,6 +182,7 @@ pub enum Key {
     Root,
     Placement(String),
     Row(String),
+    Stock(String),
 }
 impl Row {
     pub fn references(&self) -> impl Iterator<Item = &Reference> {
@@ -184,16 +197,25 @@ impl Row {
         if let Some(uid) = self.sweep.as_ref().and_then(|s| s.profile.sketch.as_ref()) {
             keys.insert(Key::Row(uid.clone()));
         }
+        for owner in self.junction.iter().chain(self.joint.parent.iter()) {
+            keys.insert(Key::Row(owner.clone()));
+        }
         for r in self.references() {
             match r {
                 Reference::Point(_) | Reference::Slot { .. } => (),
                 Reference::Axis { sweep, .. } => {
-                    keys.insert(Key::Row(sweep.clone()));
+                    keys.insert(Key::Stock(sweep.clone()));
+                }
+                Reference::Frame { junction, .. } => {
+                    keys.insert(Key::Row(junction.clone()));
                 }
                 Reference::Placement { placement } => {
                     keys.insert(Key::Placement(placement.clone()));
                 }
                 Reference::Row { row } => {
+                    if self.kind == "repeat" && self.repeat.run["between"] == *row {
+                        keys.insert(Key::Stock(row.clone()));
+                    }
                     keys.insert(Key::Row(row.clone()));
                 }
                 Reference::Element { path, .. } => {
@@ -212,6 +234,9 @@ impl Row {
 pub struct LiveTable {
     pub presets: Arc<std::collections::BTreeMap<String, super::presets::Preset>>,
     pub cut_targets: OrdSet<String>,
+    pub junctions: OrdSet<String>,
+    pub owned: HashMap<String, OrdSet<String>>,
+    pub stock: HashMap<String, Arc<super::junction::Stock>>,
     pub repeats: OrdSet<String>,
     pub groups: Arc<std::collections::HashMap<String, u64>>,
     pub rows: HashMap<String, Arc<Row>>,
@@ -265,6 +290,16 @@ impl LiveTable {
         self.clear_frames(uid);
         self.cut_targets.remove(uid);
         self.repeats.remove(uid);
+        self.stock.remove(uid);
+        self.junctions.remove(uid);
+        if let Some(owner) = row.junction.as_ref().or(row.joint.parent.as_ref()) {
+            if let Some(children) = self.owned.get_mut(owner) {
+                children.remove(uid);
+                if children.is_empty() {
+                    self.owned.remove(owner);
+                }
+            }
+        }
         if row.kind != "cut" {
             self.owners.remove(&row.owner);
         }
@@ -297,7 +332,20 @@ impl LiveTable {
             self.serial += 1;
             self.serial
         });
+        let stock = self.stock.get(&row.uid).cloned();
         self.remove(&row.uid);
+        if let Some(stock) = stock {
+            self.stock.insert(row.uid.clone(), stock);
+        }
+        if row.kind == "junction" {
+            self.junctions.insert(row.uid.clone());
+        }
+        if let Some(owner) = row.junction.as_ref().or(row.joint.parent.as_ref()) {
+            self.owned
+                .entry(owner.clone())
+                .or_default()
+                .insert(row.uid.clone());
+        }
         for k in row.keys() {
             self.users.entry(k).or_default().insert(row.uid.clone());
         }
@@ -327,55 +375,140 @@ impl LiveTable {
         &self,
         seeds: impl IntoIterator<Item = String>,
     ) -> Result<Vec<String>, &'static str> {
-        let mut dirty = HashSet::new();
-        let mut queue: Vec<_> = seeds.into_iter().collect();
-        while let Some(id) = queue.pop() {
-            let Some(row) = self.rows.get(&id) else {
-                continue;
-            };
-            if dirty.insert(id.clone()) {
-                queue.extend(self.users(&Key::Row(id)).cloned());
-                if row.kind != "cut" {
-                    queue.extend(self.users(&Key::Placement(row.owner.clone())).cloned());
+        Ok(self
+            .plan(seeds)?
+            .into_iter()
+            .filter_map(|n| match n {
+                Key::Row(id) => Some(id),
+                _ => None,
+            })
+            .collect())
+    }
+    pub(super) fn entry(&self, id: &str) -> Key {
+        if self
+            .rows
+            .get(id)
+            .is_some_and(|r| matches!(r.kind.as_str(), "sweep" | "repeat" | "cut_stack"))
+        {
+            Key::Stock(id.into())
+        } else {
+            Key::Row(id.into())
+        }
+    }
+    pub(super) fn next_nodes(&self, node: &Key) -> HashSet<Key> {
+        let (Key::Stock(id) | Key::Row(id)) = node else {
+            return HashSet::new();
+        };
+        let row = &self.rows[id];
+        let mut next = HashSet::new();
+        let stock = matches!(node, Key::Stock(_));
+        if stock {
+            next.insert(Key::Row(id.clone()));
+            for user in self.users(&Key::Placement(row.owner.clone())) {
+                if self.rows[user].kind == "repeat"
+                    && self.rows[user].source.as_deref() == Some(&row.owner)
+                {
+                    next.insert(Key::Stock(user.clone()));
                 }
             }
         }
-        let mut ready = BTreeSet::new();
-        let mut next: StdMap<&str, Vec<&str>> = StdMap::new();
+        for uid in self.users(node) {
+            next.insert(
+                if self.rows[uid].cuts.contains(id)
+                    || (!stock
+                        && self.rows[uid].kind == "repeat"
+                        && self.rows[uid].repeat.run["between"] == *id)
+                {
+                    Key::Row(uid.clone())
+                } else {
+                    self.entry(uid)
+                },
+            );
+        }
+        if row.kind == "cut" {
+            // Each adaptive copy intersects this cutter in its own frame.
+            // The source intersection may stay identical while a copy changes.
+            for user in self.users(&Key::Placement(row.owner.clone())) {
+                let repeat = &self.rows[user];
+                if repeat.kind == "repeat"
+                    && repeat.source.as_deref() == Some(&row.owner)
+                    && repeat.repeat.adapt.as_deref() != Some("identical")
+                {
+                    next.insert(Key::Row(user.clone()));
+                }
+            }
+        }
+        if !stock {
+            if self.entry(id) == *node {
+                next.extend(self.users(&Key::Stock(id.clone())).map(|u| self.entry(u)));
+            }
+            if row.kind != "cut" {
+                for user in self.users(&Key::Placement(row.owner.clone())) {
+                    let dependent = &self.rows[user];
+                    if dependent.kind == "repeat" {
+                        next.insert(Key::Row(user.clone()));
+                        if self.entry(id) == *node
+                            || dependent.source.as_deref() != Some(&row.owner)
+                        {
+                            next.insert(self.entry(user));
+                        }
+                    } else {
+                        next.insert(self.entry(user));
+                    }
+                }
+            }
+        }
+        next.retain(|n| match n {
+            Key::Stock(k) | Key::Row(k) => self.rows[k].state != "cycle",
+            _ => false,
+        });
+        next
+    }
+    pub(super) fn plan(
+        &self,
+        seeds: impl IntoIterator<Item = String>,
+    ) -> Result<Vec<Key>, &'static str> {
+        let mut queue: Vec<_> = seeds
+            .into_iter()
+            .filter(|s| self.rows.contains_key(s))
+            .map(|s| self.entry(&s))
+            .collect();
+        let mut edges = StdMap::new();
         let mut counts = StdMap::new();
-        for id in &dirty {
-            let deps: HashSet<_> = self.rows[id]
-                .keys()
-                .into_iter()
-                .filter_map(|k| match k {
-                    Key::Root => None,
-                    Key::Row(id) => Some(id),
-                    Key::Placement(p) => self.owners.get(&p).cloned(),
-                })
-                .filter(|k| dirty.contains(k) && self.rows[id].state != "cycle")
-                .collect();
-            for dep in &deps {
-                next.entry(self.rows[dep].uid.as_str())
-                    .or_default()
-                    .push(id);
+        while let Some(node) = queue.pop() {
+            if edges.contains_key(&node) {
+                continue;
             }
-            if deps.is_empty() {
-                ready.insert((self.order[id], id.as_str()));
+            let next = self.next_nodes(&node);
+            for dest in &next {
+                *counts.entry(dest.clone()).or_insert(0usize) += 1;
             }
-            counts.insert(id.as_str(), deps.len());
+            queue.extend(next.iter().cloned());
+            edges.insert(node, next);
         }
+        let rank = |n: &Key| match n {
+            Key::Row(id) => (self.order[id], true, id.clone()),
+            Key::Stock(id) => (self.order[id], false, id.clone()),
+            _ => unreachable!(),
+        };
+        let mut ready: BTreeSet<_> = edges
+            .keys()
+            .filter(|n| !counts.contains_key(n))
+            .map(rank)
+            .collect();
         let mut result = Vec::new();
-        while let Some((_, id)) = ready.pop_first() {
-            result.push(id.to_owned());
-            for &user in next.get(id).into_iter().flatten() {
-                let n = counts.get_mut(user).unwrap();
-                *n -= 1;
-                if *n == 0 {
-                    ready.insert((self.order[user], user));
+        while let Some((_, row, id)) = ready.pop_first() {
+            let n = if row { Key::Row(id) } else { Key::Stock(id) };
+            for dest in &edges[&n] {
+                let degree = counts.get_mut(dest).unwrap();
+                *degree -= 1;
+                if *degree == 0 {
+                    ready.insert(rank(dest));
                 }
             }
+            result.push(n);
         }
-        if result.len() != dirty.len() {
+        if result.len() != edges.len() {
             return Err("cycle");
         }
         Ok(result)
@@ -388,6 +521,10 @@ mod tests {
 
     fn row(id: &str, owner: &str, inputs: Vec<Reference>) -> Row {
         Row {
+            frames: Default::default(),
+            joint: Default::default(),
+            junction: None,
+            key: None,
             repeat: Default::default(),
             uid: id.into(),
             owner: owner.into(),

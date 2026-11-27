@@ -11,6 +11,7 @@ use serde::de::{Deserialize, DeserializeSeed, Deserializer, Error, MapAccess, Se
 pub enum Fields {
     Plain,
     Document,
+    Extensions,
     Scene,
     Prototypes,
     Prototype,
@@ -25,6 +26,7 @@ pub struct FileMatrix(pub [f64; 16]);
 impl Fields {
     fn member(self, key: &str) -> Self {
         match (self, key) {
+            (Self::Document, "ext") => Self::Extensions,
             (Self::Document, "scene") => Self::Scene,
             (Self::Scene, "protos") => Self::Prototypes,
             (Self::Scene, "groups" | "kept_components") | (Self::Placement, "children") => {
@@ -137,6 +139,17 @@ impl<'de> Visitor<'de> for Fields {
                         .map(Value::ElementKey)
                         .map_err(A::Error::custom)
                 };
+            }
+            // The live reader consumes its typed rows directly. Preserve the spelling
+            // for the ordinary extension path when the version or rows are unknown.
+            if matches!(self, Fields::Extensions) && key == "built.live" {
+                let raw = map.next_value::<Box<serde_json::value::RawValue>>()?;
+                let block = Python::attach(|py| Py::new(py, crate::live::FileLive(raw)))
+                    .map_err(A::Error::custom)?;
+                fields.push((Value::Str(key), Value::Opaque(crate::doc::value::Opaque(
+                    std::sync::Arc::new(block.into_any()),
+                ))));
+                continue;
             }
             if mesh && matches!(key.as_str(), "edges" | "faces") {
                 let array = if key == "edges" {

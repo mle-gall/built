@@ -59,19 +59,43 @@ pub(crate) fn load(scene: &Obj<'_>, ext: &Bound<'_, PyDict>) -> PyResult<()> {
     let Some(data) = ext.get_item(EXT)? else {
         return Ok(());
     };
-    // Preserve an unrecognised extension verbatim like other optional data.
+    let raw = data.extract::<PyRef<FileLive>>().ok();
+    if let Some(raw) = raw {
+        if let Ok(pack) = serde_json::from_str::<FileRows>(raw.0.get()) {
+            if pack.v == 1 && load_rows(scene, ext, pack.rows)? {
+                return Ok(());
+            }
+        }
+        let foreign = scene
+            .py()
+            .import("json")?
+            .call_method1("loads", (raw.0.get(),))?;
+        return ext.set_item(EXT, foreign);
+    }
     let Ok(data) = data.cast::<PyDict>() else {
         return Ok(());
     };
     if data.get_item("v")?.and_then(|v| v.extract::<u32>().ok()) != Some(1) {
         return Ok(());
     }
-    let Some(raw) = data.get_item("rows")? else {
-        return Ok(());
-    };
-    let Ok(rows) = json::<Vec<Row>>(&raw) else {
-        return Ok(());
-    };
+    if let Some(raw) = data.get_item("rows")? {
+        if let Ok(rows) = json::<Vec<Row>>(&raw) {
+            load_rows(scene, ext, rows)?;
+        }
+    }
+    Ok(())
+}
+
+#[pyclass(frozen)]
+pub(crate) struct FileLive(pub Box<serde_json::value::RawValue>);
+
+#[derive(serde::Deserialize)]
+struct FileRows {
+    v: u32,
+    rows: Vec<Row>,
+}
+
+fn load_rows(scene: &Obj<'_>, ext: &Bound<'_, PyDict>, rows: Vec<Row>) -> PyResult<bool> {
     let py = scene.py();
     let mut t = LiveTable::default();
     t.groups = Arc::new(index(root(scene)?));
@@ -82,22 +106,34 @@ pub(crate) fn load(scene: &Obj<'_>, ext: &Bound<'_, PyDict>) -> PyResult<()> {
         if row.v != 1
             || !matches!(
                 row.kind.as_str(),
-                "test_box" | "sweep" | "sketch" | "cut" | "cut_stack" | "repeat"
+                "test_box" | "sweep" | "sketch" | "cut" | "cut_stack" | "repeat" | "junction"
             )
             || t.rows.contains_key(&id)
         {
-            return Ok(());
+            return Ok(false);
         }
         if row.kind == "cut" {
-            if !t.groups.contains_key(&row.owner) { row.state = "ref_lost".into(); }
-        } else if row.kind=="repeat"{
-            if let Some(g)=group(py,&t,&row.owner){
-                if row.state=="ok"{
-                    let saved=metadata(&g)?.get_item(EXT)?.and_then(|v|v.get_item("stamp").ok()).and_then(|v|v.extract::<String>().ok());
-                    if saved.as_deref()!=Some(&repeat::stamp(&g)?){row.state="stale".into();}
+            if !t.groups.contains_key(&row.owner) {
+                row.state = "ref_lost".into();
+            }
+        } else if matches!(row.kind.as_str(), "repeat" | "junction") {
+            if let Some(g) = group(py, &t, &row.owner) {
+                if row.state == "ok" {
+                    let saved = metadata(&g)?
+                        .get_item(EXT)?
+                        .and_then(|v| v.get_item("stamp").ok())
+                        .and_then(|v| v.extract::<String>().ok());
+                    if saved.as_deref() != Some(&repeat::stamp(&g)?) {
+                        row.state = "stale".into();
+                    }
                 }
             } else {
-                row.state = "ref_lost".into();
+                row.state = if row.kind == "junction" {
+                    "lost"
+                } else {
+                    "ref_lost"
+                }
+                .into();
             }
         } else if let Some(k) = t.groups.get(&row.owner) {
             if let Some((stamp, mesh)) = marker(py, *k, attr, &id) {
@@ -121,7 +157,7 @@ pub(crate) fn load(scene: &Obj<'_>, ext: &Bound<'_, PyDict>) -> PyResult<()> {
         }
         let has_inputs = row.references().next().is_some();
         if t.insert(row).is_err() {
-            return Ok(());
+            return Ok(false);
         }
         if has_inputs && t.schedule([id.clone()]).is_err() {
             t.set_state(&id, "cycle");
@@ -145,5 +181,6 @@ pub(crate) fn load(scene: &Obj<'_>, ext: &Bound<'_, PyDict>) -> PyResult<()> {
         }
     }
     put(scene, t)?;
-    ext.del_item(EXT)
+    ext.del_item(EXT)?;
+    Ok(true)
 }

@@ -277,6 +277,12 @@ pub(super) fn end_planes(
                 return Ok(Err("ref_lost"));
             };
             origin = p;
+            if let Reference::Frame { junction, frame } = &anchor.reference {
+                let Some(m) = super::junction::local_frame(t, &row.owner, junction, frame) else {
+                    return Ok(Err("ref_lost"));
+                };
+                normal = m.z_axis.truncate();
+            }
             if let Some(face) =
                 reference::element_points(scene, t, row, &anchor.reference, Kind::Face)?
             {
@@ -388,6 +394,13 @@ fn operand<'p>(
                     return Ok(Err("ref_lost"));
                 };
                 origin = point;
+                if let Reference::Frame { junction, frame } = &anchor.reference {
+                    let Some(m) = super::junction::local_frame(t, &cut.owner, junction, frame)
+                    else {
+                        return Ok(Err("ref_lost"));
+                    };
+                    normal = m.z_axis.truncate();
+                }
                 if let Some(points) =
                     reference::element_points(scene, t, cut, &anchor.reference, Kind::Face)?
                 {

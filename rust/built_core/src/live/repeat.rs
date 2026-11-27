@@ -142,24 +142,31 @@ fn points(scene: &Obj<'_>, t: &LiveTable, row: &Row) -> PyResult<Option<Vec<DVec
         let Some(host) = t
             .rows
             .get(id)
-            .filter(|r| r.kind == "repeat" && r.state == "ok")
+            .filter(|r| r.kind == "repeat" && !matches!(r.state.as_str(), "cycle" | "stale"))
         else {
             return Ok(None);
         };
         let Some(owner) = group(scene.py(), t, &host.owner) else {
             return Ok(None);
         };
-        let positions = metadata(&owner)?
-            .get_item(EXT)?
-            .and_then(|m| m.get_item("stations").ok());
-        let Some(positions) = positions else {
-            return Ok(None);
+        let positions = if let Some(stock) = t.stock.get(id) {
+            if stock.state != "ok" {
+                return Ok(None);
+            }
+            stock.path.clone()
+        } else {
+            let Some(positions) = metadata(&owner)?
+                .get_item(EXT)?
+                .and_then(|m| m.get_item("stations").ok())
+            else {
+                return Ok(None);
+            };
+            positions.extract::<Vec<[f64; 3]>>()?
         };
         let m = reference::frame(t.groups[&row.owner]).inverse()
             * reference::frame(t.groups[&host.owner]);
         return Ok(Some(
             positions
-                .extract::<Vec<[f64; 3]>>()?
                 .into_iter()
                 .map(|p| m.transform_point3(p.into()))
                 .collect(),
@@ -249,13 +256,23 @@ fn planar_part<'p>(
     Ok(Ok(mesh))
 }
 
-pub(super) fn evaluate(scene: &Obj<'_>, t: &LiveTable, row: &Row) -> PyResult<&'static str> {
+#[derive(Clone, Debug, PartialEq)]
+pub(super) struct Layout {
+    pub base: DMat4,
+    pub poses: Vec<(usize, f64, DMat4)>,
+    host_count: usize,
+}
+pub(super) fn layout(
+    scene: &Obj<'_>,
+    t: &LiveTable,
+    row: &Row,
+) -> PyResult<Result<Layout, &'static str>> {
     let py = scene.py();
-    let Some(source) = row.source.as_deref().and_then(|s| group(py, t, s)) else {
-        return Ok("ref_lost");
+    let Some(_) = row.source.as_deref().and_then(|s| group(py, t, s)) else {
+        return Ok(Err("ref_lost"));
     };
-    let Some(owner) = group(py, t, &row.owner) else {
-        return Ok("ref_lost");
+    let Some(_) = group(py, t, &row.owner) else {
+        return Ok(Err("ref_lost"));
     };
     let source_uid = row.source.as_ref().unwrap();
     let base =
@@ -271,7 +288,7 @@ pub(super) fn evaluate(scene: &Obj<'_>, t: &LiveTable, row: &Row) -> PyResult<&'
             vector(&p["axis"]).and_then(DVec3::try_normalize),
             p["angle"].as_f64(),
         ) else {
-            return Ok("invalid_run");
+            return Ok(Err("invalid_run"));
         };
         centre = c;
         axis = a;
@@ -279,11 +296,11 @@ pub(super) fn evaluate(scene: &Obj<'_>, t: &LiveTable, row: &Row) -> PyResult<&'
         deg.abs()
     } else {
         let Some(p) = points(scene, t, row)? else {
-            return Ok("ref_lost");
+            return Ok(Err("ref_lost"));
         };
         path = p;
         if path.len() < 2 || path.windows(2).any(|p| p[0].distance(p[1]) < 1e-12) {
-            return Ok("invalid_run");
+            return Ok(Err("invalid_run"));
         }
         path.windows(2).map(|v| v[0].distance(v[1])).sum()
     };
@@ -293,10 +310,10 @@ pub(super) fn evaluate(scene: &Obj<'_>, t: &LiveTable, row: &Row) -> PyResult<&'
     let mut rule = row.repeat.rule.clone();
     if row.repeat.measure.as_deref() == Some("gap") && polar.is_none() {
         let dir = (path[1] - path[0]).normalize();
-        let store = source
-            .getattr("mesh")?
-            .getattr("_store")?
-            .cast_into::<PyMeshStore>()?;
+        let Some(stock_mesh) = junction::uncut_mesh(scene, t, source_uid)? else {
+            return Ok(Err("end_unresolved"));
+        };
+        let store = stock_mesh.getattr("_store")?.cast_into::<PyMeshStore>()?;
         let store = store.try_borrow()?;
         let s = &store.inner;
         let (lo, hi) = s
@@ -321,12 +338,105 @@ pub(super) fn evaluate(scene: &Obj<'_>, t: &LiveTable, row: &Row) -> PyResult<&'
         }
     }
     let Some((mut count, step)) = stations(&rule, span - start - end, polar.is_some()) else {
-        return Ok("invalid_rule");
+        return Ok(Err("invalid_rule"));
     };
     let between = row.repeat.run.get("between").is_some();
     if between {
         count = path.len() - 1;
     }
+    let mut skipped = HashSet::new();
+    for skip in &row.repeat.skips {
+        if let Some(at) = skip["at"].as_f64() {
+            let d = at * if polar.is_some() { 1. } else { 0.001 };
+            let station = if skip["from"] == "end" {
+                count as f64 * step - d
+            } else {
+                d
+            };
+            skipped.insert(((station - start) / step).round() as i64);
+        }
+    }
+    let mut poses = Vec::new();
+    let first = if start != 0. && row.repeat.ends["at_start"] == true && !between {
+        0
+    } else {
+        1
+    };
+    for i in first..=count {
+        if skipped.contains(&(i as i64)) {
+            continue;
+        }
+        let distance = start + i as f64 * step;
+        if row.repeat.ends["at_end"] == false && (distance + end - span).abs() < 1e-9 {
+            continue;
+        }
+        let transform = if polar.is_some() {
+            let rot = DMat4::from_axis_angle(axis, (distance * sign).to_radians());
+            let turn = DMat4::from_translation(centre) * rot * DMat4::from_translation(-centre);
+            if row.repeat.orientation.as_deref() == Some("fixed") {
+                DMat4::from_translation(
+                    turn.transform_point3(base.w_axis.truncate()) - base.w_axis.truncate(),
+                )
+            } else {
+                turn
+            }
+        } else if between {
+            DMat4::from_translation((path[i - 1] + path[i]) * 0.5 - path[0])
+        } else {
+            let mut d = distance;
+            let mut pos = path[0];
+            let mut direction = path[1] - path[0];
+            for (idx, p) in path.windows(2).enumerate() {
+                let len = p[0].distance(p[1]);
+                if d <= len || idx + 2 == path.len() {
+                    direction = p[1] - p[0];
+                    pos = p[0] + (p[1] - p[0]) * (d / len);
+                    break;
+                }
+                d -= len;
+            }
+            let translation = DMat4::from_translation(pos - path[0]);
+            if row.repeat.orientation.as_deref() == Some("follow") {
+                let turn = glam::DQuat::from_rotation_arc(
+                    (path[1] - path[0]).normalize(),
+                    direction.normalize(),
+                );
+                translation
+                    * DMat4::from_translation(base.w_axis.truncate())
+                    * DMat4::from_quat(turn)
+                    * DMat4::from_translation(-base.w_axis.truncate())
+            } else {
+                translation
+            }
+        };
+        let mut pose = transform * base;
+        if row.repeat.orientation.as_deref() == Some("alternate") && i % 2 == 1 {
+            pose *= DMat4::from_scale(DVec3::new(-1., 1., 1.));
+        }
+        poses.push((i, distance, pose));
+    }
+    Ok(Ok(Layout {
+        base,
+        poses,
+        host_count: path.len(),
+    }))
+}
+pub(super) fn evaluate(scene: &Obj<'_>, t: &LiveTable, row: &Row) -> PyResult<&'static str> {
+    let py = scene.py();
+    let Some(source) = row.source.as_deref().and_then(|s| group(py, t, s)) else {
+        return Ok("ref_lost");
+    };
+    let Some(owner) = group(py, t, &row.owner) else {
+        return Ok("ref_lost");
+    };
+    let source_uid = row.source.as_ref().unwrap();
+    let layout = match t.stock.get(&row.uid).and_then(|s| s.layout.as_ref()) {
+        Some(layout) => layout,
+        None => return Ok(t.stock.get(&row.uid).map_or("invalid_run", |s| s.state)),
+    };
+    let base = layout.base;
+    let between = row.repeat.run.get("between").is_some();
+    let polar = row.repeat.run.get("polar");
     let mut source_recipe = t
         .owners
         .get(source_uid)
@@ -394,7 +504,7 @@ pub(super) fn evaluate(scene: &Obj<'_>, t: &LiveTable, row: &Row) -> PyResult<&'
             );
         }
     }
-    if between && host_paths.len() != path.len() {
+    if between && host_paths.len() != layout.host_count {
         return Ok("ref_lost");
     }
     let slot_templates = source_recipe
@@ -472,18 +582,6 @@ pub(super) fn evaluate(scene: &Obj<'_>, t: &LiveTable, row: &Row) -> PyResult<&'
         let child = child?;
         old.insert(child.getattr("uid")?.extract::<String>()?, child);
     }
-    let mut skipped = HashSet::new();
-    for skip in &row.repeat.skips {
-        if let Some(at) = skip["at"].as_f64() {
-            let d = at * if polar.is_some() { 1. } else { 0.001 };
-            let station = if skip["from"] == "end" {
-                count as f64 * step - d
-            } else {
-                d
-            };
-            skipped.insert(((station - start) / step).round() as i64);
-        }
-    }
     let nested_source = t
         .owners
         .get(source_uid)
@@ -493,62 +591,7 @@ pub(super) fn evaluate(scene: &Obj<'_>, t: &LiveTable, row: &Row) -> PyResult<&'
         .and_then(|uid| group(py, t, uid));
     let leaf = source.getattr("children")?.is_empty()? && nested_source.is_none();
     let source_mesh = source.getattr("mesh")?;
-    let first = if start != 0. && row.repeat.ends["at_start"] == true && !between {
-        0
-    } else {
-        1
-    };
-    for i in first..=count {
-        if skipped.contains(&(i as i64)) {
-            continue;
-        }
-        let distance = start + i as f64 * step;
-        if row.repeat.ends["at_end"] == false && (distance + end - span).abs() < 1e-9 {
-            continue;
-        }
-        let transform = if polar.is_some() {
-            let rot = DMat4::from_axis_angle(axis, (distance * sign).to_radians());
-            let turn = DMat4::from_translation(centre) * rot * DMat4::from_translation(-centre);
-            if row.repeat.orientation.as_deref() == Some("fixed") {
-                DMat4::from_translation(
-                    turn.transform_point3(base.w_axis.truncate()) - base.w_axis.truncate(),
-                )
-            } else {
-                turn
-            }
-        } else if between {
-            DMat4::from_translation((path[i - 1] + path[i]) * 0.5 - path[0])
-        } else {
-            let mut d = distance;
-            let mut pos = path[0];
-            let mut direction = path[1] - path[0];
-            for (idx, p) in path.windows(2).enumerate() {
-                let len = p[0].distance(p[1]);
-                if d <= len || idx + 2 == path.len() {
-                    direction = p[1] - p[0];
-                    pos = p[0] + (p[1] - p[0]) * (d / len);
-                    break;
-                }
-                d -= len;
-            }
-            let translation = DMat4::from_translation(pos - path[0]);
-            if row.repeat.orientation.as_deref() == Some("follow") {
-                let turn = glam::DQuat::from_rotation_arc(
-                    (path[1] - path[0]).normalize(),
-                    direction.normalize(),
-                );
-                translation
-                    * DMat4::from_translation(base.w_axis.truncate())
-                    * DMat4::from_quat(turn)
-                    * DMat4::from_translation(-base.w_axis.truncate())
-            } else {
-                translation
-            }
-        };
-        let mut pose = transform * base;
-        if row.repeat.orientation.as_deref() == Some("alternate") && i % 2 == 1 {
-            pose *= DMat4::from_scale(DVec3::new(-1., 1., 1.));
-        }
+    for &(i, distance, pose) in &layout.poses {
         offsets.push(pose.w_axis.truncate().to_array());
         let uid = eid::derived_uid(&format!("built:repeat:v1:{}:{i}", row.uid));
         let copy = if let Some(existing) = old.get(&uid).filter(|_| leaf) {

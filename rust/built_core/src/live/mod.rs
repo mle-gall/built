@@ -6,9 +6,11 @@ mod cut_display;
 pub(crate) use cut::{assign_cut_roles, hosted, migrate_wall, pushed_row};
 pub(crate) use cut_display::live_cut_display;
 mod drawn_profile;
+mod expr;
 mod file;
 mod geometry;
 mod joints;
+pub(crate) mod junction;
 mod presets;
 pub(crate) mod profile;
 mod reference;
@@ -16,7 +18,7 @@ mod repeat;
 pub mod sketch;
 mod sketch_scene;
 mod sweep;
-pub(crate) use file::{load, save};
+pub(crate) use file::{load, save, FileLive};
 mod table;
 use crate::{
     doc::{self, Data, Field, Op},
@@ -254,18 +256,98 @@ fn evaluate(
     Ok("ok")
 }
 fn run(scene: &Obj<'_>, t: &mut LiveTable, seeds: HashSet<String>) -> PyResult<()> {
-    for uid in t.schedule(seeds).map_err(PyValueError::new_err)? {
-        reference::bind_frames(t, &uid);
-        let row = &t.rows[&uid];
-        if row.state == "stale" || row.state == "cycle" {
+    let plan = t
+        .plan(seeds.iter().cloned())
+        .map_err(PyValueError::new_err)?;
+    let mut dirty: HashSet<_> = seeds
+        .iter()
+        .filter(|s| t.rows.contains_key(*s))
+        .flat_map(|id| [t.entry(id), Key::Row(id.clone())])
+        .collect();
+    let mut checked = HashSet::new();
+    for node in plan {
+        if !dirty.contains(&node) {
             continue;
         }
+        let uid = match &node {
+            Key::Stock(id) => {
+                if matches!(t.rows[id].state.as_str(), "stale" | "cycle") {
+                    continue;
+                }
+                let downstream = t.next_nodes(&node);
+                if t.rows[id].kind != "repeat" && downstream.len() == 1 {
+                    t.stock.remove(id);
+                    dirty.extend(downstream);
+                    continue;
+                }
+                let stock = junction::stock(scene, t, &t.rows[id])?;
+                if t.stock.get(id).is_none_or(|old| **old != stock) {
+                    t.stock.insert(id.clone(), Arc::new(stock));
+                    dirty.extend(downstream);
+                }
+                continue;
+            }
+            Key::Row(id) => id.clone(),
+            _ => unreachable!(),
+        };
+        if matches!(t.rows[&uid].state.as_str(), "cycle" | "stale") {
+            continue;
+        }
+        if t.rows[&uid]
+            .junction
+            .as_deref()
+            .and_then(|p| t.rows.get(p))
+            .is_some_and(|p| p.state == "lost")
+        {
+            continue;
+        }
+        reference::bind_frames(t, &uid);
+        if t.rows[&uid].kind == "junction" {
+            if junction::evaluate(scene, t, &uid)? {
+                dirty.extend(t.next_nodes(&node));
+            }
+            checked.insert(uid);
+            continue;
+        }
+        if t.rows[&uid].kind == "repeat" && !t.stock.contains_key(&uid) {
+            t.stock.insert(
+                uid.clone(),
+                Arc::new(junction::stock(scene, t, &t.rows[&uid])?),
+            );
+        }
+        let downstream = t.next_nodes(&node);
+        let marker_stamp = |t: &LiveTable, id: &str| -> Option<String> {
+            let r = t.rows.get(id)?;
+            let g = group(scene.py(), t, &r.owner)?;
+            metadata(&g)
+                .ok()?
+                .get_item(EXT)
+                .ok()??
+                .get_item("stamp")
+                .ok()?
+                .extract()
+                .ok()
+        };
+        let old_stamp = if !downstream.is_empty()
+            && matches!(t.rows[&uid].kind.as_str(), "sweep" | "repeat" | "test_box")
+        {
+            marker_stamp(t, &uid)
+        } else {
+            None
+        };
+        let old_state = t.rows[&uid].state.clone();
+        let row = &t.rows[&uid];
         let mut active = None;
         let mut skipped = Vec::new();
         let state = evaluate(scene, t, row, &mut active, &mut skipped)?;
         let repeat = row.kind == "repeat";
         let cut_ids = row.cuts.clone();
         let initial = row.state.is_empty();
+        for id in &cut_ids {
+            if let Some(parent) = t.rows.get(id).and_then(|r| r.junction.as_ref()) {
+                checked.insert(parent.clone());
+            }
+        }
         if repeat && state == "ok" {
             t.groups = Arc::new(index(root(scene)?));
         }
@@ -287,6 +369,43 @@ fn run(scene: &Obj<'_>, t: &mut LiveTable, seeds: HashSet<String>) -> PyResult<(
         } else if initial {
             // A user of an open sketch with nothing good to keep yet.
             t.set_state(&uid, "profile_open");
+        }
+        if old_stamp.is_none()
+            || old_state != t.rows[&uid].state
+            || old_stamp != marker_stamp(t, &uid)
+        {
+            dirty.extend(downstream);
+        }
+    }
+    for id in checked {
+        let Some(row) = t.rows.get(&id) else { continue };
+        if let Some(g) = group(scene.py(), t, &row.owner) {
+            let stamp = repeat::stamp(&g)?;
+            let ext = metadata(&g)?;
+            if !ext
+                .get_item(EXT)?
+                .and_then(|m| m.get_item("stamp").ok())
+                .is_some_and(|v| v.eq(&stamp).unwrap_or(false))
+            {
+                ext.set_item(
+                    EXT,
+                    to_py(scene.py(), &serde_json::json!({"row":id,"stamp":stamp}))?,
+                )?;
+                g.setattr("ext", ext)?;
+            }
+        }
+        if row.state == "ok" || (row.state == "failed" && row.joint.reason.get("child").is_some()) {
+            let failure = t
+                .owned
+                .get(&id)
+                .into_iter()
+                .flatten()
+                .filter_map(|c| t.rows.get(c))
+                .find(|r| r.state != "ok")
+                .map(|r| serde_json::json!({"child":r.uid,"state":r.state}));
+            let row = Arc::make_mut(t.rows.get_mut(&id).unwrap());
+            row.state = if failure.is_some() { "failed" } else { "ok" }.into();
+            row.joint.reason = failure.unwrap_or_default();
         }
     }
     Ok(())
@@ -423,6 +542,8 @@ pub(crate) fn finish(
                         .clone();
                         cut.uid = eid::new_uid();
                         cut.owner = uid.clone();
+                        cut.junction = None;
+                        cut.key = None;
                         *cut_id = cut.uid.clone();
                         seeds.insert(cut.uid.clone());
                         t.insert(cut).map_err(PyValueError::new_err)?;
@@ -440,10 +561,16 @@ pub(crate) fn finish(
             seeds.extend(t.users(&Key::Placement(uid.clone())).cloned());
             if let Some(id) = t.owners.get(&uid).cloned() {
                 if let Some(row) = t.remove(&id) {
+                    junction::forget_content(&mut t, &row);
+                    if row.kind == "junction" {
+                        junction::remove_descendants(&mut t, &id)?;
+                        seeds.extend(std::mem::take(&mut t.pending));
+                    }
                     for cut in &row.cuts {
                         t.remove(cut);
                     }
                 }
+                seeds.extend(t.users(&Key::Stock(id.clone())).cloned());
                 seeds.extend(t.users(&Key::Row(id)).cloned());
             }
         }
@@ -473,6 +600,20 @@ pub(crate) fn finish(
             Data::Placement(p) => p.uid.clone(),
             _ => None,
         });
+        if let Some(owner) = &owner {
+            seeds.extend(
+                t.users(&Key::Placement(owner.clone()))
+                    .filter(|id| t.junctions.contains(*id))
+                    .cloned(),
+            );
+            if let Some(id) = t.owners.get(owner) {
+                seeds.extend(
+                    t.users(&Key::Stock(id.clone()))
+                        .filter(|id| t.junctions.contains(*id))
+                        .cloned(),
+                );
+            }
+        }
         let Some(uid) = owner.as_ref().and_then(|id| t.owners.get(id)).cloned() else {
             continue;
         };
@@ -570,6 +711,7 @@ enum Edit {
     Create(Vec<sweep::Sweep>),
     Set(Vec<Row>),
     Release(String),
+    ReleaseTree(String),
     Reevaluate(String),
 }
 #[pyclass(frozen, dict, name = "LiveCommand")]
@@ -742,6 +884,10 @@ impl Mutation {
                     let definitions = std::mem::take(&mut spec.cut_definitions);
                     let target_uid = owner.clone();
                     t.insert(Row {
+                        frames: Default::default(),
+                        joint: Default::default(),
+                        junction: None,
+                        key: None,
                         repeat: Default::default(),
                         kind: "sweep".into(),
                         uid: uid.clone(),
@@ -782,6 +928,11 @@ impl Mutation {
             Edit::Set(requests) => {
                 for request in requests {
                     let mut row = request.clone();
+                    junction::validate_ownership(&mut t, &row)?;
+                    if row.kind == "junction" {
+                        let preset = junction::detail(&t, &row)?;
+                        junction::prepare(scene, &mut t, &mut row, &preset)?;
+                    }
                     if row.kind == "repeat" {
                         repeat::prepare(scene, &mut t, &mut row)?;
                         presets::bind_repeat(scene, &mut t, &mut row)?;
@@ -825,7 +976,12 @@ impl Mutation {
                         spec.preset_definition = None;
                         bind_drawing(&mut t, &mut spec.profile)?;
                     }
-                    row.state.clear();
+                    row.state = t
+                        .rows
+                        .get(&row.uid)
+                        .filter(|r| r.state != "cycle")
+                        .map(|r| r.state.clone())
+                        .unwrap_or_default();
                     let new_repeat = row.kind == "repeat" && !t.rows.contains_key(&row.uid);
                     t.insert(row.clone()).map_err(PyValueError::new_err)?;
                     if new_repeat {
@@ -847,10 +1003,32 @@ impl Mutation {
                     t.pending.insert(row.uid);
                 }
             }
+            Edit::ReleaseTree(id) => {
+                let mut nodes = vec![id.clone()];
+                let mut seen = HashSet::new();
+                let mut order = Vec::new();
+                while let Some(uid) = nodes.pop() {
+                    if !seen.insert(uid.clone()) {
+                        return Err(PyValueError::new_err("ownership cycle"));
+                    }
+                    nodes.extend(t.owned.get(&uid).into_iter().flatten().cloned());
+                    order.push(uid);
+                }
+                for uid in order {
+                    if current(py, document).is_some_and(|t| t.rows.contains_key(&uid)) {
+                        Mutation(Edit::Release(uid)).apply_edit(scene)?;
+                    }
+                }
+                return Ok(());
+            }
             Edit::Release(id) => {
+                if let Some(j) = t.rows.get(id).filter(|r| r.kind == "junction").cloned() {
+                    junction::release(scene, &mut t, &j)?;
+                }
                 let mut row = t
                     .remove(id)
                     .ok_or_else(|| PyValueError::new_err("unknown recipe"))?;
+                junction::forget_content(&mut t, &row);
                 if row.kind == "cut" {
                     let target_uid = t.owners[&row.owner].clone();
                     let mut target = (*t.rows[&target_uid]).clone();
@@ -1257,14 +1435,20 @@ fn live_set<'p>(history: &Obj<'p>, row: &Obj<'p>) -> PyResult<Bound<'p, PyDict>>
         return Err(PyValueError::new_err("Expected live rows"));
     }
     for row in &rows {
-        for uid in std::iter::once(&row.uid)
-            .chain((!matches!(row.kind.as_str(), "sketch" | "repeat") || !row.owner.is_empty()).then_some(&row.owner))
-        {
+        for uid in std::iter::once(&row.uid).chain(
+            (!matches!(row.kind.as_str(), "sketch" | "repeat" | "junction")
+                || !row.owner.is_empty())
+            .then_some(&row.owner),
+        ) {
             if uid.len() != 16 || !uid.bytes().all(|c| c.is_ascii_hexdigit()) {
                 return Err(PyValueError::new_err("expected 16-hex uid"));
             }
         }
-        if !matches!(row.kind.as_str(), "test_box" | "sweep" | "sketch" | "cut" | "repeat") || row.v != 1 {
+        if !matches!(
+            row.kind.as_str(),
+            "test_box" | "sweep" | "sketch" | "cut" | "repeat" | "junction"
+        ) || row.v != 1
+        {
             return Err(PyValueError::new_err("unsupported recipe"));
         }
         if row.kind == "sketch" {
@@ -1336,6 +1520,11 @@ fn live_rows<'p>(scene: &Obj<'p>) -> PyResult<Obj<'p>> {
 }
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     presets::register(m)?;
+    m.add_function(wrap_pyfunction!(junction::junction_markers, m)?)?;
+    m.add_function(wrap_pyfunction!(junction_apply, m)?)?;
+    m.add_function(wrap_pyfunction!(junction_set, m)?)?;
+    m.add_function(wrap_pyfunction!(junction_frames, m)?)?;
+    m.add_function(wrap_pyfunction!(junction_release, m)?)?;
     m.add_function(wrap_pyfunction!(live_cut_display, m)?)?;
     m.add_function(wrap_pyfunction!(live_cuts, m)?)?;
     m.add_function(wrap_pyfunction!(cut::live_openings, m)?)?;
@@ -1467,4 +1656,61 @@ fn live_cuts<'p>(scene: &Obj<'p>, owner: &str) -> PyResult<Obj<'p>> {
         .filter_map(|id| t.rows.get(id))
         .collect();
     to_py(scene.py(), &cuts)
+}
+
+#[pyfunction]
+fn junction_apply<'p>(
+    history: &Obj<'p>,
+    detail: String,
+    bindings: &Obj<'p>,
+) -> PyResult<Bound<'p, PyDict>> {
+    let uid = eid::new_uid();
+    let roles: serde_json::Value = json(bindings)?;
+    let row = to_py(
+        history.py(),
+        &serde_json::json!({"kind":"junction","uid":uid,"detail":{"uid":detail},"roles":roles}),
+    )?;
+    let reply = live_set(history, &row)?;
+    reply.set_item("uid", uid)?;
+    Ok(reply)
+}
+#[pyfunction]
+fn junction_set<'p>(history: &Obj<'p>, row: &Obj<'p>) -> PyResult<Bound<'p, PyDict>> {
+    let copy = row.call_method0("copy")?;
+    copy.set_item("kind", "junction")?;
+    if !copy.contains("uid")? {
+        let uid = match (copy.get_item("parent"), copy.get_item("key")) {
+            (Ok(parent), Ok(key)) => {
+                junction::id(&parent.extract::<String>()?, &key.extract::<String>()?)
+            }
+            _ => eid::new_uid(),
+        };
+        copy.set_item("uid", uid)?;
+    }
+    let reply = live_set(history, &copy)?;
+    reply.set_item("uid", copy.get_item("uid")?)?;
+    Ok(reply)
+}
+#[pyfunction]
+#[pyo3(signature=(history,uid,deep=false))]
+fn junction_release<'p>(history: &Obj<'p>, uid: String, deep: bool) -> PyResult<Bound<'p, PyDict>> {
+    let scene = history.getattr("scene")?;
+    if current(scene.py(), root(&scene)?).is_none_or(|t| !t.junctions.contains(&uid)) {
+        return Err(PyValueError::new_err("Unknown junction"));
+    }
+    if deep {
+        edit(history, Edit::ReleaseTree(uid))
+    } else {
+        live_release(history, uid)
+    }
+}
+#[pyfunction]
+fn junction_frames<'p>(scene: &Obj<'p>, uid: &str) -> PyResult<Obj<'p>> {
+    let t = current(scene.py(), root(scene)?).unwrap_or_default();
+    let row = t
+        .rows
+        .get(uid)
+        .filter(|r| r.kind == "junction")
+        .ok_or_else(|| PyValueError::new_err("Unknown junction"))?;
+    to_py(scene.py(), &row.frames)
 }
