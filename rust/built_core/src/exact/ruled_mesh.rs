@@ -231,7 +231,10 @@ pub(super) fn rectangle(
         m.edge_samples.insert(e.id, ids);
     }
     let edges = std::mem::take(&mut m.edge_samples);
-    grid(&mut m, f, rows, &edges, &verts, n, tol)?;
+    match grid(&mut m, f, rows, &edges, &verts, n, tol) {
+        Err("grid boundary disagrees with support") => return Ok(None),
+        result => result?,
+    }
     m.edge_samples = edges;
     Ok(Some(m))
 }
