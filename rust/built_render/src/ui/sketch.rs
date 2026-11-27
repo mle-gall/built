@@ -1398,7 +1398,7 @@ impl Ui {
             ctx.request_repaint();
         }
         let painter = ctx.layer_painter(egui::LayerId::new(egui::Order::Foreground, egui::Id::new("sketch_inset_paint"))).with_clip_rect(r);
-        painter.rect_filled(r, R_CONTROL, if s.peek { Color32::from_black_alpha(40) } else { CARD });
+        painter.rect_filled(r, R_CONTROL, if s.peek { PEEK_SCRIM } else { CARD });
         painter.rect_stroke(r, R_CONTROL, Stroke::new(1.0_f32, if resp.hovered() { ACCENT_LINE } else { EDGE }), egui::StrokeKind::Inside);
         if !s.peek {
             inset_paint(&painter, s, r.shrink(10.0));
@@ -1468,8 +1468,8 @@ fn sketch_paint(painter: &egui::Painter, s: &mut SketchWs, rect: Rect, cursor: O
     // Grid.
     let step = grid_step(s.zoom);
     let (lo, hi) = (s.s2w(rect.left_bottom()), s.s2w(rect.right_top()));
-    let minor = Color32::from_white_alpha(8);
-    let major = Color32::from_white_alpha(16);
+    let minor = SKETCH_GRID;
+    let major = SKETCH_GRID_MAJOR;
     let mut x = (lo.x / step).floor() * step;
     let mut guard = 0;
     while x <= hi.x && guard < 400 {
@@ -1497,13 +1497,13 @@ fn sketch_paint(painter: &egui::Painter, s: &mut SketchWs, rect: Rect, cursor: O
     if s.view == View::Sliced {
         for b in &s.behind {
             let pts = shape_points(s, b);
-            painter.add(egui::Shape::line(pts, Stroke::new(1.0_f32, Color32::from_white_alpha(22))));
+            painter.add(egui::Shape::line(pts, Stroke::new(1.0_f32, SKETCH_BEHIND)));
         }
     }
     if s.view != View::Isolated {
         for g in &s.ghost {
             let pts = shape_points(s, g);
-            painter.add(egui::Shape::dashed_line(&pts, Stroke::new(1.0_f32, Color32::from_white_alpha(70)), 5.0, 3.0));
+            painter.add(egui::Shape::dashed_line(&pts, Stroke::new(1.0_f32, SKETCH_GHOST), 5.0, 3.0));
         }
     }
     // The regions, filled faintly when they close.
@@ -1511,7 +1511,7 @@ fn sketch_paint(painter: &egui::Painter, s: &mut SketchWs, rect: Rect, cursor: O
     for region in &prof.regions {
         let poly: Vec<Pos2> = region.outer.polygon(64).into_iter().map(|p| s.w2s(p)).collect();
         if poly.len() >= 3 {
-            let mesh = fill_polygon(&poly, Color32::from_rgba_unmultiplied(106, 165, 255, 18));
+            let mesh = fill_polygon(&poly, SKETCH_REGION);
             painter.add(mesh);
         }
     }
@@ -1633,7 +1633,7 @@ fn sketch_paint(painter: &egui::Painter, s: &mut SketchWs, rect: Rect, cursor: O
         let sp = s.w2s(c);
         let (colour, label) = match h.kind {
             SnapKind::End => (OK, h.kind.label()),
-            SnapKind::Mid => (Color32::from_rgb(0x4F, 0xC3, 0xF7), h.kind.label()),
+            SnapKind::Mid => (SNAP_MID, h.kind.label()),
             SnapKind::Centre | SnapKind::Crossing | SnapKind::Origin => (WARN, h.kind.label()),
             SnapKind::On => (ERROR, h.kind.label()),
             SnapKind::AxisX => (AXIS_X, h.kind.label()),
@@ -1761,7 +1761,7 @@ fn inset_paint(painter: &egui::Painter, s: &SketchWs, r: Rect) {
         painter.line_segment([to_s(a), to_s(b)], Stroke::new(1.0_f32, INK_2.gamma_multiply(0.7)));
     }
     let q: Vec<Pos2> = quad.iter().map(|p| to_s(*p)).collect();
-    painter.add(egui::Shape::convex_polygon(q.clone(), Color32::from_rgba_unmultiplied(245, 184, 74, 40), Stroke::new(1.0_f32, WARN)));
+    painter.add(egui::Shape::convex_polygon(q.clone(), SKETCH_PLANE, Stroke::new(1.0_f32, WARN)));
     for line in sketch {
         painter.add(egui::Shape::line(line.into_iter().map(to_s).collect(), Stroke::new(1.5_f32, ACCENT)));
     }

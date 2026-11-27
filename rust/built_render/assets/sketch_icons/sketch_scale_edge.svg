@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
   <!-- Scale by edge: one edge measured, the whole drawing follows -->
-  <path d="M8 38 L36 10"/>
-  <path d="M14 44 L42 16" stroke-width="2.4"/>
-  <path d="M11 41 L17 47 M39 13 L45 19" stroke-width="2"/>
+  <path d="M8 36 L34 10"/>
+  <path d="M14 40 L40 14" stroke-width="2.4"/>
+  <path d="M11 37 L16 42 M37 11 L42 16" stroke-width="2"/>
   <path d="M6 14 V6 H14 M34 42 H42 V34" stroke-width="2.4"/>
 </svg>
