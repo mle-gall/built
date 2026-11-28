@@ -177,7 +177,18 @@ the drawing itself: outline, closed regions filled. It is rendered from
 the sketch (`sketch_thumbs.rs`), under a key made from the drawing's
 curves, so the same drawing is rendered once and reused, in every
 destination and in the model, and an edited drawing is rendered again the
-next time the tab lists it. No picture file is stored for it.
+next time the tab lists it. No picture file is stored for it. A title
+block's tile is drawn the same way from its size, rows and columns, and a
+view template's is a box as its camera kind shows one (parallel,
+perspective, two-point), cut across when the template cuts the model.
+
+**The header in a small window.** The right group (menus, search, close)
+is laid out first and the left group takes what it leaves. Room goes, in
+this order, to the tabs at their usual spacing, the title, then the search
+beyond its least width; when it runs short the title goes first, then the
+tabs draw closer together (other tabs' counts already hidden). The search
+shortcut is shown only where it does not print over the placeholder. At
+1280 × 800 the nine tabs, the type's button and both menus fit.
 
 ## Trade add-ons
 
