@@ -531,10 +531,79 @@ pub(crate) fn file_created_placement<'py>(
     Ok(Some(command))
 }
 
+/// Classes a recipe gives the parts and assemblies it makes (a plate, a
+/// bolt, a lining, a junction's assembly). The active drawing node files the
+/// members a user draws; it must not turn these into its own class.
+pub(crate) const OWN_CLASSES: &[&str] = &[
+    "IfcPlate",
+    "IfcFastener",
+    "IfcMechanicalFastener",
+    "IfcDiscreteAccessory",
+    "IfcBuildingElementPart",
+    "IfcElementAssembly",
+];
+
+/// A part's or assembly's own class, when it is one of `OWN_CLASSES`.
+fn own_class(g: &Obj<'_>) -> PyResult<Option<String>> {
+    let record = g.getattr("ifc")?;
+    if record.is_none() {
+        return Ok(None);
+    }
+    let class: Option<String> = record.call_method1("get", ("class",))?.extract().unwrap_or(None);
+    Ok(class.filter(|c| OWN_CLASSES.contains(&c.as_str())))
+}
+
+/// The node whose recipe gives `class`, when the active node gives another:
+/// `Some(key)` files there, `Some("")` leaves the item unfiled with its
+/// class, `None` lets the active node file it as usual.
+fn node_for_class(scene: &Obj<'_>, class: &str) -> PyResult<Option<String>> {
+    let api = scene.py().import("built_core.structure")?;
+    let registry = api.getattr("bim_registry")?.call_method1("get", (scene,))?;
+    let section = get(&registry, "structure")?;
+    if !section.is_truthy()? {
+        return Ok(None);
+    }
+    let active: Option<String> = get(&section, "active")?.extract().unwrap_or(None);
+    let Some(active) = active.filter(|a| !a.is_empty()) else { return Ok(None) };
+    let nodes = api.call_method1("_nodes", (&registry,))?;
+    let class_of = |node: &Obj<'_>| -> Option<String> {
+        node.call_method1("get", ("recipe",)).ok()?.call_method1("get", ("class",)).ok()?.extract().ok()
+    };
+    if nodes.call_method1("get", (&active,)).ok().filter(|n| !n.is_none()).and_then(|n| class_of(&n)).as_deref() == Some(class) {
+        return Ok(None);
+    }
+    for item in nodes.call_method0("items")?.try_iter()? {
+        let (key, node): (String, Obj<'_>) = item?.extract()?;
+        if node.contains("source")? || key.starts_with("link:") {
+            continue;
+        }
+        if class_of(&node).as_deref() == Some(class) {
+            return Ok(Some(key));
+        }
+    }
+    Ok(Some(String::new()))
+}
+
 /// File under the preset's named node when there is no active drawing node.
+/// A part or assembly (`OWN_CLASSES`) keeps its class: it goes to the node of
+/// that class, or stays unfiled rather than becoming the active node's kind.
 pub(crate) fn file_sweep(scene:&Obj<'_>,g:&Obj<'_>,destination:&str)->PyResult<()>{
-    if destination.is_empty() {file_created_placement(scene,g)?;return Ok(());}
     let py=scene.py();
+    if let Some(class)=own_class(g)? {
+        match node_for_class(scene,&class)? {
+            Some(key) if key.is_empty() => return Ok(()),
+            Some(key) => {
+                let api=py.import("built_core.structure")?;
+                let registry=api.getattr("bim_registry")?.call_method1("get",(scene,))?;
+                let key=PyString::new(py,&key);
+                let steps=plan_filing(scene,vec![g.clone()],&registry,key.as_any(),&empty(py))?;
+                api.call_method1("CompoundCommand",(steps,))?.call_method1("do",(scene,))?;
+                return Ok(());
+            }
+            None => {}
+        }
+    }
+    if destination.is_empty() {file_created_placement(scene,g)?;return Ok(());}
     let api=py.import("built_core.structure")?;
     let registry=api.getattr("bim_registry")?.call_method1("get",(scene,))?;
     let section=registry.call_method1("setdefault",("structure",PyDict::new(py)))?;
