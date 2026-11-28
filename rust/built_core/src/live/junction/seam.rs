@@ -102,7 +102,7 @@ pub(super) fn update(
         profile.drawing = t.rows.get(id).map(|r| json!(r));
     }
     let outline = profile.outline(sweep.segments).map_err(err)?;
-    let origin = outline.attachment(&sweep.attachment).map_err(err)?;
+    let origin = sweep.origin(&outline).map_err(err)?;
     let contact = DMat4::from_cols_array(
         j.frames
             .get("b.contact")

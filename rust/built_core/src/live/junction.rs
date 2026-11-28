@@ -350,7 +350,7 @@ fn role(scene: &Obj<'_>, t: &LiveTable, j: &Row, b: &Value) -> PyResult<Option<R
             profile.drawing = t.rows.get(id).map(|r| json!(r));
         }
         if let Ok(o) = profile.outline(s.segments) {
-            let Ok(origin) = o.attachment(&s.attachment) else {
+            let Ok(origin) = s.origin(&o) else {
                 return Ok(None);
             };
             let convert = |p: glam::DVec2| {

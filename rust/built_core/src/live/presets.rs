@@ -225,12 +225,25 @@ impl Preset {
                     | "segments"
                     | "corner"
                     | "cut_definitions"
+                    | "depth"
+                    | "edge"
+                    | "shift"
+                    | "fit"
             ) {
                 return Err(error("Unknown sweep preset field"));
             }
             if !fixed_only || self.locks.get(key).is_some_and(|lock| lock == "fixed") {
-                spec[key] = val.clone();
+                match key.as_str() {
+                    // An extrusion's thickness is its path's depth.
+                    "depth" => spec["path"]["depth"] = val.clone(),
+                    // The host is the element's own; the preset gives the sizes.
+                    "fit" => spec["fit"]["values"] = val["values"].clone(),
+                    _ => spec[key] = val.clone(),
+                }
             }
+        }
+        if spec["fit"].is_object() && !spec["fit"]["values"].is_object() {
+            spec["fit"] = Value::Null;
         }
         spec["preset"] = json!(self.name);
         spec["preset_uid"] = json!(self.uid);
@@ -285,10 +298,15 @@ pub fn detach(old: &sweep::Sweep, new: &mut sweep::Sweep, p: &Preset) -> Option<
         return None;
     }
     let (a, b) = (json!(old), json!(new));
+    let read = |v: &Value, k: &str| match k {
+        "depth" => v["path"]["depth"].clone(),
+        "fit" => v["fit"]["values"].clone(),
+        _ => v[k].clone(),
+    };
     let field = p
         .values
         .keys()
-        .find(|k| p.locks.get(*k).is_some_and(|v| v == "fixed") && a[*k] != b[*k])?;
+        .find(|k| p.locks.get(*k).is_some_and(|v| v == "fixed") && read(&a, k) != read(&b, k))?;
     new.preset_uid = None;
     new.preset = None;
     new.preset_rev = 0;
