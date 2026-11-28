@@ -828,7 +828,9 @@ pub(super) fn command_query<'py>(a: &Args<'py>) -> Reply<'py> {
                 matches.push((at.unwrap_or(usize::MAX),group,name,detail,entry));
             }
         }
-        matches.sort_by(|a,b|(&a.0,&a.1,&a.2).cmp(&(&b.0,&b.1,&b.2)));
+        // Recent first, then the project's own, then the user's, then packs.
+        let rank=|group:&str|match group{"Recent"=>0,"This project"=>1,"My presets"=>2,_=>3};
+        matches.sort_by(|a,b|(&a.0,rank(&a.1),&a.1,&a.2).cmp(&(&b.0,rank(&b.1),&b.1,&b.2)));
         for (_,group,name,detail,entry) in matches{
             results.append((name,group,detail,true))?;
             actions.append(entry)?;

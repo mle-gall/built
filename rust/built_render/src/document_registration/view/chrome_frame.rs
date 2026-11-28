@@ -774,9 +774,10 @@ fn cursor_value<'py>(a: &Args<'py>) -> Reply<'py> {
         _ => 0.into_bound_py_any(py)?,
     };
     let renderer = view.getattr("renderer")?;
-    // The junction review owns the viewport while it is open: the armed
-    // tool's chip (its last hover) would sit over the review list.
-    if crate::junction_review::current(&attr(&view, "scene")?)?.is_some() {
+    // The junction review and the capture popover own the viewport while
+    // open: the armed tool's chip (its last hover) would sit over them.
+    let scene = attr(&view, "scene")?;
+    if crate::junction_review::current(&scene)?.is_some() || crate::junction_capture::popover_open(&scene)? {
         renderer.call_method1("ui_set_cursor_value", ("", "", false, py.None(), py.None(), py.None(), &revision, false))?;
         return Ok(none(py));
     }
