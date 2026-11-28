@@ -1669,12 +1669,14 @@ fn profile_dimensions(ctx: &Bound<'_, PyAny>, item: &Bound<'_, PyAny>) -> PyResu
     let forms = py.import("built_render.chrome_forms")?;
     let fields = PyList::empty(py);
     let params = item.get_item("dimensions")?;
+    let circular = matches!(item.get_item("category")?.extract::<String>()?.as_str(), "round" | "chs");
     let mut keys = Vec::new();
     for key in ["width", "height", "web", "flange", "radius"] {
-        if !params.contains(key)? { continue; }
+        if !params.contains(key)? || (circular && key == "height") { continue; }
         let value = params.get_item(key)?.extract::<f64>()?;
         if matches!(key, "web" | "flange") && value == 0. { continue; }
-        fields.append(forms.getattr("Field")?.call1((key, "edit", format!("{key} (mm)"), value.to_string()))?)?;
+        let label = if circular && key == "width" { "Diameter" } else { key };
+        fields.append(forms.getattr("Field")?.call1((key, "edit", format!("{label} (mm)"), value.to_string()))?)?;
         keys.push(key);
     }
     let library = item.get_item("key")?.extract::<String>()?;
@@ -1686,8 +1688,14 @@ fn profile_dimensions(ctx: &Bound<'_, PyAny>, item: &Bound<'_, PyAny>) -> PyResu
             let dims = PyDict::new(py);
             for key in &keys {
                 let text = values.get_item(key)?.str()?.to_string();
-                let Ok(num) = text.trim().parse::<f64>() else { return Err(pyo3::exceptions::PyValueError::new_err("Invalid dimension")); };
+                let Some(num) = text.trim().parse::<f64>().ok().filter(|n| n.is_finite()) else {
+                    window.bind(py).call_method1("notify", ("warning", "Invalid profile dimensions"))?;
+                    return Ok(none(py));
+                };
                 dims.set_item(key, num)?;
+                if circular && *key == "width" {
+                    dims.set_item("height", num)?;
+                }
             }
             let profile = PyDict::new(py);
             profile.set_item("library", &library)?;
@@ -2752,7 +2760,7 @@ impl LibrarySheet {
                 }
                 if ok {
                     st.set_item("type", &arg)?;
-                    st.set_item("scope", if matches!(arg.as_str(), "presets" | "profiles" | "styles") {"s:bundled"} else if matches!(arg.as_str(), "families" | "sections") { "s:all" } else { "s:model" })?;
+                    st.set_item("scope", if matches!(arg.as_str(), "styles") {"s:bundled"} else if matches!(arg.as_str(), "families" | "sections" | "presets" | "profiles") { "s:all" } else { "s:model" })?;
                     st.set_item("cursor", py.None())?;
                     _save_state(&st)?;
                 }
@@ -2961,8 +2969,7 @@ fn open_library(py: Python<'_>, win: &Bound<'_, PyAny>, type_id: Option<String>,
     let st = _state(&view)?;
     _land(&view, win)?;
     if let Some(t) = type_id.filter(|t| !t.is_empty()) {
-        if matches!(t.as_str(),"profiles"|"presets") && !st.get_item("type")?.eq(&t)?{st.set_item("scope","s:bundled")?;}
-        if matches!(t.as_str(), "families" | "sections") && !st.get_item("type")?.eq(&t)? { st.set_item("scope", "s:all")?; }
+        if matches!(t.as_str(), "families" | "sections" | "profiles" | "presets") && !st.get_item("type")?.eq(&t)? { st.set_item("scope", "s:all")?; }
         st.set_item("type", t)?;
     }
     if let Some(sc) = scope.filter(|s| !s.is_empty()) {

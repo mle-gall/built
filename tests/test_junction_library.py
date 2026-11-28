@@ -146,3 +146,86 @@ def test_newer_pack_revision_is_offered_never_applied(win, tmp_path):
     assert model[knee["uid"]]["source"]["rev"] == 2
     j = next(r for r in live.live_rows(sc) if r["kind"] == "junction" and not r.get("parent"))
     assert j["params"]["plate_width"] == 120 + 160 and j["state"] == "ok"
+
+
+@pytest.mark.parametrize("pack", sorted(p.name for p in addon_cases.ADDONS.iterdir()))
+def test_portable_addon_installs_into_my_library(win, tmp_path, pack):
+    scene = win.viewport.scene
+    assert not any(r.get("profile_preset") for r in L.ProfilesProvider().items(None))
+    archive = addon_cases.build(addon_cases.ADDONS / pack, tmp_path)
+    first = archive.read_bytes()
+    report = addon_cases.install(win, pack, tmp_path)
+    assert first == archive.read_bytes()
+    assert report["ok"] == len(addon_cases.rows(pack))
+    installed = L.library_items("presets", scene)
+    assert {r["preset"]["uid"] for r in installed} >= {r["uid"] for r in addon_cases.rows(pack)}
+    from built_core.scene import Scene
+    from formats import igz
+    from tests.junction_starter_cases import arrangement
+
+    ctx = L.Ctx(win, win.view)
+    if pack.startswith("steel-profiles-"):
+        provider = L.ProfilesProvider()
+        for index, size in enumerate(row for row in provider.items(ctx) if row.get("profile_preset")):
+            profile = size["profile_preset"]["values"]["profile"]
+            provider.run(ctx, "apply", size)
+            assert win._tools["sweep"]._state("profile") == profile["library"]
+            sweeps(win.viewport.history, (profile, [[index, 0, 0], [index, 0, 3]]))
+    else:
+        provider = L.PresetsProvider()
+        name = {"timber-joints": "Half-lap", "purlin-connections-en": "Purlin cleat",
+                "mep-penetrations": "Pipe through wall"}.get(pack, "End plate, 4 bolts")
+        item = next(row for row in provider.items(ctx) if row["name"] == name)
+        if pack == "steel-connections-aisc":
+            w = addon_cases.profile("aisc/w8x18")
+            picks = sweeps(win.viewport.history, (w, [[0, 0, 0], [0, 0, 3]]), (w, [[0, 0, 2], [0, 2, 2]]))
+        else:
+            picks = arrangement(scene, win.viewport.history, item["preset"])
+        scene.select([scene.groups_by_uid()[uid] for uid in picks])
+        provider.run(ctx, "apply", item)
+        assert any(row["kind"] == "junction" for row in live.live_rows(scene))
+
+    saved = tmp_path / "installed.built"
+    igz.save_scene(scene, saved)
+    reopened = Scene()
+    igz.load_into(reopened, saved)
+    rows = live.live_rows(reopened)
+    assert rows
+    assert [(r["kind"], r.get("key"), r["state"]) for r in rows if r["state"] != "ok"] == []
+
+
+def test_old_catalogue_key_recovers_installed_size_and_keeps_overrides(win, tmp_path):
+    from built_core.scene import Scene
+    from formats import igz
+    from tests.test_live_recipes import rewrite
+
+    addon_cases.install(win, "steel-profiles-en", tmp_path)
+    scene = win.viewport.scene
+    column, = sweeps(win.viewport.history, (HE, [[0, 0, 0], [0, 0, 3]]))
+    saved = tmp_path / "column.built"
+    igz.save_scene(scene, saved)
+
+    def old_profile(document):
+        row, = document["ext"]["built.live"]["rows"]
+        row["profile"] = {"library": HE["library"], "params": {"width": 190}}
+
+    previous = tmp_path / "previous.built"
+    rewrite(saved, previous, old_profile)
+    restored = Scene()
+    igz.load_into(restored, previous)
+    profile = live.live_sweep(restored, column)["profile"]
+    assert profile["family"] == HE["family"]
+    assert profile["params"] == {**HE["params"], "width": 190}
+
+
+def test_round_family_takes_one_diameter_and_arms_sweep(win):
+    from built_render import chrome_forms
+
+    ctx = L.Ctx(win, win.view)
+    profiles = L.ProfilesProvider()
+    bar = next(row for row in profiles.items(ctx) if row["category"] == "round")
+    profiles.run(ctx, "size", bar)
+    form = chrome_forms.current(win)
+    form.receive("width", "75")
+    form.press("ok")
+    assert win._tools["sweep"]._state("profile") == bar["key"]

@@ -1226,6 +1226,7 @@ pub fn read(files: &dyn Files, known: &Known) -> PyResult<Plan> {
             row["source"]["profile_size"] = json!(true);
         }
         for key in ["author", "licence"] {
+            row["source"][key] = row.get(key).unwrap_or(&pack[key]).clone();
             if row.get(key).is_none() {
                 if let Some(v) = pack.get(key) {
                     row[key] = v.clone();

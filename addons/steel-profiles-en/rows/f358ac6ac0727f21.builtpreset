@@ -4,7 +4,9 @@
   "rev": 1,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -44,5 +46,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:a79aac72789b41d47647f149bc101523ec4634ca03ba748368785cf9783e8c6f"
+  "hash": "sha256:0c5a68568f9dad50a6089945bfdd8c43a751dbe92135e5bf3821ff71cae59b13"
 }

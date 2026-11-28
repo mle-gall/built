@@ -301,6 +301,7 @@ def test_component_bundle_embeds_once_on_apply(tmp_path):
 
 @pytest.mark.parametrize("filename", [
     "steel-connections-en", "steel-connections-aisc", "purlin-connections-en", "mep-penetrations",
+    "steel-profiles-en", "steel-profiles-aisc", "timber-joints",
 ])
 def test_inline_pack_hashes_and_dependencies(filename, tmp_path):
     path = addon_cases.build(addon_cases.ADDONS / filename, tmp_path)

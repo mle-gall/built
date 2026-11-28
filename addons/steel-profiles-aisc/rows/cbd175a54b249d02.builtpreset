@@ -4,7 +4,9 @@
   "rev": 1,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -41,5 +43,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:26193020b45520b6c02411b1036b7088530c6886f6ad1f41efe692bf3bbcd0e4"
+  "hash": "sha256:bffe04837e677dcdc8e1b589accc9942e0cc297576831648627a384652657fd7"
 }

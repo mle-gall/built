@@ -23,13 +23,14 @@ def rows(pack):
 
 def profile(key):
     region = key.partition("/")[0]
+    pack = {"basic/timber": "timber-joints", "basic/stud": "timber-joints",
+            "basic/duct": "mep-penetrations"}.get(key)
     if region in ("en", "aisc"):
-        return next(row["values"]["profile"] for row in rows("steel-profiles-" + region)
-                    if row.get("profile_size") and row["values"]["profile"]["library"] == key)
-    pack = {"basic/timber": "timber-joints", "basic/stud": "timber-joints", "basic/duct": "mep-penetrations"}.get(key)
+        pack = "steel-profiles-" + region
     if pack:
-        return next(row["values"]["profile"] for row in rows(pack)
+        size = next(row["values"]["profile"] for row in _rows(pack)
                     if row.get("profile_size") and row["values"]["profile"]["library"] == key)
+        return deepcopy(size)
     return {"library": key}
 
 

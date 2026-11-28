@@ -75,7 +75,6 @@
           "sweep": {
             "profile": {
               "library": "basic/tube",
-              "family": "rhs",
               "params": {
                 "width": 400,
                 "height": 200,
@@ -148,5 +147,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:7fd884f3537abd67227168644cfa669067160fe9a1e3d357b06a968c7b5d54c0"
+  "hash": "sha256:1c8bc4f2370121a296ca8115ceb6fd2e9f61aec57f5f3458f656242151679884"
 }

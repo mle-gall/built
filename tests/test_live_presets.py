@@ -105,11 +105,10 @@ def test_capture_values_feed_tool_and_active_node_default():
     assert "default_preset" not in bim_registry.get(scene)["structure"]["nodes"]["ref"]["recipe"]
 
 
-def test_library_browse_and_duplicate(tmp_path, monkeypatch, native_host):
+def test_library_browse_and_duplicate(tmp_path, native_host):
     from types import SimpleNamespace
     from built_render.wgpu_library import PresetsProvider
 
-    monkeypatch.setenv("BUILT_SETTINGS_DIR", str(tmp_path))
     scene = Scene()
     history = History(scene)
     ctx = SimpleNamespace(scene=scene, core=lambda key, **kw: commands.run(history, key, **kw),
@@ -136,7 +135,6 @@ def test_pack_export_import_uses_one_step(tmp_path, monkeypatch, folder, native_
     from built_render import chrome_forms
     from built_render.wgpu_library import PresetsProvider
 
-    monkeypatch.setenv("BUILT_SETTINGS_DIR", str(tmp_path))
     scene = Scene()
     history = History(scene)
     provider = PresetsProvider()
@@ -176,7 +174,7 @@ def test_starter_presets_file_into_a_new_node():
     scene = Scene()
     history = History(scene)
     preset = steel()
-    apply(history, "create_sweeps", sweeps=[{"preset_uid": preset["uid"], "path": {"points": [[0, 0, 0], [1, 0, 0]]}}])
+    apply(history, "create_sweeps", sweeps=[{"preset_definition": preset, "preset_uid": preset["uid"], "path": {"points": [[0, 0, 0], [1, 0, 0]]}}])
     assert "structure" in scene.groups[0].ext
     assert preset["node"] in bim_registry.get(scene)["structure"]["nodes"]
     apply(history, "undo")

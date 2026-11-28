@@ -160,6 +160,11 @@ source folder under `addons/` produces one format-2 archive in
 hashes and installs the rows together in the chosen destination. Pack
 content is CC0-1.0. The website will host these packs later.
 
+New members store their section dimensions in the model. For older models
+that saved only a catalogue key, import the matching profile pack into My
+library before opening the model. Built then restores the dimensions, keeps
+any overrides, and includes the recovered section on the next save.
+
 | Resource | Where it lives and why |
 |---|---|
 | Steel profiles · EN and · AISC | Add-ons containing the standard catalogue sizes, provenance and steel sweep presets. Each size carries its family and dimensions into the model. |
@@ -167,7 +172,7 @@ content is CC0-1.0. The website will host these packs later.
 | Purlin connections · EN | Add-on containing the cleat and the bolt detail it uses. |
 | MEP penetrations | Add-on containing Duct, Pipe and their wall and slab penetrations. |
 | Timber joints | Add-on containing timber section presets and four framing joints. |
-| Generic profile families | Bundled editable section geometry including I, C, L, T, Z, rectangle and round and rectangular tube. |
+| Generic profile families | Bundled editable section geometry including I, C, L, T, Z, rectangle, round bar, round tube and rectangular tube. |
 | Generic and Architecture presets | Bundled general fittings, plate, wall, opening, lining, frame, lintel, sill, corner and slab tools. |
 | Metric and inch fastener tables | Bundled dimensions for the user-sized bolt primitive and for evaluating embedded fastener details after a pack is removed. |
 | Colours, textures, styles, entourage and other starter components | Bundled appearance and scene resources. |

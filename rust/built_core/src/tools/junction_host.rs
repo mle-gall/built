@@ -122,8 +122,8 @@ impl ViewportToolHost {
                 // A flange of an I-section member: bolts measure through it.
                 let row = api(py)?.call_method1("live_sweep", (&scene, &uid))?;
                 if !row.is_none() && !face.is_none() {
-                    let library = row.get_item("profile")?.call_method1("get", ("library", ""))?.extract::<String>()?;
-                    if ["en/he", "en/ipe", "aisc/w"].iter().any(|p| library.starts_with(p)) {
+                    let profile = row.get_item("profile")?;
+                    if profile.call_method1("get", ("family", ""))?.eq("i")? || profile.call_method1("get", ("library", ""))?.eq("basic/i")? {
                         let normal = xyz(&face.call_method0("normal")?)?;
                         let path: Vec<[f64; 3]> = row.call_method1("get", ("resolved_points",))?.extract().unwrap_or_default();
                         if path.len() >= 2 {

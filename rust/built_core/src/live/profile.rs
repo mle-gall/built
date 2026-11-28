@@ -112,7 +112,7 @@ impl Profile {
             return Err("invalid_profile");
         }
         let fam = family;
-        if fam != "rectangle" && !(t > 0. && t < w && t < h) {
+        if !matches!(fam, "rectangle" | "round") && !(t > 0. && t < w && t < h) {
             return Err("invalid_profile");
         }
         if matches!(fam, "i" | "channel" | "tee" | "zed") && !(f > 0. && 2. * f < h) {
@@ -222,10 +222,10 @@ impl Profile {
             "rhs" if 2. * t < w.min(h) && 2. * r < w.min(h) => {
                 vec![rect(0., r)?, rect(t, (r - t).max(0.))?]
             }
-            "chs" if 2. * t < w && w == h => {
+            "chs" | "round" if 2. * t < w && w == h => {
                 let centre = DVec2::splat(mid);
                 [mid, mid - t]
-                    .into_iter()
+                    .into_iter().take(if fam == "round" { 1 } else { 2 })
                     .map(|rad| {
                         (0..segments)
                             .map(|i| Node {
@@ -259,7 +259,7 @@ impl Profile {
 pub fn is_family(name: &str) -> bool {
     matches!(
         name,
-        "i" | "rhs" | "rectangle" | "channel" | "angle" | "chs" | "tee" | "zed"
+        "i" | "rhs" | "rectangle" | "channel" | "angle" | "chs" | "round" | "tee" | "zed"
     )
 }
 

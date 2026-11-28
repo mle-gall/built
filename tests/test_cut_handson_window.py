@@ -95,6 +95,8 @@ def window_probe(app):
     from built_core.solids import solid_volume
 
     base = Path(__file__).parent
+    from built_render import wgpu_library
+    wgpu_library.import_pack(app.window, str(base / "steel-connections-en.builtpack"), "mine")
     def frame():
         camera = app.viewport.camera
         camera.set_view("iso")
@@ -133,6 +135,8 @@ def test_cut_member_picks(tmp_path, shape, crossing, drawn_stock):
     profile = tmp_path / "profile"
     plugin = profile / "data/built/plugins/cut_probe.py"
     plugin.parent.mkdir(parents=True)
+    from tests.addon_cases import ADDONS, build
+    build(ADDONS / "steel-connections-en", plugin.parent)
     plugin.write_text(inspect.getsource(window_probe).replace("def window_probe(", "def setup("))
     model = tmp_path / "members.built"
     igz.save_scene(post_and_beam(shape, crossing, drawn_stock), model)
