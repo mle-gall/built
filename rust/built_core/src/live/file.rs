@@ -181,6 +181,39 @@ fn load_rows(scene: &Obj<'_>, ext: &Bound<'_, PyDict>, rows: Vec<Row>) -> PyResu
             }
         }
     }
+    let openings: Vec<_> = t
+        .rows
+        .values()
+        .filter(|r| r.junction.is_none() && matches!(r.cutter, Some(cut::Cutter::Opening(_))))
+        .cloned()
+        .collect();
+    for row in openings {
+        let Some(cut::Cutter::Opening(o)) = &row.cutter else {
+            continue;
+        };
+        let host_link =
+            group(py, &t, &o.fill).and_then(|g| g.getattr("ext").ok()?.get_item("wall_host").ok());
+        if host_link.is_some_and(|h| {
+            h.get_item("uid")
+                .is_ok_and(|v| v.eq(&row.owner).unwrap_or(false))
+                && h.get_item("profile")
+                    .is_ok_and(|v| v.extract::<[[f64; 3]; 4]>().is_ok())
+        }) && DMat4::from_cols_array(&o.frame).inverse().is_finite()
+            && t.owners
+                .get(&row.owner)
+                .and_then(|id| t.rows.get(id))
+                .is_some_and(|target| target.cuts.contains(&row.uid))
+            && !t.groups.contains_key(&junction::id(
+                &eid::derived_uid(&format!(
+                    "built:junction:v1:hosted:{}:{}",
+                    row.owner, o.fill
+                )),
+                "owner",
+            ))
+        {
+            junction::hosting::adopt(scene, &mut t, &row, &o.fill, true)?;
+        }
+    }
     put(scene, t)?;
     ext.del_item(EXT)?;
     Ok(true)

@@ -1460,6 +1460,7 @@ impl FamiliesProvider {
             if let Some(class) = class {
                 template.getattr("ifc")?.set_item("class", class)?;
                 template.getattr("ext")?.set_item("library_host", "wall")?;
+                template.getattr("ext")?.set_item("junction", if class == "IfcDoor" { "30e27bad196ea165" } else { "5c9f9bb202d14a8c" })?;
             }
             cache.set_item(key, &template)?;
         }

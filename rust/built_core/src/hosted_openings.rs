@@ -300,10 +300,24 @@ fn update(scene: &Obj, g: &Obj, remove: bool) -> PyResult<()> {
         }
     }
     if !remove {
-        let r = rect(p, world)?;
-        if !valid(r, &cuts) {
+        let candidate = rect(p, world).ok().filter(|r| valid(*r, &cuts));
+        let changed = guid.is_some() && crate::live::wall_faces_changed(&wall)?;
+        if candidate.is_none() || changed {
+            let reason = if changed {
+                "wall_faces"
+            } else {
+                "opening_overlap"
+            };
+            if let Some(relative) = optional(&host, "relative")? {
+                if crate::live::opening_conflict(scene, &wall, g, reason)? {
+                    let last = pose(&wall)? * DMat4::from_cols_array(&relative.extract()?);
+                    g.setattr("xform", crate::math::Matrix4::from(last))?;
+                    return Ok(());
+                }
+            }
             return Err(err());
         }
+        let r = candidate.unwrap();
         let entry = PyDict::new(py);
         if let Some(id) = guid {
             entry.set_item("guid", id)?;
@@ -360,34 +374,10 @@ fn update(scene: &Obj, g: &Obj, remove: bool) -> PyResult<()> {
     ifc.set_item("openings", entries)?;
     Ok(())
 }
-pub(crate) fn regenerate(scene: &Obj, g: &Obj) -> PyResult<()> {
-    if let Some(entries) = optional(&g.getattr("ifc")?, "openings")? {
-        for entry in entries.try_iter()? {
-            let entry = entry?;
-            if optional(&entry, "cut")?.is_none() {
-                continue;
-            }
-            let Some(uid) = optional(&entry, "fill_uid")? else {
-                continue;
-            };
-            let fill =
-                scene.call_method1("resolve_occurrence", (vec![uid.extract::<String>()?],))?;
-            if fill.is_none() {
-                continue;
-            }
-            if let Some(host) = optional(&fill.getattr("ext")?, "wall_host")? {
-                if let Some(relative) = optional(&host, "relative")? {
-                    let xf = pose(g)? * DMat4::from_cols_array(&relative.extract()?);
-                    fill.setattr(
-                        "xform",
-                        Py::new(scene.py(), crate::math::Matrix4::from(xf))?,
-                    )?;
-                }
-            }
-        }
-    }
+pub(crate) fn place(scene: &Obj, g: &Obj) -> PyResult<()> {
     update(scene, g, false)
 }
+
 pub(crate) fn detach(scene: &Obj, g: &Obj) -> PyResult<()> {
     update(scene, g, true)
 }

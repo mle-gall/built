@@ -550,7 +550,10 @@ def test_hosted_window_through_cut_history_and_ifc(win, tmp_path):
     assert face_set_volume(wall.mesh.faces) == pytest.approx(5.5)
     for dx in (3.1, -2.5):
         mesh = wall.mesh
-        assert not run(history, "move_placements", placements=[window.uid], delta=[dx,0,0])["ok"]
+        assert run(history, "move_placements", placements=[window.uid], delta=[dx,0,0])["ok"]
+        from built_core.protocol import queries
+        joint = next(r for r in queries.live_rows(scene) if r.get("roles", {}).get("hosted", {}).get("placement") == window.uid)
+        assert joint["state"] == "failed" and joint["reason"]["criterion"] == "opening_overlap"
         assert wall.mesh is mesh and window.xform.data()[12] == pytest.approx(2)
     assert run(history, "move_placements", placements=[window.uid], delta=[1,.03,.2])["ok"]
     assert window.ext["wall_host"]["offset"] == pytest.approx(.03)

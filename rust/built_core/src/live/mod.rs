@@ -12,6 +12,7 @@ mod geometry;
 mod hole;
 mod joints;
 pub(crate) mod junction;
+pub(crate) use junction::hosting::{opening_conflict,wall_faces_changed};
 mod presets;
 pub(crate) mod profile;
 mod reference;
@@ -454,13 +455,13 @@ pub(crate) fn finish(
     let Some(mut t) = current(py, document) else {
         return Ok(());
     };
+    let mut moved = HashSet::new();
     let mut seeds: HashSet<_> = std::mem::take(&mut t.pending).into_iter().collect();
     let mut structure = false;
     let mut records = HashSet::new();
     let ifc = doc::attr_id("ifc").map_err(PyValueError::new_err)?;
     {
         let d = doc::lock();
-        let mut moved = HashSet::new();
         let mut add = |k| {
             if let Some(Data::Placement(p)) = d.node(k).map(|n| &n.data) {
                 if let Some(uid) = &p.uid {
@@ -533,8 +534,16 @@ pub(crate) fn finish(
                 _ => (),
             }
         }
-        for key in moved {
-            seeds.extend(t.frames.get(&key).into_iter().flatten().cloned());
+        for key in &moved {
+            seeds.extend(t.frames.get(key).into_iter().flatten().cloned());
+        }
+    }
+    if !moved.is_empty() && !t.junctions.is_empty() {
+        // The complete transform transaction is visible here, including a
+        // selection containing both the host and its fill in either order.
+        if junction::hosting::sync_poses(scene, &t, &moved)? {
+            t = current(py, document).unwrap_or(t);
+            seeds.extend(std::mem::take(&mut t.pending));
         }
     }
     if structure {
@@ -750,7 +759,7 @@ pub(crate) fn finish(
 enum Edit {
     Presets(Vec<presets::Preset>),
     DeletePreset(String),
-    Create(Vec<sweep::Sweep>),
+    Create(Vec<sweep::Sweep>, bool),
     Set(Vec<Row>),
     Release(String),
     ReleaseTree(String),
@@ -839,7 +848,7 @@ impl Mutation {
             .is_some_and(|ext| ext.contains("built.presets").unwrap_or(false))
             && matches!(
                 self.0,
-                Edit::Presets(_) | Edit::DeletePreset(_) | Edit::Create(_)
+                Edit::Presets(_) | Edit::DeletePreset(_) | Edit::Create(..)
             )
         {
             return Err(PyValueError::new_err("Unrecognised preset extension"));
@@ -856,7 +865,7 @@ impl Mutation {
                     .remove(id)
                     .ok_or_else(|| PyValueError::new_err("Unknown project preset"))?;
             }
-            Edit::Create(sweeps) => {
+            Edit::Create(sweeps, wall_junctions) => {
                 for spec in sweeps {
                     let key = &spec.profile.library;
                     let name = profile::label(key).unwrap_or("Drawn profile");
@@ -963,6 +972,9 @@ impl Mutation {
                         cut::attach(scene, &mut t, &mut cut)?;
                         t.pending.insert(cut.uid.clone());
                         t.insert(cut).map_err(PyValueError::new_err)?;
+                    }
+                    if *wall_junctions {
+                        junction::walls::apply_ends(scene, &mut t, &uid)?;
                     }
                     t.pending.insert(uid);
                 }
@@ -1434,8 +1446,12 @@ fn sweep_profile<'p>(row: &Obj<'p>) -> PyResult<Obj<'p>> {
         &serde_json::json!({"family":outline.family,"web":outline.web,"flange":outline.flange,"radius":outline.radius,"width":outline.width,"height":outline.height,"rings":rings,"offset":outline.attachment(&spec.attachment).map_err(PyValueError::new_err)?,"name":profile::label(&spec.profile.library)}),
     )
 }
-#[pyfunction]
-fn create_sweeps<'p>(history: &Obj<'p>, sweeps: &Obj<'p>) -> PyResult<Bound<'p, PyDict>> {
+#[pyfunction(signature = (history, sweeps, wall_junctions=false))]
+fn create_sweeps<'p>(
+    history: &Obj<'p>,
+    sweeps: &Obj<'p>,
+    wall_junctions: bool,
+) -> PyResult<Bound<'p, PyDict>> {
     let raw: Vec<serde_json::Value> = json(sweeps)?;
     let mut specs = Vec::with_capacity(raw.len());
     for mut value in raw {
@@ -1476,7 +1492,7 @@ fn create_sweeps<'p>(history: &Obj<'p>, sweeps: &Obj<'p>) -> PyResult<Bound<'p, 
             return Err(PyValueError::new_err("invalid_path"));
         }
     }
-    edit(history, Edit::Create(specs))
+    edit(history, Edit::Create(specs, wall_junctions))
 }
 #[pyfunction]
 fn live_set<'p>(history: &Obj<'p>, row: &Obj<'p>) -> PyResult<Bound<'p, PyDict>> {

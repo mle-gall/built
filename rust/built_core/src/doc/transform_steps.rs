@@ -47,7 +47,6 @@ fn run_move(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResult<()> {
     let g = s.arg(py, 0);
     s.remember(vec![g.getattr("axes")?]);
     crate::placement_transform::shift_group(scene, &g, &s.arg(py, 1))?;
-    crate::hosted_openings::regenerate(scene,&g)?;
     s.set_undo_by_transaction(is_instance(&g)?);
     version(scene)
 }
@@ -72,7 +71,6 @@ fn run_pose(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResult<()> {
     if transform.call_method1("apply", (scene, &g, s.arg(py, 1), false, s.journalled()))?.is_truthy()? {
         version(scene)?;
     }
-    crate::hosted_openings::regenerate(scene,&g)?;
     s.set_undo_by_transaction(is_instance(&g)?);
     Ok(())
 }
@@ -134,7 +132,6 @@ fn flip_meshes<'py>(s: &RecordStep, py: Python<'py>, _scene: &Obj<'py>) -> PyRes
 fn run_flip(s: &RecordStep, py: Python<'_>, scene: &Obj<'_>) -> PyResult<()> {
     let groups = s.items(py, 0)?;
     crate::placement_transform::flip_groups(scene, groups.clone(), &s.arg(py, 1))?;
-    for group in &groups {crate::hosted_openings::regenerate(scene,group)?;}
     let instances = classic(&groups)?.is_empty();
     s.set_undo_by_transaction(instances);
     if instances {

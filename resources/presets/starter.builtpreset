@@ -593,6 +593,1071 @@
       },
       "naming": "",
       "node": ""
+    },
+    {
+      "uid": "8ccdd727386a50c6",
+      "name": "Hosted opening",
+      "pack": "Architecture",
+      "primitive": "junction",
+      "rev": 1,
+      "values": {
+        "meeting": "hosted",
+        "roles": {
+          "host": {},
+          "hosted": {}
+        },
+        "rule": {
+          "meeting": "hosted",
+          "roles": {
+            "host": {
+              "class": [
+                "IfcWall",
+                "IfcWallStandardCase"
+              ]
+            },
+            "hosted": {}
+          }
+        },
+        "contents": [
+          {
+            "key": "opening",
+            "hosted_opening": true
+          }
+        ],
+        "params": [
+          {
+            "key": "sill",
+            "expr": "hosted.sill",
+            "unit": "mm"
+          },
+          {
+            "key": "offset",
+            "expr": "hosted.offset",
+            "unit": "mm"
+          },
+          {
+            "key": "reveal",
+            "expr": "0",
+            "unit": "mm"
+          }
+        ]
+      },
+      "locks": {},
+      "record": {
+        "class": "IfcElementAssembly"
+      }
+    },
+    {
+      "uid": "f9490cb14ae4e3dc",
+      "name": "Lining Left",
+      "pack": "Architecture",
+      "primitive": "sweep",
+      "rev": 1,
+      "values": {
+        "profile": {
+          "library": "basic/timber",
+          "params": {
+            "width": 25,
+            "height": 50
+          }
+        },
+        "attachment": "centre"
+      },
+      "locks": {},
+      "record": {
+        "class": "IfcBuildingElementPart"
+      }
+    },
+    {
+      "uid": "6b25e6669cb4aaaa",
+      "name": "Lining Right",
+      "pack": "Architecture",
+      "primitive": "sweep",
+      "rev": 1,
+      "values": {
+        "profile": {
+          "library": "basic/timber",
+          "params": {
+            "width": 25,
+            "height": 50
+          }
+        },
+        "attachment": "centre"
+      },
+      "locks": {},
+      "record": {
+        "class": "IfcBuildingElementPart"
+      }
+    },
+    {
+      "uid": "b852adcbc3b010eb",
+      "name": "Frame",
+      "pack": "Architecture",
+      "primitive": "sweep",
+      "rev": 1,
+      "values": {
+        "profile": {
+          "library": "basic/timber",
+          "params": {
+            "width": 25,
+            "height": 50
+          }
+        },
+        "attachment": "centre"
+      },
+      "locks": {},
+      "record": {
+        "class": "IfcBuildingElementPart"
+      }
+    },
+    {
+      "uid": "ff6bca8fc03fd3d4",
+      "name": "Lintel",
+      "pack": "Architecture",
+      "primitive": "sweep",
+      "rev": 1,
+      "values": {
+        "profile": {
+          "library": "basic/timber",
+          "params": {
+            "width": 25,
+            "height": 50
+          }
+        },
+        "attachment": "centre"
+      },
+      "locks": {},
+      "record": {
+        "class": "IfcBeam",
+        "predefined_type": "LINTEL"
+      }
+    },
+    {
+      "uid": "0ac426540859c03e",
+      "name": "Reveal Left",
+      "pack": "Architecture",
+      "primitive": "sweep",
+      "rev": 1,
+      "values": {
+        "profile": {
+          "library": "basic/timber",
+          "params": {
+            "width": 25,
+            "height": 50
+          }
+        },
+        "attachment": "centre"
+      },
+      "locks": {},
+      "record": {
+        "class": "IfcBuildingElementPart"
+      }
+    },
+    {
+      "uid": "642e5e77683b954a",
+      "name": "Reveal Right",
+      "pack": "Architecture",
+      "primitive": "sweep",
+      "rev": 1,
+      "values": {
+        "profile": {
+          "library": "basic/timber",
+          "params": {
+            "width": 25,
+            "height": 50
+          }
+        },
+        "attachment": "centre"
+      },
+      "locks": {},
+      "record": {
+        "class": "IfcBuildingElementPart"
+      }
+    },
+    {
+      "uid": "30e27bad196ea165",
+      "name": "Door opening",
+      "pack": "Architecture",
+      "primitive": "junction",
+      "rev": 1,
+      "values": {
+        "meeting": "hosted",
+        "roles": {
+          "host": {},
+          "hosted": {}
+        },
+        "rule": {
+          "meeting": "hosted",
+          "roles": {
+            "host": {
+              "class": [
+                "IfcWall",
+                "IfcWallStandardCase"
+              ],
+              "size": {
+                "thickness": [
+                  60,
+                  650
+                ]
+              }
+            },
+            "hosted": {
+              "class": [
+                "IfcDoor"
+              ]
+            }
+          }
+        },
+        "contents": [
+          {
+            "key": "opening",
+            "hosted_opening": true
+          },
+          {
+            "key": "lining_left",
+            "part": {
+              "preset": "f9490cb14ae4e3dc",
+              "path": {
+                "points": [
+                  [
+                    0,
+                    0,
+                    0
+                  ],
+                  [
+                    0,
+                    0.1,
+                    0
+                  ]
+                ]
+              },
+              "fields": {
+                "path.y": "hosted.height",
+                "profile.params.width": 18,
+                "profile.params.height": "frame_depth"
+              },
+              "at": {
+                "frame": "@meet",
+                "offset": [
+                  0,
+                  0,
+                  "-frame_depth / 2"
+                ]
+              }
+            }
+          },
+          {
+            "key": "lining_right",
+            "part": {
+              "preset": "6b25e6669cb4aaaa",
+              "path": {
+                "points": [
+                  [
+                    0,
+                    0,
+                    0
+                  ],
+                  [
+                    0,
+                    0.1,
+                    0
+                  ]
+                ]
+              },
+              "fields": {
+                "path.y": "hosted.height",
+                "profile.params.width": 18,
+                "profile.params.height": "frame_depth"
+              },
+              "at": {
+                "frame": "@meet",
+                "offset": [
+                  "hosted.width",
+                  0,
+                  "-frame_depth / 2"
+                ]
+              }
+            }
+          },
+          {
+            "key": "frame",
+            "part": {
+              "preset": "b852adcbc3b010eb",
+              "path": {
+                "points": [
+                  [
+                    0,
+                    0,
+                    0
+                  ],
+                  [
+                    0.1,
+                    0,
+                    0
+                  ]
+                ]
+              },
+              "fields": {
+                "path.x": "hosted.width",
+                "profile.params.width": 40,
+                "profile.params.height": "frame_depth"
+              },
+              "at": {
+                "frame": "@meet",
+                "offset": [
+                  0,
+                  "hosted.height",
+                  "-frame_depth / 2"
+                ]
+              }
+            }
+          },
+          {
+            "key": "lintel",
+            "part": {
+              "preset": "ff6bca8fc03fd3d4",
+              "path": {
+                "points": [
+                  [
+                    0,
+                    0,
+                    0
+                  ],
+                  [
+                    0.1,
+                    0,
+                    0
+                  ]
+                ]
+              },
+              "fields": {
+                "path.x": "lintel_len",
+                "profile.params.width": 120,
+                "profile.params.height": "frame_depth"
+              },
+              "at": {
+                "frame": "@meet",
+                "offset": [
+                  "-bearing",
+                  "hosted.height + 60",
+                  "-frame_depth / 2"
+                ]
+              }
+            }
+          },
+          {
+            "key": "reveal_left",
+            "part": {
+              "preset": "0ac426540859c03e",
+              "path": {
+                "points": [
+                  [
+                    0,
+                    0,
+                    0
+                  ],
+                  [
+                    0,
+                    0.1,
+                    0
+                  ]
+                ]
+              },
+              "fields": {
+                "path.y": "hosted.height",
+                "profile.params.width": 20,
+                "profile.params.height": 12
+              },
+              "at": {
+                "frame": "@meet",
+                "offset": [
+                  -20,
+                  0,
+                  0
+                ]
+              }
+            }
+          },
+          {
+            "key": "reveal_right",
+            "part": {
+              "preset": "642e5e77683b954a",
+              "path": {
+                "points": [
+                  [
+                    0,
+                    0,
+                    0
+                  ],
+                  [
+                    0,
+                    0.1,
+                    0
+                  ]
+                ]
+              },
+              "fields": {
+                "path.y": "hosted.height",
+                "profile.params.width": 20,
+                "profile.params.height": 12
+              },
+              "at": {
+                "frame": "@meet",
+                "offset": [
+                  "hosted.width + 20",
+                  0,
+                  0
+                ]
+              }
+            }
+          }
+        ],
+        "params": [
+          {
+            "key": "sill",
+            "expr": "hosted.sill",
+            "unit": "mm"
+          },
+          {
+            "key": "offset",
+            "expr": "hosted.offset",
+            "unit": "mm"
+          },
+          {
+            "key": "reveal",
+            "expr": "0",
+            "unit": "mm"
+          },
+          {
+            "key": "frame_depth",
+            "expr": "host.thickness",
+            "unit": "mm"
+          },
+          {
+            "key": "bearing",
+            "expr": "150",
+            "unit": "mm"
+          },
+          {
+            "key": "lintel_len",
+            "expr": "hosted.width + 2 * bearing",
+            "unit": "mm"
+          }
+        ]
+      },
+      "locks": {},
+      "record": {
+        "class": "IfcElementAssembly"
+      }
+    },
+    {
+      "uid": "dcb5d3cf8c5f2981",
+      "name": "Sill",
+      "pack": "Architecture",
+      "primitive": "sweep",
+      "rev": 1,
+      "values": {
+        "profile": {
+          "library": "basic/timber",
+          "params": {
+            "width": 25,
+            "height": 50
+          }
+        },
+        "attachment": "centre"
+      },
+      "locks": {},
+      "record": {
+        "class": "IfcBuildingElementPart"
+      }
+    },
+    {
+      "uid": "5c9f9bb202d14a8c",
+      "name": "Window opening",
+      "pack": "Architecture",
+      "primitive": "junction",
+      "rev": 1,
+      "values": {
+        "meeting": "hosted",
+        "roles": {
+          "host": {},
+          "hosted": {}
+        },
+        "rule": {
+          "meeting": "hosted",
+          "roles": {
+            "host": {
+              "class": [
+                "IfcWall",
+                "IfcWallStandardCase"
+              ],
+              "size": {
+                "thickness": [
+                  60,
+                  650
+                ]
+              }
+            },
+            "hosted": {
+              "class": [
+                "IfcWindow"
+              ]
+            }
+          }
+        },
+        "contents": [
+          {
+            "key": "opening",
+            "hosted_opening": true
+          },
+          {
+            "key": "lining_left",
+            "part": {
+              "preset": "f9490cb14ae4e3dc",
+              "path": {
+                "points": [
+                  [
+                    0,
+                    0,
+                    0
+                  ],
+                  [
+                    0,
+                    0.1,
+                    0
+                  ]
+                ]
+              },
+              "fields": {
+                "path.y": "hosted.height",
+                "profile.params.width": 18,
+                "profile.params.height": "frame_depth"
+              },
+              "at": {
+                "frame": "@meet",
+                "offset": [
+                  0,
+                  0,
+                  "-frame_depth / 2"
+                ]
+              }
+            }
+          },
+          {
+            "key": "lining_right",
+            "part": {
+              "preset": "6b25e6669cb4aaaa",
+              "path": {
+                "points": [
+                  [
+                    0,
+                    0,
+                    0
+                  ],
+                  [
+                    0,
+                    0.1,
+                    0
+                  ]
+                ]
+              },
+              "fields": {
+                "path.y": "hosted.height",
+                "profile.params.width": 18,
+                "profile.params.height": "frame_depth"
+              },
+              "at": {
+                "frame": "@meet",
+                "offset": [
+                  "hosted.width",
+                  0,
+                  "-frame_depth / 2"
+                ]
+              }
+            }
+          },
+          {
+            "key": "frame",
+            "part": {
+              "preset": "b852adcbc3b010eb",
+              "path": {
+                "points": [
+                  [
+                    0,
+                    0,
+                    0
+                  ],
+                  [
+                    0.1,
+                    0,
+                    0
+                  ]
+                ]
+              },
+              "fields": {
+                "path.x": "hosted.width",
+                "profile.params.width": 40,
+                "profile.params.height": "frame_depth"
+              },
+              "at": {
+                "frame": "@meet",
+                "offset": [
+                  0,
+                  "hosted.height",
+                  "-frame_depth / 2"
+                ]
+              }
+            }
+          },
+          {
+            "key": "lintel",
+            "part": {
+              "preset": "ff6bca8fc03fd3d4",
+              "path": {
+                "points": [
+                  [
+                    0,
+                    0,
+                    0
+                  ],
+                  [
+                    0.1,
+                    0,
+                    0
+                  ]
+                ]
+              },
+              "fields": {
+                "path.x": "lintel_len",
+                "profile.params.width": 120,
+                "profile.params.height": "frame_depth"
+              },
+              "at": {
+                "frame": "@meet",
+                "offset": [
+                  "-bearing",
+                  "hosted.height + 60",
+                  "-frame_depth / 2"
+                ]
+              }
+            }
+          },
+          {
+            "key": "reveal_left",
+            "part": {
+              "preset": "0ac426540859c03e",
+              "path": {
+                "points": [
+                  [
+                    0,
+                    0,
+                    0
+                  ],
+                  [
+                    0,
+                    0.1,
+                    0
+                  ]
+                ]
+              },
+              "fields": {
+                "path.y": "hosted.height",
+                "profile.params.width": 20,
+                "profile.params.height": 12
+              },
+              "at": {
+                "frame": "@meet",
+                "offset": [
+                  -20,
+                  0,
+                  0
+                ]
+              }
+            }
+          },
+          {
+            "key": "reveal_right",
+            "part": {
+              "preset": "642e5e77683b954a",
+              "path": {
+                "points": [
+                  [
+                    0,
+                    0,
+                    0
+                  ],
+                  [
+                    0,
+                    0.1,
+                    0
+                  ]
+                ]
+              },
+              "fields": {
+                "path.y": "hosted.height",
+                "profile.params.width": 20,
+                "profile.params.height": 12
+              },
+              "at": {
+                "frame": "@meet",
+                "offset": [
+                  "hosted.width + 20",
+                  0,
+                  0
+                ]
+              }
+            }
+          },
+          {
+            "key": "sill",
+            "part": {
+              "preset": "dcb5d3cf8c5f2981",
+              "path": {
+                "points": [
+                  [
+                    0,
+                    0,
+                    0
+                  ],
+                  [
+                    0.1,
+                    0,
+                    0
+                  ]
+                ]
+              },
+              "fields": {
+                "path.x": "hosted.width",
+                "profile.params.width": 25,
+                "profile.params.height": "frame_depth"
+              },
+              "at": {
+                "frame": "@meet",
+                "offset": [
+                  0,
+                  0,
+                  "-frame_depth / 2"
+                ]
+              }
+            }
+          }
+        ],
+        "params": [
+          {
+            "key": "sill",
+            "expr": "hosted.sill",
+            "unit": "mm"
+          },
+          {
+            "key": "offset",
+            "expr": "hosted.offset",
+            "unit": "mm"
+          },
+          {
+            "key": "reveal",
+            "expr": "0",
+            "unit": "mm"
+          },
+          {
+            "key": "frame_depth",
+            "expr": "host.thickness",
+            "unit": "mm"
+          },
+          {
+            "key": "bearing",
+            "expr": "150",
+            "unit": "mm"
+          },
+          {
+            "key": "lintel_len",
+            "expr": "hosted.width + 2 * bearing",
+            "unit": "mm"
+          }
+        ]
+      },
+      "locks": {},
+      "record": {
+        "class": "IfcElementAssembly"
+      }
+    },
+    {
+      "uid": "4036051395af3d4c",
+      "name": "Wall corner · mitre",
+      "pack": "Architecture",
+      "primitive": "junction",
+      "rev": 1,
+      "values": {
+        "meeting": "corner",
+        "roles": {
+          "main": {},
+          "joining": {}
+        },
+        "rule": {
+          "meeting": "corner",
+          "roles": {
+            "main": {
+              "class": [
+                "IfcWall",
+                "IfcWallStandardCase"
+              ]
+            },
+            "joining": {
+              "class": [
+                "IfcWall",
+                "IfcWallStandardCase"
+              ]
+            }
+          }
+        },
+        "contents": [
+          {
+            "key": "main_trim",
+            "on": "main",
+            "row": {
+              "kind": "cut",
+              "operation": "trim",
+              "end": "@main.end",
+              "cutter": {
+                "plane": {}
+              },
+              "anchor": {
+                "ref": "@meet",
+                "offset": 0
+              }
+            }
+          },
+          {
+            "key": "joining_trim",
+            "on": "joining",
+            "row": {
+              "kind": "cut",
+              "operation": "trim",
+              "end": "@joining.end",
+              "cutter": {
+                "plane": {}
+              },
+              "anchor": {
+                "ref": "@meet",
+                "offset": 0
+              }
+            }
+          }
+        ],
+        "params": []
+      },
+      "locks": {},
+      "record": {
+        "class": "IfcElementAssembly"
+      }
+    },
+    {
+      "uid": "f4f093aed0396c6f",
+      "name": "Wall corner · by priority",
+      "pack": "Architecture",
+      "primitive": "junction",
+      "rev": 1,
+      "values": {
+        "meeting": "corner",
+        "roles": {
+          "main": {},
+          "joining": {}
+        },
+        "rule": {
+          "meeting": "corner",
+          "roles": {
+            "main": {
+              "class": [
+                "IfcWall",
+                "IfcWallStandardCase"
+              ]
+            },
+            "joining": {
+              "class": [
+                "IfcWall",
+                "IfcWallStandardCase"
+              ]
+            }
+          }
+        },
+        "contents": [
+          {
+            "key": "joining_trim",
+            "on": "joining",
+            "row": {
+              "kind": "cut",
+              "operation": "trim",
+              "end": "@joining.end",
+              "cutter": {
+                "plane": {}
+              },
+              "anchor": {
+                "ref": "@main.contact",
+                "offset": 0
+              }
+            }
+          },
+          {
+            "key": "main_trim",
+            "on": "main",
+            "row": {
+              "kind": "cut",
+              "operation": "trim",
+              "end": "@main.end",
+              "cutter": {
+                "plane": {}
+              },
+              "anchor": {
+                "ref": "@joining.contact",
+                "offset": "-joining.thickness"
+              }
+            }
+          }
+        ],
+        "params": []
+      },
+      "locks": {},
+      "record": {
+        "class": "IfcElementAssembly"
+      }
+    },
+    {
+      "uid": "a2ff384d2a3b97b3",
+      "name": "Wall tee",
+      "pack": "Architecture",
+      "primitive": "junction",
+      "rev": 1,
+      "values": {
+        "meeting": "corner",
+        "roles": {
+          "main": {},
+          "joining": {}
+        },
+        "rule": {
+          "meeting": "corner",
+          "roles": {
+            "main": {
+              "class": [
+                "IfcWall",
+                "IfcWallStandardCase"
+              ]
+            },
+            "joining": {
+              "class": [
+                "IfcWall",
+                "IfcWallStandardCase"
+              ]
+            }
+          }
+        },
+        "contents": [
+          {
+            "key": "joining_trim",
+            "on": "joining",
+            "row": {
+              "kind": "cut",
+              "operation": "trim",
+              "end": "@joining.end",
+              "cutter": {
+                "plane": {}
+              },
+              "anchor": {
+                "ref": "@main.contact",
+                "offset": 0
+              }
+            }
+          }
+        ],
+        "params": [],
+        "arrangement": "tee"
+      },
+      "locks": {},
+      "record": {
+        "class": "IfcElementAssembly"
+      }
+    },
+    {
+      "uid": "9266cd42050e4e90",
+      "name": "Wall on slab",
+      "pack": "Architecture",
+      "primitive": "junction",
+      "rev": 1,
+      "values": {
+        "meeting": "base",
+        "roles": {
+          "main": {},
+          "joining": {}
+        },
+        "rule": {
+          "meeting": "base",
+          "roles": {
+            "main": {
+              "class": [
+                "IfcSlab"
+              ]
+            },
+            "joining": {
+              "class": [
+                "IfcWall",
+                "IfcWallStandardCase"
+              ]
+            }
+          }
+        },
+        "contents": [],
+        "params": []
+      },
+      "locks": {},
+      "record": {
+        "class": "IfcElementAssembly"
+      }
+    },
+    {
+      "uid": "81b20e81b1f87d45",
+      "name": "Wall on slab · trim",
+      "pack": "Architecture",
+      "primitive": "junction",
+      "rev": 1,
+      "values": {
+        "meeting": "base",
+        "roles": {
+          "main": {},
+          "joining": {}
+        },
+        "rule": {
+          "meeting": "base",
+          "roles": {
+            "main": {
+              "class": [
+                "IfcSlab"
+              ]
+            },
+            "joining": {
+              "class": [
+                "IfcWall",
+                "IfcWallStandardCase"
+              ]
+            }
+          }
+        },
+        "contents": [
+          {
+            "key": "slab_trim",
+            "on": "joining",
+            "row": {
+              "kind": "cut",
+              "operation": "subtract",
+              "cutter": {
+                "body": "@main"
+              }
+            }
+          }
+        ],
+        "params": []
+      },
+      "locks": {},
+      "record": {
+        "class": "IfcElementAssembly"
+      }
     }
   ]
 }

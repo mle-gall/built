@@ -3,6 +3,8 @@
 use super::*;
 mod fastener;
 mod grid;
+pub(super) mod hosting;
+pub(super) mod walls;
 pub(super) use grid::{attach_holes, detach_holes};
 mod parts;
 mod seam;
@@ -425,6 +427,9 @@ fn face_plane(
 }
 
 fn geometry(scene: &Obj<'_>, t: &LiveTable, j: &Row) -> PyResult<Option<(Frames, expr::Values)>> {
+    if j.joint.meeting.as_deref() == Some("hosted") && j.joint.roles["hosted"]["attached"] == true {
+        return Ok(hosting::geometry(t, j));
+    }
     let mut roles = BTreeMap::new();
     let Some(bindings) = j.joint.roles.as_object() else {
         return Ok(None);
@@ -501,6 +506,13 @@ fn geometry(scene: &Obj<'_>, t: &LiveTable, j: &Row) -> PyResult<Option<(Frames,
     };
     let delta = a.pos - b.pos;
     let (meet, z) = match j.joint.meeting.as_deref() {
+        Some("corner")
+            if bindings[main]["contact"] == "path"
+                || detail(t, j)
+                    .is_ok_and(|p| p.values.get("arrangement") == Some(&json!("tee"))) =>
+        {
+            (b.pos + normal * (contact - b.pos).dot(normal), normal)
+        }
         Some("corner") => ((a.pos + b.pos) * 0.5, (a.axis - b.axis).normalize_or_zero()),
         Some("parts") if main == "ply_1" => (a.pos, a.axis),
         Some("end_end" | "parts") => ((a.pos + b.pos) * 0.5, a.axis),
@@ -518,6 +530,11 @@ fn geometry(scene: &Obj<'_>, t: &LiveTable, j: &Row) -> PyResult<Option<(Frames,
             )
         }
         Some("hosted") => (b.pos + normal * (contact - b.pos).dot(normal), normal),
+        Some("base") if b.axis.dot(a.up).abs() < 1e-8 => {
+            let top = a.pos + a.datums.get("top").copied().unwrap_or_default();
+            let up = a.up.normalize_or_zero();
+            (b.pos + up * (top - b.pos).dot(up), up)
+        }
         _ => {
             let den = b.axis.dot(normal);
             if den.abs() < 1e-10 {
@@ -733,12 +750,32 @@ fn outside_role(
 
 pub(super) fn evaluate(scene: &Obj<'_>, t: &mut LiveTable, uid: &str) -> PyResult<bool> {
     let mut row = (*t.rows[uid]).clone();
+    if matches!(
+        row.joint.reason["criterion"].as_str(),
+        Some("opening_overlap" | "wall_faces")
+    ) {
+        return Ok(false);
+    }
     let before = (
         row.frames.clone(),
         row.joint.params.clone(),
         row.state.clone(),
     );
     let mut fields_changed = false;
+    if row.joint.meeting.as_deref() == Some("hosted") {
+        match hosting::resize(scene, t, &mut row)? {
+            Ok(changed) => fields_changed = changed,
+            Err(reason) => {
+                set_reason(
+                    &mut row,
+                    "failed",
+                    json!({"criterion":reason,"role":"host"}),
+                );
+                t.rows.insert(uid.into(), Arc::new(row));
+                return Ok(false);
+            }
+        }
+    }
     let Ok(p) = detail(t, &row) else {
         set_reason(&mut row, "failed", json!({"criterion":"detail_missing"}));
         t.rows.insert(uid.into(), Arc::new(row));
@@ -884,6 +921,8 @@ fn expand_field(
                     .get("end")
                     .cloned()
                     .unwrap_or(json!("end"))
+            } else if path == "/cutter/body" {
+                json!(placement(&row.joint.roles[frame]).ok_or_else(|| err("Unknown cutter role"))?)
             } else if path == "/anchor/ref" {
                 json!({"junction":row.uid,"frame":frame})
             } else {
@@ -1052,7 +1091,20 @@ pub(super) fn prepare(
             Some(children) => children,
             None => scene.getattr("groups")?,
         };
-        siblings.call_method1("append", (&g,))?;
+        // A newly placed family remains the last sibling, as ordinary
+        // placement callers expect. Keep its assembly immediately beside it.
+        let fill = row
+            .joint
+            .roles
+            .get("hosted")
+            .filter(|b| b["attached"] == true)
+            .and_then(placement)
+            .and_then(|uid| group(py, t, uid));
+        if let Some(index) = fill.and_then(|f| siblings.call_method1("index", (f,)).ok()) {
+            siblings.call_method1("insert", (index, &g))?;
+        } else {
+            siblings.call_method1("append", (&g,))?;
+        }
         crate::structure::file_sweep(scene, &g, "")?;
         Arc::make_mut(&mut t.groups).insert(owner.clone(), g.getattr("_doc_key")?.extract()?);
     }
@@ -1078,6 +1130,32 @@ pub(super) fn prepare(
             .as_array()
             .is_some_and(|a| a.contains(&json!(key)))
         {
+            continue;
+        }
+        if item["hosted_opening"] == true {
+            let host =
+                placement(&row.joint.roles["host"]).ok_or_else(|| err("Missing opening host"))?;
+            let fill =
+                placement(&row.joint.roles["hosted"]).ok_or_else(|| err("Missing opening fill"))?;
+            let cut = t
+                .owners
+                .get(host)
+                .and_then(|id| t.rows.get(id))
+                .into_iter()
+                .flat_map(|r| &r.cuts)
+                .filter_map(|id| t.rows.get(id))
+                .find(|r| matches!(&r.cutter,Some(cut::Cutter::Opening(o)) if o.fill==fill))
+                .ok_or_else(|| err("Place the hosted component on its wall first"))?;
+            if cut.junction.as_ref().is_some_and(|id| id != &row.uid) {
+                return Err(err("Opening already belongs to a junction"));
+            }
+            let mut cut = (**cut).clone();
+            cut.junction = Some(row.uid.clone());
+            cut.key = Some(key.into());
+            cut.inputs.clear();
+            keep.insert(cut.uid.clone());
+            contents.push(json!({"key":key,"row":cut.uid}));
+            t.insert(cut).map_err(err)?;
             continue;
         }
         let uid = id(&row.uid, key);
@@ -1410,14 +1488,14 @@ pub(super) fn junction_markers<'p>(scene: &Obj<'p>) -> PyResult<Obj<'p>> {
         let selected = scene.getattr("selection")?;
         for uid in &t.junctions {
             let j = &t.rows[uid];
-            let visible = std::iter::once(&j.owner)
+            let visible = std::iter::once(j.owner.as_str())
                 .chain(
                     j.joint
                         .roles
                         .as_object()
                         .into_iter()
                         .flat_map(|m| m.values())
-                        .filter_map(|b| Some(&t.rows.get(b["row"].as_str()?)?.owner)),
+                        .filter_map(placement),
                 )
                 .filter_map(|id| group(scene.py(), &t, id))
                 .any(|g| selected.contains(g).unwrap_or(false));
