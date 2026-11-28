@@ -261,6 +261,19 @@ pub struct LiveTable {
     pub(super) users: HashMap<Key, OrdSet<String>>,
     pub(super) order: HashMap<String, u64>,
     pub(super) serial: u64,
+    /// Junction and Repeat rows opened without their stamps checked yet
+    /// (`live/file.rs`): shared by every snapshot of the opened table, never
+    /// journalled, so checking them later neither dirties the file nor
+    /// enters Undo.
+    pub verify: Arc<std::sync::Mutex<Verify>>,
+}
+/// Stamps still to check after an open, and the rows found stale so far.
+#[derive(Default, Debug)]
+pub struct Verify {
+    pub pending: Vec<String>,
+    /// (row uid, the stamp its marker had when found stale): once the row
+    /// is evaluated again its marker changes and it no longer reads stale.
+    pub stale: Vec<(String, String)>,
 }
 impl LiveTable {
     pub fn by_creation(&self) -> Vec<&Row> {

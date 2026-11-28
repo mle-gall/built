@@ -56,7 +56,18 @@ fn current(py: Python<'_>, root: doc::Key) -> Option<LiveTable> {
         };
         obj.0.clone_ref(py)
     };
-    Some(value.bind(py).cast::<LiveTable>().ok()?.get().clone())
+    let mut t = value.bind(py).cast::<LiveTable>().ok()?.get().clone();
+    // Rows an after-open check found stale read stale from every snapshot.
+    let stale = t.verify.lock().map(|v| v.stale.clone()).unwrap_or_default();
+    for (uid, stamp) in stale {
+        let Some(owner) = t.rows.get(&uid).filter(|r| r.state == "ok").map(|r| r.owner.clone()) else { continue };
+        let marked = group(py, &t, &owner)
+            .and_then(|g| metadata(&g).ok()?.get_item(EXT).ok()??.get_item("stamp").ok()?.extract::<String>().ok());
+        if marked.as_deref() == Some(stamp.as_str()) {
+            t.set_state(&uid, "stale");
+        }
+    }
+    Some(t)
 }
 fn put(scene: &Obj<'_>, table: LiveTable) -> PyResult<()> {
     let py = scene.py();
@@ -1927,11 +1938,19 @@ pub(crate) fn cut_feedback(scene: &Obj<'_>, ids: &[String]) -> PyResult<Option<&
 
 #[pyfunction]
 fn live_rows<'p>(scene: &Obj<'p>) -> PyResult<Obj<'p>> {
+    file::verify(scene, None, None)?;
     let t = current(scene.py(), root(scene)?).unwrap_or_default();
     to_py(scene.py(), &t.by_creation())
 }
+/// Check up to `budget_ms` of the stamps an open left for later (the view
+/// calls it between frames). Returns (rows left, whether one read stale).
+#[pyfunction]
+fn live_verify(scene: &Obj<'_>, budget_ms: f64) -> PyResult<(usize, bool)> {
+    file::verify(scene, Some(std::time::Duration::from_secs_f64(budget_ms.max(0.) / 1000.)), None)
+}
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     presets::register(m)?;
+    m.add_function(wrap_pyfunction!(live_verify, m)?)?;
     m.add_function(wrap_pyfunction!(junction::junction_markers, m)?)?;
     m.add_function(wrap_pyfunction!(junction_apply, m)?)?;
     m.add_function(wrap_pyfunction!(junction_skip, m)?)?;
@@ -2255,6 +2274,11 @@ fn junction_capture_offers<'p>(scene: &Obj<'p>) -> PyResult<Obj<'p>> {
 /// The junction record for the inspector (`uid`: the row or its assembly).
 #[pyfunction]
 fn junction_record<'p>(scene: &Obj<'p>, uid: &str) -> PyResult<Obj<'p>> {
+    let row = current(scene.py(), root(scene)?)
+        .and_then(|t| t.rows.get(uid).map(|r| r.uid.clone()).or_else(|| t.owners.get(uid).cloned()));
+    if let Some(row) = row {
+        file::verify(scene, None, Some(&row))?;
+    }
     let t = current(scene.py(), root(scene)?).unwrap_or_default();
     let v = junction::capture::record_of(scene, &t, uid)?;
     to_py(scene.py(), &v)

@@ -1713,6 +1713,9 @@ pub(super) fn along_repeat(scene: &Obj<'_>, t: &LiveTable, roles: &Value) -> Opt
 pub(crate) fn view_rows(scene: &Obj<'_>, expanded: &HashSet<String>) -> PyResult<Vec<(String, String, String, &'static str, usize, usize, bool)>> {
     let py = scene.py();
     let mut out = Vec::new();
+    if scene.getattr_opt("_junction_view")?.is_some_and(|v| v.eq("problems").unwrap_or(false)) {
+        super::file::verify(scene, None, None)?;
+    }
     let Some(t) = root(scene).ok().and_then(|k| current(py, k)) else { return Ok(out) };
     let tops: Vec<&Arc<Row>> = t.junctions.iter().filter_map(|id| t.rows.get(id)).filter(|r| r.joint.parent.is_none()).collect();
     let details = t.presets.values().filter(|p| p.primitive == "junction").count();
