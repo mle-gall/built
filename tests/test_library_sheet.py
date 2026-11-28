@@ -254,7 +254,8 @@ def test_linked_files_materials_are_listed_read_only(win, tmp_path):
     assert next(b for b in detail(sh) if b["kind"] == "heading")["right"] == "C.igz · read-only"
     assert not any(b["kind"] == "fields" for b in detail(sh))         # no editor: read-only
     verbs = [v["id"] for b in detail(sh) if b["kind"] == "buttons" for v in b["buttons"]]
-    assert verbs == ["apply", "opensource"]
+    assert verbs == ["apply"]
+    assert "opensource" in dict(tiles(sh)[0]["menu"])
 
 
 def test_components_tab(win):

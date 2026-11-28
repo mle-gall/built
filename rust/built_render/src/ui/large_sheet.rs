@@ -708,10 +708,16 @@ impl Draw<'_> {
     }
 
     /// Report a click / double-click / right-click on an item.
-    fn item_input(&mut self, resp: &egui::Response, it: &Item) {
+    fn item_input(&mut self, ui: &mut egui::Ui, resp: &egui::Response, it: &Item) {
         if it.id.is_empty() { return; }
-        if resp.secondary_clicked() && !it.menu.is_empty() {
-            let at = resp.interact_pointer_pos().unwrap_or(resp.rect.left_bottom());
+        let library = matches!(it.kind.as_str(), "library" | "placeable");
+        let more = if library && !it.menu.is_empty() {
+            let rect = Rect::from_min_size(resp.rect.right_top() - vec2(BUTTON_H, 0.), vec2(BUTTON_H, BUTTON_H));
+            let mut cell = ui.new_child(egui::UiBuilder::new().id_salt(("item actions", &it.id)).max_rect(rect));
+            Some(kit::panel_button(&mut cell, "…", "", 0, Some(BUTTON_H)))
+        } else { None };
+        if let Some(at) = more.as_ref().filter(|r| r.clicked() || r.secondary_clicked()).map(|r| r.rect.left_bottom())
+            .or_else(|| (resp.secondary_clicked() && !it.menu.is_empty()).then(|| resp.interact_pointer_pos().unwrap_or(resp.rect.left_bottom()))) {
             self.st.menu = Some((it.id.clone(), it.menu.clone(), at));
             if self.focusable && !it.fixed {
                 self.st.focused = Some(it.id.clone());
@@ -723,7 +729,7 @@ impl Draw<'_> {
             if resp.clicked() { self.out.push(format!("pick{SEP}{}", it.id)); }
             return;
         }
-        if resp.double_clicked() {
+        if (library && resp.clicked() && it.menu.iter().any(|(id,_)| id == "apply")) || resp.double_clicked() {
             self.out.push(format!("open{SEP}{}", it.id));
         } else if resp.clicked() {
             if self.st.focused.as_deref() != Some(it.id.as_str()) {
@@ -814,7 +820,7 @@ impl Draw<'_> {
                 ui.painter().galley(pos2(r.min.x, pic.max.y + 20.0), s, FAINT);
             }
             let resp = if it.tip.is_empty() { resp } else { resp.on_hover_text(&it.tip) };
-            self.item_input(&resp, it);
+            self.item_input(ui, &resp, it);
         }
         if !components.is_empty() {
             self.out.push(std::iter::once("component-previews").chain(components).collect::<Vec<_>>().join(&SEP.to_string()));
@@ -883,6 +889,7 @@ impl Draw<'_> {
             }
             // Right: the dot and its words, then the right text.
             let mut right_x = r.max.x - SPACE_S;
+            if matches!(it.kind.as_str(), "library" | "placeable") && !it.menu.is_empty() { right_x -= BUTTON_H; }
             if let Some(mut enabled) = it.toggle {
                 let track = Rect::from_center_size(pos2(right_x - 21., r.center().y), vec2(42., CONTROL_H));
                 let mut cell = ui.new_child(egui::UiBuilder::new().id_salt(("row toggle", &it.id)).max_rect(track));
@@ -945,7 +952,7 @@ impl Draw<'_> {
                 paint_dot(ui, pos2(bx - 8.0, r.center().y), "warn");
             }
             let resp = if it.tip.is_empty() { resp } else { resp.on_hover_text(&it.tip) };
-            self.item_input(&resp, it);
+            self.item_input(ui, &resp, it);
         }
 
         if !components.is_empty() {
