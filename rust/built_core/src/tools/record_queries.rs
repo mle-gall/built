@@ -267,14 +267,21 @@ impl ViewportToolHost {
                 }
                 hit
             }
+            "cut_feedback" => json!(crate::live::cut_feedback(&view.getattr("scene")?, &args::<Vec<String>>(arg)?)?),
+            "cut_solid" => {
+                let scene = view.getattr("scene")?;
+                let group = scene.call_method1("resolve_occurrence", (args::<Vec<String>>(arg)?,))?;
+                json!(py.import("built_core.solids")?.call_method1("is_solid", (group,))?.is_truthy()?)
+            }
             "cut_pick" => {
                 let px:(f64,f64)=args(arg)?;
                 let Some(pair)=hit(view,"pick_face_placement",px)? else{return Ok(Some(Value::Null));};
                 let face=pair.get_item(0)?;let placed=pair.get_item(1)?;
-                if face.is_none() || placed.is_none(){return Ok(Some(Value::Null));}
+                if face.is_none(){return Ok(Some(Value::Null));}
+                if placed.is_none(){return Ok(Some(json!({"reason":"Group the loose geometry before cutting"})));}
                 let matrix=placed.getattr("xform")?;
                 let xf=if matrix.is_none(){DMat4::IDENTITY}else{DMat4::from_cols_array(&matrix.call_method0("data")?.extract()?)};
-                let group=placed.getattr_opt("source_occurrence")?.unwrap_or(placed);
+                let group=placed.getattr_opt("source_occurrence")?.filter(|v| !v.is_none()).unwrap_or(placed);
                 let scene=view.getattr("scene")?;
                 let path:Vec<String>=scene.call_method1("occurrence_path",(&group,))?.extract()?;
                 let id=group.getattr("mesh")?.getattr("_store")?.call_method1("id_of",("face",face.getattr("key")?))?.extract()?;
@@ -295,20 +302,39 @@ impl ViewportToolHost {
                         }
                     }
                 }
-                let ends=group.getattr("ext")?.call_method1("get",("built.live",))?;
-                let points=ends.get_item("path").and_then(|p|p.extract::<Vec<[f64;3]>>()).unwrap_or_default();
+                let metadata = group.getattr("ext")?;
+                let ends = metadata.get_item("built.live").unwrap_or_else(|_| py.None().into_bound(py));
+                let points=match ends.get_item("path").and_then(|p|p.extract::<Vec<[f64;3]>>()) {
+                    Ok(path) => path, Err(_) => crate::live::solid_axis(&group.getattr("mesh")?)?,
+                };
                 let repeat = group.getattr("ext")?.get_item("built.repeat").ok()
                     .and_then(|m|m.get_item("row").ok()).and_then(|id|id.extract::<String>().ok());
                 let spans = ends.get_item("zones").and_then(|zones| zones.len())
                     .unwrap_or(points.len().saturating_sub(1));
                 let (span, start) = nearest_span_end(&points, spans, local);
-                json!({"repeat":repeat,"placement":group.getattr("uid")?.extract::<String>()?,"ring":ring,"face":{"path":path,"id":crate::element_ids::to_text('f',id)},"span":span,"end":if start {"start"}else{"end"}})
+                use crate::store::{keys::Kind, py::PyMeshStore};
+                let store = group.getattr("mesh")?.getattr("_store")?.cast_into::<PyMeshStore>()?;
+                let store = store.try_borrow()?;
+                let mesh = &store.inner;
+                let mut open_edges = 0;
+                let outline: Vec<_> = mesh.live_slots(Kind::Edge).into_iter().map(|edge| {
+                    open_edges += usize::from(mesh.edge_faces(edge).len() == 1);
+                    mesh.state.ends.get(edge as usize).map(|v| {
+                        let p = mesh.state.frame.definition_point(*mesh.state.vpos.get(v as usize));
+                        xf.transform_point3(p.into()).to_array()
+                    })
+                }).collect();
+                json!({"outline":outline,"open_edges":open_edges,"repeat":repeat,"placement":group.getattr("uid")?.extract::<String>()?,"ring":ring,"face":{"path":path,"id":crate::element_ids::to_text('f',id)},"span":span,"end":if start {"start"}else{"end"}})
             }
             "cut_selection" => {
                 let selected=view.getattr("scene")?.getattr("selection")?;
                 if selected.len()?==1 {
                     let g=selected.try_iter()?.next().transpose()?;
-                    json!(g.and_then(|g|g.getattr("uid").ok()).and_then(|v|v.extract::<String>().ok()))
+                    if let Some(g) = g {
+                        if py.import("built_core.solids")?.call_method1("is_solid", (&g,))?.is_truthy()? {
+                            json!(g.getattr("uid")?.extract::<String>()?)
+                        } else { Value::Null }
+                    } else { Value::Null }
                 } else {Value::Null}
             }
             "cut_draw_section" => {

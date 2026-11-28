@@ -84,6 +84,9 @@ fn outline(
             single.cuts = vec![row.uid.clone()];
             let path = if let Some(s) = target.sweep.as_ref() {
                 reference::sweep_path(scene, t, target, &s.path)?.unwrap_or_default()
+            } else if let Some(source) = cut::source(scene, target.source.as_deref().unwrap_or(""))?
+            {
+                cut::solid_axis(&source.getattr("mesh")?)?
             } else {
                 vec![[0.; 3], [0., 0., 1.]]
             };
