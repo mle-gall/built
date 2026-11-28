@@ -104,3 +104,20 @@ def test_sloped_flanges_and_toe_radii_change_the_drawing():
     # A toe radius equal to the leg thickness uses the whole leg end.
     full = command_protocol.profile_properties({"family": "angle", "params": dict(angle, toe=6)})
     assert full["area"] < command_protocol.profile_properties({"family": "angle", "params": angle})["area"]
+
+
+@pytest.mark.parametrize("folder", PACKS, ids=lambda f: f.name)
+def test_every_size_sweeps_into_a_member(folder):
+    # At the default 24 facets per turn: no two profile points may weld into
+    # one model vertex (fillets that end a hair before an edge's end).
+    from built_core.history import History
+    from built_core.protocol import queries
+    from built_core.scene import Scene
+    from tests.test_live_recipes import apply
+
+    sizes = [r for r in rows(folder.name) if r.get("profile_size")]
+    scene = Scene()
+    apply(History(scene), "create_sweeps", sweeps=[
+        dict(profile=r["values"]["profile"], path=dict(points=[[i, 0, 0], [i, 0, 1]])) for i, r in enumerate(sizes)])
+    states = [row["state"] for row in queries.live_rows(scene)]
+    assert [(r["name"], s) for r, s in zip(sizes, states) if s != "ok"] == []
