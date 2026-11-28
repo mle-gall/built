@@ -324,3 +324,24 @@ def test_purlin_seats_at_an_oblique_crossing():
     apply(h, "undo")
     joining = next(r for r in rows_of(scene) if r["owner"] == b)
     assert all(pt[2] == 0 for pt in joining["path"]["points"])
+
+
+@pytest.mark.parametrize("name,thickness", [
+    ("Pipe through wall", .2), ("Pipe through slab", .25),
+    ("Duct through wall", .2), ("Duct through slab", .25),
+])
+def test_penetration_removes_the_clear_opening(name, thickness):
+    from math import sin, tau
+    from tests.test_live_cut import solid_volume
+
+    p = next(q for q in starter_details() if q["name"] == name)
+    scene, h, uid = apply_in_empty_document(p)
+    j = next(r for r in rows_of(scene) if r["uid"] == uid)
+    host = j["roles"]["main"]["placement"]
+    cut = solid_volume(scene.groups_by_uid()[host])
+    width = j["params"]["opening_w"] / 1000
+    height = j["params"]["opening_h"] / 1000
+    # The bore has 24 sides, matching the sleeve's faceted section.
+    area = 12 * sin(tau / 24) * (width / 2) ** 2 if name.startswith("Pipe") else width * height
+    apply(h, "undo")
+    assert solid_volume(scene.groups_by_uid()[host]) - cut == pytest.approx(area * thickness)
