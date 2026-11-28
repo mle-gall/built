@@ -305,12 +305,14 @@ def test_along_a_repeat_is_one_row_that_follows_its_copies():
     j = rows[uid]
     assert j["state"] == "ok" and j["along"]["repeat"]
     children = [r for r in rows.values() if r.get("parent") == uid]
-    assert len(children) == 48 and all(r["state"] == "ok" for r in children)
-    assert len([r for r in rows.values() if r.get("key") == "cleat"]) == 48
-    # One copy fewer per slope and bay: its cleats go in the same step.
-    inner = rows["0000000000001001"]
+    # This slope's Purlins: 4 purlins in each of 3 bays, both ends.
+    assert len(children) == 24 and all(r["state"] == "ok" for r in children)
+    assert len([r for r in rows.values() if r.get("key") == "cleat"]) == 24
+    # One purlin fewer per bay: its cleats go in the same step.
+    outer = rows[j["along"]["repeat"]]
+    inner = next(r for r in rows.values() if r["kind"] == "repeat" and r["owner"] == outer["source"])
     apply(history, "live_set", row=dict(inner, rule={"divide": 2}))
     children = [r for r in rows_by_uid(scene).values() if r.get("parent") == uid]
-    assert len(children) == 40, len(children)
+    assert len(children) == 18, len(children)
     apply(history, "undo")
-    assert len([r for r in rows_by_uid(scene).values() if r.get("parent") == uid]) == 48
+    assert len([r for r in rows_by_uid(scene).values() if r.get("parent") == uid]) == 24
