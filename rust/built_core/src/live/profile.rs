@@ -80,6 +80,78 @@ impl Outline {
         Ok(DVec2::from(uv) * DVec2::new(self.width, self.height))
     }
 }
+/// Section properties of a drawn outline, in millimetres: area, centroid,
+/// second moments about the centroidal x (horizontal, "y-y" in EN tables)
+/// and y (vertical, "z-z") axes, the product moment, the principal moments
+/// and the elastic moduli to the extreme fibres.
+#[derive(Debug, Clone, Copy, Serialize)]
+pub struct Properties {
+    pub area: f64,
+    pub cx: f64,
+    pub cy: f64,
+    pub i_xx: f64,
+    pub i_yy: f64,
+    pub i_xy: f64,
+    pub i_u: f64,
+    pub i_v: f64,
+    pub w_xx: f64,
+    pub w_yy: f64,
+    pub perimeter: f64,
+}
+impl Outline {
+    /// Exact for the outline's facets (Green's theorem over each ring; the
+    /// first ring is the outer boundary, the others are holes).
+    pub fn properties(&self) -> Properties {
+        let (mut a, mut sx, mut sy, mut ixx, mut iyy, mut ixy, mut perimeter) = (0., 0., 0., 0., 0., 0., 0.);
+        for (k, ring) in self.rings.iter().enumerate() {
+            let n = ring.len();
+            let (mut ra, mut rsx, mut rsy, mut rxx, mut ryy, mut rxy) = (0., 0., 0., 0., 0., 0.);
+            for i in 0..n {
+                let (p, q) = (ring[i].p, ring[(i + 1) % n].p);
+                let c = p.perp_dot(q);
+                ra += c / 2.;
+                rsx += (p.x + q.x) * c / 6.;
+                rsy += (p.y + q.y) * c / 6.;
+                rxx += (p.y * p.y + p.y * q.y + q.y * q.y) * c / 12.;
+                ryy += (p.x * p.x + p.x * q.x + q.x * q.x) * c / 12.;
+                rxy += (p.x * q.y + 2. * p.x * p.y + 2. * q.x * q.y + q.x * p.y) * c / 24.;
+                perimeter += p.distance(q);
+            }
+            // The outer ring counts positive whatever its winding; holes subtract.
+            let s = if k == 0 { ra.signum() } else { -ra.signum() };
+            a += s * ra;
+            sx += s * rsx;
+            sy += s * rsy;
+            ixx += s * rxx;
+            iyy += s * ryy;
+            ixy += s * rxy;
+        }
+        let (cx, cy) = (sx / a, sy / a);
+        let i_xx = ixx - a * cy * cy;
+        let i_yy = iyy - a * cx * cx;
+        let i_xy = ixy - a * cx * cy;
+        let mean = (i_xx + i_yy) / 2.;
+        let half = (((i_xx - i_yy) / 2.).powi(2) + i_xy * i_xy).sqrt();
+        let (mut ymax, mut xmax) = (0f64, 0f64);
+        for node in self.rings.iter().flatten() {
+            ymax = ymax.max((node.p.y - cy).abs());
+            xmax = xmax.max((node.p.x - cx).abs());
+        }
+        Properties {
+            area: a,
+            cx,
+            cy,
+            i_xx,
+            i_yy,
+            i_xy,
+            i_u: mean + half,
+            i_v: mean - half,
+            w_xx: i_xx / ymax,
+            w_yy: i_yy / xmax,
+            perimeter,
+        }
+    }
+}
 impl Profile {
     pub fn name(&self) -> Option<&str> {
         self.catalogue.as_ref().map(|entry| entry.name.as_str()).or_else(|| label(&self.library))
@@ -108,7 +180,13 @@ impl Profile {
             get("flange"),
             get("radius"),
         );
-        if !(w > 0. && h > 0. && (4..=512).contains(&segments) && r >= 0.) {
+        // Optional refinements (0 or absent keeps the plain family): the
+        // flange toe radius, the inner flange slope in percent with the
+        // distance from the flange tip where `flange` is measured, and a
+        // tube's own inner corner radius.
+        let toe = get("toe");
+        let slope = get("slope") / 100.;
+        if !(w > 0. && h > 0. && (4..=512).contains(&segments) && r >= 0. && toe >= 0.) {
             return Err("invalid_profile");
         }
         let fam = family;
@@ -118,7 +196,43 @@ impl Profile {
         if matches!(fam, "i" | "channel" | "tee" | "zed") && !(f > 0. && 2. * f < h) {
             return Err("invalid_profile");
         }
+        // Flange thickness at the tip and at the web face of a sloped flange.
+        let outstand = if fam == "channel" { w - t } else { (w - t) / 2. };
+        let at = match self.params.get("flange_at").or_else(|| table.and_then(|p| p.get("flange_at"))) {
+            Some(&a) => a,
+            None => outstand / 2.,
+        };
+        let f_tip = f - slope * at;
+        let f_root = f + slope * (outstand - at);
+        if !(slope >= 0. && slope < 1. && (0. ..=outstand).contains(&at)) {
+            return Err("invalid_profile");
+        }
+        if matches!(fam, "i" | "channel" | "tee") && !(f_tip > 0. && 2. * f_root < h) {
+            return Err("invalid_profile");
+        }
         let polygon = |points: &[(f64, f64, f64)]| -> Result<Vec<Node>, &'static str> {
+            let n = points.len();
+            let pt = |j: usize| DVec2::new(points[j % n].0, points[j % n].1);
+            // A fillet of radius r in a corner of interior angle θ touches
+            // both edges at r / tan(θ/2) from the corner.
+            let corner = |i: usize| -> Option<(DVec2, DVec2, f64)> {
+                let p = pt(i);
+                let a = (pt(i + n - 1) - p).try_normalize()?;
+                let b = (pt(i + 1) - p).try_normalize()?;
+                let theta = a.dot(b).clamp(-1., 1.).acos();
+                Some((a, b, theta))
+            };
+            let tangent = |i: usize| -> Result<f64, &'static str> {
+                let radius = points[i % n].2;
+                if radius == 0. {
+                    return Ok(0.);
+                }
+                let (_, _, theta) = corner(i).ok_or("invalid_profile")?;
+                if !(theta > 1e-6 && theta < std::f64::consts::PI - 1e-6) {
+                    return Err("invalid_profile");
+                }
+                Ok(radius / (theta / 2.).tan())
+            };
             let mut ring = Vec::new();
             for (i, &(x, y, radius)) in points.iter().enumerate() {
                 let p = DVec2::new(x, y);
@@ -130,23 +244,22 @@ impl Profile {
                     });
                     continue;
                 }
-                let pt = |j: usize| DVec2::new(points[j].0, points[j].1);
-                let prev = pt((i + points.len() - 1) % points.len()) - p;
-                let next = pt((i + 1) % points.len()) - p;
-                if radius >= prev.length()
-                    || radius >= next.length()
-                    || radius + points[(i + 1) % points.len()].2 > next.length()
-                {
+                let (a, b, theta) = corner(i).ok_or("invalid_profile")?;
+                let d = tangent(i)?;
+                let prev = (pt(i + n - 1) - p).length();
+                let next = (pt(i + 1) - p).length();
+                if d >= prev || d >= next || d + tangent(i + 1)? > next {
                     return Err("invalid_profile");
                 }
-                let a = prev.normalize();
-                let b = next.normalize();
-                let centre = p + radius * (a + b);
-                let steps = segments.div_ceil(4);
+                let centre = p + (a + b).normalize() * (radius / (theta / 2.).sin());
+                let sweep = std::f64::consts::PI - theta;
+                let start = p + a * d - centre;
+                let turn = if start.perp_dot(p + b * d - centre) < 0. { -1. } else { 1. };
+                let steps = ((segments as f64 * sweep / std::f64::consts::TAU).ceil() as usize).max(1);
                 for k in 0..=steps {
-                    let angle = std::f64::consts::FRAC_PI_2 * k as f64 / steps as f64;
+                    let angle = turn * sweep * k as f64 / steps as f64;
                     ring.push(Node {
-                        p: centre - radius * (b * angle.cos() + a * angle.sin()),
+                        p: centre + DVec2::from_angle(angle).rotate(start),
                         arc: (k < steps).then_some(centre),
                         role: format!("round/{i}/{k}"),
                     });
@@ -165,49 +278,50 @@ impl Profile {
         let mid = w / 2.;
         let l = mid - t / 2.;
         let u = mid + t / 2.;
+        let (ft, fr) = (f_tip, f_root);
         let rings = match fam {
             "rectangle" => vec![rect(0., 0.)?],
             "i" => vec![polygon(&[
                 (0., 0., 0.),
                 (w, 0., 0.),
-                (w, f, 0.),
-                (u, f, r),
-                (u, h - f, r),
-                (w, h - f, 0.),
+                (w, ft, toe),
+                (u, fr, r),
+                (u, h - fr, r),
+                (w, h - ft, toe),
                 (w, h, 0.),
                 (0., h, 0.),
-                (0., h - f, 0.),
-                (l, h - f, r),
-                (l, f, r),
-                (0., f, 0.),
+                (0., h - ft, toe),
+                (l, h - fr, r),
+                (l, fr, r),
+                (0., ft, toe),
             ])?],
             "channel" => vec![polygon(&[
                 (0., 0., 0.),
                 (w, 0., 0.),
-                (w, f, 0.),
-                (t, f, r),
-                (t, h - f, r),
-                (w, h - f, 0.),
+                (w, ft, toe),
+                (t, fr, r),
+                (t, h - fr, r),
+                (w, h - ft, toe),
                 (w, h, 0.),
                 (0., h, 0.),
             ])?],
             "angle" => vec![polygon(&[
                 (0., 0., 0.),
                 (w, 0., 0.),
-                (w, t, 0.),
+                (w, t, toe),
                 (t, t, r),
-                (t, h, 0.),
+                (t, h, toe),
                 (0., h, 0.),
             ])?],
             "tee" => vec![polygon(&[
                 (l, 0., 0.),
                 (u, 0., 0.),
-                (u, h - f, r),
-                (w, h - f, 0.),
+                (u, h - fr, r),
+                (w, h - ft, toe),
                 (w, h, 0.),
                 (0., h, 0.),
-                (0., h - f, 0.),
-                (l, h - f, r),
+                (0., h - ft, toe),
+                (l, h - fr, r),
             ])?],
             "zed" => vec![polygon(&[
                 (0., 0., 0.),
@@ -220,7 +334,11 @@ impl Profile {
                 (0., f, 0.),
             ])?],
             "rhs" if 2. * t < w.min(h) && 2. * r < w.min(h) => {
-                vec![rect(0., r)?, rect(t, (r - t).max(0.))?]
+                let inner = match get("inner") {
+                    i if i > 0. => i,
+                    _ => (r - t).max(0.),
+                };
+                vec![rect(0., r)?, rect(t, inner)?]
             }
             "chs" | "round" if 2. * t < w && w == h => {
                 let centre = DVec2::splat(mid);
