@@ -2622,7 +2622,10 @@ impl Ui {
                                 let n = &col.nodes[index];
                                 let editable = n.row == 0 && n.key.starts_with("n:") && n.key.len() > 2 && !n.key.starts_with("n:link:");
                                 let tag_row = n.key.starts_with("preview-folder:") || n.key.starts_with("preview-tag:");
-                                let sense = if editable || n.local_placement || tag_row { Sense::click_and_drag() } else { Sense::click() };
+                                // A cut row drags onto a junction's row to join it
+                                // (docs/junctions.md §6.3); with a click-only sense the
+                                // list scrolled under the pointer instead.
+                                let sense = if editable || n.local_placement || tag_row || n.key.starts_with("cut:") { Sense::click_and_drag() } else { Sense::click() };
                                 let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), ROW_H), sense);
                                 let cols = lens::RowLayout::plan(columns, rect.min.x, rect.max.x, col.cells_scroll);
                                 // The model's content, then a divider, then its scenes and sheets.

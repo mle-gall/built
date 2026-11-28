@@ -371,13 +371,17 @@ fn document_tools_leave_group_edit<'py>(a: &Args<'py>) -> Reply<'py> {
     {
         updated = Some((share.get_item(0)?, share.get_item(1)?));
     }
-    let (label, millis) = if let Some((group, proto)) = updated {
-        let mut count = 0;
+    // Copies that share the edited definition: the toast tells only when
+    // others changed too (a junction's assembly has one).
+    let mut count = 0;
+    if let Some((_, proto)) = &updated {
         for pair in scene.call_method0("placements")?.try_iter()? {
-            if pair?.get_item(0)?.getattr("mesh")?.is(&proto) {
+            if pair?.get_item(0)?.getattr("mesh")?.is(proto) {
                 count += 1;
             }
         }
+    }
+    let (label, millis) = if let Some((group, _)) = updated.filter(|_| count > 1) {
         let kw = fields!(py;"name"=>group.getattr("name")?,"n"=>count);
         (
             module.call_method(
