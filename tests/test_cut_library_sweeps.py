@@ -118,7 +118,7 @@ def library_placement(profile, start, finish, start_view, end_view, size):
             "key escape", "tool select", "wait 260"]
 
 
-def exercise_connection(folder, layout, preset, *, screenshots=False, autosave=False, size="1600x1000", shortcuts=False):
+def exercise_connection(folder, layout, preset, *, screenshots=False, autosave=False, size="1600x1000", shortcuts=False, preselected=False):
     column = [[0, 0, -.22], [0, 0, .3]]
     side = .09 if layout == "beside" else 0
     ends = {"touch": .00325, "gap": .03825, "overrun": -.035, "beside": -.42, "corner": 0,
@@ -154,13 +154,17 @@ def exercise_connection(folder, layout, preset, *, screenshots=False, autosave=F
         steps += ["capture stock"]
         if preset == "Cope" and layout == "touch":
             steps += [action+"7", "wait 220", "capture gap-before", action+"1", "wait 220"]
+    if preselected:
+        steps += ["move "+pixels[4], "click "+pixels[4], "wait 450"]
     steps += ["tool cut"]
     if preset and preset != "Flush" and shortcuts:
         steps += ["key "+{"Cope":"c", "End plate":"p", "Penetration":"b", "Mitre":"m"}[preset]]
     elif preset and preset != "Flush":
         steps += ["key l", "wait 180", "type "+preset, "wait 180", "key enter"]
-    steps += ["move "+pixels[4], action+"3", "click "+pixels[4], action+"3",
-              "move "+pixels[5], "wait 150", action+"3", "state"]
+    steps += ["move "+pixels[4], action+"3"]
+    if not preselected:
+        steps += ["click "+pixels[4]]
+    steps += [action+"3", "move "+pixels[5], "wait 150", action+"3", "state"]
     if preset == "Flush":
         steps += ["type 0", "key enter", "wait 160"]
     if screenshots:
@@ -265,3 +269,13 @@ def test_library_connection(tmp_path, layout, preset):
                     assert max(abs(v.x()+v.y()-.02) for v in ends) < 2e-5
             apply(history, "undo")
             assert all(r["state"] == "ok" for r in command_protocol.live_rows(reopened))
+
+
+@pytest.mark.window
+@pytest.mark.skipif(os.getenv("BUILT_WINDOW_TESTS") != "1", reason="requires native window")
+def test_preselected_library_beam_fits_with_one_click(tmp_path):
+    hover, _, preview, result = exercise_connection(tmp_path, "overrun", None, preselected=True)
+    assert hover["target"] == hover["members"][1]["owner"]
+    assert "trim" in preview["prompt"]
+    assert result["cuts"][0]["state"] == "ok"
+    assert result["members"][1]["volume"] < hover["members"][1]["volume"] - .00009
