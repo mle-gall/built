@@ -1580,6 +1580,7 @@ impl ProfilesProvider {
             }
             serde_json::json!({"key":size["key"],"name":size["label"],"category":size["family"],
                 "thumb":format!("profile:{}",size["key"].as_str().unwrap()),"defaults":details,
+                "aliases":size.get("aliases").cloned().unwrap_or_else(||serde_json::json!([])),
                 "source":"bundled","dimensions":size["params"],"verbs":["apply","size"]})
         }).collect();
         let scene=ctx.getattr_opt("scene")?.filter(|s|!s.is_none() && s.hasattr("_root").unwrap_or(false));

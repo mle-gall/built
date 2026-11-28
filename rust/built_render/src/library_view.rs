@@ -61,6 +61,10 @@ pub struct Item {
     pub explicit_class: String,
     #[serde(deserialize_with = "lenient")]
     pub verbs: Vec<String>,
+    /// Other names the item is searched by, never shown ("HEA 200" for
+    /// HE 200 A): trade spellings come with the data, not with the search.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub aliases: Vec<String>,
 }
 
 impl Item {
@@ -270,9 +274,16 @@ pub fn filtered<'a>(items: impl IntoIterator<Item = &'a Item>, st: &Browse) -> V
         if words.is_empty() {
             return true;
         }
-        let hay = format!("{} {} {} {} {}", e.name, e.label.as_deref().unwrap_or(""), e.short.as_deref().unwrap_or(""),
-                          e.category, e.file.as_deref().unwrap_or("")).to_lowercase();
-        words.iter().all(|w| hay.contains(w))
+        let hay = format!("{} {} {} {} {} {}", e.name, e.label.as_deref().unwrap_or(""), e.short.as_deref().unwrap_or(""),
+                          e.category, e.file.as_deref().unwrap_or(""), e.aliases.join(" ")).to_lowercase();
+        if words.iter().all(|w| hay.contains(w)) {
+            return true;
+        }
+        // Spaces are optional: "ipe240" finds IPE 240, "hea200" HEA 200.
+        let compact = |s: &str| s.chars().filter(|c| !c.is_whitespace()).collect::<String>();
+        let query = compact(&words.concat());
+        std::iter::once(e.name.as_str()).chain(e.label.as_deref()).chain(e.aliases.iter().map(String::as_str))
+            .any(|name| compact(&name.to_lowercase()).contains(&query))
     }).collect()
 }
 
@@ -882,6 +893,25 @@ mod tests {
     fn it(key: &str, name: &str, source: &str, category: &str, uses: i64) -> Item {
         Item { key: key.into(), name: name.into(), source: source.into(), category: category.into(), uses,
                base: Some("colour".into()), ..Default::default() }
+    }
+
+    #[test]
+    fn profiles_are_found_by_their_aliases_and_without_spaces() {
+        let mut he = it("en/he200a", "HE 200 A", "bundled", "i", 0);
+        he.base = None;
+        he.aliases = vec!["HEA 200".into()];
+        let mut ipe = it("en/ipe240", "IPE 240", "bundled", "i", 0);
+        ipe.base = None;
+        let items = [he, ipe];
+        let find = |q: &str| {
+            let st = Browse { filter: q.into(), ..Default::default() };
+            filtered(&items, &st).iter().map(|e| e.key.clone()).collect::<Vec<_>>()
+        };
+        assert_eq!(find("HEA 200"), ["en/he200a"]);
+        assert_eq!(find("hea200"), ["en/he200a"]);
+        assert_eq!(find("HE 200 A"), ["en/he200a"]);
+        assert_eq!(find("ipe240"), ["en/ipe240"]);
+        assert!(find("hea 240").is_empty());
     }
 
     #[test]
