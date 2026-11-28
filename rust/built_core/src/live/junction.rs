@@ -1091,7 +1091,20 @@ pub(super) fn prepare(
             Some(children) => children,
             None => scene.getattr("groups")?,
         };
-        siblings.call_method1("append", (&g,))?;
+        // A newly placed family remains the last sibling, as ordinary
+        // placement callers expect. Keep its assembly immediately beside it.
+        let fill = row
+            .joint
+            .roles
+            .get("hosted")
+            .filter(|b| b["attached"] == true)
+            .and_then(placement)
+            .and_then(|uid| group(py, t, uid));
+        if let Some(index) = fill.and_then(|f| siblings.call_method1("index", (f,)).ok()) {
+            siblings.call_method1("insert", (index, &g))?;
+        } else {
+            siblings.call_method1("append", (&g,))?;
+        }
         crate::structure::file_sweep(scene, &g, "")?;
         Arc::make_mut(&mut t.groups).insert(owner.clone(), g.getattr("_doc_key")?.extract()?);
     }
