@@ -3846,7 +3846,7 @@
  "Click along red or type its angle in the drawing plane.": "Fai clic nella direzione dell’asse rosso o digita il suo angolo nel piano di disegno.",
  "Click toward green or type its tilt about red.": "Fai clic nella direzione dell’asse verde o digita la sua inclinazione attorno all’asse rosso.",
  "Hover a meeting: the detail's ghost shows how it fits. Click applies · Alt-click custom · ↓ next detail · L details.": "Passa su un incontro: il fantasma del dettaglio mostra come si adatta. Clic applica · Alt-clic personalizzato · ↓ dettaglio successivo · L dettagli.",
- "Hid {items}": "Nascosti · {items}",
+ "Hid {items}": "Hai nascosto {items}",
  "1 object": "1 oggetto",
  "{n} objects": "{n} oggetti",
  "1 face": "1 faccia",

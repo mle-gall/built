@@ -37,6 +37,21 @@ def test_placeholders_survive_translation(path):
     assert not bad, f"{len(bad)} entries change their {{placeholders}}: {bad[:3]}"
 
 
+@pytest.mark.parametrize("lang,count,expected", [
+    ("ru", 3, "3 объекта"), ("ru", 11, "11 объектов"), ("ru", 21, "21 объект"),
+    ("uk", 22, "22 об’єкти"), ("pl", 12, "12 obiektów"), ("pl", 24, "24 obiekty"),
+    ("ar", 2, "عنصرين"), ("ar", 7, "7 عناصر"), ("ar", 17, "17 عنصرًا"),
+])
+def test_counted_object_names(lang, count, expected):
+    from built_core.i18n import current_language, set_language, tr
+    previous = current_language()
+    try:
+        set_language(lang)
+        assert tr("{n} objects", n=count) == expected
+    finally:
+        set_language(previous)
+
+
 def test_every_language_has_a_menu_name():
     assert set(available_languages()) <= set(LANGUAGE_NAMES)
 

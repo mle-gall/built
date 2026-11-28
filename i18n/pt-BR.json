@@ -3851,7 +3851,7 @@
  "Click along red or type its angle in the drawing plane.": "Clique na direção do eixo vermelho ou digite seu ângulo no plano de desenho.",
  "Click toward green or type its tilt about red.": "Clique na direção do eixo verde ou digite sua inclinação em torno do eixo vermelho.",
  "Hover a meeting: the detail's ghost shows how it fits. Click applies · Alt-click custom · ↓ next detail · L details.": "Passe sobre um encontro: o fantasma do detalhe mostra como ele se encaixa. Clique aplica · Alt-clique personalizado · ↓ próximo detalhe · L detalhes.",
- "Hid {items}": "Ocultação · {items}",
+ "Hid {items}": "Você ocultou {items}",
  "1 object": "1 objeto",
  "{n} objects": "{n} objetos",
  "1 face": "1 face",

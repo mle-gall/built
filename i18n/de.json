@@ -3845,7 +3845,7 @@
  "Click along red or type its angle in the drawing plane.": "Klicken Sie in Richtung der roten Achse oder geben Sie ihren Winkel in der Zeichenebene ein.",
  "Click toward green or type its tilt about red.": "Klicken Sie in Richtung der grünen Achse oder geben Sie ihre Neigung um die rote Achse ein.",
  "Hover a meeting: the detail's ghost shows how it fits. Click applies · Alt-click custom · ↓ next detail · L details.": "Über einen Anschluss fahren: Die Vorschau zeigt, wie das Detail passt. Klick wendet an · Alt-Klick individuell · ↓ nächstes Detail · L Details.",
- "Hid {items}": "Ausgeblendet · {items}",
+ "Hid {items}": "{items} ausgeblendet",
  "1 object": "1 Objekt",
  "{n} objects": "{n} Objekte",
  "1 face": "1 Fläche",

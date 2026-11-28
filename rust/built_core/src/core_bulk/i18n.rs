@@ -269,6 +269,43 @@ fn source_of<'py>(m: &Module<'py>, text: &Obj<'py>) -> PyResult<Obj<'py>> {
         .unwrap_or_else(|| text.clone()))
 }
 
+/// Optional catalogue variants for positive integer counts in languages whose
+/// noun changes beyond the singular/plural distinction in English. Existing
+/// catalogues and count-neutral messages keep their ordinary translation.
+fn counted_variant<'py>(
+    catalogue: &Catalogue,
+    text: &Obj<'py>,
+    kwargs: &Bound<'py, PyDict>,
+) -> PyResult<Option<Obj<'py>>> {
+    let lang = catalogue.language.as_str();
+    if !matches!(lang, "ru" | "uk" | "pl" | "ar") {
+        return Ok(None);
+    }
+    let Some(n) = kwargs.get_item("n")?.and_then(|v| v.extract::<u64>().ok()) else {
+        return Ok(None);
+    };
+    let Ok(source) = text.extract::<&str>() else {
+        return Ok(None);
+    };
+    if !source.contains("{n}") {
+        return Ok(None);
+    }
+    let translations = catalogue.translations.bind(text.py());
+    let last = n % 10;
+    let hundred = n % 100;
+    let form = match lang {
+        "ar" if n == 2 => return translations.get_item(source.replace("{n}", "2")),
+        "ar" if (3..=10).contains(&hundred) => "few",
+        "ar" if (11..=99).contains(&hundred) => "many",
+        "ar" => "other",
+        "ru" | "uk" if last == 1 && hundred != 11 => "one",
+        "pl" if n == 1 => "one",
+        _ if (2..=4).contains(&last) && !(12..=14).contains(&hundred) => "few",
+        _ => "many",
+    };
+    translations.get_item(format!("{source} [{form}]"))
+}
+
 /// Translate a source string, then apply Python string formatting if keywords are supplied.
 #[pyfunction(pass_module, signature=(text, /, **kwargs))]
 fn tr<'py>(
@@ -289,6 +326,7 @@ fn tr<'py>(
     let Some(kwargs) = kwargs.filter(|d| !d.is_empty()) else {
         return Ok(out);
     };
+    let out = counted_variant(catalogue.get(), text, kwargs)?.unwrap_or(out);
     match out.call_method("format", (), Some(kwargs)) {
         Err(err)
             if err.is_instance_of::<PyKeyError>(py)

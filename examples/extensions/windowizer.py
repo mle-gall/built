@@ -1268,7 +1268,7 @@ def _run(viewport, mutate, ok_message) -> bool:
     if callable(notify):
         notify()
     viewport.update()
-    viewport.flash_status(ok_message, 4000)
+    viewport.flash_status(ok_message() if callable(ok_message) else ok_message, 4000)
     return True
 
 
@@ -1334,7 +1334,7 @@ def _create_windows(viewport, faces, params):
         sc.selection.clear()
         sc.selection.update(made)
 
-    if _run(viewport, mutate, _counted("Windowizer: {n} window created.", "Windowizer: {n} windows created.", len(faces) - len(skipped))):
+    if _run(viewport, mutate, lambda: _counted("Windowizer: {n} window created.", "Windowizer: {n} windows created.", len(made))):
         if skipped:
             _warn(viewport, _tr("Some faces were skipped:") + "\n• " + "\n• ".join(skipped))
 
