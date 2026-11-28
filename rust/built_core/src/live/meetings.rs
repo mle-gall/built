@@ -6,7 +6,7 @@
 //! journalled: only skips and Follow (on the live table) are.
 mod classify;
 use super::*;
-use classify::{Found, Member, Shape};
+use classify::{Dims, Found, Member, Shape};
 use doc::value::Value as DocValue;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -69,7 +69,7 @@ struct Template {
     half: [f64; 2],
     profile: String,
     family: String,
-    dims: BTreeMap<String, f64>,
+    dims: Dims,
     wall: bool,
 }
 
@@ -128,15 +128,14 @@ impl Template {
                 offset,
             ]);
         }
-        let mut dims = BTreeMap::from([
-            ("width".to_string(), o.width),
-            ("height".into(), o.height),
-            ("thickness".into(), o.width),
-            ("web".into(), o.web),
-            ("flange".into(), o.flange),
-            ("radius".into(), o.radius),
+        let dims = Dims::of(&[
+            ("width", o.width),
+            ("height", o.height),
+            ("thickness", o.width),
+            ("web", o.web),
+            ("flange", o.flange),
+            ("radius", o.radius),
         ]);
-        dims.retain(|_, v| *v != 0.);
         Some(Template {
             path,
             sections,
@@ -154,8 +153,8 @@ impl Template {
         (0..n)
             .map(|i| {
                 let [across, up, offset] = self.sections[i];
-                let mut dims = self.dims.clone();
-                dims.insert("length".into(), length * 1000.);
+                let mut dims = self.dims;
+                dims.set("length", length * 1000.);
                 Member {
                     uid: if n == 1 { base.uid.clone() } else { format!("{}#{i}", base.uid) },
                     a: world.transform_point3(self.path[i] + offset),
@@ -260,8 +259,9 @@ fn locate(d: &doc::Doc, k: doc::Key) -> Option<(DMat4, Vec<doc::Key>, Vec<String
 
 struct Walk<'a> {
     t: &'a LiveTable,
-    /// Definition key → the sweep owner it was generated for.
-    defs: HashMap<u64, String>,
+    /// Definition key → the sweep owner it was generated for (built when a
+    /// copy first needs it).
+    defs: Option<HashMap<u64, String>>,
     ext: u16,
     ifc: u16,
     names: HashMap<String, String>,
@@ -328,7 +328,7 @@ impl Walk<'_> {
                 class: class.to_string(),
                 profile: String::new(),
                 family: String::new(),
-                dims: BTreeMap::new(),
+                dims: Dims::default(),
             };
             let def = p.definition.as_ref().map(|r| r.0.get());
             let copy = text(ext.and_then(|e| field(e, "built.repeat")).and_then(|m| field(m, "row")))
@@ -349,7 +349,20 @@ impl Walk<'_> {
                 })
                 .or_else(|| {
                     // A copy of a sweep's placement sharing its definition.
-                    let source = self.defs.get(&def?.key)?.clone();
+                    let defs = self.defs.get_or_insert_with(|| {
+                        let mut defs = HashMap::new();
+                        for row in self.t.rows.values().filter(|r| r.kind == "sweep" && r.junction.is_none()) {
+                            let def = self.t.groups.get(&row.owner).and_then(|k| match &d.node(*k)?.data {
+                                Data::Placement(p) => Some(p.definition.as_ref()?.0.get().key),
+                                _ => None,
+                            });
+                            if let Some(def) = def {
+                                defs.insert(def, row.owner.clone());
+                            }
+                        }
+                        defs
+                    });
+                    let source = defs.get(&def?.key)?.clone();
                     let tpl = self.sweep_template(d, &source, class)?;
                     Some((None, source, tpl))
                 })
@@ -451,14 +464,14 @@ fn box_member(base: Member, (lo, hi): (DVec3, DVec3), world: DMat4) -> Option<Me
     };
     let (dir, _) = canonical(axis);
     let half_len = length / 2.;
-    let mut dims = BTreeMap::from([
-        ("length".to_string(), length * 1000.),
-        ("width".into(), half[0] * 2000.),
-        ("height".into(), half[1] * 2000.),
-        ("thickness".into(), h * 1000.),
+    let mut dims = Dims::of(&[
+        ("length", length * 1000.),
+        ("width", half[0] * 2000.),
+        ("height", half[1] * 2000.),
+        ("thickness", h * 1000.),
     ]);
     if shape == Shape::Wall {
-        dims.insert("width".into(), h * 1000.);
+        dims.set("width", h * 1000.);
     }
     Some(Member {
         a: centre - dir * half_len,
@@ -490,7 +503,7 @@ fn along_member(base: &Member, (lo, hi): (DVec3, DVec3), tpl: &Template, world: 
         let s0 = o.dot(dir);
         first.a = world.transform_point3(o + dir * (min - s0));
         first.b = world.transform_point3(o + dir * (max - s0));
-        first.dims.insert("length".into(), (max - min) * 1000.);
+        first.dims.set("length", (max - min) * 1000.);
     }
     members
 }
@@ -516,7 +529,7 @@ impl DocIndex {
     fn read(&mut self, py: Python<'_>, t: &LiveTable, keys: &[doc::Key]) -> PyResult<Vec<(Vec<doc::Key>, Vec<Member>)>> {
         let mut walk = Walk {
             t,
-            defs: HashMap::new(),
+            defs: None,
             ext: doc::attr_id("ext").map_err(PyValueError::new_err)?,
             ifc: doc::attr_id("ifc").map_err(PyValueError::new_err)?,
             names: HashMap::new(),
@@ -524,15 +537,6 @@ impl DocIndex {
         };
         {
             let d = doc::lock();
-            for row in t.rows.values().filter(|r| r.kind == "sweep" && r.junction.is_none()) {
-                let def = t.groups.get(&row.owner).and_then(|k| match &d.node(*k)?.data {
-                    Data::Placement(p) => Some(p.definition.as_ref()?.0.get().key),
-                    _ => None,
-                });
-                if let Some(def) = def {
-                    walk.defs.insert(def, row.owner.clone());
-                }
-            }
             for &k in keys {
                 let Some(n) = d.node(k) else { continue };
                 let Some(parent) = n.owners.first() else { continue };
@@ -827,7 +831,7 @@ fn pair(x: &Member, y: &Member) -> (String, String) {
 fn descriptor(m: &Member, tag: &str) -> String {
     let profile = if m.profile.is_empty() {
         if m.family.is_empty() {
-            format!("{:.0}x{:.0}", m.dims.get("width").unwrap_or(&0.), m.dims.get("height").unwrap_or(&0.))
+            format!("{:.0}x{:.0}", m.dims.get("width").unwrap_or(0.), m.dims.get("height").unwrap_or(0.))
         } else {
             m.family.clone()
         }
@@ -903,6 +907,7 @@ fn role_misses(name: &str, m: &Member, crit: &Value, face: Option<&str>, end: &s
     }
     for (dim, range) in crit["size"].as_object().into_iter().flatten() {
         let Some(v) = m.dims.get(dim) else { continue };
+        let v = &v;
         let (lo, hi) = (range[0].as_f64(), range[1].as_f64());
         if lo.is_some_and(|l| *v < l - 1e-6) || hi.is_some_and(|h| *v > h + 1e-6) {
             let wider = json!([lo.map(|l| l.min(*v)), hi.map(|h| h.max(*v))]);
@@ -935,9 +940,9 @@ fn misses(rule: &Value, names: [&str; 2], roles: [(&Member, &str); 2], f: &Found
     if let Some(value) = rule["angle"]["value"].as_f64() {
         let tol = rule["angle"]["tol"].as_f64().unwrap_or(2.);
         let off = (f.angle - value).abs();
-        if off > tol + 1e-9 {
+        if off > tol + 1e-4 {
             let mut wider = rule["angle"].clone();
-            wider["tol"] = json!((off - 1e-6).ceil());
+            wider["tol"] = json!((off - 1e-3).ceil());
             out.push(miss("angle", None, json!((f.angle * 10.).round() / 10.), rule["angle"].clone(), wider));
         }
     }
@@ -954,7 +959,7 @@ fn misses(rule: &Value, names: [&str; 2], roles: [(&Member, &str); 2], f: &Found
         let off = (f.offset - want).abs();
         if off > tol + 1e-6 {
             let mut wider = rule["offset"].clone();
-            wider["tol_mm"] = json!((off - 1e-6).ceil());
+            wider["tol_mm"] = json!((off - 1e-3).ceil());
             out.push(miss("offset", None, json!((f.offset * 10.).round() / 10.), rule["offset"].clone(), wider));
         }
     }
@@ -1044,7 +1049,7 @@ fn suggestion(
         // Equal fits: the thicker member, then the older one, is main
         // (a wall corner's priority without the load-bearing flag).
         .min_by_key(|(roles, m)| {
-            let width = |m: &Member| (m.dims.get("width").copied().unwrap_or(0.) * 1000.) as i64;
+            let width = |m: &Member| (m.dims.get("width").unwrap_or(0.) * 1000.) as i64;
             let order = |m: &Member| m.row.as_ref().and_then(|r| t.order.get(r)).copied().unwrap_or(u64::MAX);
             (m.len(), -width(roles[0].0), order(roles[0].0))
         })?;
@@ -1125,7 +1130,7 @@ fn suggest(t: &LiveTable, ix: &DocIndex, p: &presets::Preset) -> Vec<Suggestion>
     let mut out: Vec<_> = ix
         .index
         .all()
-        .filter_map(|m| suggestion(t, ix, p, &rule, &names, &existing, m))
+        .filter_map(|(a, b, f)| suggestion(t, ix, p, &rule, &names, &existing, (a, b, &f)))
         .collect();
     out.sort_by(|a, b| a.label.cmp(&b.label).then(a.key.cmp(&b.key)));
     out
@@ -1190,6 +1195,7 @@ pub(super) fn meetings_query<'p>(scene: &Obj<'p>, filter: Option<&Obj<'p>>) -> P
     let list = with_index(scene, |_, ix| {
         let mut out = Vec::new();
         for (main, other, f) in ix.index.all() {
+            let f = &f;
             if filter["kind"].as_str().is_some_and(|k| k != f.kind) {
                 continue;
             }
@@ -1231,6 +1237,7 @@ pub(super) fn junction_arrangements<'p>(scene: &Obj<'p>) -> PyResult<Obj<'p>> {
         let existing = existing(t);
         let mut groups: BTreeMap<String, (String, &'static str, usize, BTreeMap<String, usize>, usize, Vec<String>)> = BTreeMap::new();
         for (main, other, f) in ix.index.all() {
+            let f = &f;
             let (sig, words) = signature(main, other, f);
             let g = groups.entry(sig).or_insert_with(|| (words, f.kind, 0, BTreeMap::new(), 0, Vec::new()));
             g.2 += 1;

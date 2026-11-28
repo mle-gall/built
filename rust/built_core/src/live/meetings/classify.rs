@@ -2,7 +2,7 @@
 //! Members as capsules, a uniform grid over them, and the meeting classifier.
 //! Pure geometry: no document, no faces.
 use glam::DVec3;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 /// Contact tolerance in metres (docs/junctions.md §4.2: envelope + 5 mm).
@@ -20,6 +20,29 @@ pub enum Shape {
     Slab,
     /// A door, window or sleeve box: hosted by a wall or slab.
     Hostable,
+}
+
+/// Role dimensions in millimetres, inline (no allocation per member).
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Dims([f64; 7]);
+impl Dims {
+    const NAMES: [&'static str; 7] = ["width", "height", "thickness", "web", "flange", "radius", "length"];
+    pub fn of(pairs: &[(&str, f64)]) -> Self {
+        let mut d = Dims::default();
+        for (k, v) in pairs {
+            d.set(k, *v);
+        }
+        d
+    }
+    pub fn set(&mut self, name: &str, v: f64) {
+        if let Some(i) = Self::NAMES.iter().position(|n| *n == name) {
+            self.0[i] = v;
+        }
+    }
+    /// A dimension the member has (zero: it has none, a web on a box).
+    pub fn get(&self, name: &str) -> Option<f64> {
+        Self::NAMES.iter().position(|n| *n == name).map(|i| self.0[i]).filter(|v| *v != 0.)
+    }
 }
 
 /// One element as the index sees it. `a`→`b` is the envelope's centre line
@@ -48,7 +71,7 @@ pub struct Member {
     pub profile: String,
     pub family: String,
     /// Role dimensions in millimetres (`width`, `height`, `length`…).
-    pub dims: BTreeMap<String, f64>,
+    pub dims: Dims,
 }
 
 impl Member {
@@ -116,6 +139,57 @@ pub struct Found {
     pub hand: i8,
     /// The main member's end nearest the meeting (what its binding names).
     pub main_end: &'static str,
+}
+
+/// Every name a [`Found`] uses, so a stored meeting keeps one byte each.
+const NAMES: [&str; 15] = [
+    "end_face", "end_end", "crossing", "corner", "base", "hosted", "start", "end", "side", "mid",
+    "top", "bottom", "host", "flange_outer", "web",
+];
+fn code(name: &str) -> u8 {
+    NAMES.iter().position(|n| *n == name).expect("a meeting name") as u8
+}
+/// A meeting as the index keeps it (a fifth of a [`Found`]).
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Stored {
+    names: [u8; 5],
+    main: u8,
+    hand: i8,
+    angle: f32,
+    offset: f32,
+    at: [f64; 3],
+}
+impl Stored {
+    fn pack(f: &Found) -> Self {
+        Stored {
+            names: [code(f.kind), code(f.tags[0]), code(f.tags[1]), code(f.face), code(f.main_end)],
+            main: f.main as u8,
+            hand: f.hand,
+            angle: f.angle as f32,
+            offset: f.offset as f32,
+            at: f.at.to_array(),
+        }
+    }
+    fn unpack(&self) -> Found {
+        let n = |i: usize| NAMES[self.names[i] as usize];
+        Found {
+            kind: n(0),
+            main: self.main as usize,
+            tags: [n(1), n(2)],
+            at: DVec3::from(self.at),
+            angle: f64::from(self.angle),
+            offset: f64::from(self.offset),
+            face: n(3),
+            hand: self.hand,
+            main_end: n(4),
+        }
+    }
+    fn kind(&self) -> &'static str {
+        NAMES[self.names[0] as usize]
+    }
+    fn tag(&self, i: usize) -> &'static str {
+        NAMES[self.names[1 + i] as usize]
+    }
 }
 
 fn angle(x: &Member, y: &Member) -> f64 {
@@ -348,7 +422,7 @@ pub struct Index {
     cell: f64,
     cells: HashMap<[i32; 3], Vec<u32>>,
     placed: Vec<Vec<[i32; 3]>>,
-    pub(crate) meetings: HashMap<(u32, u32), Found>,
+    pub(crate) meetings: HashMap<(u32, u32), Stored>,
     near: Vec<Vec<u32>>,
 }
 
@@ -416,7 +490,7 @@ impl Index {
             return;
         }
         if let Some(f) = classify(x, y) {
-            self.meetings.insert((i, j), f);
+            self.meetings.insert((i, j), Stored::pack(&f));
             self.near[i as usize].push(j);
             self.near[j as usize].push(i);
         }
@@ -486,37 +560,38 @@ impl Index {
         true
     }
     /// Every meeting as `(main, other, found)`.
-    pub fn all(&self) -> impl Iterator<Item = (&Member, &Member, &Found)> {
+    pub fn all(&self) -> impl Iterator<Item = (&Member, &Member, Found)> {
         self.meetings
             .iter()
             .filter(|(&(i, j), f)| !self.lapped(i, j, f))
             .map(|(&(i, j), f)| {
-            let (x, y) = (self.member(i), self.member(j));
-            if f.main == 0 {
-                (x, y, f)
-            } else {
-                (y, x, f)
-            }
-        })
+                let (x, y) = (self.member(i), self.member(j));
+                let f = f.unpack();
+                if f.main == 0 {
+                    (x, y, f)
+                } else {
+                    (y, x, f)
+                }
+            })
     }
     /// Two ends that both sit on a third member's face (purlins butting over
     /// a rafter) meet that member, not each other.
-    fn lapped(&self, i: u32, j: u32, f: &Found) -> bool {
-        if f.kind != "end_end" {
+    fn lapped(&self, i: u32, j: u32, f: &Stored) -> bool {
+        if f.kind() != "end_end" {
             return false;
         }
         let on = |end: u32, tag: &str, host: u32| {
             self.meetings
                 .get(&(end.min(host), end.max(host)))
                 .is_some_and(|g| {
-                    matches!(g.kind, "end_face" | "crossing")
-                        && g.main == usize::from(host > end)
-                        && g.tags[1] == tag
+                    matches!(g.kind(), "end_face" | "crossing")
+                        && g.main == u8::from(host > end)
+                        && g.tag(1) == tag
                 })
         };
         self.near[i as usize]
             .iter()
-            .any(|&k| k != j && on(i, f.tags[0], k) && on(j, f.tags[1], k))
+            .any(|&k| k != j && on(i, f.tag(0), k) && on(j, f.tag(1), k))
     }
     /// Approximate heap use in bytes (members, grid and meetings).
     pub fn heap_bytes(&self) -> usize {
@@ -529,14 +604,13 @@ impl Index {
                 + m.class.len()
                 + m.profile.len()
                 + m.family.len()
-                + m.dims.keys().map(|k| k.len() + 48).sum::<usize>()
         };
         self.members().map(member).sum::<usize>()
             + self.ids.keys().map(|k| k.len() + 40).sum::<usize>()
             + self.cells.values().map(|v| 48 + v.len() * 4).sum::<usize>()
             + self.placed.iter().map(|v| 24 + v.len() * 12).sum::<usize>()
             + self.near.iter().map(|v| 24 + v.len() * 4).sum::<usize>()
-            + self.meetings.len() * (std::mem::size_of::<Found>() + 16)
+            + self.meetings.len() * (std::mem::size_of::<Stored>() + 16)
     }
 }
 
@@ -564,7 +638,7 @@ pub(crate) mod tests {
             class: "IfcBeam".into(),
             profile: "en/ipe240".into(),
             family: "i".into(),
-            dims: BTreeMap::from([("height".into(), h), ("width".into(), w)]),
+            dims: Dims::of(&[("height", h), ("width", w)]),
         }
     }
 

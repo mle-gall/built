@@ -62,7 +62,7 @@ pub fn current<'p>(scene: &Obj<'p>) -> PyResult<Option<Bound<'p, Review>>> {
         .and_then(|r| r.cast_into::<Review>().ok()))
 }
 
-fn items(reply: &Value, keep: &HashMap<String, bool>) -> Vec<Item> {
+fn items(reply: &Value, keep: &HashMap<String, (String, bool)>) -> Vec<Item> {
     let mut out: Vec<Item> = reply["suggestions"]
         .as_array()
         .into_iter()
@@ -72,7 +72,9 @@ fn items(reply: &Value, keep: &HashMap<String, bool>) -> Vec<Item> {
             let key = s["key"].as_str().unwrap_or_default().to_string();
             let fit = s["fit"].as_str().unwrap_or_default().to_string();
             Item {
-                ticked: keep.get(&key).copied().unwrap_or(fit == "match") && fit == "match",
+                // A meeting keeps its tick while it stays a match; a near miss
+                // widened into one, or an un-skipped one, comes in ticked.
+                ticked: fit == "match" && keep.get(&key).is_none_or(|(was, on)| was != "match" || *on),
                 at: serde_json::from_value(s["at"].clone()).unwrap_or_default(),
                 label: s["label"].as_str().unwrap_or_default().to_string(),
                 why: serde_json::from_value(s["why"].clone()).unwrap_or_default(),
@@ -99,7 +101,7 @@ impl Review {
         let py = scene.py();
         let reply = to_json(&api(py)?.call_method1("junction_suggest", (scene, &self.detail))?)?;
         self.name = reply["detail"]["name"].as_str().unwrap_or_default().to_string();
-        let keep: HashMap<String, bool> = self.items.iter().map(|i| (i.key.clone(), i.ticked)).collect();
+        let keep: HashMap<String, (String, bool)> = self.items.iter().map(|i| (i.key.clone(), (i.fit.clone(), i.ticked))).collect();
         self.items = items(&reply, &keep);
         let wanted: Vec<String> = self
             .items
