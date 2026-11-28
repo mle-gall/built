@@ -1615,6 +1615,7 @@ impl ProfilesProvider {
                 let profile = &preset["values"]["profile"];
                 items.push(serde_json::json!({"key":format!("size:{source}:{}",preset["uid"]),
                     "name":preset["name"],"category":profile["family"],"source":source,
+                    "aliases":profile["catalogue"].get("aliases").cloned().unwrap_or_else(||serde_json::json!([])),
                     "profile_preset":preset,"thumb":presets::profile_thumb(profile),"verbs":["apply"]}));
             }
         }
