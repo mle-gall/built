@@ -238,6 +238,9 @@ impl Gallery {
                             review_row(controls, &["Bench seat · Position X".into(), "1.25 m".into(), "1.10 m".into()], false, true, &pair, reserve);
                             review_row(controls, &["Oak · Roughness".into(), "0.80".into(), "0.35".into()], false, false,
                                        &["Apply".to_string(), "Ignore".to_string()], reserve);
+                            check_row(controls, "C-2 × R-2 · frame 1", "mirrored", "fits", OK, true, true, &["Skip".to_string()]);
+                            check_row(controls, "C-1 × R-1 · lean-to", "Widen the angle to ± 6°", "81 · outside", WARN, false, false,
+                                      &["Widen".to_string(), "Skip".to_string()]);
                             let chrome = &mut cols[1];
                             chrome.horizontal(|ui| {
                                 ui.set_height(super::TOP_H);

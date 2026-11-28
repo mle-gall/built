@@ -246,6 +246,8 @@ pub struct LiveTable {
     pub junctions: OrdSet<String>,
     pub owned: HashMap<String, OrdSet<String>>,
     pub stock: HashMap<String, Arc<super::junction::Stock>>,
+    /// Skips and Follow (docs/junctions.md §4.4), journalled with the table.
+    pub prefs: Arc<super::meetings::Prefs>,
     pub repeats: OrdSet<String>,
     pub groups: Arc<std::collections::HashMap<String, u64>>,
     pub rows: HashMap<String, Arc<Row>>,

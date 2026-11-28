@@ -272,6 +272,12 @@ impl PresetsProvider {
     }
     fn items<'p>(&self, py: Python<'p>, ctx: &Bound<'p, PyAny>) -> PyResult<Bound<'p, PyAny>> {
         let mut items = Vec::new();
+        // Junction details: their open matches, and Follow (docs/junctions.md §4.4).
+        let counts: Value = match ctx.getattr_opt("scene")?.filter(|s| s.hasattr("_root").unwrap_or(false)) {
+            Some(scene) => serde_json::from_str(&dumps(py, &py.import("built_core.command_protocol")?
+                .call_method1("junction_counts", (scene,))?)?).unwrap_or_default(),
+            None => Value::Null,
+        };
         for (p, source) in rows(ctx)? {
             let mut verbs = vec!["edit", "duplicate", "export"];
             if matches!(p["primitive"].as_str(), Some("sweep" | "cut" | "repeat")) {
@@ -280,7 +286,22 @@ impl PresetsProvider {
             if source == "model" || source == "mine" {
                 verbs.push("delete");
             }
-            let details = details(&p);
+            let mut details = details(&p);
+            let junction = &counts["details"][p["uid"].as_str().unwrap_or_default()];
+            if junction.is_object() {
+                let open = junction["counts"]["match"].as_u64().unwrap_or(0);
+                if open > 0 {
+                    verbs.insert(0, "review");
+                }
+                verbs.push(if junction["follow"] == true { "unfollow" } else { "follow" });
+                let state = if junction["follow"] == true {
+                    crate::settings_rows::tr(py, "On · {n} new")?.replace("{n}", &open.to_string())
+                } else {
+                    crate::settings_rows::tr(py, "Off")?
+                };
+                details.insert(0, (crate::settings_rows::tr(py, "Follow")?, state, "free".into()));
+                details.insert(0, (crate::settings_rows::tr(py, "Similar meetings")?, open.to_string(), "free".into()));
+            }
             items.push(json!({"key":p["uid"],"name":p["name"],"category":p["pack"],"source":source,"preset":p,"verbs":verbs,"defaults":details,
                 "thumb":p["values"]["profile"]["library"].as_str().map(|k|format!("profile:{k}"))}));
         }
@@ -354,6 +375,19 @@ impl PresetsProvider {
                     .get_item(p["primitive"].as_str().unwrap())?
                     .getattr("_machine")?
                     .call_method1("set", ("preset", data))?;
+            }
+            "review" => {
+                let vp = ctx.getattr("vp")?;
+                crate::junction_review::start(&vp.getattr("scene")?, &vp.getattr("history")?, &shown(&p["uid"]))?;
+                notify(&vp)?;
+            }
+            "follow" | "unfollow" => {
+                let api = py.import("built_core.command_protocol")?;
+                let kw = PyDict::new(py);
+                kw.set_item("detail", shown(&p["uid"]))?;
+                kw.set_item("on", verb == "follow")?;
+                api.getattr("run")?.call((ctx.getattr("vp")?.getattr("history")?, "junction_follow"), Some(&kw))?;
+                notify(&ctx.getattr("vp")?)?;
             }
             "edit" => edit(
                 ctx,

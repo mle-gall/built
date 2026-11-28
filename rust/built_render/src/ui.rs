@@ -189,6 +189,8 @@ pub struct Ui {
     view_menu: Vec<(String, Vec<Item>)>,
     view_open: bool,
     form: Option<Form>,
+    /// The junction review list (title, count, rows, ticked count).
+    junction_review: Option<(String, String, Vec<crate::junction_review::Row>, usize)>,
     /// Options strip: (id, label, key, state: 0 off, 1 on, 2 read-only note).
     options: Vec<(String, String, String, u8)>,
     /// Right column: project tree above, inspector below.
@@ -417,6 +419,7 @@ impl Ui {
             view_menu: Vec::new(),
             view_open: false,
             form: None,
+            junction_review: None,
             options: Vec::new(),
             column: None,
             delivery: None,
@@ -774,6 +777,67 @@ impl Ui {
     }
     pub fn set_palette(&mut self, items: Vec<(String, String, String, String, bool)>) { self.palette_items = items; }
     /// Opens (or refreshes) the settings form; an empty title closes it.
+    pub fn set_junction_review(&mut self, panel: Option<(String, String, Vec<crate::junction_review::Row>, usize)>) {
+        self.junction_review = panel;
+    }
+
+    /// The junction review list beside the rail (docs/junctions.md §11): the
+    /// meetings that fit, near misses with Widen, skipped ones with Un-skip.
+    /// Apply (Enter) applies the ticked; nothing is applied otherwise.
+    fn junction_review_panel(&mut self, ctx: &egui::Context, screen: Rect) {
+        let Some((title, count, rows, ticked)) = self.junction_review.clone() else { return };
+        let (band_top, band_bottom) = self.band(ctx, screen);
+        let at = pos2(GUT + self.rail_w + GUT, band_top);
+        let mut out = Vec::new();
+        egui::Area::new(egui::Id::new("junction_review"))
+            .fixed_pos(at)
+            .order(egui::Order::Foreground)
+            .show(ctx, |ui| {
+                popover().inner_margin(Margin::same(8)).show(ui, |ui| {
+                    ui.set_width(316.0);
+                    ui.spacing_mut().item_spacing = vec2(0.0, 0.0);
+                    let (hr, _) = ui.allocate_exact_size(vec2(ui.available_width(), 26.0), Sense::hover());
+                    ui.painter().text(hr.left_center() + vec2(6.0, 0.0), egui::Align2::LEFT_CENTER, &title, title_font(), INK);
+                    ui.painter().text(hr.right_center() - vec2(6.0, 0.0), egui::Align2::RIGHT_CENTER, &count, meta(), DIM);
+                    let tone = |t: &str| match t { "ok" => OK, "warn" => WARN, "off" => OFF, _ => DIM };
+                    let mut section = "";
+                    egui::ScrollArea::vertical().max_height((band_bottom - band_top - 120.0).max(120.0)).show(ui, |ui| {
+                        for (index, label, why, status, t, on, tickable, actions) in &rows {
+                            let group = match t.as_str() { "warn" => "near", "off" => "skipped", _ => "" };
+                            if group != section {
+                                section = group;
+                                ui.add_space(SPACE_XS);
+                                caption_at(ui, if group == "near" { tr("Near") } else { tr("Skipped") }.as_str(), 6.0);
+                            }
+                            let names: Vec<String> = actions.iter().map(|(_, n)| n.clone()).collect();
+                            let (tick, act) = check_row(ui, label, why, status, tone(t), *on, *tickable, &names);
+                            if tick {
+                                out.push(format!("jreview:tick:{index}"));
+                            }
+                            if let Some(a) = act {
+                                out.push(format!("jreview:{}:{index}", actions[a].0));
+                            }
+                        }
+                    });
+                    ui.add_space(SPACE_S);
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing = vec2(SPACE_S, 0.0);
+                        let apply = tr("Apply {n}").replace("{n}", &ticked.to_string());
+                        if sheet_button(ui, &apply, "↩", 1) {
+                            out.push("jreview:apply".into());
+                        }
+                        if sheet_button(ui, &tr("Skip all"), "", 0) {
+                            out.push("jreview:skip_all".into());
+                        }
+                        if sheet_button(ui, &tr("Close"), "esc", 3) {
+                            out.push("jreview:close".into());
+                        }
+                    });
+                });
+            });
+        self.actions.extend(out);
+    }
+
     pub fn set_form(&mut self, title: String, fields: Vec<FormField>) {
         if title.is_empty() { self.form = None; return; }
         let choice_open = self.form.as_ref().filter(|f| f.title == title).and_then(|f| f.choice_open);
@@ -3245,6 +3309,7 @@ impl Ui {
                     }
                     self.panels.frame_guide(ctx, screen);
                 }
+                if !self.review && !sheet_up { self.junction_review_panel(ctx, screen); }
                 if !sheet_up { self.cursor_value(ctx, screen); }
                 if !sheet_up { self.keystrokes(ctx, screen); }
                 if !self.review && !sheet_up { self.task_pins(ctx, screen); }
@@ -3288,6 +3353,7 @@ impl Ui {
                      ("terrain_profile", work && model && self.panels.data["terrain"].is_object()),
                      ("jobs", !self.jobs.is_empty() || self.activity_open),
                      ("notices", self.history.iter().any(|r| r.5 > 0.)),
+                     ("junction_review", work && model && self.junction_review.is_some()),
                      ("dialog", self.dialog.as_ref().is_some_and(|d| d.placement.is_empty() && !d.in_drawer())),
                      ("tab_menu", self.strip.menu_open()),
                      ("tab_overflow", self.strip.overflow_open()),

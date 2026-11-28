@@ -703,6 +703,10 @@ pub struct Doc {
     /// changed?" for caches keyed on the document.
     pub serial: u64,
     pub reader_epochs: FastMap<Key, u64>,
+    /// Keys written since a reader asked for them (the meeting index):
+    /// `None` until one does. Wraps at [`TOUCHED_CAP`], bumping the generation.
+    pub touched: Option<Vec<Key>>,
+    pub touched_gen: u64,
     /// Set while a journal is replayed (undo, redo, rollback): the tree
     /// invariant was checked when it was recorded.
     pub replaying: bool,
@@ -721,6 +725,9 @@ pub struct Doc {
 /// Python while holding it (the lock rule above), so it is never contended
 /// in practice: an atomic flag (a few ns) instead of a pthread mutex (most
 /// of a field read's cost through the facade).
+/// How many written keys the touched log keeps before readers rescan.
+pub const TOUCHED_CAP: usize = 1 << 16;
+
 pub struct DocCell {
     locked: AtomicBool,
     doc: UnsafeCell<Option<Doc>>,
@@ -1156,6 +1163,13 @@ impl Doc {
     /// Track writes to reachable model data. Constructing a detached paste
     /// candidate or releasing a temporary record cannot invalidate a panel.
     fn note_reader_write(&mut self, mut key: Key) {
+        if let Some(log) = &mut self.touched {
+            if log.len() >= TOUCHED_CAP {
+                log.clear();
+                self.touched_gen += 1;
+            }
+            log.push(key);
+        }
         if self.reader_epochs.is_empty() { return; }
         // The usual case is a single parent. Shared ownership can occur in
         // compatibility mode, including cycles, so bound both traversals.

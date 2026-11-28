@@ -426,7 +426,7 @@ fn face_plane(
     Ok(normal.try_normalize().map(|n| (origin, n)))
 }
 
-fn geometry(scene: &Obj<'_>, t: &LiveTable, j: &Row) -> PyResult<Option<(Frames, expr::Values)>> {
+pub(super) fn geometry(scene: &Obj<'_>, t: &LiveTable, j: &Row) -> PyResult<Option<(Frames, expr::Values)>> {
     if j.joint.meeting.as_deref() == Some("hosted") && j.joint.roles["hosted"]["attached"] == true {
         return Ok(hosting::geometry(t, j));
     }
@@ -684,6 +684,45 @@ fn set_reason(row: &mut Row, state: &str, reason: Value) {
     row.state = state.into();
     row.joint.reason = reason;
 }
+/// The sweep recipe a role's member was generated from: its own, its
+/// Repeat's source (a station or a copy, nested or not), or the sweep whose
+/// geometry a copied placement shares.
+fn binding_sweep(scene: &Obj<'_>, t: &LiveTable, binding: &Value) -> PyResult<Option<Arc<Row>>> {
+    let source = |r: &Row| {
+        r.source
+            .as_ref()
+            .and_then(|s| t.owners.get(s))
+            .and_then(|id| t.rows.get(id))
+            .filter(|r| r.sweep.is_some())
+            .cloned()
+    };
+    if let Some(r) = binding["row"].as_str().and_then(|id| t.rows.get(id)) {
+        if r.sweep.is_some() {
+            return Ok(Some(r.clone()));
+        }
+        if r.kind == "repeat" {
+            return Ok(source(r));
+        }
+    }
+    let Some(g) = placement(binding).and_then(|id| group(scene.py(), t, id)) else {
+        return Ok(None);
+    };
+    if let Some(r) = metadata(&g)?
+        .get_item("built.repeat")?
+        .and_then(|m| m.get_item("row").ok())
+        .and_then(|id| id.extract::<String>().ok())
+        .and_then(|id| t.rows.get(&id))
+    {
+        return Ok(source(r));
+    }
+    let mesh = g.getattr("mesh")?;
+    for r in t.rows.values().filter(|r| r.kind == "sweep" && r.junction.is_none()) {
+        if group(scene.py(), t, &r.owner).is_some_and(|o| o.getattr("mesh").is_ok_and(|m| m.is(&mesh))) {
+            return Ok(Some(r.clone()));
+        }
+    }
+    Ok(None)
+}
 fn outside_role(
     scene: &Obj<'_>,
     t: &LiveTable,
@@ -711,10 +750,8 @@ fn outside_role(
         }
     }
     if let Some(profiles) = rule["profile"].as_array() {
-        let sweep = binding["row"]
-            .as_str()
-            .and_then(|id| t.rows.get(id))
-            .and_then(|r| r.sweep.as_deref());
+        let owned = binding_sweep(scene, t, binding)?;
+        let sweep = owned.as_ref().and_then(|r| r.sweep.as_deref());
         let fits = sweep.is_some_and(|s| {
             profiles.iter().any(|p| {
                 let library = p["library"]

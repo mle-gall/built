@@ -14,6 +14,9 @@ pub(crate) fn save(scene: &Obj<'_>, out: &Bound<'_, PyDict>) -> PyResult<()> {
     data.set_item("v", 1)?;
     data.set_item("rows", to_py(py, &t.by_creation())?)?;
     ext.set_item(EXT, data)?;
+    if let Some(prefs) = meetings::save_prefs(&t) {
+        ext.set_item(meetings::PREFS_EXT, to_py(py, &prefs)?)?;
+    }
     if !t.presets.is_empty() {
         ext.set_item(
             "built.presets",
@@ -215,6 +218,12 @@ fn load_rows(scene: &Obj<'_>, ext: &Bound<'_, PyDict>, rows: Vec<Row>) -> PyResu
             ))
         {
             junction::hosting::adopt(scene, &mut t, &row, &o.fill, true)?;
+        }
+    }
+    if let Some(raw) = ext.get_item(meetings::PREFS_EXT)? {
+        if let Some(prefs) = json::<serde_json::Value>(&raw).ok().and_then(meetings::load_prefs) {
+            t.prefs = Arc::new(prefs);
+            ext.del_item(meetings::PREFS_EXT)?;
         }
     }
     put(scene, t)?;

@@ -983,6 +983,58 @@ pub mod molecules {
         clicked
     }
 
+    /// A review list row: a tick square (empty when it cannot be ticked),
+    /// the label over a DIM line saying why, a status in its tone at the
+    /// trailing edge, then quiet actions (Skip, Widen…). Returns whether the
+    /// tick was clicked and which action was.
+    pub fn check_row(ui: &mut egui::Ui, label: &str, why: &str, status: &str, tone: Color32,
+                     ticked: bool, tickable: bool, actions: &[String]) -> (bool, Option<usize>) {
+        let height = if why.is_empty() { CONTROL_H } else { CONTROL_H + 14.0 };
+        let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), height), Sense::hover());
+        let top = Rect::from_min_size(rect.min, vec2(rect.width(), CONTROL_H));
+        let tick = Rect::from_center_size(pos2(rect.left() + SPACE_S + 7.0, top.center().y), vec2(14.0, 14.0));
+        let resp = ui.interact(tick.expand(4.0), ui.id().with(("check-row", label)), Sense::click());
+        let st = state_of(&resp, false, tickable);
+        let r = CornerRadius::same(3);
+        if ticked {
+            ui.painter().rect_filled(tick, r, if st == State::Hover { PRIMARY_HOVER } else { ACCENT });
+            ui.painter().line(vec![pos2(tick.left() + 3.0, tick.center().y), pos2(tick.left() + 6.0, tick.bottom() - 4.0),
+                                   pos2(tick.right() - 3.0, tick.top() + 4.0)], Stroke::new(1.8_f32, ON_PRIMARY));
+        } else {
+            ui.painter().rect_stroke(tick, r, Stroke::new(1.0_f32, if tickable { HOVER_EDGE } else { EDGE }), egui::StrokeKind::Inside);
+            if st == State::Hover {
+                ui.painter().rect_filled(tick, r, HOVER);
+            }
+        }
+        let mut right = rect.right();
+        let mut clicked = None;
+        for (index, name) in actions.iter().enumerate().rev() {
+            let g = ui.painter().layout_no_wrap(name.clone(), meta(), INK_2);
+            let w = g.size().x + 12.0;
+            let button = Rect::from_min_max(pos2(right - w, top.top() + 3.0), pos2(right, top.bottom() - 3.0));
+            right -= w + SPACE_XS;
+            let b = ui.interact(button, ui.id().with(("check-row-action", label, index)), Sense::click());
+            let bs = control_state(ui, &b, false);
+            paint_state(ui, button, bs, R_ROW);
+            centered(ui.painter(), button, g, ink_of(bs));
+            if b.clicked() {
+                clicked = Some(index);
+            }
+        }
+        let status_g = ui.painter().layout_no_wrap(status.to_owned(), meta(), tone);
+        let status_x = right - status_g.size().x - SPACE_XS;
+        leading(ui.painter(), top, status_x, status_g, tone);
+        let left = tick.right() + SPACE_S;
+        let text = super::fit(ui, label, body(), if tickable || ticked { INK } else { INK_2 }, (status_x - left - SPACE_XS).max(1.0), 1);
+        leading(ui.painter(), top, left, text, if tickable || ticked { INK } else { INK_2 });
+        if !why.is_empty() {
+            let below = Rect::from_min_max(pos2(rect.left(), top.bottom() - 4.0), rect.max);
+            let g = super::fit(ui, why, meta(), DIM, (rect.right() - left - SPACE_XS).max(1.0), 1);
+            leading(ui.painter(), below, left, g, DIM);
+        }
+        (resp.clicked() && tickable, clicked)
+    }
+
     pub fn swatch(ui: &mut egui::Ui, value: &mut Color32) -> egui::Response {
         ui.color_edit_button_srgba(value)
     }
