@@ -4,7 +4,7 @@
  "pack": {
   "id": "ac868834411f84b1d4d61a14b0c89c6a",
   "name": "Steel connections · EN",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": {
    "name": "Built"
   },
@@ -271,7 +271,7 @@
    "name": "Fin plate",
    "pack": "Steel connections · EN",
    "primitive": "junction",
-   "rev": 1,
+   "rev": 2,
    "values": {
     "meeting": "end_face",
     "roles": {
@@ -325,6 +325,28 @@
       "name": "Weld throat",
       "unit": "mm",
       "group": "Weld"
+     },
+     {
+      "key": "pitch",
+      "expr": "fin_h / 2",
+      "name": "Bolt pitch",
+      "unit": "mm",
+      "group": "Bolts"
+     },
+     {
+      "key": "bolt_d",
+      "expr": "16",
+      "name": "Bolt Ø",
+      "unit": "mm",
+      "group": "Bolts",
+      "limits": {
+       "list": [
+        12,
+        16,
+        20,
+        24
+       ]
+      }
      }
     ],
     "contents": [
@@ -354,12 +376,40 @@
         "thickness": "fin_l"
        },
        "at": {
-        "frame": "@meet",
+        "frame": "@joining.depth",
         "offset": [
          0,
          "joining.web / 2 + fin_t / 2",
          0
         ]
+       }
+      }
+     },
+     {
+      "key": "bolts",
+      "junction": {
+       "detail": "bcb26d949f754449",
+       "roles": {
+        "ply_1": {
+         "placement": "@fin",
+         "face": "top"
+        },
+        "ply_2": {
+         "placement": "@joining",
+         "face": "web_left"
+        }
+       },
+       "params": {
+        "d": "bolt_d",
+        "x": "-pitch / 2",
+        "y": 0
+       },
+       "repeat": {
+        "rule": {
+         "count": 2,
+         "step": "pitch"
+        },
+        "run": "@joining.depth.x"
        }
       }
      },
@@ -426,12 +476,18 @@
     },
     {
      "kind": "detail",
+     "key": "bcb26d949f754449",
+     "bundled": null,
+     "rev": 1
+    },
+    {
+     "kind": "detail",
      "key": "1fa8a4f99a56a112",
      "bundled": null,
      "rev": 1
     }
    ],
-   "hash": "sha256:c42d41bfef038aa10353bda127b10fcd2c7401b638caca8e0ceb71961682b4a4"
+   "hash": "sha256:7200dc9af6ea859c159b821abc88175304f7a09c9d2cac3b16dd1ba196c67ff8"
   },
   {
    "uid": "7499347f63978217",

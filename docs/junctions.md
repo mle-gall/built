@@ -1285,3 +1285,24 @@ problems; its context menu switches.
 | Q3 | Bolt, nut and washer geometry: generated from standard tables and shared per size, or one Library component file per size? | **Implemented in J1.** ISO 4014/4017 bolts use generated, shared definitions keyed by standard, diameter, length and grip. Grip sets the nut and washer positions. Library components stay for hangers, brackets and couplers. |
 | Q4 | Should the Wall tool apply the corner detail when a wall ends on another wall? | **Implemented in J4**, as part of the Wall tool's own commit, with the marker and Undo: it is the tool's visible behaviour, not a silent suggestion. Existing walls get corners only through the review. |
 | Q5 | Release: one level (cuts stay live cut rows, a plate stays a sweep), or bake everything? | **Implemented in J2: one level**, consistent with Repeat's Release; "Release all" in the same menu bakes everything in one step. |
+
+### Steel connections and service penetrations
+
+The original **Bolt group M16 · 2 × 2** lives in
+`resources/presets/starter.builtpreset`. The EN pack's **Bolt M16 8.8**
+and **Anchor M16** live in
+`resources/presets/packs/steel-connections-en.builtpreset`.
+Both sets remain available pending the owner's choice. Pack authorship
+and licence continue to use the existing bundled-pack values.
+
+**Fin plate** drills the fin and joining web together. Its pitch follows
+the fin height. For **Purlin cleat**, pick the rafter first and the purlin
+second. Apply seats its lower datum on the flange. The foot follows the rafter's top flange and the cleat
+turns with the crossing purlin. For a pipe or duct penetration, select
+the wall or slab and the service, then apply the matching MEP detail.
+Opening clearance and collar dimensions are editable.
+
+The AISC steel pack appears in Library › Presets when the model or the
+new-document preference uses inches or feet. It has its own pack and
+detail IDs. Each row's provenance identifies its metric counterpart.
+Plate sizes and bolt geometry use millimetres internally.

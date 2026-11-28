@@ -31,6 +31,11 @@ static METRIC: LazyLock<Table> = LazyLock::new(|| {
     .expect("metric fasteners")
 });
 
+static INCH: LazyLock<Table> = LazyLock::new(|| {
+    serde_json::from_str(include_str!("../../../../../resources/fasteners/inch.builtfastener"))
+        .expect("inch fasteners")
+});
+
 /// Loft a closed shell between coaxial polygons (hex flats or round sections).
 /// Independent shells preserve the head, shank, washers and nut at contact.
 fn prism(
@@ -191,7 +196,8 @@ fn update_plain(
     if !(d > 0. && d <= 64. && length > 0. && length <= 2000.) {
         return Err(err(format!("Give the {} a diameter and length", kind.name())));
     }
-    let (d, length) = ((d * 100.).round() / 100., (length * 100.).round() / 100.);
+    let precision = if spec["table"] == "inch" { 1000000. } else { 100. };
+    let (d, length) = ((d * precision).round() / precision, (length * precision).round() / precision);
     let key = eid::derived_uid(&format!("built:fastener:v1:{}:{d}:{length}", kind.name()));
     let py = scene.py();
     let definition = if let Some(g) = cut::source(scene, &key)? {
@@ -213,7 +219,8 @@ fn update_plain(
             }
             FastenerKind::Anchor => {
                 // Rising out of the base: the nut and washer sit on the plate.
-                let size = METRIC.sizes.iter().find(|s| s.d == d);
+                let table = if spec["table"] == "inch" { &*INCH } else { &*METRIC };
+                let size = table.sizes.iter().find(|s| s.d == d);
                 let (nut, washer) = size.map_or((0.8 * d, 0.2 * d), |s| (s.nut, s.washer_t));
                 let flats = size.map_or(1.5 * d, |s| s.flats);
                 let hex = flats / (std::f64::consts::PI / 6.).cos();
@@ -289,23 +296,24 @@ pub(super) fn update(
         return update_plain(scene, g, spec, kind, d, grip, &number);
     }
     let standard = spec["standard"].as_str().unwrap_or("ISO 4017");
-    let size = METRIC
+    let table = if spec["table"] == "inch" { &*INCH } else { &*METRIC };
+    let size = table
         .sizes
         .iter()
         .find(|s| s.d == d)
-        .filter(|_| METRIC.bolts.iter().any(|s| s == standard))
+        .filter(|_| table.bolts.iter().any(|s| s == standard))
         .ok_or_else(|| err("Unknown bolt size or standard"))?;
     let minimum = grip + 2. * size.washer_t + size.nut + 2. * size.pitch;
     let length = number(
         "length",
-        METRIC
+        table
             .lengths
             .iter()
             .find(|l| **l >= minimum)
             .copied()
             .unwrap_or(0.),
     )?;
-    if grip <= 0. || length < minimum || !METRIC.lengths.contains(&length) {
+    if grip <= 0. || length < minimum || !table.lengths.contains(&length) {
         return Err(err("No standard bolt length for this grip"));
     }
     let key = eid::derived_uid(&format!("built:fastener:v1:{standard}:{d}:{length}:{grip}"));
@@ -339,7 +347,13 @@ pub(super) fn update(
         drop(b);
         eid::set_definition_uid(&mesh, &key)?;
         def.setattr("uid", &key)?;
-        def.setattr("name", format!("{standard} M{d} × {length}"))?;
+        let label = if spec["table"] == "inch" {
+            let inches = |mm| crate::model::units_format::frac_inches(mm / 25.4, 2);
+            format!("{standard} {} × {} in", inches(d), inches(length))
+        } else {
+            format!("{standard} M{d} × {length}")
+        };
+        def.setattr("name", label)?;
         def.setattr("component", true)?;
         scene
             .getattr("kept_components")?

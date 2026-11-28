@@ -539,6 +539,10 @@ pub(super) fn geometry(scene: &Obj<'_>, t: &LiveTable, j: &Row) -> PyResult<Opti
             (b.pos + normal * (contact - b.pos).dot(normal), normal)
         }
         Some("corner") => ((a.pos + b.pos) * 0.5, (a.axis - b.axis).normalize_or_zero()),
+        Some("parts") if main == "ply_1" && matches!(bindings[main]["face"].as_str(), Some("top" | "bottom" | "left" | "right")) => {
+            // Centre a side-drilled bolt on the finite side of the first ply.
+            (contact - a.axis * (a.dims["length"] / 2000.), normal)
+        }
         Some("parts") if main == "ply_1" => (a.pos, a.axis),
         Some("end_end" | "parts") => ((a.pos + b.pos) * 0.5, a.axis),
         Some("crossing") => {
@@ -585,6 +589,14 @@ pub(super) fn geometry(scene: &Obj<'_>, t: &LiveTable, j: &Row) -> PyResult<Opti
         return Ok(None);
     };
     let mut frames = Frames::from([("meet".into(), m.to_cols_array())]);
+    if j.joint.meeting.as_deref() == Some("end_face") {
+        if let Some(frame) = pose(meet, z, b.up) {
+            frames.insert("joining.depth".into(), frame.to_cols_array());
+        }
+        if let Some(frame) = pose(meet, z, b.across) {
+            frames.insert("joining.section".into(), frame.to_cols_array());
+        }
+    }
     let mut dims = expr::Values::new();
     for (name, r) in &roles {
         let at = r.pos + r.axis * (meet - r.pos).dot(r.axis);
@@ -612,6 +624,13 @@ pub(super) fn geometry(scene: &Obj<'_>, t: &LiveTable, j: &Row) -> PyResult<Opti
             ),
         ] {
             frames.insert(format!("{name}.{suffix}"), frame.to_cols_array());
+        }
+        if *name == main && j.joint.meeting.as_deref() == Some("crossing") {
+            // A review suggestion can bind a crossing without a picked face.
+            // Seat on the section's upper datum regardless of pick order or end.
+            if let Some(frame) = r.datums.get("top").and_then(|top| pose(at + *top, r.up, b.axis)) {
+                frames.insert(format!("{name}.seat"), frame.to_cols_array());
+            }
         }
         for (k, v) in &r.datums {
             frames.insert(
@@ -659,7 +678,11 @@ pub(super) fn geometry(scene: &Obj<'_>, t: &LiveTable, j: &Row) -> PyResult<Opti
                 .and_then(|s| s.preset_uid.as_deref())
                 .and_then(|uid| presets::lookup(t, uid))
                 .is_some_and(|p| p.record.get("class") == Some(&json!("IfcPlate")));
-            let field = if is_plate {
+            let field = if matches!(b["face"].as_str(), Some("top" | "bottom")) {
+                "height"
+            } else if matches!(b["face"].as_str(), Some("left" | "right")) {
+                "width"
+            } else if is_plate {
                 "length"
             } else {
                 match b["face"].as_str() {
@@ -1039,6 +1062,39 @@ pub(super) fn remove_cut(t: &mut LiveTable, uid: &str) -> PyResult<()> {
     }
     Ok(())
 }
+/// Seat an unanchored member's stock datum on a role plane in the Apply edit.
+fn seat_member(scene: &Obj<'_>, t: &mut LiveTable, j: &Row, seat: &Value) -> PyResult<()> {
+    let Some((frames, _)) = geometry(scene, t, j)? else {
+        return Err(err("The selected members need a non-parallel crossing"));
+    };
+    let frame = |key: &str| seat[key].as_str().and_then(|s| frames.get(s))
+        .map(DMat4::from_cols_array).ok_or_else(|| err("Missing seating datum"));
+    let plane = frame("on")?;
+    let datum = frame("datum")?;
+    let n = plane.z_axis.truncate();
+    let gap = n.dot((plane.w_axis - datum.w_axis).truncate());
+    if gap.abs() < 1e-8 { return Ok(()); }
+    let name = seat["role"].as_str().ok_or_else(|| err("Missing seated member"))?;
+    let mut member = j.joint.roles[name]["row"].as_str().and_then(|id| t.rows.get(id))
+        .map(|r| (**r).clone()).ok_or_else(|| err("Select a swept member to seat"))?;
+    let path = &mut member.sweep.as_mut().ok_or_else(|| err("Select a swept member to seat"))?.path;
+    if !path.chain.is_empty() || path.ends.is_some() {
+        return Err(err("The seated member has anchored ends"));
+    }
+    let owner = t.groups[&member.owner];
+    let path_frame = if path.definition_space { reference::frame(owner) } else {
+        let parent = doc::lock().node(owner).and_then(|node| node.owners.first().copied());
+        parent.map(reference::frame).unwrap_or(DMat4::IDENTITY)
+    };
+    let delta = (path_frame.inverse() * reference::frame(t.groups[&j.owner])).transform_vector3(n * gap);
+    for point in &mut path.points {
+        *point = (DVec3::from(*point) + delta).to_array();
+    }
+    t.pending.insert(member.uid.clone());
+    t.insert(member).map_err(err)?;
+    Ok(())
+}
+
 pub(super) fn prepare(
     scene: &Obj<'_>,
     t: &mut LiveTable,
@@ -1145,6 +1201,9 @@ pub(super) fn prepare(
         .get("meeting")
         .and_then(Value::as_str)
         .map(String::from);
+    if let Some(seat) = p.values.get("seat") {
+        seat_member(scene, t, row, seat)?;
+    }
     let mut contents = Vec::new();
     let mut bindings = Vec::new();
     let mut keep = HashSet::new();
@@ -1190,7 +1249,7 @@ pub(super) fn prepare(
             return Err(err("Duplicate junction content key"));
         }
         if let Some(spec) = item.get("part") {
-            let item = parts::prepare(scene, t, row, key, spec, &mut bindings)?;
+            let item = parts::prepare(scene, t, row, p, key, spec, &mut bindings)?;
             if item.get("row").is_none() {
                 let uid = item["placement"]
                     .as_str()

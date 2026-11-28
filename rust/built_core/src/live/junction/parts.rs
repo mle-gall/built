@@ -1,11 +1,65 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 use super::*;
 
+/// Resolve the packed definition once inside the same edit as its instances.
+fn component<'p>(
+    scene: &Obj<'p>, t: &LiveTable, preset: &presets::Preset, uid: &str,
+) -> PyResult<Obj<'p>> {
+    let py = scene.py();
+    let bundle = &preset.source.as_ref().unwrap_or(&Value::Null)["components"][uid];
+    let existing = match group(py, t, uid) {
+        Some(g) => Some(g),
+        None => cut::source(scene, uid)?,
+    };
+    if let Some(existing) = existing {
+        let ext = metadata(&existing)?;
+        if let Some(stamp) = ext.get_item("built.pack_component")? {
+            let rev = stamp.get_item("rev")?;
+            let same_revision = rev.eq(to_py(py, &bundle["rev"])?)?
+                && stamp.get_item("hash")?.eq(to_py(py, &bundle["hash"])?)?;
+            if !bundle.is_null() && !same_revision {
+                return Err(err("This component is already present at a different revision"));
+            }
+        }
+        return Ok(existing);
+    }
+    let data = bundle["data"].as_str().ok_or_else(|| err("Missing component definition"))?;
+    let bytes: Vec<u8> = py.import("base64")?.call_method1("b64decode", (data,))?.extract()?;
+    if bundle["hash"] != pack::sha256(&bytes) {
+        return Err(err("Bundled component hash mismatch"));
+    }
+    let dir = tempfile::tempdir()?;
+    let path = dir.path().join("component.built");
+    std::fs::write(&path, bytes)?;
+    let doc = py.import("built_core.scene")?.call_method0("Scene")?;
+    let path = py.import("pathlib")?.call_method1("Path", (path,))?;
+    py.import("built_core.formats.igz")?.call_method1("load_into", (&doc, path))?;
+    let groups = doc.getattr("groups")?;
+    if groups.len()? != 1 {
+        return Err(err("Expected one component definition"));
+    }
+    let g = groups.get_item(0)?;
+    if !g.getattr("uid")?.eq(uid)? {
+        return Err(err("Bundled component identity mismatch"));
+    }
+    let def = py.import("built_core.kept_components")?.call_method1("make_template", (g,))?;
+    def.setattr("uid", uid)?;
+    py.import("built_core.document_insert")?.call_method1(
+        "merge_materials", (doc.getattr("materials")?, scene.getattr("materials")?, &def),
+    )?;
+    let ext = metadata(&def)?;
+    ext.set_item("built.pack_component", to_py(py, &json!({"uid":uid,"rev":bundle["rev"],"hash":bundle["hash"]}))?)?;
+    def.setattr("ext", ext)?;
+    scene.getattr("kept_components")?.call_method1("append", (&def,))?;
+    Ok(def)
+}
+
 /// Construct the ordinary placement or sweep that the template item owns.
 pub(super) fn prepare(
     scene: &Obj<'_>,
     t: &mut LiveTable,
     j: &Row,
+    detail: &presets::Preset,
     key: &str,
     spec: &Value,
     bindings: &mut Vec<Value>,
@@ -30,12 +84,7 @@ pub(super) fn prepare(
         }
     }
     if let Some(source) = spec["component"].as_str() {
-        let definition = match group(py, t, source) {
-            Some(g) => g,
-            None => {
-                cut::source(scene, source)?.ok_or_else(|| err("Missing component definition"))?
-            }
-        };
+        let definition = component(scene, t, detail, source)?;
         let assembly = group(py, t, &j.owner).ok_or_else(|| err("Missing junction assembly"))?;
         let copy = py
             .import("built_core.group")?

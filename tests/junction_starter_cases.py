@@ -10,7 +10,7 @@ from tests.test_geometry_arrays import CUBE
 from tests.test_live_recipes import apply
 from tests.test_sketch_rows import member
 
-STARTER_PACKS = ("Steel connections · EN", "Timber joints", "Generic", "Architecture")
+STARTER_PACKS = ("Steel connections · EN", "Timber joints", "Generic", "Architecture", "Purlin connections · EN", "MEP penetrations")
 HE, IPE, TIMBER, FLAT, WALL = ({"library": k} for k in ("en/he200a", "en/ipe240", "basic/timber", "basic/flat", "basic/wall"))
 
 
@@ -62,6 +62,16 @@ def arrangement(scene, h, p):
         z = 0 if name.endswith("trim") else .25
         apply(h, "create_sweeps", sweeps=[dict(profile=WALL, attachment="bottom_left", path=dict(points=[[0, 0, z], [2, 0, z]]))])
         return [slab.uid, scene.groups[-1].uid]
+    if name == "Purlin cleat":
+        return sweeps(h, (HE, [[-1.5, 0, 0], [1.5, 0, 0]]),
+                      (IPE, [[-.4, -1, .215], [.4, 1, .215]]))
+    if p["pack"] == "MEP penetrations":
+        profile = {"library": "basic/rail" if name.startswith("Pipe") else "basic/duct"}
+        if name.endswith("wall"):
+            return sweeps(h, (WALL, [[-1, 0, 0], [1, 0, 0]]),
+                          (profile, [[0, -1, .3], [0, 1, .3]]))
+        slab = box(scene, "Slab", "IfcSlab", (-1, -1, 0), (1, 1, .25))
+        return [slab.uid] + sweeps(h, (profile, [[0, 0, -.3], [0, 0, .6]]))
     if name == "Apex haunch":
         return sweeps(h, (IPE, [[-2, 0, 0], [0, 0, .5]]), (IPE, [[0, 0, .5], [2, 0, 0]]))
     if name == "Birdsmouth":
