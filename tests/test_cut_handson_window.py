@@ -117,7 +117,7 @@ def window_probe(app):
         preview = tool._machine.preview()
         with (base / "samples.jsonl").open("a") as f:
             print(json.dumps(dict(prompt=tool._state("prompt"), target=tool._state("target"),
-                                  lines=len(preview["lines"]), faces=len(preview["faces"]),
+                                  sizes=tool._state("cut_sizes"), lines=len(preview["lines"]), faces=len(preview["faces"]),
                                   volumes=[solid_volume(g) for g in app.scene.groups],
                                   rows=command_protocol.live_rows(app.scene))), file=f)
     app.add_menu_action("Frame members", frame)
@@ -160,6 +160,10 @@ def test_cut_member_picks(tmp_path, shape, crossing, drawn_stock):
             assert beam_hover["lines"] >= 12 and beam_hover["faces"] == 0
             if kind == "plane":
                 assert post_hover["faces"] == 1
+            elif kind == "body" and shape == "sweep" and (crossing or presets[i] == "Cope"):
+                # A rectangular cut face can have just four rim edges.
+                assert post_hover["lines"] >= 4 and post_hover["faces"] == 0
+                assert dict(post_hover["sizes"])["Depth"] > 0
             else:
                 assert post_hover["lines"] >= 12 and post_hover["faces"] == 0
             cut, = cuts
