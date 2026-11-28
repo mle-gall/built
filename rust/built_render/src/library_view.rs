@@ -675,7 +675,8 @@ fn saved_detail(inp: &Input, e: &Item, mut out: Vec<Value>) -> Vec<Value> {
         first.push(verb("apply", primary, "↩", PRIMARY));
     }
     if e.verbs.iter().any(|v| v == "edit") {
-        first.push(verb("edit", "Open the drawing", if first.is_empty() { "↩" } else { "" }, if first.is_empty() { PRIMARY } else { 0 }));
+        let label = if inp.kind == "presets" { "Edit…" } else { "Open the drawing" };
+        first.push(verb("edit", label, if first.is_empty() { "↩" } else { "" }, if first.is_empty() { PRIMARY } else { 0 }));
     }
     if !first.is_empty() {
         out.push(block("buttons", json!({"buttons": first, "align": "fill"})));

@@ -106,7 +106,7 @@ pub(super) fn describe(py: Python<'_>, p: &Value, used: usize, offer: Option<(u6
         let version = source["version"].as_str().map(|v| format!(" {v}")).unwrap_or_default();
         rows.push(json!(["Pack", format!("{pack}{version}"), ""]));
     }
-    rows.push(json!(["Revision", pack_rev(p).to_string(), ""]));
+    rows.push(json!(["Detail revision", pack_rev(p).to_string(), ""]));
     for (key, label) in [("author", "Author"), ("licence", "Licence")] {
         let v = if p[key].is_null() { &p["source"][key] } else { &p[key] };
         let shown = v["name"].as_str().map(str::to_owned).unwrap_or_else(|| text(v));
