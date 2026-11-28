@@ -188,7 +188,10 @@ this order, to the tabs at their usual spacing, the title, then the search
 beyond its least width; when it runs short the title goes first, then the
 tabs draw closer together (other tabs' counts already hidden). The search
 shortcut is shown only where it does not print over the placeholder. At
-1280 × 800 the nine tabs, the type's button and both menus fit.
+1280 × 800 the nine tabs, the type's button and both menus fit. Narrower
+still (1000 wide), the title and the usual spacing stay and the tabs that
+do not fit fold into a More menu after the ones that do; the current tab
+always shows.
 
 ## Trade add-ons
 

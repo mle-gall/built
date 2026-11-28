@@ -237,6 +237,8 @@ pub struct LargeSheet {
     pub menu: Option<(String, Vec<(String, String)>, Pos2)>,
     /// A header menu: (menu id, under this rect).
     head_menu: Option<(String, Rect)>,
+    /// The tabs a narrow header folds into More: (id, label, enabled).
+    more_tabs: Vec<(String, String, bool)>,
     /// One form per fields block (keyed pane:block), Python's values.
     forms: HashMap<String, dialog::Dialog>,
     focus_search: bool,
@@ -249,6 +251,8 @@ pub struct LargeSheet {
 fn search_id() -> egui::Id { egui::Id::new("lsheet_search") }
 /// The narrowest the header's search field gets.
 const SEARCH_LEAST: f32 = 80.0;
+/// The header menu of the tabs that did not fit.
+const MORE_TABS: &str = "tabs-more";
 
 impl LargeSheet {
     pub(super) fn choice_open(&self) -> bool {
@@ -1336,6 +1340,26 @@ impl Ui {
                     });
                 });
                 close=ctx.input(|i|i.pointer.any_pressed() && i.pointer.interact_pos().is_some_and(|p|!popup.response.rect.contains(p) && !anchor.contains(p)));
+            } else if mid == MORE_TABS {
+                let r = egui::Area::new(egui::Id::new("lsheet_head_menu"))
+                    .fixed_pos(anchor.left_bottom() + vec2(0.0, 4.0))
+                    .order(egui::Order::Tooltip)
+                    .constrain_to(screen)
+                    .show(ctx, |ui| {
+                        glass(Surface::Raised).inner_margin(Margin::same(4)).show(ui, |ui| {
+                            let width = st.more_tabs.iter().map(|t| ui.painter().layout_no_wrap(t.1.clone(), body(), INK).size().x + 48.).fold(anchor.width(), f32::max);
+                            ui.set_width(width.min(screen.width() - 16.));
+                            ui.spacing_mut().item_spacing = vec2(0.0, 0.0);
+                            for (id, label, enabled) in &st.more_tabs {
+                                if menu_row(ui, &(id.clone(), label.clone(), String::new(), String::new(), -1, *enabled)) {
+                                    out.push(format!("tab{SEP}{id}"));
+                                    close = true;
+                                }
+                            }
+                        });
+                    });
+                let pressed_out = ctx.input(|i| i.pointer.any_pressed() && i.pointer.interact_pos().is_some_and(|p| !r.response.rect.contains(p) && !anchor.contains(p)));
+                if pressed_out { close = true; }
             } else if let Some(m) = spec.menus.iter().find(|m| m.id == mid) {
                 let r = egui::Area::new(egui::Id::new("lsheet_head_menu"))
                     .fixed_pos(anchor.left_bottom() + vec2(0.0, 4.0))
@@ -1449,19 +1473,52 @@ impl Ui {
             ui.spacing_mut().item_spacing = vec2(SPACE_S, 0.0);
             ui.set_clip_rect(ui.clip_rect().intersect(left));
             let mut room = left.width();
-            if !spec.title.is_empty() && left_least + title <= room {
+            // Too narrow even with the title gone and the tabs drawn close
+            // together: the title and the usual spacing stay, and the tabs
+            // that do not fit fold into More.
+            let fold = !tabs.is_empty() && left_least > room;
+            if !spec.title.is_empty() && (fold || left_least + title <= room) {
                 ui.label(egui::RichText::new(&spec.title).font(heading()).color(INK));
                 ui.add_space(SPACE_M);
                 room -= title;
             }
             if !tabs.is_empty() {
-                let width = (room - verbs - menu_width(ui, true) - 2.0 * SPACE_S).max(0.0);
+                let mut width = (room - verbs - menu_width(ui, true) - 2.0 * SPACE_S).max(0.0);
+                let mut shown: Vec<usize> = (0..tabs.len()).collect();
+                if fold {
+                    let more = ui.painter().layout_no_wrap("More".to_owned(), body(), INK).size().x + 36.0 + SPACE_S;
+                    let each = |ui: &egui::Ui, i: usize| kit::underline_tabs_width(ui, &tabs[i..=i], usize::from(i != current), false);
+                    // The current tab always shows; the others in order while they fit.
+                    let mut used = if current < tabs.len() { each(ui, current) } else { 0.0 };
+                    let mut full = false;
+                    shown.retain(|&i| {
+                        if i == current {
+                            return true;
+                        }
+                        let w = each(ui, i);
+                        full |= used + w + more > width;
+                        if !full {
+                            used += w;
+                        }
+                        !full
+                    });
+                    width = used;
+                }
+                let visible: Vec<_> = shown.iter().map(|&i| tabs[i].clone()).collect();
+                let at = shown.iter().position(|&i| i == current).unwrap_or(visible.len());
                 let hit = ui.allocate_ui_with_layout(vec2(width, CONTROL_H), egui::Layout::left_to_right(egui::Align::Center), |ui| {
                     ui.set_max_width(width);
-                    inline_underline_tabs(ui, &tabs, current)
+                    inline_underline_tabs(ui, &visible, at)
                 }).inner;
-                if let Some(i) = hit {
+                if let Some(i) = hit.map(|i| shown[i]) {
                     if i != current { out.push(format!("tab{SEP}{}", spec.tabs[i].id)); }
+                }
+                st.more_tabs = (0..tabs.len()).filter(|i| !shown.contains(i)).map(|i| (spec.tabs[i].id.clone(), spec.tabs[i].label.clone(), spec.tabs[i].enabled)).collect();
+                if !st.more_tabs.is_empty() {
+                    let open = st.head_menu.as_ref().is_some_and(|h| h.0 == MORE_TABS);
+                    if let Some(r) = menu_button(ui, "More", open) {
+                        st.head_menu = if open { None } else { Some((MORE_TABS.into(), r)) };
+                    }
                 }
                 ui.add_space(SPACE_S);
             }
