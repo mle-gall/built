@@ -3900,5 +3900,8 @@
  "{n} texture image could not be read, so it was not packed into the document — those faces will lose their texture on another computer.": "Неуспешно прочитане на {n} изображение на текстура, поради което то не е включено в документа — съответните повърхнини ще загубят текстурите си на друг компютър.",
  "{n} texture images could not be read, so they were not packed into the document — those faces will lose their texture on another computer.": "Неуспешно прочитане на {n} изображения на текстури, поради което те не са включени в документа — съответните повърхнини ще загубят текстурите си на друг компютър.",
  "Click or drag to place · … for actions · Esc back to the model": "Щракнете или плъзнете за поставяне · … за действия · Esc връща към модела",
- "Click to use · … for actions · Esc back to the model": "Щракнете за използване · … за действия · Esc връща към модела"
+ "Click to use · … for actions · Esc back to the model": "Щракнете за използване · … за действия · Esc връща към модела",
+ "Click a face to take its outline, or two opposite corners. Type the thickness. F = above. Alt = draw on a face.": "Щракнете върху стена на тяло, за да вземете контура ѝ, или върху два срещуположни ъгъла. Въведете дебелината. F = отгоре. Alt = чертане върху стена на тяло.",
+ "Click the opposite corner, or type width;height and Enter. One number is the thickness.": "Щракнете върху срещуположния ъгъл или въведете ширина;височина и натиснете Enter. Едно число е дебелината.",
+ "Click a column or a wall to size it from that member, or click a free point. Type the thickness. L = presets.": "Щракнете върху колона или стена, за да оразмерите по този елемент, или върху свободна точка. Въведете дебелината. L = предварителни настройки."
 }

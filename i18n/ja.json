@@ -3899,5 +3899,8 @@
  "{n} texture image could not be read, so it was not packed into the document — those faces will lose their texture on another computer.": "{n} 個のテクスチャ画像を読み込めず、ドキュメントに格納できませんでした。別のコンピューターでは、それらの面のテクスチャが失われます。",
  "{n} texture images could not be read, so they were not packed into the document — those faces will lose their texture on another computer.": "{n} 個のテクスチャ画像を読み込めず、ドキュメントに格納できませんでした。別のコンピューターでは、それらの面のテクスチャが失われます。",
  "Click or drag to place · … for actions · Esc back to the model": "クリックまたはドラッグして配置 · … で操作を表示 · Esc でモデルに戻る",
- "Click to use · … for actions · Esc back to the model": "クリックして使用 · … で操作を表示 · Esc でモデルに戻る"
+ "Click to use · … for actions · Esc back to the model": "クリックして使用 · … で操作を表示 · Esc でモデルに戻る",
+ "Click a face to take its outline, or two opposite corners. Type the thickness. F = above. Alt = draw on a face.": "面をクリックしてその輪郭を使うか、対角の 2 点をクリック。厚さを入力。F = 上側。Alt = 面上に作図。",
+ "Click the opposite corner, or type width;height and Enter. One number is the thickness.": "対角の角をクリックするか、幅;高さを入力して Enter。数値 1 つは厚さです。",
+ "Click a column or a wall to size it from that member, or click a free point. Type the thickness. L = presets.": "柱または壁をクリックするとその部材から寸法を決めます。自由な点をクリックしても配置できます。厚さを入力。L = プリセット。"
 }

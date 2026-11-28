@@ -3899,5 +3899,8 @@
  "{n} texture image could not be read, so it was not packed into the document — those faces will lose their texture on another computer.": "{n} Texturbild konnte nicht gelesen werden und wurde daher nicht in das Dokument gepackt — diese Flächen verlieren auf einem anderen Computer ihre Textur.",
  "{n} texture images could not be read, so they were not packed into the document — those faces will lose their texture on another computer.": "{n} Texturbilder konnten nicht gelesen werden und wurden daher nicht in das Dokument gepackt — diese Flächen verlieren auf einem anderen Computer ihre Textur.",
  "Click or drag to place · … for actions · Esc back to the model": "Zum Platzieren klicken oder ziehen · … für Aktionen · Esc zurück zum Modell",
- "Click to use · … for actions · Esc back to the model": "Zum Verwenden klicken · … für Aktionen · Esc zurück zum Modell"
+ "Click to use · … for actions · Esc back to the model": "Zum Verwenden klicken · … für Aktionen · Esc zurück zum Modell",
+ "Click a face to take its outline, or two opposite corners. Type the thickness. F = above. Alt = draw on a face.": "Klicke eine Fläche an, um ihren Umriss zu übernehmen, oder zwei gegenüberliegende Ecken. Gib die Dicke ein. F = darüber. Alt = auf einer Fläche zeichnen.",
+ "Click the opposite corner, or type width;height and Enter. One number is the thickness.": "Klicke die gegenüberliegende Ecke an oder gib Breite;Höhe ein und drücke Enter. Eine einzelne Zahl ist die Dicke.",
+ "Click a column or a wall to size it from that member, or click a free point. Type the thickness. L = presets.": "Klicke eine Stütze oder eine Wand an, um die Größe von diesem Bauteil abzuleiten, oder einen freien Punkt. Gib die Dicke ein. L = Vorgaben."
 }

@@ -12,6 +12,7 @@ from built_core.protocol import commands
 from built_core.scene import Scene
 from built_core.solids import solid_volume
 from formats import igz
+from tests import addon_cases
 from tests.test_live_recipes import apply
 from tests.test_persistent_ids import all_ids
 
@@ -20,8 +21,21 @@ def preset(name, scene=None):
     return next(p for p, _ in live.preset_catalog(scene) if p["name"] == name)
 
 
+def steel(key):
+    """A catalogue size from the steel add-on pack (never bundled): the row keeps its own dimensions."""
+    return addon_cases.profile(key)
+
+
+def steel_column():
+    return next(r for r in addon_cases.rows("steel-profiles-en") if r["name"] == "Steel column")
+
+
 def bounds(group):
+    """World bounds: a member keeps its own frame (X along it, origin at its start)."""
     pts = [(v.x(), v.y(), v.z()) for f in group.mesh.faces for v in f.vertices]
+    if group.xform is not None:
+        m = group.xform.data()
+        pts = [tuple(m[i] * x + m[4 + i] * y + m[8 + i] * z + m[12 + i] for i in range(3)) for x, y, z in pts]
     return [min(p[i] for p in pts) for i in range(3)], [max(p[i] for p in pts) for i in range(3)]
 
 
@@ -155,9 +169,47 @@ def test_wall_on_slab_meets_a_preset_slab_on_its_top():
     assert j["state"] == "ok" and j["frames"]["meet"][14] == pytest.approx(0)
 
 
+def test_a_cut_a_junction_refuses_stays_as_it_was_made():
+    """A cut dropped on a junction's row that cannot take it (it cuts a member
+    outside the meeting): refused with its reason, no History step, so the
+    next Undo is the cut's own creation and Redo brings it back."""
+    from tests.test_geometry_arrays import CUBE
+    scene = Scene()
+    shaft = Group(name="Shaft")
+    shaft.xform = Matrix4()
+    for face in CUBE:
+        shaft.mesh.add_face([Vec3(11 + x * 0.5, -1.5 + y * 0.5, z - 0.5) for x, y, z in face])
+    scene.groups.append(shaft)
+    h = History(scene)
+    g = slab(h)
+    apply(h, "create_sweeps", sweeps=[dict(profile=dict(library="basic/wall"), attachment="bottom_left",
+                                           path=dict(points=[[0.5, -1, 0], [3, -1, 0]]))])
+    wall = scene.groups[-1]
+    detail = preset("Wall on slab", scene)
+    apply(h, "junction_apply", detail=detail["uid"], bindings={"main": {"placement": g.uid}, "joining": {"placement": wall.uid}})
+    j = next(r for r in live.live_rows(scene) if r["kind"] == "junction")
+    p = preset("Slab")
+    apply(h, "create_sweeps", sweeps=[dict(preset_uid=p["uid"], attachment="bottom_left", path=dict(points=[[10, 0, 0]], dir=[0, 0, -1]))])
+    other = scene.groups[-1]
+    apply(h, "live_set", row=dict(kind="cut", owner=other.uid, uid="c0700000000000b2", cutter={"body": shaft.uid},
+                                  operation="subtract", preset=preset("Penetration")["name"]))
+    cut = lambda: [r for r in live.live_rows(scene) if r["kind"] == "cut"]  # noqa: E731
+    volume = solid_volume(other)
+    assert volume == pytest.approx(2.4 - 0.5 * 0.5 * 0.2) and len(cut()) == 1
+    steps = len(h.undo_stack)
+    reply = commands.run(h, "junction_adopt", junction=j["uid"], rows=["c0700000000000b2"])
+    assert not reply["ok"] and reply["rejected"] == "Cannot adopt it: it cuts something outside this meeting"
+    assert len(h.undo_stack) == steps and len(h.redo_stack) == 0
+    assert len(cut()) == 1 and "junction" not in cut()[0] and solid_volume(other) == pytest.approx(volume)
+    apply(h, "undo")
+    assert cut() == [] and solid_volume(other) == pytest.approx(2.4)
+    apply(h, "redo")
+    assert len(cut()) == 1 and solid_volume(other) == pytest.approx(volume)
+
+
 def column(h, at=(1, 1), key="en/he200a", **more):
-    p = preset("Steel column")
-    apply(h, "create_sweeps", sweeps=[dict(preset_uid=p["uid"], profile=dict(library=key),
+    p = steel_column()
+    apply(h, "create_sweeps", sweeps=[dict(preset_uid=p["uid"], preset_definition=p, profile=steel(key),
                                            path=dict(points=[[at[0], at[1], 0], [at[0], at[1], 3]]), **more)])
     return h.scene.groups[-1]
 
@@ -186,7 +238,7 @@ def test_pad_footing_is_sized_from_its_column_and_follows_it(tmp_path):
     assert foot.ifc["class"] == "IfcFooting" and foot.ifc["predefined_type"] == "PAD_FOOTING" and foot.name == "PF-1"
     # A larger column: the pad follows, in the same step.
     crow = live.live_sweep(scene, col.uid)
-    apply(h, "live_set", row=dict(crow, profile=dict(library="en/ipe240")))
+    apply(h, "live_set", row=dict(crow, profile=steel("en/ipe240")))
     other = live.live_sweep(scene, foot.uid)["profile"]["params"]
     assert other["width"] == pytest.approx(520) and other["height"] == pytest.approx(640)
     lo, hi = bounds(foot)
@@ -216,7 +268,7 @@ def test_a_fitted_size_edited_by_hand_stops_following_the_host():
     assert row["profile"]["params"]["width"] == 900
     assert row["fit"]["values"] == {"profile.params.height": "host.height + 400"}
     crow = live.live_sweep(scene, col.uid)
-    apply(h, "live_set", row=dict(crow, profile=dict(library="en/ipe240")))
+    apply(h, "live_set", row=dict(crow, profile=steel("en/ipe240")))
     after = live.live_sweep(scene, foot.uid)["profile"]["params"]
     assert after["width"] == 900 and after["height"] == pytest.approx(640)
     # A host whose section no longer resolves leaves the footing as it was.
@@ -285,9 +337,9 @@ def test_footing_budgets_on_a_grid_of_columns():
 
     scene = Scene()
     h = History(scene)
-    column_preset, pad_preset = preset("Steel column"), preset("Pad footing")
+    column_preset, pad_preset = steel_column(), preset("Pad footing")
     grid = [(x * 5.0, y * 5.0) for x in range(20) for y in range(10)]
-    apply(h, "create_sweeps", sweeps=[dict(preset_uid=column_preset["uid"], path=dict(points=[[x, y, 0], [x, y, 3]]))
+    apply(h, "create_sweeps", sweeps=[dict(preset_uid=column_preset["uid"], preset_definition=column_preset, profile=steel("en/he200a"), path=dict(points=[[x, y, 0], [x, y, 3]]))
                                       for x, y in grid])
     columns = list(scene.groups)
     rows = [live.live_sweep(scene, g.uid) for g in columns]
@@ -303,9 +355,9 @@ def test_footing_budgets_on_a_grid_of_columns():
     meshes = [g.mesh for g in footings]
     samples = []
     for i in range(15):
-        size = "en/ipe240" if i % 2 == 0 else "en/he200a"
+        size = steel("en/ipe240" if i % 2 == 0 else "en/he200a")
         start = time.perf_counter()
-        apply(h, "live_set", row=dict(rows[7], profile=dict(library=size)))
+        apply(h, "live_set", row=dict(rows[7], profile=size))
         samples.append((time.perf_counter() - start) * 1000)
     changed = [i for i, (g, m) in enumerate(zip(footings, meshes)) if g.mesh is not m]
     assert changed == [7]

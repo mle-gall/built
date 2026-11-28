@@ -3905,5 +3905,8 @@
  "{n} texture image could not be read, so it was not packed into the document — those faces will lose their texture on another computer.": "{n} imagem de textura não pôde ser lida, então não foi empacotada no documento — essas faces perderão sua textura em outro computador.",
  "{n} texture images could not be read, so they were not packed into the document — those faces will lose their texture on another computer.": "{n} imagens de textura não puderam ser lidas, então não foram empacotadas no documento — essas faces perderão sua textura em outro computador.",
  "Click or drag to place · … for actions · Esc back to the model": "Clique ou arraste para posicionar · … para ações · Esc para voltar ao modelo",
- "Click to use · … for actions · Esc back to the model": "Clique para usar · … para ações · Esc para voltar ao modelo"
+ "Click to use · … for actions · Esc back to the model": "Clique para usar · … para ações · Esc para voltar ao modelo",
+ "Click a face to take its outline, or two opposite corners. Type the thickness. F = above. Alt = draw on a face.": "Clique em uma face para usar o contorno dela, ou em dois cantos opostos. Digite a espessura. F = acima. Alt = desenhar em uma face.",
+ "Click the opposite corner, or type width;height and Enter. One number is the thickness.": "Clique no canto oposto, ou digite largura;altura e Enter. Um único número é a espessura.",
+ "Click a column or a wall to size it from that member, or click a free point. Type the thickness. L = presets.": "Clique em um pilar ou uma parede para dimensionar a partir desse elemento, ou em um ponto livre. Digite a espessura. L = predefinições."
 }

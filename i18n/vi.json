@@ -3925,5 +3925,8 @@
  "{n} texture image could not be read, so it was not packed into the document — those faces will lose their texture on another computer.": "Không thể đọc {n} hình ảnh họa tiết (texture), do đó chúng không được đóng gói vào tài liệu — các bề mặt này sẽ bị mất họa tiết khi mở trên máy tính khác.",
  "{n} texture images could not be read, so they were not packed into the document — those faces will lose their texture on another computer.": "Không thể đọc {n} hình ảnh họa tiết (texture), do đó chúng không được đóng gói vào tài liệu — các bề mặt này sẽ bị mất họa tiết khi mở trên máy tính khác.",
  "Click or drag to place · … for actions · Esc back to the model": "Nhấp hoặc kéo để đặt · … để xem thao tác · Esc để trở về mô hình",
- "Click to use · … for actions · Esc back to the model": "Nhấp để sử dụng · … để xem thao tác · Esc để trở về mô hình"
+ "Click to use · … for actions · Esc back to the model": "Nhấp để sử dụng · … để xem thao tác · Esc để trở về mô hình",
+ "Click a face to take its outline, or two opposite corners. Type the thickness. F = above. Alt = draw on a face.": "Bấm vào một mặt để lấy đường bao của nó, hoặc hai góc đối diện. Nhập độ dày. F = phía trên. Alt = vẽ trên một mặt.",
+ "Click the opposite corner, or type width;height and Enter. One number is the thickness.": "Bấm vào góc đối diện hoặc nhập chiều rộng;chiều cao và Enter. Một số duy nhất là độ dày.",
+ "Click a column or a wall to size it from that member, or click a free point. Type the thickness. L = presets.": "Bấm vào cột hoặc tường để lấy kích thước theo cấu kiện đó, hoặc bấm vào một điểm tự do. Nhập độ dày. L = mẫu đặt sẵn."
 }

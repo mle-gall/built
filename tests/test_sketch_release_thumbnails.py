@@ -79,7 +79,7 @@ def test_release_of_a_catalogue_member_s_drawing_adopts_and_freezes_it_in_one_st
     (g,) = scene.groups
     (row,) = rows_of(scene, "sweep")
     size = extent(g)
-    drawn = command_protocol.profile_sketch("en/ipe240")
+    drawn = command_protocol.profile_sketch(rows_of(scene, "sweep")[0]["profile"])
     steps = len(h.undo_stack)
     reply = apply(h, "sketch_commit", row=dict(drawn, uid="5ce7c40000000019"), adopt=[row["uid"]], release=True)
     assert reply["released"] == 1 and len(h.undo_stack) == steps + 1

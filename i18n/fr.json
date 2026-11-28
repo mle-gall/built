@@ -4053,5 +4053,8 @@
  "{n} texture image could not be read, so it was not packed into the document — those faces will lose their texture on another computer.": "{n} image de texture n’a pas pu être lue et n’a donc pas été intégrée au document — ces faces perdront leur texture sur un autre ordinateur.",
  "{n} texture images could not be read, so they were not packed into the document — those faces will lose their texture on another computer.": "{n} images de texture n'ont pas pu être lues et n'ont donc pas été intégrées au document — ces faces perdront leur texture sur un autre ordinateur.",
  "Click or drag to place · … for actions · Esc back to the model": "Cliquez ou faites glisser pour placer · … pour les actions · Échap pour revenir au modèle",
- "Click to use · … for actions · Esc back to the model": "Cliquez pour utiliser · … pour les actions · Échap pour revenir au modèle"
+ "Click to use · … for actions · Esc back to the model": "Cliquez pour utiliser · … pour les actions · Échap pour revenir au modèle",
+ "Click a face to take its outline, or two opposite corners. Type the thickness. F = above. Alt = draw on a face.": "Cliquez sur une face pour reprendre son contour, ou sur deux coins opposés. Saisissez l’épaisseur. F = au-dessus. Alt = dessiner sur une face.",
+ "Click the opposite corner, or type width;height and Enter. One number is the thickness.": "Cliquez sur le coin opposé, ou saisissez largeur;hauteur et Entrée. Un seul nombre donne l’épaisseur.",
+ "Click a column or a wall to size it from that member, or click a free point. Type the thickness. L = presets.": "Cliquez sur un poteau ou un mur pour le dimensionner d’après cet élément, ou sur un point libre. Saisissez l’épaisseur. L = préréglages."
 }

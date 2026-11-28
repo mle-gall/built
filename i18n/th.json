@@ -3902,5 +3902,8 @@
  "{n} texture image could not be read, so it was not packed into the document — those faces will lose their texture on another computer.": "ไม่สามารถอ่านภาพพื้นผิวสัมผัส {n} ภาพได้ จึงไม่ได้บันทึกรวมในเอกสาร — พื้นผิวเหล่านี้จะสูญเสียลวดลายเมื่อเปิดบนคอมพิวเตอร์เครื่องอื่น",
  "{n} texture images could not be read, so they were not packed into the document — those faces will lose their texture on another computer.": "ไม่สามารถอ่านภาพพื้นผิวสัมผัส {n} ภาพได้ จึงไม่ได้บันทึกรวมในเอกสาร — พื้นผิวเหล่านี้จะสูญเสียลวดลายเมื่อเปิดบนคอมพิวเตอร์เครื่องอื่น",
  "Click or drag to place · … for actions · Esc back to the model": "คลิกหรือลากเพื่อวาง · … เพื่อดูการทำงาน · Esc เพื่อกลับไปยังโมเดล",
- "Click to use · … for actions · Esc back to the model": "คลิกเพื่อใช้ · … เพื่อดูการทำงาน · Esc เพื่อกลับไปยังโมเดล"
+ "Click to use · … for actions · Esc back to the model": "คลิกเพื่อใช้ · … เพื่อดูการทำงาน · Esc เพื่อกลับไปยังโมเดล",
+ "Click a face to take its outline, or two opposite corners. Type the thickness. F = above. Alt = draw on a face.": "คลิกหน้าเพื่อใช้เส้นขอบของหน้านั้น หรือคลิกสองมุมตรงข้าม พิมพ์ความหนา F = ด้านบน Alt = วาดบนหน้า",
+ "Click the opposite corner, or type width;height and Enter. One number is the thickness.": "คลิกมุมตรงข้าม หรือพิมพ์ ความกว้าง;ความสูง แล้วกด Enter ตัวเลขเดียวคือความหนา",
+ "Click a column or a wall to size it from that member, or click a free point. Type the thickness. L = presets.": "คลิกเสาหรือผนังเพื่อกำหนดขนาดตามชิ้นส่วนนั้น หรือคลิกจุดอิสระ พิมพ์ความหนา L = ค่าที่ตั้งไว้"
 }

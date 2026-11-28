@@ -3912,5 +3912,8 @@
  "{n} faces [one]": "{n} грань",
  "{n} faces [few]": "{n} грані",
  "{n} edges [one]": "{n} ребро",
- "{n} edges [few]": "{n} ребра"
+ "{n} edges [few]": "{n} ребра",
+ "Click a face to take its outline, or two opposite corners. Type the thickness. F = above. Alt = draw on a face.": "Клацніть грань, щоб узяти її контур, або два протилежні кути. Введіть товщину. F = зверху. Alt = малювати на грані.",
+ "Click the opposite corner, or type width;height and Enter. One number is the thickness.": "Клацніть протилежний кут або введіть «ширина;висота» та Enter. Одне число — товщина.",
+ "Click a column or a wall to size it from that member, or click a free point. Type the thickness. L = presets.": "Клацніть колону або стіну, щоб задати розміри за цим елементом, або вільну точку. Введіть товщину. L — набори."
 }

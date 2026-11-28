@@ -3900,5 +3900,8 @@
  "{n} texture image could not be read, so it was not packed into the document — those faces will lose their texture on another computer.": "无法读取 {n} 个纹理图像，因此它们未打包到文档中 — 这些面在另一台计算机上将丢失纹理。",
  "{n} texture images could not be read, so they were not packed into the document — those faces will lose their texture on another computer.": "无法读取 {n} 个纹理图像，因此它们未打包到文档中 — 这些面在另一台计算机上将丢失纹理。",
  "Click or drag to place · … for actions · Esc back to the model": "点击或拖动以放置 · 点 … 查看操作 · 按 Esc 返回模型",
- "Click to use · … for actions · Esc back to the model": "点击使用 · 点 … 查看操作 · 按 Esc 返回模型"
+ "Click to use · … for actions · Esc back to the model": "点击使用 · 点 … 查看操作 · 按 Esc 返回模型",
+ "Click a face to take its outline, or two opposite corners. Type the thickness. F = above. Alt = draw on a face.": "点击一个面以采用其轮廓，或点击两个对角点。输入厚度。F = 上方。Alt = 在面上绘制。",
+ "Click the opposite corner, or type width;height and Enter. One number is the thickness.": "点击对角角点，或输入宽度;高度并按 Enter。只输入一个数值即为厚度。",
+ "Click a column or a wall to size it from that member, or click a free point. Type the thickness. L = presets.": "点击柱或墙以按该构件确定尺寸，或点击任意一点。输入厚度。L = 预设。"
 }
