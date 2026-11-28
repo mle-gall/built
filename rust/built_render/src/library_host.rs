@@ -1580,7 +1580,7 @@ impl ProfilesProvider {
             }
             serde_json::json!({"key":size["key"],"name":size["label"],"category":size["family"],
                 "thumb":format!("profile:{}",size["key"].as_str().unwrap()),"defaults":details,
-                "source":"bundled","verbs":["apply"]})
+                "source":"bundled","dimensions":size["params"],"verbs":["apply","size"]})
         }).collect();
         let scene=ctx.getattr_opt("scene")?.filter(|s|!s.is_none() && s.hasattr("_root").unwrap_or(false));
         let saved:std::collections::HashSet<String>=destinations::saved_ids(py,scene.as_ref(),"profiles")?.into_iter().chain(destinations::saved_ids(py,scene.as_ref(),"sections")?).collect();
@@ -1605,6 +1605,18 @@ impl ProfilesProvider {
                 items.push(serde_json::json!({"key":format!("sketch:{}",row["uid"].as_str().unwrap_or_default()),"name":row["name"].as_str().unwrap_or("Drawn profile"),"category":"Sketches","source":"model","sketch":row,"verbs":["apply","edit"]}));
             }
         }
+        let mut catalog = presets::listed(ctx)?;
+        for entry in destinations::entries(py,scene.as_ref(), &["presets"])? {
+            catalog.push((entry.entry.data, entry.dest.key));
+        }
+        for (preset, source) in catalog {
+            if preset["source"]["profile_size"] == true {
+                let profile = &preset["values"]["profile"];
+                items.push(serde_json::json!({"key":format!("size:{source}:{}",preset["uid"]),
+                    "name":preset["name"],"category":profile["family"],"source":source,
+                    "profile_preset":preset,"thumb":presets::profile_thumb(profile),"verbs":["apply"]}));
+            }
+        }
         // Saved profiles; saved sections are Library › Sections (SectionsProvider).
         for row in destinations::items(py,scene.as_ref(),&["profiles"])? {
             items.push(row);
@@ -1613,15 +1625,20 @@ impl ProfilesProvider {
     }
     /// The header's New profile… and Import drawing… (sketch_workspace.rs).
     fn type_action(&self, ctx: &Bound<'_, PyAny>, action: &str) -> PyResult<()> {
+        if action == "pack" { return packs::ask_import(ctx); }
         sketch_entry(ctx, action, false)
     }
     #[pyo3(signature=(ctx,verb,item,_arg=""))]
     fn run(&self,ctx:&Bound<'_,PyAny>,verb:&str,item:&Bound<'_,PyAny>,_arg:&str)->PyResult<()> {
+        if verb == "size" {
+            return profile_dimensions(ctx, item);
+        }
         if verb=="apply" {
             let win=ctx.getattr("win")?;
             win.call_method1("_activate_tool",("sweep",))?;
             let machine=win.getattr("_tools")?.get_item("sweep")?.getattr("_machine")?;
-            if item.contains("sketch")? {machine.call_method1("set",("sketch",item.get_item("sketch")?))?;}
+            if item.contains("profile_preset")? { machine.call_method1("set",("preset",item.get_item("profile_preset")?))?; }
+            else if item.contains("sketch")? {machine.call_method1("set",("sketch",item.get_item("sketch")?))?;}
             else {machine.call_method1("set",("profile",item.get_item("key")?))?;}
         }
         if verb=="edit" {
@@ -1644,6 +1661,53 @@ impl ProfilesProvider {
         }
         Ok(())
     }
+}
+
+/// Arm Sweep with a user-sized family without changing its Library defaults.
+fn profile_dimensions(ctx: &Bound<'_, PyAny>, item: &Bound<'_, PyAny>) -> PyResult<()> {
+    let py = ctx.py();
+    let forms = py.import("built_render.chrome_forms")?;
+    let fields = PyList::empty(py);
+    let params = item.get_item("dimensions")?;
+    let mut keys = Vec::new();
+    for key in ["width", "height", "web", "flange", "radius"] {
+        if !params.contains(key)? { continue; }
+        let value = params.get_item(key)?.extract::<f64>()?;
+        if matches!(key, "web" | "flange") && value == 0. { continue; }
+        fields.append(forms.getattr("Field")?.call1((key, "edit", format!("{key} (mm)"), value.to_string()))?)?;
+        keys.push(key);
+    }
+    let library = item.get_item("key")?.extract::<String>()?;
+    let win = ctx.getattr("win")?;
+    let window = win.clone().unbind();
+    let done = func(py, move |py, args| {
+        if args.get_item(0)?.eq("ok")? {
+            let values = args.get_item(1)?;
+            let dims = PyDict::new(py);
+            for key in &keys {
+                let text = values.get_item(key)?.str()?.to_string();
+                let Ok(num) = text.trim().parse::<f64>() else { return Err(pyo3::exceptions::PyValueError::new_err("Invalid dimension")); };
+                dims.set_item(key, num)?;
+            }
+            let profile = PyDict::new(py);
+            profile.set_item("library", &library)?;
+            profile.set_item("params", dims)?;
+            let win = window.bind(py);
+            win.call_method1("_activate_tool", ("sweep",))?;
+            let machine = win.getattr("_tools")?.get_item("sweep")?.getattr("_machine")?;
+            if machine.call_method1("set", ("dimensions", profile))?.is_truthy()? {
+                cs(py)?.call_method1("close", (win,))?;
+            } else {
+                win.call_method1("notify", ("warning", "Invalid profile dimensions"))?;
+            }
+        }
+        Ok(none(py))
+    })?;
+    let kw = PyDict::new(py);
+    kw.set_item("on_done", done)?;
+    let form = forms.getattr("Form")?.call(("Profile dimensions", fields), Some(&kw))?;
+    forms.call_method1("show", (win, form))?;
+    Ok(())
 }
 
 /// New and Import from the Profiles and Sections tabs: the sheet goes and
@@ -2357,6 +2421,7 @@ impl LibrarySheet {
         if prov_id=="presets" {
             sheet.call_method1("verb",("typeact:import","Import pack…"))?;
         }else if prov_id=="profiles" {
+            sheet.call_method1("verb",("typeact:pack","Import pack…"))?;
             sheet.call_method1("verb",("typeact:new","New profile…"))?;
             sheet.call_method1("verb",("typeact:import","Import drawing…"))?;
         }else if prov_id=="sections" {
@@ -2458,8 +2523,8 @@ impl LibrarySheet {
         } else if !e.is_none() && prov_id == "components" {
             slf.call_method1("_component_detail", (&detail, &prov, ctx, &e))?;
         }
-        let hint = if matches!(prov_id.as_str(), "components" | "families") { "Click or drag to place · … for actions · Esc back to the model" } else { "Click to use · … for actions · Esc back to the model" };
-        sheet.call_method1("footer", (PyTuple::empty(py), hint))?;
+        let hint = if prov_id == "profiles" && !st.get_item("items")?.call_method0("values")?.try_iter()?.any(|r| r.is_ok_and(|r| r.contains("profile_preset").unwrap_or(false))) { "More profiles and details come as packs: Import pack…" } else if matches!(prov_id.as_str(), "components" | "families") { "Click or drag to place · … for actions · Esc back to the model" } else { "Click to use · … for actions · Esc back to the model" };
+        sheet.call_method1("footer", (PyTuple::empty(py), crate::settings_rows::tr(py, hint)?))?;
         if cursor.is_truthy()? {
             let force = st.call_method1("pop", ("force_focus", false))?.is_truthy()?;
             sheet.call_method("focus", (&cursor,), Some(&[("force", force)].into_py_dict(py)?))?;

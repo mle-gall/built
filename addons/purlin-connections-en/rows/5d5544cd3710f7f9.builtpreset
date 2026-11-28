@@ -1,0 +1,181 @@
+{
+  "uid": "5d5544cd3710f7f9",
+  "name": "Purlin cleat",
+  "pack": "Purlin connections · EN",
+  "primitive": "junction",
+  "rev": 1,
+  "values": {
+    "meeting": "crossing",
+    "params": [
+      {
+        "key": "foot_l",
+        "expr": "main.width * 0.8",
+        "name": "Cleat length",
+        "unit": "mm",
+        "group": "Dimensions"
+      },
+      {
+        "key": "foot_w",
+        "expr": "50",
+        "name": "Foot width",
+        "unit": "mm",
+        "group": "Dimensions"
+      },
+      {
+        "key": "leg_h",
+        "expr": "joining.height / 2",
+        "name": "Leg height",
+        "unit": "mm",
+        "group": "Dimensions"
+      },
+      {
+        "key": "cleat_t",
+        "expr": "8",
+        "name": "Cleat thickness",
+        "unit": "mm",
+        "group": "Dimensions"
+      },
+      {
+        "key": "bolt_d",
+        "expr": "16",
+        "name": "Bolt Ø",
+        "unit": "mm",
+        "group": "Bolts",
+        "limits": {
+          "list": [
+            12,
+            16,
+            20,
+            24
+          ]
+        }
+      }
+    ],
+    "contents": [
+      {
+        "key": "foot",
+        "part": {
+          "preset": "732730a077d0b9f2",
+          "fields": {
+            "profile.params.width": "foot_l",
+            "profile.params.height": "foot_w",
+            "thickness": "cleat_t"
+          },
+          "at": {
+            "frame": "@main.seat",
+            "offset": [
+              0,
+              "joining.width / 2 + foot_w / 2",
+              0
+            ]
+          }
+        }
+      },
+      {
+        "key": "leg",
+        "part": {
+          "preset": "732730a077d0b9f2",
+          "fields": {
+            "profile.params.width": "foot_l",
+            "profile.params.height": "leg_h",
+            "thickness": "cleat_t"
+          },
+          "at": {
+            "frame": "@main.seat",
+            "axis": "y",
+            "offset": [
+              0,
+              "joining.width / 2",
+              "leg_h / 2 + cleat_t"
+            ]
+          }
+        }
+      },
+      {
+        "key": "bolts",
+        "junction": {
+          "detail": "bcb26d949f754449",
+          "roles": {
+            "ply_1": "@foot",
+            "ply_2": {
+              "placement": "@main",
+              "face": "flange_outer"
+            }
+          },
+          "params": {
+            "d": "bolt_d",
+            "x": "-foot_l / 4",
+            "y": 0
+          },
+          "repeat": {
+            "rule": {
+              "count": 2,
+              "step": "foot_l / 2"
+            },
+            "run": "@main.seat.x"
+          }
+        }
+      }
+    ],
+    "roles": {
+      "main": {
+        "name": "Rafter"
+      },
+      "joining": {
+        "name": "Purlin"
+      }
+    },
+    "rule": {
+      "meeting": "crossing",
+      "roles": {
+        "main": {
+          "profile": [
+            {
+              "family": "i"
+            }
+          ],
+          "face": [
+            "top"
+          ]
+        },
+        "joining": {
+          "class": [
+            "IfcBeam",
+            "IfcMember"
+          ]
+        }
+      }
+    },
+    "seat": {
+      "role": "joining",
+      "datum": "joining.bottom",
+      "on": "main.seat"
+    }
+  },
+  "locks": {},
+  "record": {
+    "class": "IfcElementAssembly"
+  },
+  "naming": "",
+  "node": "",
+  "provenance": {
+    "created": "2026-11-28",
+    "created_with": "Built",
+    "derived_from": null
+  },
+  "depends": [
+    {
+      "kind": "preset",
+      "key": "732730a077d0b9f2",
+      "bundled": null,
+      "rev": 1
+    },
+    {
+      "kind": "detail",
+      "key": "bcb26d949f754449",
+      "bundled": "rows/bcb26d949f754449.builtpreset",
+      "rev": 1
+    }
+  ],
+  "hash": "sha256:6fed0b6096abff05ad3b5504511b8e25f61e70efce2c7cab625247a606329621"
+}

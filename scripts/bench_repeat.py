@@ -25,7 +25,7 @@ def measure(folder, samples=15):
 
     repeat = next(r for r in queries.live_rows(scene) if r["uid"] == f"{210:016x}")
     apply("create_sweeps", sweeps=[{
-        "profile": {"library": "basic/timber", "params": {"width": 120, "height": 55}},
+        "profile": {"library": "basic/rectangle", "params": {"width": 120, "height": 55}},
         "path": {"points": [[-.2, .3, 3.39], [3.65, .3, 4.82]]}, "attachment": "centre",
     }])
     apply("live_set", row={"kind": "cut", "uid": f"{399:016x}", "owner": repeat["source"],

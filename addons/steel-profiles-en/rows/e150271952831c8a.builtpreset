@@ -1,0 +1,45 @@
+{
+  "uid": "e150271952831c8a",
+  "name": "HE 200 A",
+  "rev": 1,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/he200a",
+      "family": "i",
+      "params": {
+        "height": 190,
+        "width": 200,
+        "web": 6.5,
+        "flange": 10,
+        "radius": 18
+      },
+      "catalogue": {
+        "name": "HE 200 A",
+        "series": [
+          [
+            "en/he200a",
+            190
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "source": "https://orangebook.arcelormittal.com/node/16",
+    "standard": "EN 10365"
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/he200a",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:d8a10901ed133bb8acc10ff35da714bf68debfddbac191d923bb17aa4f6d2f91"
+}

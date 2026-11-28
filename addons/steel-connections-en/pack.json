@@ -1,0 +1,60 @@
+{
+  "format": "built.presets",
+  "v": 2,
+  "pack": {
+    "id": "ac868834411f84b1d4d61a14b0c89c6a",
+    "name": "Steel connections · EN",
+    "version": "1.1.0",
+    "author": {
+      "name": "Built"
+    },
+    "licence": "CC0-1.0",
+    "description": "Steel connections for EN sections: end plates, fin plates, base plates and an apex haunch, with their bolts, anchors and welds.",
+    "units": {
+      "length": "mm",
+      "angle": "deg"
+    },
+    "requires": {
+      "built": ">= 1.0",
+      "features": [
+        "junction.v1",
+        "hole.v1",
+        "block.v1",
+        "fastener.v1",
+        "weld.v1"
+      ]
+    },
+    "files": {
+      "rows/3774c4d6bf717d74.builtpreset": "sha256:767c846cba1daf6a5887b120822fbbf522f40ef20824cc142210d040fdf45f0f",
+      "rows/0627197caa2068eb.builtpreset": "sha256:3a2b57e2a2366aeb410326bafc510d263fd3d3c1f3c808f622e8d43d09396c5c",
+      "rows/7499347f63978217.builtpreset": "sha256:42932baef06c72662814fd1c39249d774800b438658005940a0a78a32fdec8d7",
+      "rows/30496c74688414a4.builtpreset": "sha256:b8abd309267e9b535973524acecb672772de64b60e9ea6c91e841305ed5404bc",
+      "rows/bcb26d949f754449.builtpreset": "sha256:e0342b142aa0d4a1a3b64e611a16565fc73add5c2e109646ed6fb3f8a911431c",
+      "rows/a67d49d4e28ababb.builtpreset": "sha256:ced8c36fcca1f5292b672ec570d2734e666b3e2dbc0283c1c9579a094cf583f1",
+      "rows/1fa8a4f99a56a112.builtpreset": "sha256:d6b14ed69ad2cf2db942762aef10ad94219e7b391278e59140786209ea1e7c3a",
+      "rows/81f3c1507efa12f3.builtpreset": "sha256:e103e3d29ee2ee75f3c1d02239daa64f7dd74a36c26a154274826172b9a9cc9b",
+      "rows/78d69d1a1cd30f54.builtpreset": "sha256:9cbfc7354798ecb3951359bb45c8bcf2d20c0f1113a636924ed966846976b7be",
+      "rows/5392afd385895e8a.builtpreset": "sha256:b425c8ba0ee8081a4ca76b85c72fc6b43bebf6d2a822a6e49d0c91c4d4ca3b3f",
+      "rows/95f3d998bf6c7707.builtpreset": "sha256:0d059d936b673dcddaca01beff58a9c30bb75a58301bb06c4b492945bd903781",
+      "rows/d514908360f1b4c2.builtpreset": "sha256:13047a1a02a0da47520bccbc6b8b04935ed38aa99ef1fc90ef5967cee40eb1ab",
+      "rows/b07a16e8a0000001.builtpreset": "sha256:f41427333948073935b0199c4c60ccdcd2688d9f72235b40f988404142db864e",
+      "rows/b07a16e8a0000002.builtpreset": "sha256:38e0f8cd231598c8e7aa44226445979645a179c74fa19f6ad5b2f6893b3780c8"
+    }
+  },
+  "rows": [
+    "rows/3774c4d6bf717d74.builtpreset",
+    "rows/0627197caa2068eb.builtpreset",
+    "rows/7499347f63978217.builtpreset",
+    "rows/30496c74688414a4.builtpreset",
+    "rows/bcb26d949f754449.builtpreset",
+    "rows/a67d49d4e28ababb.builtpreset",
+    "rows/1fa8a4f99a56a112.builtpreset",
+    "rows/81f3c1507efa12f3.builtpreset",
+    "rows/78d69d1a1cd30f54.builtpreset",
+    "rows/5392afd385895e8a.builtpreset",
+    "rows/95f3d998bf6c7707.builtpreset",
+    "rows/d514908360f1b4c2.builtpreset",
+    "rows/b07a16e8a0000001.builtpreset",
+    "rows/b07a16e8a0000002.builtpreset"
+  ]
+}

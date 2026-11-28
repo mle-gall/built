@@ -1179,13 +1179,10 @@ Two template additions came with the starter packs:
 | `part.at.axis`: `x`, `y`, `z`, `-x`, `-y`, `-z` (which frame axis the part's own Z follows) | fin plates, hanger sides, dowels across a tenon |
 | `part.fastener.kind`: `bolt` (default), `screw`, `nail`, `dowel`, `anchor`; `holes` overrides the bore default (screws and nails none) | timber fixings, anchors |
 
-The starter packs ship as format 2 packs with inline rows in
-`resources/presets/packs/`. They are Steel connections · EN (End plate,
-4 bolts; Fin plate; Base plate; Apex haunch; Bolt M16 8.8; Anchor M16;
-Fillet weld), Timber joints (Birdsmouth, Half-lap, Tenon and mortise,
-Joist hanger) and Generic (Corner mitre, Butt with screws). The
-Architecture pack is J4's. `tests/junction_starter_cases.py` draws the
-members for each one in an empty document.
+Generic details ship in the app. Trade details ship separately as format-2
+CC0-1.0 add-ons. Each source pack under `addons/` builds into one
+`.builtpack` for Import pack…. The website will host them later.
+See docs/library.md for the pack inventory and build command.
 
 ### Capture and editing (J2)
 
@@ -1288,12 +1285,10 @@ problems; its context menu switches.
 
 ### Steel connections and service penetrations
 
-The original **Bolt group M16 · 2 × 2** lives in
-`resources/presets/starter.builtpreset`. The EN pack's **Bolt M16 8.8**
-and **Anchor M16** live in
-`resources/presets/packs/steel-connections-en.builtpreset`.
-Both sets remain available pending the owner's choice. Pack authorship
-and licence continue to use the existing bundled-pack values.
+The generic Bolt group exposes diameter, rows, columns, pitch and gauge.
+Steel connections · EN carries the original M16 group and the steel bolt
+and anchor details. Both metric and inch fastener tables ship with the
+generator so embedded junctions retain their geometry.
 
 **Fin plate** drills the fin and joining web together. Its pitch follows
 the fin height. For **Purlin cleat**, pick the rafter first and the purlin
@@ -1302,7 +1297,6 @@ turns with the crossing purlin. For a pipe or duct penetration, select
 the wall or slab and the service, then apply the matching MEP detail.
 Opening clearance and collar dimensions are editable.
 
-The AISC steel pack appears in Library › Presets when the model or the
-new-document preference uses inches or feet. It has its own pack and
+Import the AISC steel pack to see its details in Library › Presets. It has its own pack and
 detail IDs. Each row's provenance identifies its metric counterpart.
 Plate sizes and bolt geometry use millimetres internally.

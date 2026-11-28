@@ -1,0 +1,49 @@
+{
+  "format": "built.presets",
+  "v": 2,
+  "pack": {
+    "id": "96fc665350c34ebe5a2bb97a2f5798ec",
+    "name": "Steel connections · AISC",
+    "version": "1.0.0",
+    "author": {
+      "name": "Built"
+    },
+    "licence": "CC0-1.0",
+    "description": "W-shape connections with inch plate stock and inch fasteners.",
+    "units": {
+      "length": "mm",
+      "angle": "deg"
+    },
+    "requires": {
+      "built": ">= 1.0",
+      "features": [
+        "junction.v1",
+        "hole.v1",
+        "block.v1",
+        "fastener.v1",
+        "weld.v1"
+      ]
+    },
+    "preference": "imperial",
+    "files": {
+      "rows/a15cc4d6bf717d74.builtpreset": "sha256:d7c2ccaafb0c6cb8a6ce3c8e96a2a194ef7befe3fd22ae9dfc7781c8a37bf558",
+      "rows/a15c197caa2068eb.builtpreset": "sha256:7c1f6acd3dfe54191d63ac0edebf38d54eb5716c6e899243147b2bdb978c00a3",
+      "rows/a15c347f63978217.builtpreset": "sha256:9f156df5afbe916b05d7fa96c3f385e3eb26fc10efc9dbab558efb49faf385bf",
+      "rows/a15c6c74688414a4.builtpreset": "sha256:a0416a0b4bd9c86bcae87e66d08774791c20ea2b24657e1cd9f19e9956dc219a",
+      "rows/a15c6d949f754449.builtpreset": "sha256:5782bd7c1201590b9cf2787244d3f4374ba0e8ddd7e931b32a32f6b79b2bc87b",
+      "rows/a15c49d4e28ababb.builtpreset": "sha256:9bcc7de5853d016f209a5173d999008e698a1be504014c5e49bf8ec14af5ab2d",
+      "rows/a15ca4f99a56a112.builtpreset": "sha256:eebfd291c73e45c6eef1084e6f926a57d220f95ad565fac0a8a00424051efc56",
+      "rows/a15c44cd3710f7f9.builtpreset": "sha256:a27665fd25cc03cf692c71536aad268a7187742850e662625aeae57095572f36"
+    }
+  },
+  "rows": [
+    "rows/a15cc4d6bf717d74.builtpreset",
+    "rows/a15c197caa2068eb.builtpreset",
+    "rows/a15c347f63978217.builtpreset",
+    "rows/a15c6c74688414a4.builtpreset",
+    "rows/a15c6d949f754449.builtpreset",
+    "rows/a15c49d4e28ababb.builtpreset",
+    "rows/a15ca4f99a56a112.builtpreset",
+    "rows/a15c44cd3710f7f9.builtpreset"
+  ]
+}

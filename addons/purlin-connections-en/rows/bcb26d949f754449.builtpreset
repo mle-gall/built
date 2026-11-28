@@ -1,0 +1,98 @@
+{
+  "uid": "bcb26d949f754449",
+  "name": "Bolt M16 8.8",
+  "pack": "Steel connections · EN",
+  "primitive": "junction",
+  "rev": 1,
+  "values": {
+    "meeting": "parts",
+    "roles": {
+      "ply_1": {
+        "name": "Plate"
+      },
+      "ply_2": {
+        "name": "Member"
+      }
+    },
+    "params": [
+      {
+        "key": "d",
+        "expr": "16",
+        "name": "Bolt Ø",
+        "unit": "mm",
+        "group": "Bolt",
+        "limits": {
+          "list": [
+            8,
+            10,
+            12,
+            16,
+            20,
+            24
+          ]
+        }
+      },
+      {
+        "key": "clearance",
+        "expr": "2",
+        "name": "Hole clearance",
+        "unit": "mm",
+        "group": "Bolt"
+      },
+      {
+        "key": "x",
+        "expr": "0",
+        "name": "Offset across",
+        "unit": "mm",
+        "group": "Position"
+      },
+      {
+        "key": "y",
+        "expr": "0",
+        "name": "Offset along",
+        "unit": "mm",
+        "group": "Position"
+      }
+    ],
+    "contents": [
+      {
+        "key": "bolt",
+        "part": {
+          "fastener": {
+            "d": "d",
+            "clearance": "clearance",
+            "grade": "8.8"
+          },
+          "at": {
+            "frame": "@meet",
+            "offset": [
+              "x",
+              "y",
+              0
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "locks": {},
+  "record": {
+    "class": "IfcElementAssembly",
+    "predefined_type": "ACCESSORY_ASSEMBLY"
+  },
+  "naming": "",
+  "node": "",
+  "provenance": {
+    "created": "2026-11-28",
+    "created_with": "Built",
+    "derived_from": null
+  },
+  "depends": [
+    {
+      "kind": "fastener",
+      "key": "metric",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:dd30a9878164f2dca84a699509d1c9db52f0cd6475953ae18164397c0c4124aa"
+}

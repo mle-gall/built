@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Empty-document arrangements for every starter junction detail: the
 members each detail's roles need, drawn the way a user would draw them."""
+from tests import addon_cases
 from built_core import Matrix4, Vec3
 from built_core import command_protocol as live
 from built_core.group import Group
@@ -11,7 +12,7 @@ from tests.test_live_recipes import apply
 from tests.test_sketch_rows import member
 
 STARTER_PACKS = ("Steel connections · EN", "Timber joints", "Generic", "Architecture", "Purlin connections · EN", "MEP penetrations")
-HE, IPE, TIMBER, FLAT, WALL = ({"library": k} for k in ("en/he200a", "en/ipe240", "basic/timber", "basic/flat", "basic/wall"))
+HE, IPE, TIMBER, FLAT, WALL = (addon_cases.profile(k) for k in ("en/he200a", "en/ipe240", "basic/timber", "basic/flat", "basic/wall"))
 
 
 def box(scene, name, cls, lo, hi):
@@ -105,7 +106,10 @@ def arrangement(scene, h, p):
 
 
 def starter_details(scene=None):
-    return [p for p, _ in live.preset_catalog(scene) if p["primitive"] == "junction" and p["pack"] in STARTER_PACKS]
+    catalog = {p["uid"]: p for p, _ in live.preset_catalog(scene)}
+    for pack in ("steel-connections-en", "timber-joints", "purlin-connections-en", "mep-penetrations"):
+        catalog.update((p["uid"], p) for p in addon_cases.rows(pack))
+    return [p for p in catalog.values() if p["primitive"] == "junction" and p["pack"] in STARTER_PACKS and p["name"] not in ("Bolt", "Bolt group")]
 
 
 def apply_in_empty_document(p, embed=()):
@@ -120,6 +124,7 @@ def apply_in_empty_document(p, embed=()):
         uid = next(r["uid"] for r in live.live_rows(scene) if r["kind"] == "junction")
         return scene, h, uid
     picks = arrangement(scene, h, p)
-    bindings = live.junction_bind(scene, p["uid"], picks)
-    uid = apply(h, "junction_apply", detail=p["uid"], bindings=bindings)["uid"]
+    definitions = live.junction_definitions(p, starter_details(scene))
+    bindings = live.junction_bind(scene, p, picks)
+    uid = apply(h, "junction_apply", detail=p["uid"], bindings=bindings, definitions=definitions)["uid"]
     return scene, h, uid

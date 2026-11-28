@@ -24,6 +24,7 @@ pub struct JunctionTool {
     plies: Vec<Json>,
     point: Option<P3>,
     message: Option<String>,
+    pack_hint: Option<String>,
     /// A parts detail starts from the selected part (as the Cut tool
     /// starts from its selected target): checked once per detail.
     selection_read: bool,
@@ -60,7 +61,10 @@ impl JunctionTool {
             return m.clone();
         }
         if self.detail.is_null() {
-            return "Save a junction first, or press L for junction details".into();
+            return self.pack_hint.clone().unwrap_or_else(|| "Press L for junction details".into());
+        }
+        if self.hover.is_null() && self.plies.is_empty() {
+            if let Some(hint) = &self.pack_hint { return hint.clone(); }
         }
         if self.parts() {
             return if self.plies.is_empty() {
@@ -82,7 +86,7 @@ impl JunctionTool {
         }
     }
     fn apply(&mut self, host: &mut dyn ToolHost, bindings: Json, force: bool, repeat: bool) -> Reply {
-        let answer = host.call("junction_apply", json!({"detail": self.uid(), "bindings": bindings, "force": force, "repeat": repeat}));
+        let answer = host.call("junction_apply", json!({"detail": self.uid(), "preset": self.detail, "bindings": bindings, "force": force, "repeat": repeat}));
         if answer["ok"] == true {
             self.message = answer["message"].as_str().map(str::to_owned);
             self.hover = Json::Null;
@@ -142,6 +146,7 @@ impl Tool for JunctionTool {
         match e {
             ToolEvent::Activate => {
                 self.armed = host.call("junction_selection", Json::Null);
+                self.pack_hint = host.call("junction_pack_hint", Json::Null).as_str().map(str::to_owned);
                 let d = host.call("junction_default", Json::Null);
                 if !d.is_null() {
                     self.detail = d;
@@ -185,7 +190,7 @@ impl Tool for JunctionTool {
                 self.hover = if self.parts() {
                     host.call("junction_ply", json!({"px": p.px}))
                 } else {
-                    host.call("junction_hover", json!({"px": p.px, "world": p.world, "detail": self.uid()}))
+                    host.call("junction_hover", json!({"px": p.px, "world": p.world, "detail": self.detail}))
                 };
             }
             ToolEvent::Click(p) => {
@@ -215,7 +220,7 @@ impl Tool for JunctionTool {
                     }
                     return Reply::redraw();
                 }
-                let hover = host.call("junction_hover", json!({"px": p.px, "world": p.world, "detail": self.uid()}));
+                let hover = host.call("junction_hover", json!({"px": p.px, "world": p.world, "detail": self.detail}));
                 self.hover = hover.clone();
                 let alt = p.mods.alt;
                 match hover["fit"].as_str() {

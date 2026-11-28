@@ -69,6 +69,7 @@ pub struct Member {
     pub shape: Shape,
     pub class: String,
     pub profile: String,
+    pub profile_label: String,
     pub family: String,
     /// Role dimensions in millimetres (`width`, `height`, `length`…).
     pub dims: Dims,
@@ -637,6 +638,7 @@ pub(crate) mod tests {
             shape: Shape::Bar,
             class: "IfcBeam".into(),
             profile: "en/ipe240".into(),
+            profile_label: "IPE 240".into(),
             family: "i".into(),
             dims: Dims::of(&[("height", h), ("width", w)]),
         }

@@ -214,7 +214,7 @@ fn expression_names(v: &Value, out: &mut BTreeSet<String>) -> Result<(), String>
                     "key" | "on" | "name" | "prompt" | "group" | "unit" | "lock" | "kind"
                         | "operation" | "end" | "face" | "frame" | "type" | "standard"
                         | "grade" | "preset" | "component" | "detail" | "run" | "material"
-                        | "table" | "library" | "class" | "axis" | "process" | "contact" | "arrangement" | "ref" | "meeting"
+                        | "table" | "library" | "family" | "catalogue" | "class" | "axis" | "process" | "contact" | "arrangement" | "ref" | "meeting"
                 ) {
                     continue;
                 }
@@ -284,6 +284,7 @@ fn profile_words(p: &Value) -> String {
         if let Some(label) = profile::label(key) {
             return label.into();
         }
+        if let Some(label) = p["label"].as_str() { return label.into(); }
         return key.rsplit('/').next().unwrap_or(key).to_uppercase();
     }
     match p["family"].as_str() {
@@ -447,7 +448,8 @@ pub fn adds_words(p: &Value) -> String {
         } else if let Some(j) = item.get("junction") {
             let n = j["repeat"]["rule"]["count"].as_u64().unwrap_or(1) as usize
                 * j["repeat"]["nest"]["count"].as_u64().unwrap_or(1) as usize;
-            let child = j["detail"].as_str().and_then(builtin_preset);
+            let uid = j["detail"].as_str().unwrap_or("");
+            let child = builtin_preset(uid);
             let label = child
                 .as_ref()
                 .and_then(|c| {
@@ -455,6 +457,7 @@ pub fn adds_words(p: &Value) -> String {
                     let w = adds_words(&v);
                     (!w.is_empty()).then_some(w)
                 })
+                .or_else(|| p["source"]["child_kinds"][uid].as_str().map(str::to_owned))
                 .unwrap_or_default();
             let kind: &'static str = if label.contains("screw") {
                 "screw"
@@ -509,7 +512,7 @@ pub fn thumb_key(p: &Value) -> String {
                 'c'
             });
         } else if let Some(child) = item["junction"]["detail"].as_str() {
-            let welds = builtin_preset(child).is_some_and(|c| {
+            let welds = p["source"]["child_kinds"][child] == "weld" || builtin_preset(child).is_some_and(|c| {
                 c.values
                     .get("contents")
                     .and_then(Value::as_array)
@@ -1219,6 +1222,9 @@ pub fn read(files: &dyn Files, known: &Known) -> PyResult<Plan> {
         presets_row_check(&row).map_err(|e| err(format!("{path}: {e}")))?;
         row["source"] = json!({"pack": id, "name": pack["name"], "version": pack["version"],
                                "rev": row["rev"], "hash": row["hash"], "path": path});
+        if row["profile_size"] == true {
+            row["source"]["profile_size"] = json!(true);
+        }
         for key in ["author", "licence"] {
             if row.get(key).is_none() {
                 if let Some(v) = pack.get(key) {
@@ -1256,6 +1262,21 @@ pub fn read(files: &dyn Files, known: &Known) -> PyResult<Plan> {
                     profile["params"] = params;
                 }
             }
+        }
+    }
+    let child_kinds: BTreeMap<_, _> = rows.iter().filter_map(|r| {
+        let part = &template_items(r).next()?["part"];
+        let kind = if part.get("weld").is_some() { "weld" }
+            else { part.get("fastener")?.get("kind").and_then(Value::as_str).unwrap_or("bolt") };
+        Some((r["uid"].as_str()?.to_owned(), kind.to_owned()))
+    }).collect();
+    for row in &mut rows {
+        let children: Map<_, _> = template_items(row).filter_map(|item| {
+            let uid = item["junction"]["detail"].as_str()?;
+            Some((uid.to_owned(), json!(child_kinds.get(uid)?)))
+        }).collect();
+        if !children.is_empty() {
+            row["source"]["child_kinds"] = Value::Object(children);
         }
     }
     resolve(&mut rows, &contents, known)?;
@@ -1642,7 +1663,7 @@ mod tests {
                "locks":{},"record":{},
                "values":{"meeting":"end_face","roles":{"main":{"name":"Column"},"joining":{"name":"Rafter"}},
                  "params":[{"key":"plate_width","expr":"joining.width + 150","unit":"mm"}],
-                 "rule":{"roles":{"main":{"profile":[{"library":"en/he200a"}],"size":{"height":[152,240]},"face":["flange_outer"]},
+                 "rule":{"roles":{"main":{"profile":[{"library":"en/he200a","label":"HE 200 A"}],"size":{"height":[152,240]},"face":["flange_outer"]},
                                   "joining":{"profile":[{"library":"en/ipe"}]}},"angle":{"value":90,"tol":2}},
                  "contents":[{"key":"end_cut","on":"joining","row":{"kind":"cut","operation":"trim","end":"@joining.end",
                    "cutter":{"plane":{}},"anchor":{"ref":"@meet","offset":12}}},

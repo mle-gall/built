@@ -1,0 +1,176 @@
+{
+  "uid": "e411026fad6643b4",
+  "name": "Half-lap",
+  "pack": "Timber joints",
+  "primitive": "junction",
+  "rev": 1,
+  "values": {
+    "meeting": "crossing",
+    "roles": {
+      "main": {
+        "name": "Lower member"
+      },
+      "joining": {
+        "name": "Upper member"
+      }
+    },
+    "params": [
+      {
+        "key": "main_w",
+        "expr": "main.width",
+        "name": "Lower width",
+        "unit": "mm",
+        "group": "Lap"
+      },
+      {
+        "key": "main_h",
+        "expr": "main.height",
+        "name": "Lower depth",
+        "unit": "mm",
+        "group": "Lap"
+      },
+      {
+        "key": "joining_w",
+        "expr": "joining.width",
+        "name": "Upper width",
+        "unit": "mm",
+        "group": "Lap"
+      },
+      {
+        "key": "joining_h",
+        "expr": "joining.height",
+        "name": "Upper depth",
+        "unit": "mm",
+        "group": "Lap"
+      },
+      {
+        "key": "dowel_d",
+        "expr": "16",
+        "name": "Dowel Ø",
+        "unit": "mm",
+        "group": "Dowel",
+        "limits": {
+          "list": [
+            12,
+            16,
+            20
+          ]
+        }
+      }
+    ],
+    "contents": [
+      {
+        "key": "main_lap",
+        "on": "main",
+        "row": {
+          "kind": "cut",
+          "operation": "subtract",
+          "cutter": {
+            "block": {
+              "size": [
+                "main_w + 2",
+                "joining_w",
+                "main_h / 2 + 1"
+              ],
+              "at": [
+                "-main_w / 2 - 1",
+                "-joining_w / 2",
+                0
+              ]
+            }
+          },
+          "anchor": {
+            "ref": "@meet"
+          }
+        }
+      },
+      {
+        "key": "joining_lap",
+        "on": "joining",
+        "row": {
+          "kind": "cut",
+          "operation": "subtract",
+          "cutter": {
+            "block": {
+              "size": [
+                "main_w",
+                "joining_w + 2",
+                "joining_h / 2 + 1"
+              ],
+              "at": [
+                "-main_w / 2",
+                "-joining_w / 2 - 1",
+                "-joining_h / 2 - 1"
+              ]
+            }
+          },
+          "anchor": {
+            "ref": "@meet"
+          }
+        }
+      },
+      {
+        "key": "dowel",
+        "part": {
+          "fastener": {
+            "kind": "dowel",
+            "d": "dowel_d",
+            "clearance": 0,
+            "length": "main_h"
+          },
+          "at": {
+            "frame": "@meet",
+            "offset": [
+              0,
+              0,
+              "main_h / 2"
+            ]
+          }
+        }
+      }
+    ],
+    "rule": {
+      "meeting": "crossing",
+      "roles": {
+        "main": {
+          "profile": [
+            {
+              "family": "rectangle"
+            }
+          ]
+        },
+        "joining": {
+          "profile": [
+            {
+              "family": "rectangle"
+            }
+          ]
+        }
+      },
+      "angle": {
+        "value": 90,
+        "tol": 2
+      },
+      "mirror": "allow"
+    }
+  },
+  "locks": {},
+  "record": {
+    "class": "IfcElementAssembly"
+  },
+  "naming": "",
+  "node": "",
+  "provenance": {
+    "created": "2026-11-28",
+    "created_with": "Built",
+    "derived_from": null
+  },
+  "depends": [
+    {
+      "kind": "fastener",
+      "key": "metric",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:d41278e71772850f9d8bc8d93957dc3adadefeeae292c3a548e9eda8ab23025c"
+}

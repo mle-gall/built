@@ -23,7 +23,16 @@ struct Sizes {
 static SIZES: LazyLock<Catalogue> =
     LazyLock::new(|| serde_json::from_str(CATALOGUE).expect("starter profiles"));
 #[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct CatalogueEntry {
+    pub name: String,
+    #[serde(default)]
+    pub series: Vec<(String, f64)>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Profile {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub catalogue: Option<CatalogueEntry>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sketch: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -72,6 +81,9 @@ impl Outline {
     }
 }
 impl Profile {
+    pub fn name(&self) -> Option<&str> {
+        self.catalogue.as_ref().map(|entry| entry.name.as_str()).or_else(|| label(&self.library))
+    }
     pub fn outline(&self, segments: usize) -> Result<Outline, &'static str> {
         if let Some(drawing) = &self.drawing {
             return super::drawn_profile::outline(drawing, segments);
@@ -293,10 +305,14 @@ pub fn label(key: &str) -> Option<&'static str> {
 /// member's size can be opened in the Sketch workspace. Runs of facets
 /// about one centre become one arc; a ring about one centre is a circle.
 pub fn catalogue_sketch(key: &str) -> Option<serde_json::Value> {
+    let profile = Profile { catalogue: None, sketch: None, drawing: None, library: key.into(), family: String::new(), params: Default::default() };
+    sketch_of(&profile)
+}
+pub fn sketch_of(profile: &Profile) -> Option<serde_json::Value> {
     use built_draft2d::{geom, Shape, Sketch, Use};
-    let outline = Profile { sketch: None, drawing: None, library: key.into(), family: String::new(), params: Default::default() }.outline(24).ok()?;
+    let outline = profile.outline(24).ok()?;
     let mut sketch = Sketch::new(Use::Profile);
-    sketch.name = label(key)?.to_owned();
+    sketch.name = profile.name().unwrap_or(&profile.library).to_owned();
     for ring in &outline.rings {
         let n = ring.len();
         if n >= 3 && ring.iter().all(|node| node.arc.is_some_and(|c| c.distance(ring[0].arc.unwrap()) < 1e-9)) {
@@ -353,7 +369,7 @@ mod tests {
         let s = built_draft2d::Sketch::from_json(&drawn).unwrap();
         let p = built_draft2d::profile(&s);
         assert!(p.ok(), "{key}: {:?}", p.problems);
-        let table = Profile { sketch: None, drawing: None, library: key.into(), family: String::new(), params: Default::default() }.outline(512).unwrap();
+        let table = Profile { catalogue: None, sketch: None, drawing: None, library: key.into(), family: String::new(), params: Default::default() }.outline(512).unwrap();
         let ring_area = |ring: &Vec<Node>| {
             ring.iter().enumerate().map(|(i, n)| n.p.perp_dot(ring[(i + 1) % ring.len()].p) / 2.).sum::<f64>().abs()
         };

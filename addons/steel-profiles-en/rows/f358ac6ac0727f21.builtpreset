@@ -1,0 +1,48 @@
+{
+  "uid": "f358ac6ac0727f21",
+  "name": "RHS 100 × 50 × 5",
+  "rev": 1,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/rhs100x5",
+      "family": "rhs",
+      "params": {
+        "width": 50,
+        "height": 100,
+        "web": 5,
+        "radius": 7.5
+      },
+      "catalogue": {
+        "name": "RHS 100 × 50 × 5",
+        "series": [
+          [
+            "en/rhs100x5",
+            100
+          ],
+          [
+            "en/rhs100x4",
+            100
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "source": "https://www.tatasteeluk.com/sites/default/files/tata-steel-celsius-s420nh-technical-guide-en.pdf",
+    "standard": "EN 10210"
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/rhs100x5",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:a79aac72789b41d47647f149bc101523ec4634ca03ba748368785cf9783e8c6f"
+}

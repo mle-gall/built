@@ -1,0 +1,45 @@
+{
+  "uid": "cbd175a54b249d02",
+  "name": "W8 × 18",
+  "rev": 1,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/w8x18",
+      "family": "i",
+      "params": {
+        "width": 133.35,
+        "height": 206.756,
+        "web": 5.842,
+        "flange": 8.382,
+        "radius": 0
+      },
+      "catalogue": {
+        "name": "W8 × 18",
+        "series": [
+          [
+            "aisc/w8x18",
+            206.756
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "source": "Nominal parametric dimensions",
+    "standard": ""
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/w8x18",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:26193020b45520b6c02411b1036b7088530c6886f6ad1f41efe692bf3bbcd0e4"
+}

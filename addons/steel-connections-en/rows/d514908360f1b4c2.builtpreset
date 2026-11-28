@@ -1,0 +1,30 @@
+{
+  "uid": "d514908360f1b4c2",
+  "name": "Purlins at 1200 mm maximum",
+  "pack": "Steel EN 10365",
+  "primitive": "repeat",
+  "rev": 1,
+  "values": {
+    "rule": {
+      "fit_max": 1200
+    },
+    "measure": "pitch",
+    "orientation": "follow",
+    "adapt": "auto"
+  },
+  "record": {},
+  "locks": {
+    "rule": "free",
+    "measure": "fixed",
+    "orientation": "free",
+    "adapt": "free"
+  },
+  "naming": "",
+  "node": "",
+  "provenance": {
+    "created_with": "Built",
+    "created": "2026-11-28"
+  },
+  "depends": [],
+  "hash": "sha256:c8f869087951dc995bf4b20461bfd834b445d57d2e573f2d6ce337641bc2684c"
+}

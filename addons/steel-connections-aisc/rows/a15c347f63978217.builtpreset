@@ -1,0 +1,217 @@
+{
+  "uid": "a15c347f63978217",
+  "name": "Base plate",
+  "pack": "Steel connections · AISC",
+  "primitive": "junction",
+  "rev": 1,
+  "values": {
+    "meeting": "base",
+    "roles": {
+      "main": {
+        "name": "Base",
+        "prompt": "The slab or footing"
+      },
+      "joining": {
+        "name": "Column"
+      }
+    },
+    "params": [
+      {
+        "key": "plate_t",
+        "expr": "19.05",
+        "name": "Plate thickness",
+        "unit": "mm",
+        "group": "Plate",
+        "limits": {
+          "list": [
+            6.35,
+            9.525,
+            12.7,
+            15.875,
+            19.05,
+            25.4
+          ]
+        }
+      },
+      {
+        "key": "edge",
+        "expr": "38.1",
+        "name": "Edge distance",
+        "unit": "mm",
+        "group": "Plate"
+      },
+      {
+        "key": "plate_w",
+        "expr": "max(joining.width, joining.height) + 2 * edge + 40",
+        "name": "Plate size",
+        "unit": "mm",
+        "group": "Plate"
+      },
+      {
+        "key": "spacing",
+        "expr": "plate_w - 2 * edge",
+        "name": "Anchor spacing",
+        "unit": "mm",
+        "group": "Anchors"
+      },
+      {
+        "key": "anchor_d",
+        "expr": "19.05",
+        "name": "Anchor Ø",
+        "unit": "mm",
+        "group": "Anchors",
+        "limits": {
+          "list": [
+            12.7,
+            15.875,
+            19.05,
+            22.225,
+            25.4
+          ]
+        }
+      },
+      {
+        "key": "weld_a",
+        "expr": "5",
+        "name": "Weld throat",
+        "unit": "mm",
+        "group": "Weld"
+      }
+    ],
+    "contents": [
+      {
+        "key": "end_cut",
+        "on": "joining",
+        "row": {
+          "kind": "cut",
+          "operation": "trim",
+          "end": "@joining.end",
+          "cutter": {
+            "plane": {}
+          },
+          "anchor": {
+            "ref": "@meet",
+            "offset": "plate_t"
+          }
+        }
+      },
+      {
+        "key": "plate",
+        "part": {
+          "preset": "732730a077d0b9f2",
+          "fields": {
+            "profile.params.width": "plate_w",
+            "profile.params.height": "plate_w",
+            "thickness": "plate_t"
+          },
+          "at": {
+            "frame": "@meet"
+          }
+        }
+      },
+      {
+        "key": "anchors",
+        "junction": {
+          "detail": "a15c49d4e28ababb",
+          "roles": {
+            "ply_1": "@plate",
+            "ply_2": "@main"
+          },
+          "params": {
+            "d": "anchor_d",
+            "x": "-spacing / 2",
+            "y": "-spacing / 2"
+          },
+          "repeat": {
+            "rule": {
+              "count": 2,
+              "step": "spacing"
+            },
+            "run": "@meet.y",
+            "nest": {
+              "count": 2,
+              "step": "spacing"
+            }
+          }
+        }
+      },
+      {
+        "key": "weld",
+        "junction": {
+          "detail": "a15ca4f99a56a112",
+          "roles": {
+            "a": "@joining",
+            "b": {
+              "placement": "@plate",
+              "face": "end"
+            }
+          },
+          "params": {
+            "throat": "weld_a"
+          }
+        }
+      }
+    ],
+    "rule": {
+      "meeting": "base",
+      "roles": {
+        "main": {
+          "class": [
+            "IfcSlab",
+            "IfcFooting"
+          ]
+        },
+        "joining": {
+          "profile": [
+            {
+              "family": "i"
+            },
+            {
+              "family": "rhs"
+            },
+            {
+              "family": "chs"
+            }
+          ]
+        }
+      },
+      "mirror": "allow"
+    }
+  },
+  "locks": {},
+  "record": {
+    "class": "IfcElementAssembly"
+  },
+  "naming": "",
+  "node": "",
+  "provenance": {
+    "created": "2026-11-28",
+    "created_with": "Built",
+    "derived_from": {
+      "pack": "ac868834411f84b1d4d61a14b0c89c6a",
+      "uid": "7499347f63978217",
+      "rev": 1
+    }
+  },
+  "depends": [
+    {
+      "kind": "preset",
+      "key": "732730a077d0b9f2",
+      "bundled": null,
+      "rev": 1
+    },
+    {
+      "kind": "detail",
+      "key": "a15c49d4e28ababb",
+      "bundled": "rows/a15c49d4e28ababb.builtpreset",
+      "rev": 1
+    },
+    {
+      "kind": "detail",
+      "key": "a15ca4f99a56a112",
+      "bundled": "rows/a15ca4f99a56a112.builtpreset",
+      "rev": 1
+    }
+  ],
+  "hash": "sha256:580cbeecb2ed95bedb9238b298bbc81d09de0be62d103e568ee1e6e64ac8145e"
+}

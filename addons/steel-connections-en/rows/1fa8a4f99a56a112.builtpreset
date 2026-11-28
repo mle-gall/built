@@ -1,0 +1,60 @@
+{
+  "uid": "1fa8a4f99a56a112",
+  "name": "Fillet weld",
+  "pack": "Steel connections · EN",
+  "primitive": "junction",
+  "rev": 1,
+  "values": {
+    "meeting": "parts",
+    "roles": {
+      "a": {
+        "name": "Member"
+      },
+      "b": {
+        "name": "Plate"
+      }
+    },
+    "params": [
+      {
+        "key": "throat",
+        "expr": "4",
+        "name": "Throat",
+        "unit": "mm",
+        "group": "Weld",
+        "limits": {
+          "list": [
+            3,
+            4,
+            5,
+            6,
+            8
+          ]
+        }
+      }
+    ],
+    "contents": [
+      {
+        "key": "seam",
+        "part": {
+          "weld": {
+            "throat": "throat",
+            "type": "fillet"
+          }
+        }
+      }
+    ]
+  },
+  "locks": {},
+  "record": {
+    "class": "IfcElementAssembly"
+  },
+  "naming": "",
+  "node": "",
+  "provenance": {
+    "created": "2026-11-28",
+    "created_with": "Built",
+    "derived_from": null
+  },
+  "depends": [],
+  "hash": "sha256:fcfd6800c838c78b38f81ed338288c3f3442008f1866c6ab96ece1b87dcecd7c"
+}

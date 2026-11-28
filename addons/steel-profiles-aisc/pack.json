@@ -1,0 +1,28 @@
+{
+  "format": "built.presets",
+  "v": 2,
+  "pack": {
+    "id": "0ac2eed1ec19c2887db7ddf837d2e026",
+    "name": "Steel profiles · AISC",
+    "version": "1.0.0",
+    "author": {
+      "name": "Built"
+    },
+    "licence": "CC0-1.0",
+    "units": {
+      "length": "mm",
+      "angle": "deg"
+    },
+    "requires": {
+      "features": []
+    },
+    "files": {
+      "rows/0d988538e2d3c915.builtpreset": "sha256:d765f5e3897ac437f81c5a94da56a46600c6c4c9dd2480db6446042d7d6b50df",
+      "rows/cbd175a54b249d02.builtpreset": "sha256:fc49632d4d30e93529de4a348afc9d4b1272bc5ec26dc15a3d35f3bf391001c5"
+    }
+  },
+  "rows": [
+    "rows/0d988538e2d3c915.builtpreset",
+    "rows/cbd175a54b249d02.builtpreset"
+  ]
+}

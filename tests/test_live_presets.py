@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 from copy import deepcopy
+from tests import addon_cases
 
 import pytest
 
@@ -13,7 +14,7 @@ from tests.test_persistent_ids import all_ids
 
 
 def steel():
-    return next(p for p, _ in live.preset_catalog() if p["name"] == "Steel rafter")
+    return next(p for p in addon_cases.rows("steel-profiles-en") if p["name"] == "Steel rafter")
 
 
 def test_preset_edit_is_one_step_and_roundtrips(tmp_path):
@@ -21,7 +22,7 @@ def test_preset_edit_is_one_step_and_roundtrips(tmp_path):
     h = History(scene)
     preset = steel()
     uid = preset["uid"]
-    member = dict(preset_uid=uid, path=dict(points=[[0, 0, 0], [4, 0, 0]]))
+    member = dict(preset_definition=preset, preset_uid=uid, path=dict(points=[[0, 0, 0], [4, 0, 0]]))
     apply(h, "create_sweeps", sweeps=[member, dict(member, rotation=90)])
     a, b = scene.groups
     assert a.ifc["material"] == "S355"
@@ -29,7 +30,7 @@ def test_preset_edit_is_one_step_and_roundtrips(tmp_path):
     assert a.name != b.name
     meshes = [a.mesh, b.mesh]
     ids = all_ids(a.mesh)
-    preset["values"]["profile"]["library"] = "en/ipe200"
+    preset["values"]["profile"] = addon_cases.profile("en/ipe200")
     preset["record"]["material"] = "S275"
     apply(h, "preset_update", rows=[preset])
     assert a.ifc["material"] == b.ifc["material"] == "S275"
@@ -53,12 +54,12 @@ def test_fixed_edit_detaches_and_invalid_pack_rolls_back():
     scene = Scene()
     h = History(scene)
     p = steel()
-    apply(h, "create_sweeps", sweeps=[dict(preset_uid=p["uid"], path=dict(points=[[0, 0, 0], [1, 0, 0]]))])
+    apply(h, "create_sweeps", sweeps=[dict(preset_definition=p, preset_uid=p["uid"], path=dict(points=[[0, 0, 0], [1, 0, 0]]))])
     g, = scene.groups
     row = live.live_sweep(scene, g.uid)
     apply(h, "live_set", row=dict(row, rotation=30))
     assert live.live_sweep(scene, g.uid)["preset_uid"] == p["uid"]
-    apply(h, "live_set", row=dict(row, profile=dict(library="basic/timber")))
+    apply(h, "live_set", row=dict(row, profile=addon_cases.profile("basic/timber")))
     assert live.live_sweep(scene, g.uid).get("preset_uid") is None
     assert "profile" in g.ifc["preset_note"]
     apply(h, "undo")
@@ -98,13 +99,13 @@ def test_capture_values_feed_tool_and_active_node_default():
     p = steel()
     tool = ToolMachine("sweep")
     assert tool.set("preset", p)
-    apply(history, "create_sweeps", sweeps=[dict(preset_uid=p["uid"], path={"points": [[0, 0, 0], [3, 0, 0]]})])
+    apply(history, "create_sweeps", sweeps=[dict(preset_definition=p, preset_uid=p["uid"], path={"points": [[0, 0, 0], [3, 0, 0]]})])
     assert bim_registry.get(scene)["structure"]["nodes"]["ref"]["recipe"]["default_preset"] == p["uid"]
     apply(history, "undo")
     assert "default_preset" not in bim_registry.get(scene)["structure"]["nodes"]["ref"]["recipe"]
 
 
-def test_library_browse_and_duplicate(tmp_path, monkeypatch):
+def test_library_browse_and_duplicate(tmp_path, monkeypatch, native_host):
     from types import SimpleNamespace
     from built_render.wgpu_library import PresetsProvider
 
@@ -114,8 +115,10 @@ def test_library_browse_and_duplicate(tmp_path, monkeypatch):
     ctx = SimpleNamespace(scene=scene, core=lambda key, **kw: commands.run(history, key, **kw),
                           vp=SimpleNamespace(notify_scene_changed=lambda: None))
     provider = PresetsProvider()
+    for pack in ("mep-penetrations", "steel-profiles-aisc", "timber-joints"):
+        addon_cases.install(native_host.window, pack, tmp_path)
     all_items = provider.items(ctx)
-    assert {e["category"] for e in all_items} >= {"MEP", "Architecture", "Steel AISC", "Timber C16/C24"}
+    assert {e["preset"]["pack"] for e in all_items} >= {"MEP", "Architecture", "Steel AISC", "Timber C16/C24"}
     pipe = next(e for e in all_items if e["name"] == "Pipe")
     assert pipe["preset"]["record"]["class"] == "IfcPipeSegment"
     provider.run(ctx, "duplicate", pipe)
@@ -126,7 +129,7 @@ def test_library_browse_and_duplicate(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize("folder", [False, True])
-def test_pack_export_import_uses_one_step(tmp_path, monkeypatch, folder):
+def test_pack_export_import_uses_one_step(tmp_path, monkeypatch, folder, native_host):
     import json
     from types import SimpleNamespace
 
@@ -142,6 +145,7 @@ def test_pack_export_import_uses_one_step(tmp_path, monkeypatch, folder):
                           core=lambda verb, **kw: commands.run(history, verb, **kw))
     path = tmp_path if folder else tmp_path / "mep.builtpreset"
     monkeypatch.setattr(chrome_forms, "ask_text", lambda *args, done: done(str(path)))
+    addon_cases.install(native_host.window, "mep-penetrations", tmp_path)
     pipe = next(p for p in provider.items(ctx) if p["name"] == "Pipe")
     provider.run(ctx, "export", pipe)
     manifest = path / "pack.json" if folder else path
@@ -157,7 +161,7 @@ def test_changed_record_default_detaches_in_same_edit():
     scene = Scene()
     h = History(scene)
     p = steel()
-    apply(h, "create_sweeps", sweeps=[dict(preset_uid=p["uid"], path={"points": [[0, 0, 0], [3, 0, 0]]})])
+    apply(h, "create_sweeps", sweeps=[dict(preset_definition=p, preset_uid=p["uid"], path={"points": [[0, 0, 0], [3, 0, 0]]})])
     g, = scene.groups
     apply(h, "patch_record_field", placements=[g.uid], path=["predefined_type"], value="JOIST")
     assert "predefined_type" in g.ifc["preset_note"]

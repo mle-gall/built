@@ -1,0 +1,131 @@
+{
+  "uid": "5395e365d471d6aa",
+  "name": "Birdsmouth",
+  "pack": "Timber joints",
+  "primitive": "junction",
+  "rev": 1,
+  "values": {
+    "meeting": "crossing",
+    "roles": {
+      "main": {
+        "name": "Wall plate"
+      },
+      "joining": {
+        "name": "Rafter"
+      }
+    },
+    "params": [
+      {
+        "key": "screw_d",
+        "expr": "8",
+        "name": "Screw Ø",
+        "unit": "mm",
+        "group": "Screws",
+        "limits": {
+          "list": [
+            6,
+            8,
+            10
+          ]
+        }
+      },
+      {
+        "key": "screw_l",
+        "expr": "joining.height + 60",
+        "name": "Screw length",
+        "unit": "mm",
+        "group": "Screws"
+      }
+    ],
+    "contents": [
+      {
+        "key": "seat",
+        "on": "joining",
+        "row": {
+          "kind": "cut",
+          "operation": "subtract",
+          "cutter": {
+            "body": "@main"
+          }
+        }
+      },
+      {
+        "key": "screw_1",
+        "part": {
+          "fastener": {
+            "kind": "screw",
+            "d": "screw_d",
+            "length": "screw_l"
+          },
+          "at": {
+            "frame": "@meet",
+            "axis": "-z",
+            "offset": [
+              "-joining.width / 4",
+              0,
+              "-joining.height / 2"
+            ]
+          }
+        }
+      },
+      {
+        "key": "screw_2",
+        "part": {
+          "fastener": {
+            "kind": "screw",
+            "d": "screw_d",
+            "length": "screw_l"
+          },
+          "at": {
+            "frame": "@meet",
+            "axis": "-z",
+            "offset": [
+              "joining.width / 4",
+              0,
+              "-joining.height / 2"
+            ]
+          }
+        }
+      }
+    ],
+    "rule": {
+      "meeting": "crossing",
+      "roles": {
+        "main": {
+          "profile": [
+            {
+              "family": "rectangle"
+            }
+          ]
+        },
+        "joining": {
+          "profile": [
+            {
+              "family": "rectangle"
+            }
+          ]
+        }
+      },
+      "mirror": "allow"
+    }
+  },
+  "locks": {},
+  "record": {
+    "class": "IfcElementAssembly"
+  },
+  "naming": "",
+  "node": "",
+  "provenance": {
+    "created": "2026-11-28",
+    "created_with": "Built",
+    "derived_from": null
+  },
+  "depends": [
+    {
+      "kind": "fastener",
+      "key": "metric",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:ecb0e077f77afb0353d5ed297697d6c5c406bca7a58bffb86faa90ce97020186"
+}

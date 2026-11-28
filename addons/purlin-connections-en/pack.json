@@ -1,0 +1,36 @@
+{
+  "format": "built.presets",
+  "v": 2,
+  "pack": {
+    "id": "d95d670458127f043f2a0359032d6b6e",
+    "name": "Purlin connections · EN",
+    "version": "1.0.0",
+    "author": {
+      "name": "Built"
+    },
+    "licence": "CC0-1.0",
+    "description": "Bolted purlin cleats on a rafter flange.",
+    "units": {
+      "length": "mm",
+      "angle": "deg"
+    },
+    "requires": {
+      "built": ">= 1.0",
+      "features": [
+        "junction.v1",
+        "hole.v1",
+        "block.v1",
+        "fastener.v1",
+        "weld.v1"
+      ]
+    },
+    "files": {
+      "rows/5d5544cd3710f7f9.builtpreset": "sha256:e7bf1a034debe63ea4e6d1a4bf4e46bdb876abbd4abe4f2eea404b0fb03f8cc1",
+      "rows/bcb26d949f754449.builtpreset": "sha256:e0342b142aa0d4a1a3b64e611a16565fc73add5c2e109646ed6fb3f8a911431c"
+    }
+  },
+  "rows": [
+    "rows/5d5544cd3710f7f9.builtpreset",
+    "rows/bcb26d949f754449.builtpreset"
+  ]
+}

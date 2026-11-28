@@ -127,15 +127,16 @@ impl Default for SweepTool {
             start: None,
             hover: None,
             profile: Profile {
+                catalogue: None,
                 sketch: None,
                 drawing: None,
-                library: "en/ipe240".into(),
+                library: "basic/i".into(),
                 params: Default::default(),
                 family: String::new(),
             },
             attachment: 0,
             inset: false,
-            chosen: Some(crate::live::starter_preset()),
+            chosen: None,
             rotation: 0.,
             mirror: false,
         }
@@ -170,7 +171,7 @@ impl SweepTool {
             .as_ref()
             .and_then(|d| d["name"].as_str())
             .filter(|n| !n.is_empty())
-            .or_else(|| label(&self.profile.library))
+            .or_else(|| self.profile.name())
             .unwrap_or(if self.profile.drawing.is_some() { "Drawn profile" } else { "Sweep" })
     }
     fn preset(&self) -> &str {
@@ -181,7 +182,7 @@ impl SweepTool {
             "" => "Drawn member",
             "basic/wall" => "Wall",
             "basic/timber" => "Timber member",
-            _ => "Steel member",
+            _ => "Member",
         }
     }
     fn run_paths(&self, paths: Vec<Json>, host: &mut dyn ToolHost) -> bool {
@@ -299,6 +300,7 @@ impl Tool for SweepTool {
             }
             "sketch" => {
                 let profile = Profile {
+                    catalogue: None,
                     library: String::new(),
                     sketch: value["uid"].as_str().map(str::to_owned),
                     drawing: Some(value.clone()),
@@ -326,6 +328,14 @@ impl Tool for SweepTool {
                     .unwrap_or(0);
                 self.attachment = index;
             }
+            "dimensions" => {
+                let Ok(profile) = serde_json::from_value::<Profile>(value.clone()) else { return false };
+                if profile.outline(24).is_err() { return false; }
+                self.edit = None;
+                self.chosen = None;
+                self.attachment = if profile.library == "basic/wall" { 2 } else { 0 };
+                self.profile = profile;
+            }
             "profile" => {
                 self.edit = None;
                 let Some(k) = value.as_str().filter(|k| label(k).is_some()) else {
@@ -333,6 +343,7 @@ impl Tool for SweepTool {
                 };
                 self.chosen = None;
                 self.profile = Profile {
+                    catalogue: None,
                     library: k.into(),
                     sketch: None,
                     drawing: None,

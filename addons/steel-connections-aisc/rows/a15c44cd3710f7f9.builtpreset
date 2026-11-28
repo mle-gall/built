@@ -1,0 +1,196 @@
+{
+  "uid": "a15c44cd3710f7f9",
+  "name": "Purlin cleat",
+  "pack": "Steel connections · AISC",
+  "primitive": "junction",
+  "rev": 1,
+  "values": {
+    "meeting": "crossing",
+    "params": [
+      {
+        "key": "foot_l",
+        "expr": "main.width * 0.8",
+        "name": "Cleat length",
+        "unit": "mm",
+        "group": "Dimensions"
+      },
+      {
+        "key": "foot_w",
+        "expr": "50",
+        "name": "Foot width",
+        "unit": "mm",
+        "group": "Dimensions"
+      },
+      {
+        "key": "leg_h",
+        "expr": "joining.height / 2",
+        "name": "Leg height",
+        "unit": "mm",
+        "group": "Dimensions"
+      },
+      {
+        "key": "cleat_t",
+        "expr": "9.525",
+        "name": "Cleat thickness",
+        "unit": "mm",
+        "group": "Dimensions",
+        "limits": {
+          "list": [
+            6.35,
+            9.525,
+            12.7,
+            15.875,
+            19.05,
+            25.4
+          ]
+        }
+      },
+      {
+        "key": "bolt_d",
+        "expr": "19.05",
+        "name": "Bolt Ø",
+        "unit": "mm",
+        "group": "Bolts",
+        "limits": {
+          "list": [
+            12.7,
+            15.875,
+            19.05,
+            22.225,
+            25.4
+          ]
+        }
+      }
+    ],
+    "contents": [
+      {
+        "key": "foot",
+        "part": {
+          "preset": "732730a077d0b9f2",
+          "fields": {
+            "profile.params.width": "foot_l",
+            "profile.params.height": "foot_w",
+            "thickness": "cleat_t"
+          },
+          "at": {
+            "frame": "@main.seat",
+            "offset": [
+              0,
+              "joining.width / 2 + foot_w / 2",
+              0
+            ]
+          }
+        }
+      },
+      {
+        "key": "leg",
+        "part": {
+          "preset": "732730a077d0b9f2",
+          "fields": {
+            "profile.params.width": "foot_l",
+            "profile.params.height": "leg_h",
+            "thickness": "cleat_t"
+          },
+          "at": {
+            "frame": "@main.seat",
+            "axis": "y",
+            "offset": [
+              0,
+              "joining.width / 2",
+              "leg_h / 2 + cleat_t"
+            ]
+          }
+        }
+      },
+      {
+        "key": "bolts",
+        "junction": {
+          "detail": "a15c6d949f754449",
+          "roles": {
+            "ply_1": "@foot",
+            "ply_2": {
+              "placement": "@main",
+              "face": "flange_outer"
+            }
+          },
+          "params": {
+            "d": "bolt_d",
+            "x": "-foot_l / 4",
+            "y": 0
+          },
+          "repeat": {
+            "rule": {
+              "count": 2,
+              "step": "foot_l / 2"
+            },
+            "run": "@main.seat.x"
+          }
+        }
+      }
+    ],
+    "roles": {
+      "main": {
+        "name": "Rafter"
+      },
+      "joining": {
+        "name": "Purlin"
+      }
+    },
+    "rule": {
+      "meeting": "crossing",
+      "roles": {
+        "main": {
+          "profile": [
+            {
+              "library": "aisc/w"
+            }
+          ],
+          "face": [
+            "top"
+          ]
+        },
+        "joining": {
+          "class": [
+            "IfcBeam",
+            "IfcMember"
+          ]
+        }
+      }
+    },
+    "seat": {
+      "role": "joining",
+      "datum": "joining.bottom",
+      "on": "main.seat"
+    }
+  },
+  "locks": {},
+  "record": {
+    "class": "IfcElementAssembly"
+  },
+  "naming": "",
+  "node": "",
+  "provenance": {
+    "created": "2026-11-28",
+    "created_with": "Built",
+    "derived_from": {
+      "pack": "d95d670458127f043f2a0359032d6b6e",
+      "uid": "5d5544cd3710f7f9",
+      "rev": 1
+    }
+  },
+  "depends": [
+    {
+      "kind": "preset",
+      "key": "732730a077d0b9f2",
+      "bundled": null,
+      "rev": 1
+    },
+    {
+      "kind": "detail",
+      "key": "a15c6d949f754449",
+      "bundled": "rows/a15c6d949f754449.builtpreset",
+      "rev": 1
+    }
+  ],
+  "hash": "sha256:ed56fe39110b8f1d69886f3df8e4da478b259459c098a2b6a247a691cf07db44"
+}

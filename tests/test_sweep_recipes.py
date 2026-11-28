@@ -14,7 +14,8 @@ CATALOGUE = json.loads((Path(__file__).parents[1] / "resources/profiles/starter.
 
 
 def spec(key):
-    return dict(profile=dict(library=key), path=dict(points=[[0, 0, 0], [2, 0, 0]]))
+    from tests.addon_cases import profile
+    return dict(profile=profile(key), path=dict(points=[[0, 0, 0], [2, 0, 0]]))
 
 
 @pytest.mark.parametrize("size", CATALOGUE["table"]["sizes"], ids=lambda s: s["label"])

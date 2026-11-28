@@ -101,10 +101,6 @@ struct Pack {
 /// (each a format 2 pack with its rows inline).
 pub const PACK_FILES: &[&str] = &[
     include_str!("../../../../resources/presets/starter.builtpreset"),
-    include_str!("../../../../resources/presets/packs/steel-connections-en.builtpreset"),
-    include_str!("../../../../resources/presets/packs/timber-joints.builtpreset"),
-    include_str!("../../../../resources/presets/packs/purlin-connections-en.builtpreset"),
-    include_str!("../../../../resources/presets/packs/mep-penetrations.builtpreset"),
     include_str!("../../../../resources/presets/packs/generic.builtpreset"),
 ];
 #[derive(Deserialize)]
@@ -114,9 +110,6 @@ struct PackFile {
     pack: Value,
 }
 static BUILTINS: LazyLock<Pack> = LazyLock::new(|| load_packs(PACK_FILES));
-static IMPERIAL: LazyLock<Pack> = LazyLock::new(|| load_packs(&[
-    include_str!("../../../../resources/presets/packs/steel-connections-aisc.builtpreset"),
-]));
 fn load_packs(files: &[&str]) -> Pack {
     let mut rows = Vec::new();
     for text in files {
@@ -138,8 +131,7 @@ fn load_packs(files: &[&str]) -> Pack {
 }
 /// A bundled preset or detail by uid.
 pub fn builtin(uid: &str) -> Option<Preset> {
-    let pack = if uid.starts_with("a15c") { &*IMPERIAL } else { &*BUILTINS };
-    pack.rows.iter().find(|p| p.uid == uid).cloned()
+    BUILTINS.rows.iter().find(|p| p.uid == uid).cloned()
 }
 
 fn error(msg: impl ToString) -> PyErr {
@@ -387,15 +379,7 @@ fn preset_catalog<'p>(py: Python<'p>, scene: Option<&Obj<'p>>) -> PyResult<Obj<'
         .and_then(|k| current(py, k))
         .unwrap_or_default();
     let mut rows = Vec::new();
-    let units = py.import("built_core.units")?;
-    let uses_inches = |units: Obj<'_>| -> PyResult<bool> {
-        let length: String = units.get_item("length")?.extract()?;
-        Ok(matches!(length.as_str(), "ft" | "in" | "ft-in" | "in-frac" | "ft-in-frac"))
-    };
-    let imperial = scene.map(|s| uses_inches(units.call_method1("model_units_of", (s,))?))
-        .transpose()?.unwrap_or(false) || uses_inches(units.call_method0("new_document_units")?)?;
-    let regional = imperial.then(|| IMPERIAL.rows.as_slice()).unwrap_or_default();
-    for p in BUILTINS.rows.iter().chain(regional) {
+    for p in &BUILTINS.rows {
         if !table.presets.contains_key(&p.uid) {
             rows.push((p, "bundled"));
         }
@@ -417,6 +401,4 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(preset_delete, m)?)
 }
 
-pub fn starter() -> Value {
-    json!(BUILTINS.rows[0])
-}
+

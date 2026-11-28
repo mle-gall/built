@@ -1,0 +1,45 @@
+{
+  "uid": "10b9a84ae7e2d54c",
+  "name": "UPE 200",
+  "rev": 1,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/upe200",
+      "family": "channel",
+      "params": {
+        "height": 200,
+        "width": 80,
+        "web": 6,
+        "flange": 11,
+        "radius": 13
+      },
+      "catalogue": {
+        "name": "UPE 200",
+        "series": [
+          [
+            "en/upe200",
+            200
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "source": "https://orangebook.arcelormittal.com/node/253",
+    "standard": "EN 10365"
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/upe200",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:c70986eb684f0793e9da32ed87fbefc02e6e44fbce4b39cf8650ec7edce94a39"
+}

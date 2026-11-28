@@ -374,9 +374,9 @@ fn fmt(v: f64) -> String {
 }
 
 /// The rule's catalogue steps for one role (± 1 step, §5).
-fn role_rule(profile: &str, dims: &BTreeMap<String, f64>, sizes: Option<&BTreeMap<String, [f64; 2]>>) -> Value {
+fn role_rule(profile: &str, catalogue: Option<&profile::CatalogueEntry>, dims: &BTreeMap<String, f64>, sizes: Option<&BTreeMap<String, [f64; 2]>>) -> Value {
     let mut out = json!({});
-    let series = profile::series(profile);
+    let series = catalogue.map(|entry| entry.series.clone()).unwrap_or_else(|| profile::series(profile));
     if let Some(i) = series.iter().position(|(k, _)| k == profile) {
         let lo = i.saturating_sub(1);
         let hi = (i + 1).min(series.len() - 1);
@@ -779,11 +779,15 @@ pub(in crate::live) fn draft(scene: &Obj<'_>, t: &LiveTable, seed: &Value, opts:
     let label = |p: &str, n: &str| profile::label(p).map(String::from).unwrap_or_else(|| n.to_string());
     let default_name = format!("{what} · {} to {}", label(&meeting.profiles[ji], &names[1]), label(&meeting.profiles[mi], &names[0]));
     let name = opts.name.clone().filter(|n| !n.trim().is_empty()).unwrap_or(default_name);
+    let catalogue = |i: usize| {
+        t.owners.get(&meeting.members[i]).and_then(|id| t.rows.get(id))
+            .and_then(|row| row.sweep.as_ref()?.profile.catalogue.as_ref())
+    };
     let mut rule = json!({
         "meeting": meeting.kind,
         "roles": {
-            "main": role_rule(&meeting.profiles[mi], &meeting.dims[mi], opts.sizes.get("main")),
-            "joining": role_rule(&meeting.profiles[ji], &meeting.dims[ji], opts.sizes.get("joining")),
+            "main": role_rule(&meeting.profiles[mi], catalogue(mi), &meeting.dims[mi], opts.sizes.get("main")),
+            "joining": role_rule(&meeting.profiles[ji], catalogue(ji), &meeting.dims[ji], opts.sizes.get("joining")),
         },
         "angle": {"value": (meeting.angle * 10.).round() / 10., "tol": opts.tol.unwrap_or(2.)},
         "mirror": opts.mirror.clone().unwrap_or_else(|| "allow".into()),

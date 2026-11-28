@@ -1,0 +1,54 @@
+{
+  "uid": "2673a97782a6a5f7",
+  "name": "Duct",
+  "pack": "MEP",
+  "primitive": "sweep",
+  "rev": 1,
+  "values": {
+    "profile": {
+      "library": "basic/duct",
+      "family": "rhs",
+      "params": {
+        "width": 400,
+        "height": 200,
+        "web": 1,
+        "flange": 0,
+        "radius": 2
+      }
+    },
+    "attachment": "centre",
+    "rotation": 0,
+    "mirror": false
+  },
+  "record": {
+    "class": "IfcDuctSegment",
+    "predefined_type": "RIGIDSEGMENT",
+    "material": "Galvanised steel",
+    "object_type": "Duct"
+  },
+  "naming": "D-{n}",
+  "node": "Ducts",
+  "locks": {
+    "profile": "fixed",
+    "attachment": "free",
+    "rotation": "free",
+    "mirror": "free",
+    "material": "fixed",
+    "class": "fixed",
+    "predefined_type": "fixed",
+    "object_type": "fixed"
+  },
+  "provenance": {
+    "created_with": "Built",
+    "created": "2026-11-28"
+  },
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "basic/duct",
+      "bundled": null
+    }
+  ],
+  "profile_size": true,
+  "hash": "sha256:8abb2a1d7bc3457f2d6f569a671f3be7968e7b3c683d3e23f08879f0ead3fda0"
+}

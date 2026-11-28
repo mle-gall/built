@@ -224,7 +224,7 @@ def test_notched_adaptive_parts_match_the_boolean_kernel(tmp_path):
         stock.xform = placed.xform
         stocks.append(stock)
     apply(history, "create_sweeps", sweeps=[{
-        "profile": {"library": "basic/timber", "params": {"width": 120, "height": 55}},
+        "profile": {"library": "basic/rectangle", "params": {"width": 120, "height": 55}},
         "path": {"points": [[-.2, .3, 3.39], [3.65, .3, 4.82]]}, "attachment": "centre",
     }])
     tool = scene.groups[-1]

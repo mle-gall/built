@@ -7,6 +7,7 @@ import json
 import shutil
 
 import pytest
+from tests import addon_cases
 from tests.shell_isolation import restore_shell_patches  # noqa: F401
 from built_core import command_protocol as live
 
@@ -32,8 +33,10 @@ def buttons(sheet):
     return [x["label"] for b in sheet["detail"]["blocks"] if b["kind"] == "buttons" for x in b["buttons"]]
 
 
-def test_junction_filter_rule_in_words_and_apply_on_the_selection(win):
-    sheet = presets_sheet(win)
+def test_junction_filter_rule_in_words_and_apply_on_the_selection(win, tmp_path):
+    for pack in ("steel-connections-en", "timber-joints"):
+        addon_cases.install(win, pack, tmp_path)
+    sheet = presets_sheet(win, scope="s:all")
     shown = {i["label"]: i for i in tiles(sheet)}
     assert {"End plate, 4 bolts", "Half-lap", "Corner mitre", "Wall tee"} <= set(shown)
     assert "Plate" not in shown and "Mitre" not in shown          # sweeps and cuts filtered out
@@ -43,7 +46,7 @@ def test_junction_filter_rule_in_words_and_apply_on_the_selection(win):
     sheet = frame(win)
     rows = detail_rows(sheet)
     assert rows["Adds"] == "cut, part, 4 bolts, weld" and rows["Pack"].startswith("Steel connections · EN")
-    assert rows["Licence"] == "GPL-3.0-or-later" and rows["Plate thickness"] == "15 mm"
+    assert rows["Licence"] == "CC0-1.0" and rows["Plate thickness"] == "15 mm"
     assert buttons(sheet) == ["Apply…"]
     assert dict(end_plate["menu"])["share"] == "Share pack…"
     # Apply… binds the selection: two members, either order.

@@ -1,0 +1,286 @@
+{
+  "uid": "30496c74688414a4",
+  "name": "Apex haunch",
+  "pack": "Steel connections · EN",
+  "primitive": "junction",
+  "rev": 1,
+  "values": {
+    "meeting": "corner",
+    "roles": {
+      "main": {
+        "name": "Rafter"
+      },
+      "joining": {
+        "name": "Rafter"
+      }
+    },
+    "params": [
+      {
+        "key": "plate_t",
+        "expr": "15",
+        "name": "Plate thickness",
+        "unit": "mm",
+        "group": "Plates",
+        "limits": {
+          "list": [
+            12,
+            15,
+            20,
+            25
+          ]
+        }
+      },
+      {
+        "key": "edge",
+        "expr": "40",
+        "name": "Edge distance",
+        "unit": "mm",
+        "group": "Plates"
+      },
+      {
+        "key": "plate_w",
+        "expr": "main.height * 1.6 + 2 * edge",
+        "name": "Plate depth (haunch)",
+        "unit": "mm",
+        "group": "Plates"
+      },
+      {
+        "key": "plate_h",
+        "expr": "main.width + 2 * edge",
+        "name": "Plate width",
+        "unit": "mm",
+        "group": "Plates"
+      },
+      {
+        "key": "drop",
+        "expr": "main.height / 2 + edge / 2 - plate_w / 2",
+        "name": "Haunch below the ridge",
+        "unit": "mm",
+        "group": "Plates"
+      },
+      {
+        "key": "gauge",
+        "expr": "plate_h - 2 * edge",
+        "name": "Bolt gauge (across)",
+        "unit": "mm",
+        "group": "Bolts"
+      },
+      {
+        "key": "pitch",
+        "expr": "(plate_w - 2 * edge) / 2",
+        "name": "Bolt pitch",
+        "unit": "mm",
+        "group": "Bolts"
+      },
+      {
+        "key": "bolt_d",
+        "expr": "16",
+        "name": "Bolt Ø",
+        "unit": "mm",
+        "group": "Bolts",
+        "limits": {
+          "list": [
+            12,
+            16,
+            20,
+            24
+          ]
+        }
+      },
+      {
+        "key": "weld_a",
+        "expr": "5",
+        "name": "Weld throat",
+        "unit": "mm",
+        "group": "Weld"
+      }
+    ],
+    "contents": [
+      {
+        "key": "main_cut",
+        "on": "main",
+        "row": {
+          "kind": "cut",
+          "operation": "trim",
+          "end": "@main.end",
+          "cutter": {
+            "plane": {}
+          },
+          "anchor": {
+            "ref": "@meet",
+            "offset": "plate_t"
+          }
+        }
+      },
+      {
+        "key": "joining_cut",
+        "on": "joining",
+        "row": {
+          "kind": "cut",
+          "operation": "trim",
+          "end": "@joining.end",
+          "cutter": {
+            "plane": {}
+          },
+          "anchor": {
+            "ref": "@meet",
+            "offset": "plate_t"
+          }
+        }
+      },
+      {
+        "key": "plate_a",
+        "part": {
+          "preset": "732730a077d0b9f2",
+          "fields": {
+            "profile.params.width": "plate_w",
+            "profile.params.height": "plate_h",
+            "thickness": "plate_t"
+          },
+          "at": {
+            "frame": "@meet",
+            "offset": [
+              "drop",
+              0,
+              0
+            ]
+          }
+        }
+      },
+      {
+        "key": "plate_b",
+        "part": {
+          "preset": "732730a077d0b9f2",
+          "fields": {
+            "profile.params.width": "plate_w",
+            "profile.params.height": "plate_h",
+            "thickness": "plate_t"
+          },
+          "at": {
+            "frame": "@meet",
+            "offset": [
+              "drop",
+              0,
+              "-plate_t"
+            ]
+          }
+        }
+      },
+      {
+        "key": "bolts",
+        "junction": {
+          "detail": "bcb26d949f754449",
+          "roles": {
+            "ply_1": "@plate_a",
+            "ply_2": "@plate_b"
+          },
+          "params": {
+            "d": "bolt_d",
+            "x": "-pitch",
+            "y": "-gauge / 2"
+          },
+          "repeat": {
+            "rule": {
+              "count": 2,
+              "step": "gauge"
+            },
+            "run": "@meet.y",
+            "nest": {
+              "count": 3,
+              "step": "pitch"
+            }
+          }
+        }
+      },
+      {
+        "key": "weld_a",
+        "junction": {
+          "detail": "1fa8a4f99a56a112",
+          "roles": {
+            "a": "@main",
+            "b": {
+              "placement": "@plate_a",
+              "face": "end"
+            }
+          },
+          "params": {
+            "throat": "weld_a"
+          }
+        }
+      },
+      {
+        "key": "weld_b",
+        "junction": {
+          "detail": "1fa8a4f99a56a112",
+          "roles": {
+            "a": "@joining",
+            "b": {
+              "placement": "@plate_b",
+              "face": "end"
+            }
+          },
+          "params": {
+            "throat": "weld_a"
+          }
+        }
+      }
+    ],
+    "rule": {
+      "meeting": "corner",
+      "roles": {
+        "main": {
+          "profile": [
+            {
+              "family": "i"
+            }
+          ]
+        },
+        "joining": {
+          "profile": [
+            {
+              "family": "i"
+            }
+          ]
+        }
+      },
+      "angle": {
+        "value": 30,
+        "tol": 25
+      },
+      "mirror": "allow"
+    }
+  },
+  "locks": {},
+  "record": {
+    "class": "IfcElementAssembly",
+    "predefined_type": "ACCESSORY_ASSEMBLY"
+  },
+  "naming": "",
+  "node": "",
+  "provenance": {
+    "created": "2026-11-28",
+    "created_with": "Built",
+    "derived_from": null
+  },
+  "depends": [
+    {
+      "kind": "preset",
+      "key": "732730a077d0b9f2",
+      "bundled": null,
+      "rev": 1
+    },
+    {
+      "kind": "detail",
+      "key": "bcb26d949f754449",
+      "bundled": "rows/bcb26d949f754449.builtpreset",
+      "rev": 1
+    },
+    {
+      "kind": "detail",
+      "key": "1fa8a4f99a56a112",
+      "bundled": "rows/1fa8a4f99a56a112.builtpreset",
+      "rev": 1
+    }
+  ],
+  "hash": "sha256:52625dc5df0c2583dd2f6903c465bdc454708e1c9cc545a79b7ed71c57562b1b"
+}

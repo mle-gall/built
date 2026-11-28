@@ -923,7 +923,7 @@ impl Mutation {
                         .and_then(|r| r.sketch_fields.name.as_str().map(str::to_owned))
                         .or_else(|| spec.profile.drawing.as_ref().and_then(|d| d["name"].as_str().map(str::to_owned)))
                         .filter(|n| !n.is_empty());
-                    let name = profile::label(key).map(str::to_owned).or(drawn).unwrap_or_else(|| "Drawn profile".into());
+                    let name = spec.profile.name().map(str::to_owned).or(drawn).unwrap_or_else(|| "Drawn profile".into());
                     let name = name.as_str();
                     let g = py.import("built_core.group")?.getattr("Group")?.call0()?;
                     g.setattr("name", name)?;
@@ -1052,6 +1052,7 @@ impl Mutation {
                         .ok_or_else(|| PyValueError::new_err("not a swept member"))?;
                     let spec = user.sweep.as_mut().unwrap();
                     spec.profile = profile::Profile {
+                        catalogue: None,
                         sketch: Some(row.uid.clone()),
                         drawing: None,
                         library: String::new(),
@@ -1560,7 +1561,7 @@ fn live_sweep<'p>(scene: &Obj<'p>, owner: &str) -> PyResult<Obj<'p>> {
             .as_ref()
             .and_then(|uid| t.rows.get(uid))
             .and_then(|r| r.sketch_fields.name.as_str())
-            .or_else(|| profile::label(&spec.profile.library))
+            .or_else(|| spec.profile.name())
             .unwrap_or("Drawn profile");
         value.set_item("profile_name", name)?;
         if let Some(g) = group(scene.py(), &t, owner) {
@@ -1581,12 +1582,11 @@ fn sweep_thumbnail<'p>(
     if !(1..=512).contains(&pixels) {
         return Err(PyValueError::new_err("invalid thumbnail size"));
     }
-    let profile = profile::Profile {
-        sketch: None,
-        drawing: None,
-        library: key,
-        family: String::new(),
-            params: Default::default(),
+    let profile = if key.starts_with('{') {
+        serde_json::from_str(&key).map_err(|e| PyValueError::new_err(format!("Invalid profile: {e}")))?
+    } else {
+        profile::Profile { catalogue: None, sketch: None, drawing: None, library: key,
+                           family: String::new(), params: Default::default() }
     };
     let outline = profile.outline(48).map_err(PyValueError::new_err)?;
     let scale = pixels as f64 * 0.8 / outline.height.max(outline.width);
@@ -1637,7 +1637,7 @@ fn sweep_profile<'p>(row: &Obj<'p>) -> PyResult<Obj<'p>> {
         .collect();
     to_py(
         row.py(),
-        &serde_json::json!({"family":outline.family,"web":outline.web,"flange":outline.flange,"radius":outline.radius,"width":outline.width,"height":outline.height,"rings":rings,"offset":outline.attachment(&spec.attachment).map_err(PyValueError::new_err)?,"name":profile::label(&spec.profile.library)}),
+        &serde_json::json!({"family":outline.family,"web":outline.web,"flange":outline.flange,"radius":outline.radius,"width":outline.width,"height":outline.height,"rings":rings,"offset":outline.attachment(&spec.attachment).map_err(PyValueError::new_err)?,"name":spec.profile.name()}),
     )
 }
 #[pyfunction(signature = (history, sweeps, wall_junctions=false))]
@@ -1798,8 +1798,13 @@ fn sketch_profile<'p>(scene: &Obj<'p>, uid: &str) -> PyResult<Obj<'p>> {
 }
 /// A catalogue size as a drawing (Sketch workspace JSON), or None.
 #[pyfunction]
-fn profile_sketch<'p>(py: Python<'p>, key: &str) -> PyResult<Obj<'p>> {
-    match profile::catalogue_sketch(key) {
+fn profile_sketch<'p>(py: Python<'p>, key: &Obj<'p>) -> PyResult<Obj<'p>> {
+    let sketch = if let Ok(key) = key.extract::<String>() {
+        profile::catalogue_sketch(&key)
+    } else {
+        profile::sketch_of(&json(key)?)
+    };
+    match sketch {
         Some(sketch) => to_py(py, &sketch),
         None => Ok(py.None().into_bound(py)),
     }
@@ -1877,9 +1882,6 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(profile_sketch, m)?)?;
     m.add_function(wrap_pyfunction!(live_reevaluate, m)?)?;
     m.add_function(wrap_pyfunction!(live_rows, m)?)
-}
-pub(crate) fn starter_preset() -> serde_json::Value {
-    presets::starter()
 }
 pub(crate) fn default_preset(scene: &Obj<'_>) -> PyResult<serde_json::Value> {
     let t = current(scene.py(), root(scene)?).unwrap_or_default();

@@ -1,0 +1,93 @@
+{
+  "uid": "b07a16e8a0000002",
+  "name": "Bolt group M16 · 2 × 2",
+  "pack": "Steel",
+  "primitive": "junction",
+  "rev": 1,
+  "values": {
+    "meeting": "parts",
+    "roles": {
+      "ply_1": {
+        "name": "Plate"
+      },
+      "ply_2": {
+        "name": "Member"
+      }
+    },
+    "params": [
+      {
+        "key": "rows",
+        "name": "Bolt rows",
+        "group": "Bolts",
+        "expr": "2",
+        "unit": "count"
+      },
+      {
+        "key": "pitch",
+        "name": "Bolt pitch",
+        "group": "Bolts",
+        "expr": "110",
+        "unit": "mm"
+      },
+      {
+        "key": "columns",
+        "name": "Bolt columns",
+        "group": "Bolts",
+        "expr": "2",
+        "unit": "count"
+      },
+      {
+        "key": "gauge",
+        "name": "Bolt gauge",
+        "group": "Bolts",
+        "expr": "110",
+        "unit": "mm"
+      }
+    ],
+    "contents": [
+      {
+        "key": "bolts",
+        "junction": {
+          "detail": "b07a16e8a0000001",
+          "roles": {
+            "ply_1": "@ply_1",
+            "ply_2": "@ply_2"
+          },
+          "repeat": {
+            "rule": {
+              "count": "rows",
+              "step": "pitch"
+            },
+            "run": "@meet.y",
+            "nest": {
+              "count": "columns",
+              "step": "gauge"
+            }
+          },
+          "params": {
+            "ox": "-(columns - 1) * gauge / 2",
+            "oy": "-(rows - 1) * pitch / 2"
+          }
+        }
+      }
+    ]
+  },
+  "record": {
+    "class": "IfcElementAssembly"
+  },
+  "naming": "",
+  "node": "",
+  "locks": {},
+  "provenance": {
+    "created_with": "Built",
+    "created": "2026-11-28"
+  },
+  "depends": [
+    {
+      "kind": "detail",
+      "key": "b07a16e8a0000001",
+      "bundled": "rows/b07a16e8a0000001.builtpreset"
+    }
+  ],
+  "hash": "sha256:85d9bc83fd990e43d59c5a6172e3c8d4ec90f22464758d4cab4dfeeba106a52f"
+}

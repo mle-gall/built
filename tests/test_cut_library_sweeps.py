@@ -42,6 +42,9 @@ def profile_probe(app):
         view.fit_to(Vec3(-.035, -.065, .21), Vec3(.062, .065, .23))
 
     def prepare():
+        from built_render import wgpu_library
+        for pack in folder.glob("*.builtpack"):
+            wgpu_library.import_pack(app.window, str(pack), "mine")
         from built_core.guide import Guide
         from built_core import units
         units.apply_units(app.scene, units.with_profile({}, "millimetric"))
@@ -139,6 +142,9 @@ def exercise_connection(folder, layout, preset, *, screenshots=False, autosave=F
     points = column + beam + picks
     plugin = folder / "profile/data/built/plugins/profile_probe.py"
     plugin.parent.mkdir(parents=True)
+    from tests.addon_cases import ADDONS, build
+    for pack in ("steel-profiles-en", "steel-connections-en"):
+        build(ADDONS / pack, plugin.parent)
     plugin.write_text(inspect.getsource(profile_probe).replace("def profile_probe(", "def setup("))
     (plugin.parent / "points.json").write_text(json.dumps(points))
     action = "menu extension:profile_probe:"

@@ -1,0 +1,49 @@
+{
+  "uid": "8ac0ca60033d0135",
+  "name": "IPE 240",
+  "rev": 1,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/ipe240",
+      "family": "i",
+      "params": {
+        "height": 240,
+        "width": 120,
+        "web": 6.2,
+        "flange": 9.8,
+        "radius": 15
+      },
+      "catalogue": {
+        "name": "IPE 240",
+        "series": [
+          [
+            "en/ipe200",
+            200
+          ],
+          [
+            "en/ipe240",
+            240
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "source": "https://orangebook.arcelormittal.com/node/6",
+    "standard": "EN 10365"
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/ipe240",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:aa9e624b7e778ac68f725bdc8dfdf0e20c8011df6cab44916846cc4db88101d4"
+}

@@ -5,6 +5,8 @@ player that replays a short scene ("beat") in a clean window exactly the
 same way every time, and camera moves that glide. You record with your own
 screen recorder; nothing here captures the screen.
 
+For a steel recording, import the steel packs first. In Library › Profiles, use Import pack… for Steel profiles · EN and Steel connections · EN, and choose My library.
+
 ## The keystroke overlay
 
 View ▸ Show Keystrokes (also Settings › Display › Recording, and the

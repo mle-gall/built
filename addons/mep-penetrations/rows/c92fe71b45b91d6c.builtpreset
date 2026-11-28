@@ -1,0 +1,152 @@
+{
+  "uid": "c92fe71b45b91d6c",
+  "name": "Duct through wall",
+  "pack": "MEP penetrations",
+  "primitive": "junction",
+  "rev": 1,
+  "values": {
+    "meeting": "end_face",
+    "params": [
+      {
+        "key": "clearance",
+        "expr": "5",
+        "name": "Radial clearance",
+        "unit": "mm",
+        "group": "Dimensions"
+      },
+      {
+        "key": "opening_w",
+        "expr": "joining.width + 2 * clearance",
+        "name": "Opening width",
+        "unit": "mm",
+        "group": "Dimensions"
+      },
+      {
+        "key": "opening_h",
+        "expr": "joining.height + 2 * clearance",
+        "name": "Opening height",
+        "unit": "mm",
+        "group": "Dimensions"
+      },
+      {
+        "key": "rim",
+        "expr": "8",
+        "name": "Collar wall",
+        "unit": "mm",
+        "group": "Dimensions"
+      },
+      {
+        "key": "depth",
+        "expr": "40",
+        "name": "Collar depth",
+        "unit": "mm",
+        "group": "Dimensions"
+      }
+    ],
+    "contents": [
+      {
+        "key": "opening",
+        "on": "main",
+        "row": {
+          "kind": "cut",
+          "operation": "subtract",
+          "cutter": {
+            "block": {
+              "size": [
+                "opening_w",
+                "opening_h",
+                "main.thickness + 2"
+              ],
+              "at": [
+                "-opening_w / 2",
+                "-opening_h / 2",
+                "-main.thickness - 1"
+              ]
+            }
+          },
+          "anchor": {
+            "ref": "@joining.section"
+          }
+        }
+      },
+      {
+        "key": "fire_collar",
+        "part": {
+          "sweep": {
+            "profile": {
+              "library": "basic/tube",
+              "family": "rhs",
+              "params": {
+                "width": 400,
+                "height": 200,
+                "web": 1,
+                "flange": 0,
+                "radius": 2
+              }
+            }
+          },
+          "record": {
+            "class": "IfcDiscreteAccessory",
+            "name": "Fire collar"
+          },
+          "at": {
+            "frame": "@joining.section"
+          },
+          "fields": {
+            "thickness": "depth",
+            "profile.params.width": "opening_w + 2 * rim",
+            "profile.params.height": "opening_h + 2 * rim",
+            "profile.params.web": "rim"
+          }
+        }
+      }
+    ],
+    "roles": {
+      "main": {
+        "name": "Wall"
+      },
+      "joining": {
+        "name": "Duct"
+      }
+    },
+    "rule": {
+      "meeting": "end_face",
+      "roles": {
+        "main": {
+          "class": [
+            "IfcWall"
+          ],
+          "face": [
+            "right"
+          ]
+        },
+        "joining": {
+          "profile": [
+            {
+              "family": "rhs"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "locks": {},
+  "record": {
+    "class": "IfcElementAssembly"
+  },
+  "naming": "",
+  "node": "",
+  "provenance": {
+    "created": "2026-11-28",
+    "created_with": "Built",
+    "derived_from": null
+  },
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "basic/tube",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:7fd884f3537abd67227168644cfa669067160fe9a1e3d357b06a968c7b5d54c0"
+}

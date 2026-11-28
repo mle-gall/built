@@ -1,0 +1,104 @@
+{
+  "uid": "a67d49d4e28ababb",
+  "name": "Anchor M16",
+  "pack": "Steel connections · EN",
+  "primitive": "junction",
+  "rev": 1,
+  "values": {
+    "meeting": "parts",
+    "roles": {
+      "ply_1": {
+        "name": "Plate"
+      },
+      "ply_2": {
+        "name": "Base"
+      }
+    },
+    "params": [
+      {
+        "key": "d",
+        "expr": "16",
+        "name": "Anchor Ø",
+        "unit": "mm",
+        "group": "Anchor",
+        "limits": {
+          "list": [
+            12,
+            16,
+            20,
+            24
+          ]
+        }
+      },
+      {
+        "key": "clearance",
+        "expr": "4",
+        "name": "Hole clearance",
+        "unit": "mm",
+        "group": "Anchor"
+      },
+      {
+        "key": "length",
+        "expr": "250",
+        "name": "Embedment",
+        "unit": "mm",
+        "group": "Anchor"
+      },
+      {
+        "key": "x",
+        "expr": "0",
+        "name": "Offset across",
+        "unit": "mm",
+        "group": "Position"
+      },
+      {
+        "key": "y",
+        "expr": "0",
+        "name": "Offset along",
+        "unit": "mm",
+        "group": "Position"
+      }
+    ],
+    "contents": [
+      {
+        "key": "anchor",
+        "part": {
+          "fastener": {
+            "kind": "anchor",
+            "d": "d",
+            "clearance": "clearance",
+            "length": "length",
+            "grade": "5.6"
+          },
+          "at": {
+            "frame": "@meet",
+            "offset": [
+              "x",
+              "y",
+              0
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "locks": {},
+  "record": {
+    "class": "IfcElementAssembly"
+  },
+  "naming": "",
+  "node": "",
+  "provenance": {
+    "created": "2026-11-28",
+    "created_with": "Built",
+    "derived_from": null
+  },
+  "depends": [
+    {
+      "kind": "fastener",
+      "key": "metric",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:25170adcec044d8d09577a943c5dded0f6f0f282c9c936f12d0083039ab39528"
+}

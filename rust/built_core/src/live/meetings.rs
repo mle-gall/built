@@ -68,6 +68,7 @@ struct Template {
     sections: Vec<[DVec3; 3]>,
     half: [f64; 2],
     profile: String,
+    profile_label: String,
     family: String,
     dims: Dims,
     wall: bool,
@@ -141,6 +142,7 @@ impl Template {
             sections,
             half: [o.width / 2000., o.height / 2000.],
             profile: s.profile.library.clone(),
+            profile_label: s.profile.name().unwrap_or(&s.profile.library).into(),
             family: o.family.clone(),
             dims,
             wall: WALL_CLASSES.contains(&class) || s.profile.library == "basic/wall",
@@ -165,6 +167,7 @@ impl Template {
                     half: self.half,
                     shape: if self.wall { Shape::Wall } else { Shape::Bar },
                     profile: self.profile.clone(),
+                    profile_label: self.profile_label.clone(),
                     family: self.family.clone(),
                     dims,
                     ..base.clone()
@@ -327,6 +330,7 @@ impl Walk<'_> {
                 shape: Shape::Bar,
                 class: class.to_string(),
                 profile: String::new(),
+                profile_label: String::new(),
                 family: String::new(),
                 dims: Dims::default(),
             };
@@ -845,7 +849,7 @@ fn label_of(m: &Member) -> String {
     if m.profile.is_empty() {
         m.class.trim_start_matches("Ifc").to_string()
     } else {
-        profile::label(&m.profile).map(String::from).unwrap_or_else(|| m.profile.clone())
+        m.profile_label.clone()
     }
 }
 /// Grouping signature, independent of modelling direction and hand.
@@ -1129,6 +1133,14 @@ fn junction_detail(t: &LiveTable, uid: &str) -> PyResult<presets::Preset> {
         .ok_or_else(|| PyValueError::new_err("Unknown junction detail"))
 }
 
+fn preview_detail(t: &LiveTable, detail: &Obj<'_>) -> PyResult<presets::Preset> {
+    if let Ok(uid) = detail.extract::<String>() {
+        junction_detail(t, &uid)
+    } else {
+        json(detail)
+    }
+}
+
 fn suggest(t: &LiveTable, ix: &DocIndex, p: &presets::Preset) -> Vec<Suggestion> {
     let rule = rule_of(p);
     let names = role_names(p);
@@ -1144,10 +1156,10 @@ fn suggest(t: &LiveTable, ix: &DocIndex, p: &presets::Preset) -> Vec<Suggestion>
 
 /// Meetings that fit a detail, its near misses, skipped and detailed ones.
 #[pyfunction]
-pub(super) fn junction_suggest<'p>(scene: &Obj<'p>, detail: &str) -> PyResult<Obj<'p>> {
+pub(super) fn junction_suggest<'p>(scene: &Obj<'p>, detail: &Obj<'p>) -> PyResult<Obj<'p>> {
     let started = Instant::now();
     let reply = with_index(scene, |t, ix| {
-        let p = junction_detail(t, detail)?;
+        let p = preview_detail(t, detail)?;
         let list = suggest(t, ix, &p);
         let mut counts = BTreeMap::<&str, usize>::new();
         for s in &list {
@@ -1290,10 +1302,10 @@ pub(super) fn meeting_index_stats<'p>(scene: &Obj<'p>) -> PyResult<Obj<'p>> {
 /// Ghost lines for a detail at meetings: the meet cross and each owned
 /// plane cut's outline, from the junction's own frames (not committed).
 #[pyfunction]
-pub(super) fn junction_ghosts<'p>(scene: &Obj<'p>, detail: &str, keys: Vec<String>) -> PyResult<Obj<'p>> {
+pub(super) fn junction_ghosts<'p>(scene: &Obj<'p>, detail: &Obj<'p>, keys: Vec<String>) -> PyResult<Obj<'p>> {
     let py = scene.py();
     let (p, chosen) = with_index(scene, |t, ix| {
-        let p = junction_detail(t, detail)?;
+        let p = preview_detail(t, detail)?;
         let wanted: HashSet<&String> = keys.iter().collect();
         let chosen: Vec<_> = suggest(t, ix, &p)
             .into_iter()

@@ -148,7 +148,7 @@ pub fn facet_value(facet: &str) -> Option<&str> {
     matches!(facet, "colour" | "image" | "sweep" | "cut" | "repeat" | "junction").then_some(facet)
 }
 /// Verb ids and their menu labels (a type relabels "apply").
-pub const VERBS: [(&str, &str); 22] = [("share", "Share pack…"), ("modelupdate", "Update this model's copy"), ("apply", "Use"), ("edit", "Edit in the inspector"), ("duplicate", "Duplicate"),
+pub const VERBS: [(&str, &str); 23] = [("size", "Set dimensions…"), ("share", "Share pack…"), ("modelupdate", "Update this model's copy"), ("apply", "Use"), ("edit", "Edit in the inspector"), ("duplicate", "Duplicate"),
     ("rename", "Rename"), ("keep", "Save to Library…"), ("unkeep", "Remove from My library"),
     ("select", "Select uses"), ("replace", "Replace selection with this"), ("keepfile", "Keep when unused"),
     ("unkeepfile", "Stop keeping in file"), ("delete", "Delete…"), ("save", "Save to Library…"),

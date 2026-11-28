@@ -1,0 +1,30 @@
+{
+  "uid": "78d69d1a1cd30f54",
+  "name": "Cope",
+  "pack": "Steel EN 10365",
+  "primitive": "cut",
+  "rev": 1,
+  "values": {
+    "operation": "subtract",
+    "role": "body",
+    "cutter_kind": "body",
+    "on": true,
+    "clearance": 2
+  },
+  "record": {},
+  "locks": {
+    "operation": "fixed",
+    "role": "fixed",
+    "cutter_kind": "free",
+    "on": "free",
+    "clearance": "free"
+  },
+  "naming": "",
+  "node": "",
+  "provenance": {
+    "created_with": "Built",
+    "created": "2026-11-28"
+  },
+  "depends": [],
+  "hash": "sha256:7b119a4a2cef2ab0bbd317908eb92dd8c0908a2e2e9f4ddf513b45b5e45e7a16"
+}

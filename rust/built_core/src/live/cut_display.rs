@@ -347,6 +347,7 @@ fn outline(
             centre = pose.w_axis.truncate();
             normal = pose.z_axis.truncate().normalize_or_zero();
             let profile = profile::Profile {
+                catalogue: None,
                 library: String::new(),
                 drawing: Some(json!(section)),
                 sketch: None,

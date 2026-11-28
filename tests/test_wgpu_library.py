@@ -133,7 +133,7 @@ def test_providers_are_data_shaped_and_profiles_have_sweep_actions():
     ids = [p.id for p in L.PROVIDERS]
     assert ids == ["materials", "components", "families", "profiles", "sections", "presets", "styles"]
     assert L.provider("profiles").ready
-    assert any(p["key"] == "en/ipe240" and "apply" in p["verbs"]
+    assert any(p["key"] == "basic/i" and "apply" in p["verbs"]
                for p in L.provider("profiles").items(None))
     for p in L.PROVIDERS:
         for verb, label in p.verbs():

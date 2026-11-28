@@ -1,0 +1,44 @@
+{
+  "uid": "dc77a4a5046c823d",
+  "name": "L 50 × 50 × 5",
+  "rev": 1,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/l50x5",
+      "family": "angle",
+      "params": {
+        "width": 50,
+        "height": 50,
+        "web": 5,
+        "radius": 7
+      },
+      "catalogue": {
+        "name": "L 50 × 50 × 5",
+        "series": [
+          [
+            "en/l50x5",
+            50
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "source": "https://steel.ie/wp-content/uploads/2016/01/Angles-Data-Sheet-Equal-Angles.pdf",
+    "standard": "EN 10056"
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/l50x5",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:8be09599349e212dc30bb5929bc9a4ae6f5bd70cc18e64f7eadf92f013ac4cab"
+}
