@@ -696,5 +696,31 @@ fn profile_label(key: &str) -> String {
             .filter_map(|s| Some((s["key"].as_str()?.to_owned(), s["label"].as_str()?.to_owned())))
             .collect()
     });
-    LABELS.get(key).cloned().unwrap_or_else(|| key.rsplit('/').next().unwrap_or(key).to_uppercase())
+    LABELS.get(key).cloned().unwrap_or_else(|| spaced(key.rsplit('/').next().unwrap_or(key)))
+}
+
+/// A catalogue key's size read as its standard writes it when the Library
+/// does not list it here (an add-on size): "he200a" → "HE 200 A".
+fn spaced(name: &str) -> String {
+    let mut out = String::new();
+    let mut last: Option<bool> = None;
+    for c in name.chars() {
+        let digit = c.is_ascii_digit();
+        if c.is_ascii_alphanumeric() && last.is_some_and(|d| d != digit) {
+            out.push(' ');
+        }
+        out.extend(c.to_uppercase());
+        last = c.is_ascii_alphanumeric().then_some(digit);
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn catalogue_keys_read_as_their_sizes() {
+        assert_eq!(super::spaced("he200a"), "HE 200 A");
+        assert_eq!(super::spaced("ipe240"), "IPE 240");
+        assert_eq!(super::profile_label("en/ipe200"), "IPE 200");
+    }
 }
