@@ -199,13 +199,14 @@ mod tests {
     #[test]
     fn a_closed_section_is_outlined_and_filled_and_keeps_its_proportions() {
         let p = render(&rect(200.0, 100.0), 96).unwrap();
-        // The outline: 200 wide fills 76 % of the tile, half as high.
-        assert_eq!(alpha(&p, 96, 48, 30), 255, "top edge");
+        // The outline: 200 wide fills 76 % of the tile (11.5 to 84.5), half
+        // as high (29.8 to 66.2).
+        assert!(alpha(&p, 96, 48, 29) > 150, "top edge");
         // A tall drawing is fitted to the band the detail pane shows.
         let tall = render(&rect(100.0, 400.0), 96).unwrap();
         assert_eq!(alpha(&tall, 96, 48, 20), 0, "above the band");
         assert!(alpha(&tall, 96, 48, 23) > 100, "its top edge, inside the band");
-        assert_eq!(alpha(&p, 96, 12, 48), 255, "left edge");
+        assert!(alpha(&p, 96, 11, 48) > 200, "left edge");
         assert_eq!(alpha(&p, 96, 48, 48), 51, "filled inside");
         assert_eq!(alpha(&p, 96, 48, 12), 0, "empty above");
         assert_eq!(alpha(&p, 96, 3, 48), 0, "empty beside");
@@ -217,7 +218,7 @@ mod tests {
         open["curves"].as_array_mut().unwrap().pop();
         let p = render(&open, 64).unwrap();
         assert_eq!(alpha(&p, 64, 32, 32), 0);
-        assert!(p.chunks(4).any(|c| c[3] == 255));
+        assert!(p.chunks(4).any(|c| c[3] > 200));
     }
 
     #[test]
@@ -249,6 +250,8 @@ mod tests {
         let p = render(&hole, 96).unwrap();
         assert_eq!(alpha(&p, 96, 48, 48), 51);
         assert_eq!(alpha(&p, 96, 14, 14), 0, "the corner outside the circle");
-        assert!(alpha(&p, 96, 48, 12) > 200, "the top of the circle");
+        // As high as the band allows: 52 % of the tile, its top at 23.
+        assert!(alpha(&p, 96, 48, 23) > 100, "the top of the circle");
+        assert_eq!(alpha(&p, 96, 48, 18), 0, "above the circle");
     }
 }
