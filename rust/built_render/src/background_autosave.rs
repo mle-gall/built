@@ -142,12 +142,12 @@ fn start_writer(manager: &Obj<'_>, job: &Obj<'_>, prepared: &Obj<'_>) -> PyResul
     Ok(())
 }
 
-fn report(manager: &Obj<'_>, job: &Obj<'_>, error: &str) -> PyResult<()> {
+fn report(manager: &Obj<'_>, job: &Obj<'_>, error: &str, context: &str) -> PyResult<()> {
     let doc = job.get_item("doc")?;
     manager.setattr("last_error", error)?;
     manager
         .getattr("finished")?
-        .call_method1("emit", (doc.call_method0("display_name")?, error))?;
+        .call_method1("emit", (doc.call_method0("display_name")?, format!("{context}. {error}")))?;
     manager
         .py()
         .import("logging")?
@@ -167,7 +167,7 @@ fn publish(
     let doc = job.get_item("doc")?;
     let publication = (|| -> PyResult<()> {
         if !error.is_none() {
-            return report(manager, job, error.extract()?);
+            return report(manager, job, error.extract()?, "Could not write the recovery file");
         }
         if valid(win, job, false)? && win.call_method1("_doc_is_dirty", (&doc,))?.is_truthy()? {
             stage.call_method1("replace", (job.get_item("slot")?,))?;
@@ -186,7 +186,7 @@ fn publish(
     let cleanup = fs::remove_file(stage.extract::<PathBuf>()?);
     manager.setattr("job", py.None())?;
     if let Err(e) = publication {
-        report(manager, job, &e.value(py).to_string())?;
+        report(manager, job, &e.value(py).to_string(), "Could not replace the previous recovery file")?;
     }
     if let Err(e) = cleanup {
         if e.kind() != std::io::ErrorKind::NotFound {
@@ -314,7 +314,7 @@ impl BackgroundAutosave {
             Ok(())
         })();
         if let Err(e) = capture {
-            report(manager, &job, &e.value(py).to_string())?;
+            report(manager, &job, &e.value(py).to_string(), "Could not prepare the model for recovery")?;
             slf.setattr("steps", py.None())?;
             slf.setattr("job", py.None())?;
         }
