@@ -117,3 +117,29 @@ step state
     assert after["camera_distance"] < before["camera_distance"]
     assert ["V", "", False] in after["keystrokes"]
     assert not math.isnan(after["camera_distance"])
+
+
+def test_a_beat_names_its_addons_and_the_player_installs_them_at_start(tmp_path):
+    from scripts.play_beat import install_addons
+
+    beat = compile_beat("addon steel-profiles-en steel-connections-en\naddon steel-profiles-en\npause 100\n")
+    assert beat.addons == ["steel-profiles-en", "steel-connections-en"]
+    assert all(not s.startswith("addon") for s in beat.steps)
+    assert install_addons(tmp_path, []) is None
+    plugin = install_addons(tmp_path, beat.addons)
+    assert plugin == tmp_path / "data/built/plugins/beat_addons.py"
+    assert sorted(p.name for p in (tmp_path / "addons").iterdir()) == [
+        "steel-connections-en.builtpack", "steel-profiles-en.builtpack"]
+    compile(plugin.read_text(), str(plugin), "exec")
+    with pytest.raises(BeatError, match="unknown add-on"):
+        install_addons(tmp_path, ["steel-profiles-xx"])
+
+
+@pytest.mark.window_size(1600, 1000)
+def test_a_steel_beat_starts_with_its_addons_in_my_library(tmp_path):
+    binary = _binary()
+    beat = compile_beat("addon steel-profiles-en steel-connections-en\npause 300\n")
+    result = play(beat, background=True, shots=None, quit_at_end=True, binary=binary, timeout=120)
+    assert result.returncode == 0, result.stderr[-2000:]
+    assert "add-on steel-profiles-en.builtpack: 12 rows in My library" in result.stdout, result.stdout[-2000:]
+    assert "add-on steel-connections-en.builtpack: " in result.stdout
