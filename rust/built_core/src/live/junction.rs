@@ -1807,6 +1807,15 @@ pub(crate) fn labels(scene: &Obj<'_>) -> PyResult<HashMap<String, Vec<(String, S
             .call_method1("row_id", (address,))?
             .extract()?;
         let label: String = g.getattr("name")?.extract()?;
+        // Under a member, its own junctions come first, then the ones nested
+        // in them (a knee, its bolt group, the group's bolt), in one order.
+        let mut depth = 0;
+        let mut up = j.joint.parent.as_deref();
+        while let Some(p) = up.and_then(|p| t.rows.get(p)) {
+            depth += 1;
+            up = p.joint.parent.as_deref();
+        }
+        let label = format!("{depth:02}\u{1f}{label}");
         for member in j
             .joint
             .roles
@@ -1820,6 +1829,14 @@ pub(crate) fn labels(scene: &Obj<'_>) -> PyResult<HashMap<String, Vec<(String, S
                 label.clone(),
                 j.state.clone(),
             ));
+        }
+    }
+    for rows in labels.values_mut() {
+        rows.sort_by(|a, b| a.1.cmp(&b.1).then_with(|| a.0.cmp(&b.0)));
+        for row in rows.iter_mut() {
+            if let Some((_, name)) = row.1.split_once('\u{1f}') {
+                row.1 = name.to_string();
+            }
         }
     }
     Ok(labels)

@@ -31,7 +31,10 @@ def steel_model():
 
 
 def member(library, a, b, **extra):
-    return dict(profile={"library": library}, path=dict(points=[list(a), list(b)]), **extra)
+    # Catalogue sizes come from the add-on packs (addons/), as a user's
+    # installed Library gives them.
+    from tests.addon_cases import profile
+    return dict(profile=profile(library), path=dict(points=[list(a), list(b)]), **extra)
 
 
 def by_name(scene, name):
@@ -83,7 +86,7 @@ def test_a_copied_frame_anchors_its_beam_to_its_own_copied_column():
     apply(history, "create_sweeps", sweeps=[member("en/he200a", (0, 0, 0), (0, 0, 3))])
     column = scene.groups[-1]
     face = facing_face(column, (0, 1, 0))
-    apply(history, "create_sweeps", sweeps=[dict(profile={"library": "en/ipe240"}, path=dict(
+    apply(history, "create_sweeps", sweeps=[dict(profile=member("en/ipe240", (0, 0, 0), (1, 0, 0))["profile"], path=dict(
         points=[[0, 0.095, 2.8], [0, 4.095, 2.8]],
         ends=[{"to": {"path": [column.uid], "id": face}, "extend": True}, [0, 4.095, 2.8]]))])
     beam = scene.groups[-1]

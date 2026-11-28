@@ -371,17 +371,23 @@ fn document_tools_leave_group_edit<'py>(a: &Args<'py>) -> Reply<'py> {
     {
         updated = Some((share.get_item(0)?, share.get_item(1)?));
     }
-    // Copies that share the edited definition: the toast tells only when
-    // others changed too (a junction's assembly has one).
-    let mut count = 0;
-    if let Some((_, proto)) = &updated {
+    // A junction's (or Repeat's) assembly is not a component the user
+    // shares: its Done chip, not a copies toast, says what changed.
+    let recipe_made = |g: &Obj<'_>| -> PyResult<bool> {
+        let ext = g.getattr("ext")?;
+        Ok(ext.is_truthy()? && ext.contains("built.live")?)
+    };
+    let updated = match updated {
+        Some((group, proto)) if !recipe_made(&group)? => Some((group, proto)),
+        _ => None,
+    };
+    let (label, millis) = if let Some((group, proto)) = updated {
+        let mut count = 0;
         for pair in scene.call_method0("placements")?.try_iter()? {
-            if pair?.get_item(0)?.getattr("mesh")?.is(proto) {
+            if pair?.get_item(0)?.getattr("mesh")?.is(&proto) {
                 count += 1;
             }
         }
-    }
-    let (label, millis) = if let Some((group, _)) = updated.filter(|_| count > 1) {
         let kw = fields!(py;"name"=>group.getattr("name")?,"n"=>count);
         (
             module.call_method(
