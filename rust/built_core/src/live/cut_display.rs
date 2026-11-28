@@ -88,62 +88,111 @@ fn mesh_outline(group: &Obj<'_>, frame: DMat4, lines: &mut Vec<[DVec3; 2]>) -> P
 type Segments = Vec<[DVec3; 2]>;
 type Dimensions = Vec<(&'static str, [DVec3; 2])>;
 
-fn notch_axes(path: &[[f64; 3]], span: usize, rotation: f64) -> Option<[DVec3; 2]> {
+struct NotchFrame {
+    ends: [DVec3; 2],
+    axes: [DVec3; 2],
+}
+
+fn notch_axes(path: &[[f64; 3]], span: usize, rotation: f64) -> Option<NotchFrame> {
     let start = DVec3::from(*path.get(span)?);
-    let longitudinal =
-        (DVec3::from(*path.get((span + 1) % path.len())?) - start).try_normalize()?;
+    let end = DVec3::from(*path.get((span + 1) % path.len())?);
+    let longitudinal = (end - start).try_normalize()?;
     let across = DVec3::Z
         .cross(longitudinal)
         .try_normalize()
         .unwrap_or(DVec3::X);
     let up = longitudinal.cross(across);
     let angle = rotation.to_radians();
-    Some([longitudinal, up * angle.cos() - across * angle.sin()])
+    Some(NotchFrame {
+        ends: [start, end],
+        axes: [longitudinal, up * angle.cos() - across * angle.sin()],
+    })
 }
 
 fn cut_edges(
     member: &Obj<'_>,
     uid: &str,
-    axes: Option<[DVec3; 2]>,
-    world: DMat4,
+    frame: Option<NotchFrame>,
 ) -> PyResult<(Segments, Dimensions)> {
-    let mut lines = Vec::new();
-    let mut measured = [None::<(f64, [DVec3; 2])>; 2];
-    for face in member.getattr("mesh")?.getattr("faces")?.try_iter()? {
+    let mesh = member.getattr("mesh")?;
+    let mut selected = Vec::new();
+    for face in mesh.getattr("faces")?.try_iter()? {
         let face = face?;
-        if !face
+        if face
             .getattr("attrs")?
             .call_method1("get", ("built.cut_face",))?
             .eq(uid)?
         {
-            continue;
+            selected.push(face);
         }
-        let ring: Vec<_> = face
-            .getattr("vertices")?
-            .try_iter()?
-            .map(|v| crate::math::xyz(&v?))
-            .collect::<PyResult<_>>()?;
-        for (&a, &b) in ring.iter().zip(ring.iter().cycle().skip(1)) {
-            lines.push([a, b]);
-            let dir = (b - a).normalize_or_zero();
-            if let Some(axes) = axes {
-                for (slot, basis) in measured.iter_mut().zip(axes) {
-                    if dir.dot(basis).abs() < 0.99 {
-                        continue;
-                    }
-                    let length = world.transform_vector3(b - a).length();
-                    if slot.is_none_or(|(best, _)| length > best) {
-                        *slot = Some((length, [a, b]));
-                    }
-                }
+    }
+    if selected.is_empty() {
+        // Older saved clearance faces already have persistent generated IDs,
+        // even when the kernel did not attach a donor to the offset surface.
+        let store = mesh.getattr("_store")?.cast_into::<PyMeshStore>()?;
+        let keys = {
+            let borrow = store.try_borrow()?;
+            let st = &borrow.inner;
+            let generated =
+                eid::intern(geometry::h64(b"built:generated:v1")).map_err(PyValueError::new_err)?;
+            let faces = st.pid_index(Kind::Face);
+            (0..)
+                .map_while(|i| {
+                    let role = format!("cut/{uid}/clearance/{i}");
+                    let id = eid::pack(
+                        generated,
+                        geometry::h64(role.as_bytes()) & eid::COUNTER_MASK,
+                    );
+                    faces.get(&id).map(|&f| st.key(Kind::Face, f))
+                })
+                .collect::<Vec<_>>()
+        };
+        let face_view = member
+            .py()
+            .import("built_core.store_mesh")?
+            .getattr("FaceView")?;
+        for key in keys {
+            selected.push(face_view.call1((&mesh, key))?);
+        }
+    }
+    let mut lines = Vec::new();
+    for face in selected {
+        for ring in
+            std::iter::once(Ok(face.getattr("vertices")?)).chain(face.getattr("holes")?.try_iter()?)
+        {
+            let points = ring?
+                .try_iter()?
+                .map(|p| crate::math::xyz(&p?))
+                .collect::<PyResult<Vec<_>>>()?;
+            for (&a, &b) in points.iter().zip(points.iter().cycle().skip(1)) {
+                lines.push([a, b]);
             }
         }
     }
-    let dimensions = measured
-        .into_iter()
-        .zip(["Length", "Depth"])
-        .filter_map(|(measurement, label)| measurement.map(|(_, edge)| (label, edge)))
-        .collect();
+    let mut dimensions = Dimensions::new();
+    if let (Some(frame), Some(first)) = (frame, lines.first()) {
+        for (axis, label) in frame.axes.into_iter().zip(["Length", "Depth"]) {
+            let (mut low, mut high) = (first[0], first[0]);
+            for &point in lines.iter().flatten() {
+                if point.dot(axis) < low.dot(axis) {
+                    low = point;
+                }
+                if point.dot(axis) > high.dot(axis) {
+                    high = point;
+                }
+            }
+            // A flat end cut leaves a single cross-section. Measure its
+            // setback from the original end of the selected sweep span.
+            if label == "Length" && (high - low).dot(axis).abs() < 1e-7 {
+                let [a, b] = frame.ends.map(|end| (end - low).dot(axis));
+                high = low + axis * if a.abs() < b.abs() { a } else { b };
+            }
+            let extent = (high - low).dot(axis);
+            if extent.abs() > 1e-8 {
+                dimensions.push((label, [low, low + extent * axis]));
+            }
+        }
+    }
     Ok((lines, dimensions))
 }
 
@@ -196,7 +245,7 @@ pub(crate) fn body_preview(scene: &Obj<'_>, args: &Value) -> PyResult<Value> {
                 args["span"].as_u64().unwrap_or(0) as usize,
                 sweep.rotation,
             );
-            let (lines, dims) = cut_edges(&result.get_item(0)?, "preview", axis, world)?;
+            let (lines, dims) = cut_edges(&result.get_item(0)?, "preview", axis)?;
             let lines: Vec<_> = lines
                 .into_iter()
                 .map(|ab| ab.map(|p| world.transform_point3(p)))
@@ -438,7 +487,7 @@ fn outline(
                     let path =
                         reference::sweep_path(scene, t, target, &sweep.path)?.unwrap_or_default();
                     let axis = notch_axes(&path, row.span.unwrap_or(0), sweep.rotation);
-                    (lines, dimensions) = cut_edges(&member, &row.uid, axis, world)?;
+                    (lines, dimensions) = cut_edges(&member, &row.uid, axis)?;
                 }
                 if lines.is_empty() {
                     mesh_outline(&g, frame, &mut lines)?;

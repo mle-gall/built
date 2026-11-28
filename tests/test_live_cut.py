@@ -67,6 +67,31 @@ def test_body_operations_preserve_both_placements(operation):
     assert solid_volume(target) == pytest.approx(original)
 
 
+def test_saved_clearance_without_face_attributes_keeps_its_frame(tmp_path):
+    from built_core import command_protocol
+    scene = Scene()
+    h = History(scene)
+    apply(h, "create_sweeps", sweeps=[
+        member({"library": "en/he200a"}, [[0, -.75, .14], [0, .30, .14]]),
+        member({"library": "en/ipe200"}, [[3.86, 0, 0], [.00325, 0, 0]])])
+    body, target = scene.groups
+    apply(h, "live_set", row=dict(kind="cut", uid="c070000000000021", owner=target.uid,
+                                  cutter={"body": body.uid}, operation="subtract", clearance=2))
+    scene.select([target])
+    frame, = command_protocol.live_cut_display(scene)
+    assert {label: size for _, size, label in frame["dimensions"]} == pytest.approx(
+        {"Length": .09875, "Depth": .057})
+    for face in target.mesh.faces:
+        if "built.cut_face" in face.attrs:
+            del face.attrs["built.cut_face"]
+    path = tmp_path / "previous.built"
+    igz.save_scene(scene, path)
+    previous = Scene()
+    igz.load_into(previous, path)
+    previous.select([previous.groups[1]])
+    assert command_protocol.live_cut_display(previous)[0]["dimensions"] == frame["dimensions"]
+
+
 def test_end_plate_follows_a_separate_host(tmp_path):
     scene = Scene()
     h = History(scene)

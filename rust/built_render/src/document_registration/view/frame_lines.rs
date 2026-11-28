@@ -914,7 +914,7 @@ pub(super) fn cutter_primitives<'py>(view: &Obj<'py>, scene: &Obj<'py>) -> Reply
             let pixel = view.call_method1("_world_to_pixel",(vec3(py,&at)?,))?;
             if let Ok((x,y)) = pixel.extract::<(f64,f64)>() {
                 let label = format!("{} {}", py.import("built_core.i18n")?.call_method1("tr",(caption,))?, py.import("built_core.units")?.call_method1("fmt_len",(length,))?);
-                result.append(primitive(py, ("text", ((x+4.,y-4.),), "#f5b84a"), Some(fields!(py; "text" => label)))?)?;
+                result.append(primitive(py, ("text", ((x+6.,y-6.),), "#f5b84a"), Some(fields!(py; "text" => label, "fill" => "#e0212325")))?)?;
             }
         }
         for grip in item.get_item("grips")?.try_iter()? {

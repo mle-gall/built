@@ -74,7 +74,7 @@ def profile_probe(app):
         with (folder / "samples.jsonl").open("a") as stream:
             print(json.dumps(dict(members=members, cuts=[r for r in rows if r["kind"] == "cut"],
                                   prompt=tool._state("prompt"), target=tool._state("target"),
-                                  lines=len(preview["lines"]), faces=len(preview["faces"]))), file=stream)
+                                  sizes=tool._state("cut_sizes"), lines=len(preview["lines"]), faces=len(preview["faces"]))), file=stream)
 
     def recovery():
         app.window._autosave_timer.start(200)
@@ -112,7 +112,7 @@ def launch_window(folder, steps, size="1600x1000"):
 def library_placement(profile, start, finish, start_view, end_view, size):
     tab, search, row = ("515 166", "1200 166", "540 287") if size.startswith("1600") else ("414 128", "1056 128", "416 250")
     return ["click-command library", "wait 200", "click "+tab, "wait 150", "click "+search,
-            "type " + profile, "wait 180", "click "+row, "key enter", "wait 180",
+            "type " + profile, "wait 180", "click "+row, "wait 180",
             start_view, "wait 200", "move " + start, "click " + start, end_view, "wait 220", "move " + finish, "click " + finish,
             "key escape", "tool select", "wait 260"]
 
@@ -121,15 +121,19 @@ def exercise_connection(folder, layout, preset, *, screenshots=False, autosave=F
     column = [[0, 0, -.22], [0, 0, .3]]
     side = .09 if layout == "beside" else 0
     ends = {"touch": .00325, "gap": .03825, "overrun": -.035, "beside": -.42, "corner": 0,
-            "flange": -.095}
+            "flange": -.095, "cope_end": .00325}
     beam = [[3.86, side, 0], [ends[layout], side, 0]]
     if layout == "corner":
         column = [[0, -.45, 0], [0, 0, 0]]
+    elif layout == "cope_end":
+        column = [[0, -.75, .14], [0, .30, .14]]
     elif layout == "flange":
         beam = [[0, -3.85, 0], [0, -.095, 0]]
     picks = [[.24, side, .1], [.00325, 0, .165]]
     if layout == "corner":
         picks[1] = [0, -.14, .1]
+    elif layout == "cope_end":
+        picks[1] = [0, -.14, .235]
     elif layout == "flange":
         picks = [[0, -.23, .1], [.04, -.095, .16]]
     points = column + beam + picks
@@ -176,6 +180,8 @@ def exercise_connection(folder, layout, preset, *, screenshots=False, autosave=F
     if autosave:
         steps += ["tool select", action+"4", "wait 1400", action+"6", "state", "capture recovery",
                   f"menu save_to:{folder}/Manual.built", "state"]
+    if screenshots and preset == "Cope":
+        steps += ["tool select", "wait 600", "move "+pixels[4], "click "+pixels[4], "wait 250", "capture selected"]
     if screenshots:
         steps += ["tool select", "wait 600", "move "+pixels[5],
                   "click "+pixels[5], "wait 120", "menu hide", "wait 180", "capture beam"]
@@ -187,7 +193,7 @@ def exercise_connection(folder, layout, preset, *, screenshots=False, autosave=F
 @pytest.mark.skipif(os.getenv("BUILT_WINDOW_TESTS") != "1", reason="requires native window")
 @pytest.mark.parametrize(("layout","preset"), [
     ("flange", None), ("touch", "Penetration"), ("touch", "Flush"), ("touch", None), ("gap", None), ("overrun", None), ("beside", None),
-    ("touch", "Cope"), ("beside", "Cope"), ("gap", "End plate"),
+    ("touch", "Cope"), ("beside", "Cope"), ("cope_end", "Cope"), ("gap", "End plate"),
     ("beside", "Penetration"), ("corner", "Mitre"),
 ])
 def test_library_connection(tmp_path, layout, preset):
@@ -202,6 +208,9 @@ def test_library_connection(tmp_path, layout, preset):
         assert beam["volume"] == pytest.approx(.011, abs=.00013)
     assert hover["lines"] > 12 and hover["faces"] == 0
     assert not preview["cuts"]
+    if preset == "Cope" and layout in ("touch", "cope_end"):
+        expected = (.002, .2) if layout == "touch" else (.09875, .057)
+        assert dict(preview["sizes"]) == pytest.approx(dict(zip(("Length", "Depth"), expected)), abs=1e-6)
     assert preview["faces"] == (1 if preset == "End plate" else 0)
     cut = next(r for r in result["cuts"] if r["owner"] == beam["owner"])
     new_stock, new_beam = result["members"]
