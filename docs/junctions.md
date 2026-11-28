@@ -291,13 +291,19 @@ replaces them with references to the junction's frames and its derived uids.
 | `class` | the role's record class is in the list (empty: any) |
 | `profile` | the role's profile library key, or family, is in the list; a drawn profile matches only by `size` |
 | `size` | every listed dimension is inside its range (mm) |
-| `face`, `end` | the contact face role, or which end meets (`start`, `end`, `any`) |
+| `face` | the contact face role on Main (`flange_outer`, `web`…); a Main binding on a flange names it, so bolt grips measure through it |
+| `end` | which end meets (`start`, `end`, `any`), checked only with `direction: "exact"`: a member drawn the other way binds its other end |
 | `angle` | the angle between Joining and Main (or the rule's `about` pair) is within `value ± tol`; default tol 2° (owner decision 4) |
-| `mirror` | `allow` (default) or `exact` |
+| `mirror` | `allow` (default) or `exact`; with `exact`, the meeting's hand must equal `hand` |
+| `hand` | the source meeting's mirror class (±1, the side of Main's section the other comes from), written at capture; a meeting of the other hand is "mirrored" |
+| `arrangement` | for `corner` rules: `tee` matches an end on a run; without it a corner rule matches L corners only |
 | `offset` | the Joining axis passes within `tol_mm` of where the detail expects it (an eccentric beam does not match a centred detail) |
 
 A rule is evaluated by the meeting index (§4.3); a near miss is a meeting that
 fails exactly one criterion, reported with the value that would include it.
+`offset` without `value` expects 0 mm. On a symmetric meeting (end to end,
+a crossing at mid spans, an L corner) equal fits take the thicker member,
+then the older one, as Main.
 
 ### 2.7 Recursion: fasteners, holes, welds, glue
 
@@ -543,8 +549,8 @@ gives candidate pairs. A classifier labels each pair:
 |---|---|
 | `end_face` | an end of B lies within tolerance of A's envelope surface, B's axis is at ≥ 10° to A's; main = A |
 | `end_end` | two ends within the larger envelope radius; mitre or apex when the axes are at < 175°, splice when nearly collinear |
-| `crossing` | the axes' closest points are interior to both (outside their end zones) and within the sum of half depths + tolerance: purlin on rafter (stacked), half-lap (interpenetrating) |
-| `corner` | `end_end` or `end_face` between two planar members (walls: height ≫ thickness): L corner or tee |
+| `crossing` | the axes' closest points are interior to both (outside their end zones) and within the sum of half depths + tolerance: purlin on rafter (stacked), half-lap (interpenetrating). A **seated end** (a purlin end bearing on a rafter's top flange, its axis along the face) is a crossing with the end named, because `end_face`'s frame needs the axis to pierce the face; two ends that both sit on one member meet that member, not each other |
+| `corner` | `end_end` or `end_face` between two planar members (walls: height ≫ thickness): an L (two ends) or a tee (an end on a run) |
 | `base` | an end of a member, or a wall's bottom face, on the top face of a slab or footing |
 | `hosted` | an existing host relation (an Opening cut, a `wall_host` marker), or a hostable component (door, window, sleeve) whose box penetrates the host's thickness |
 | `parts` | not detected model-wide: found only inside a junction's own parts (plies under a bolt, a plate on a member) |
@@ -552,7 +558,9 @@ gives candidate pairs. A classifier labels each pair:
 Each meeting gets:
 
 - a **key**, stable while its members exist:
-  `h64("built:meeting:v1:<kind>:" + sorted [(placement uid path, end or contact face role)])`.
+  `h64("built:meeting:v1:<kind>:" + sorted "<uid path>|<tag>")`, the tags
+  `start`, `end`, `side`, `mid`, `top`, `bottom`, `host`, `hosted`. The
+  contact face is not in the key, so a skip survives a rotated section.
   Skips and Follow are stored by this key.
 - a **signature** for grouping and matching, independent of modelling
   direction: `(kind, canonical role descriptors, angle bucket, mirror
@@ -606,8 +614,9 @@ Suggestion { detail: (uid, rev), meeting: key, roles: binding map,
 Review     { detail, suggestions, ticked: bitset, ghosts: LRU<meeting key, preview> }
 ```
 
-- `why` atoms render the review list's "mirrored", "sized differently: IPE
-  270", "angle 74.2°".
+- `why` atoms render the review list's "mirrored" (the meeting's hand is not
+  the rule's `hand`), "sized differently: IPE 270" (only when the rule names
+  one catalogue size), "angle 74.2°".
 - **Ghosts** are the junction evaluated into the preview layer
   (`tools/preview.rs`), not committed. The 32 nearest visible ones are built
   eagerly; the rest when they scroll into view or are hovered.
@@ -1081,28 +1090,11 @@ Section axes are read in the member's canonical direction, so a member
 drawn the other way meets the same way; its `hand` (mirror class) is the
 side of the main member's section the other comes from.
 
-The classifier adds two cases to §4.2. A seated end (a purlin end bearing
-on a rafter's top flange, its axis along the face) is a `crossing` with
-the end named, because J0's `end_face` frame needs the axis to pierce the
-face. Two ends that both sit on one member (purlins butting over a rafter)
-meet that member, not each other. A `base` end or wall bottom may lie
-inside the slab's thickness. A `corner` is an L (two ends) or a tee (an
-end on a run); a detail whose values say `"arrangement": "tee"` matches
-tees, other corner details match L corners only.
-
-Keys are `h64("built:meeting:v1:<kind>:" + sorted "<uid path>|<tag>")`
-with tags `start`, `end`, `side`, `mid`, `top`, `bottom`, `host` and
-`hosted`. The contact face is not in the key, so a skip survives a rotated
-section. The signature (By arrangement) is the kind, `class:profile:face
-or end` per role (sorted for symmetric kinds) and the angle to the degree;
-mirrored meetings share a group.
-
-Rule matching follows §2.6 with these readings: `rule.hand` is the source
-meeting's mirror class (the "mirrored" atom; `mirror: "exact"` filters on
-it); a role's `end` is checked only with `direction: "exact"`; `offset`
-without `value` expects 0 mm. Equal fits on a symmetric meeting take the
-thicker member, then the older one, as main. A main binding on a flange
-names `face: "flange_outer"`, so bolt grips measure through it.
+Seated ends, L and tee corners, meeting keys without the contact face, and
+the rule's `hand`, `arrangement` and `end` readings are in §4.2 and §2.6. A
+`base` end or wall bottom may lie inside the slab's thickness. The signature
+(By arrangement) is the kind, `class:profile:face or end` per role (sorted for
+symmetric kinds) and the angle to the degree; mirrored meetings share a group.
 
 The index follows the document through `Doc.touched`, the keys written
 since a reader asked: each touched subtree is walked again and only the
@@ -1195,6 +1187,81 @@ Joist hanger) and Generic (Corner mitre, Butt with screws). The
 Architecture pack is J4's. `tests/junction_starter_cases.py` draws the
 members for each one in an empty document.
 
+### Capture and editing (J2)
+
+**Gathering** (`live/junction/capture.rs`) starts from a seed: a cut row, a
+part, a junction, or the two members. The seed's meeting is the index
+meeting whose members the seed references, nearest to it; meetings that
+involve a part (`IfcPlate`, fasteners, accessories) are parts of a meeting,
+never one. Then, until nothing is added (at most 200 items):
+
+| Gathered | When |
+|---|---|
+| Cut on either member | its anchor or cutter references the other member or a gathered part |
+| Part (a sweep classed `IfcPlate`, `IfcFastener`, `IfcMechanicalFastener`, `IfcDiscreteAccessory`, `IfcBuildingElementPart`) | it follows both members, or a member and a gathered part (*anchored*); or it rests on one member near the meeting (*near*, still ticked); a part with no anchor near the meeting is listed unticked |
+| Junction (a bolt group, a weld) | every role is a member or a gathered part, and one is a part |
+
+A part bound in a junction role while anchored to a face of another role's
+member (a plate drawn on a column flange, then bolted through that flange)
+would read the member's result while the junction cuts it. Its anchored end
+is pinned where it is and `path.rests_on` keeps the member, so capture still
+gathers it with that member.
+
+**Conversion** keeps every uid: the detail is inserted, the gathered rows are
+owned under their template keys, and expansion adopts them (`contents`
+records their uids; later uses derive theirs). Moved placements and their
+descendants get their current GlobalId written into the record first. A plane
+cut is re-anchored to the role frame whose Z is its normal (`meet`, the other
+role's `contact`, its own `contact` or `end`) with the offset that keeps the
+plane; a part keeps its pose as `at: {"frame": "@meet", "offset", "basis"}`
+(the part's axes in the frame, column-major 3 × 3) and its section's turn,
+mirror and attachment; a part without a preset carries its section and record
+inline (`part.sweep`, `part.record`). A child junction keeps its detail and
+binds its roles to `@main`, `@joining` or a part's key.
+
+**Parameters found**: a part's thickness and section dimensions, non-zero
+offsets, a cut's gap or clearance, and a child junction's own parameters.
+Equal values of the same field merge. Relations, best first: equal to an
+earlier parameter, equal to a role dimension, that dimension plus a multiple
+of 5 mm up to half of it, then × ½ or × 2. The popover shows the relation in
+words ("= R-1 width + 30"); a click tries the next one, then a fixed value.
+The rule takes the meeting kind, each role's catalogue series within one step
+(`profile` and `size.height`), the angle ± 2°, `mirror: allow` with the
+source `hand`, `direction: ignore` and the source offset ± 5 mm.
+
+**Along a Repeat** (Q1): one row with `along: {"repeat", "end", "skips",
+"stations"}`. Its children are ordinary junctions, one per copy and end
+(`<copy uid>:<end>`), each bound to the member that copy meets; a station's
+own values are its child's overrides, kept by that key when copies change. A
+step that adds or removes copies re-expands the row in the same History step.
+
+**Editing.** The record shows status with its ways out (Widen the detail,
+Keep as custom), roles with Swap, "All N · This one" (All writes a detail
+revision; This one writes `overrides`, marked ●), the parts, and Edit inside,
+Select all, Similar…, Upgrade to detail, Reset, Detach, Release and Release
+all. Inside a junction (double-click it, or Edit inside) the Cut tool's cuts
+are this use's (`local.added`); leaving with new cuts or parts asks "Apply to
+all N · This one only". A cut row dragged onto a junction's tree row is
+adopted with its anchor rewritten to the junction's frame. Release is one
+level; Release all bakes everything (Q5).
+
+**The Junction tool** (rail, Draw › Junction): the chip names the detail,
+the meeting and its fit; hovering shows the detail's ghost; a click applies a
+fitting detail, Alt-click applies it outside its rule (`local.forced`, the
+rule is not checked); ↓ cycles the details that fit the meeting; L opens the
+junction details. On a Repeat copy it asks once: every copy, both ends; every
+copy, this end; this meeting only. A detail between parts (a bolt group)
+takes its plies by pick order.
+
+The project Junctions view (the tree's last section) lists uses by detail,
+by arrangement (§4.2 signatures with how many are detailed), or the
+problems; its context menu switches.
+
+| Protocol | |
+|---|---|
+| Verbs | `junction_capture(seed, options)` (`include`, `swap`, `name`, `tol`, `mirror`, `exprs`, `sizes`), `junction_adopt(junction, rows, detail=False)`, `junction_upgrade(uid)`, `junction_apply(detail, bindings, force=False, along=None)` |
+| Queries | `junction_capture_preview(scene, seed, options)`, `junction_capture_offers(scene)`, `junction_record(scene, uid)` |
+
 ## 13. Risks
 
 | Risk | Mitigation |
@@ -1213,8 +1280,8 @@ members for each one in an empty document.
 
 | # | Question | Recommendation |
 |---|---|---|
-| Q1 | A junction applied along a Repeat (the purlin cleats): one row with per-station overrides, or one row per meeting? | **One row with `along`**, like a repeated cutter: new copies get their cleat in the same step, skips and overrides stay with their purlin by station key, and the file stays small. A station that needs a different detail is detached into its own junction. |
+| Q1 | A junction applied along a Repeat (the purlin cleats): one row with per-station overrides, or one row per meeting? | **Implemented in J2: one row with `along`**, like a repeated cutter: new copies get their cleat in the same step, skips and overrides stay with their purlin by station key, and the file stays small. A station that needs a different detail is detached into its own junction. |
 | Q2 | IFC for child junctions: aggregate their parts flat into the top junction's assembly, or nest one `IfcElementAssembly` per child junction? | **Flat.** One assembly per connection is what Tekla, Advance Steel and most checkers expect; each child junction still writes its own `IfcRelConnectsWithRealizingElements` (plate to rafter realized by the weld; plate to column realized by the bolts), and `Built_Junction` on each part names the child detail it came from. |
 | Q3 | Bolt, nut and washer geometry: generated from standard tables and shared per size, or one Library component file per size? | **Implemented in J1.** ISO 4014/4017 bolts use generated, shared definitions keyed by standard, diameter, length and grip. Grip sets the nut and washer positions. Library components stay for hangers, brackets and couplers. |
 | Q4 | Should the Wall tool apply the corner detail when a wall ends on another wall? | **Implemented in J4**, as part of the Wall tool's own commit, with the marker and Undo: it is the tool's visible behaviour, not a silent suggestion. Existing walls get corners only through the review. |
-| Q5 | Release: one level (cuts stay live cut rows, a plate stays a sweep), or bake everything? | **One level**, consistent with Repeat's Release; "Release all" in the same menu bakes everything in one step. |
+| Q5 | Release: one level (cuts stay live cut rows, a plate stays a sweep), or bake everything? | **Implemented in J2: one level**, consistent with Repeat's Release; "Release all" in the same menu bakes everything in one step. |
