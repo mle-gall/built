@@ -651,15 +651,16 @@ pub mod molecules {
         draw_underline_tabs(ui, tabs, at, true)
     }
 
-    /// The least an inline tab row can take: every label, the current tab's
-    /// count, the tabs drawn close together.
-    pub fn underline_tabs_least(ui: &egui::Ui, tabs: &[(String, String, bool)], at: usize) -> f32 {
+    /// What an inline tab row takes with every label and the current tab's
+    /// count: drawn close together (the least), or with its usual room.
+    pub fn underline_tabs_width(ui: &egui::Ui, tabs: &[(String, String, bool)], at: usize, least: bool) -> f32 {
+        let gap = if least { TAB_GAP_LEAST } else { TAB_GAP };
         tabs.iter()
             .enumerate()
             .map(|(i, t)| {
                 let label = ui.painter().layout_no_wrap(t.0.clone(), strong(TYPE_BODY), INK).size().x;
                 let count = if i == at && !t.1.is_empty() { ui.painter().layout_no_wrap(t.1.clone(), meta(), FAINT).size().x + 4.0 } else { 0.0 };
-                label + count + TAB_GAP_LEAST
+                label + count + gap
             })
             .sum()
     }

@@ -1404,8 +1404,11 @@ impl Ui {
         // together, its verbs and menus whole. The title is the first to go.
         let title = if spec.title.is_empty() { 0.0 } else { ui.painter().layout_no_wrap(spec.title.clone(), heading(), INK).size().x + SPACE_S + SPACE_M };
         let verbs: f32 = spec.verbs.iter().filter(|_| spec.id != "start").map(|v| kit::panel_button_width(ui, &v.label, &v.key) + SPACE_S).sum();
-        let least_tabs = if tabs.is_empty() { 0.0 } else { kit::underline_tabs_least(ui, &tabs, current) + 2.0 * SPACE_S };
-        let left_least = least_tabs + verbs + menu_width(ui, true);
+        let tabs_width = |ui: &egui::Ui, least: bool| if tabs.is_empty() { 0.0 } else { kit::underline_tabs_width(ui, &tabs, current, least) + 2.0 * SPACE_S };
+        let left_least = tabs_width(ui, true) + verbs + menu_width(ui, true);
+        // Room goes to the tabs' usual spacing and the title before the
+        // search grows past its least.
+        let left_easy = tabs_width(ui, false) + verbs + menu_width(ui, true) + title;
         // The right group first: the left one takes what it leaves, so a
         // narrow sheet with many tabs never prints one over the other.
         let mut right_edge = inner.max.x;
@@ -1429,7 +1432,7 @@ impl Ui {
             if let Some(s) = spec.search.as_ref().filter(|_| spec.id != "start") {
                 let sw = (inner.width() * 0.30).clamp(200.0, 320.0);
                 // The search yields to the tabs, verbs and menus beside it.
-                let width = sw.min((ui.available_width() - menu_width(ui, false) - SPACE_M - left_least - title).max(SEARCH_LEAST));
+                let width = sw.min((ui.available_width() - menu_width(ui, false) - SPACE_M - left_easy).max(SEARCH_LEAST));
                 Self::lsheet_search(ui, st, s, width);
             }
             if spec.search.is_some() { ui.add_space(SPACE_XS); }

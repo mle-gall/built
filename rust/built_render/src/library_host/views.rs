@@ -125,7 +125,7 @@ pub(crate) fn view_rows(data: &Value) -> Vec<(String, String, String)> {
     vec![
         ("Camera".to_owned(), kind, String::new()),
         ("Style".to_owned(), data["style"]["name"].as_str().unwrap_or("Current style").to_owned(), String::new()),
-        ("Tags".to_owned(), hidden, String::new()),
+        ("Visible tags".to_owned(), hidden, String::new()),
         ("Sections".to_owned(), format!("{cut} · {planes}"), String::new()),
     ]
 }
@@ -454,30 +454,34 @@ pub(crate) fn block_picture(data: &Value) -> Value {
 pub(crate) fn view_picture(data: &Value) -> Value {
     let perspective = data["camera"]["perspective"].as_bool().unwrap_or(true);
     let two_point = data["camera"]["two_point"].as_bool().unwrap_or(false);
-    let (yaw, pitch) = (35f64.to_radians(), if two_point { 0.0 } else { 26f64.to_radians() });
+    let (yaw, pitch) = (35f64.to_radians(), 26f64.to_radians());
     let project = |p: [f64; 3]| -> [f64; 2] {
         // Turned about the vertical, then tipped towards the eye.
         let (x, y) = (p[0] * yaw.cos() - p[1] * yaw.sin(), p[0] * yaw.sin() + p[1] * yaw.cos());
         let (up, depth) = (p[2] * pitch.cos() + y * pitch.sin(), y * pitch.cos() - p[2] * pitch.sin());
-        let k = if perspective { 3.4 / (3.4 + depth) } else { 1.0 };
-        [x * k, (up + if two_point { 0.35 * (1.0 - k) } else { 0.0 }) * if two_point { 1.0 } else { k }]
+        let k = if perspective || two_point { 3.4 / (3.4 + depth) } else { 1.0 };
+        [x * k, up * k]
     };
     let (a, b, c) = (1.3, 0.9, 0.8);
     let corner = |i: usize, z: f64| [if i == 1 || i == 2 { a } else { -a } * 0.5, if i >= 2 { b } else { -b } * 0.5, z];
+    // Two-point: the verticals stay upright, each corner above its foot.
+    let at = |i: usize, z: f64| -> [f64; 2] {
+        let p = project(corner(i, z));
+        if two_point { [project(corner(i, -c * 0.5))[0], p[1]] } else { p }
+    };
     let mut lines = Vec::new();
-    let mut ring = |z: f64| {
+    let mut heights = vec![-c * 0.5, c * 0.5];
+    if data["section"]["active"].is_object() {
+        heights.push(c * 0.12);
+    }
+    for z in heights {
         for i in 0..4 {
-            let (p, q) = (project(corner(i, z)), project(corner((i + 1) % 4, z)));
+            let (p, q) = (at(i, z), at((i + 1) % 4, z));
             lines.push([p[0], p[1], q[0], q[1]]);
         }
-    };
-    ring(-c * 0.5);
-    ring(c * 0.5);
-    if data["section"]["active"].is_object() {
-        ring(c * 0.12);
     }
     for i in 0..4 {
-        let (p, q) = (project(corner(i, -c * 0.5)), project(corner(i, c * 0.5)));
+        let (p, q) = (at(i, -c * 0.5), at(i, c * 0.5));
         lines.push([p[0], p[1], q[0], q[1]]);
     }
     line_drawing(&lines)

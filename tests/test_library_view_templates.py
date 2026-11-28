@@ -82,7 +82,7 @@ def test_save_view_as_template_takes_the_same_destinations_and_applies_from_the_
     assert (row["source"], row["name"]) == ("project", "Plan view")
     facts = {r[0]: r[1] for r in row["defaults"]}
     assert facts["Camera"] == "Parallel" and facts["Style"] == "Working drawing"
-    assert facts["Tags"] == "Hidden: Furniture" and facts["Sections"] == "Cut by Plan cut · planes hidden"
+    assert facts["Visible tags"] == "Hidden: Furniture" and facts["Sections"] == "Cut by Plan cut · planes hidden"
     assert (tmp_path / "Library" / "scenes").is_dir()
     # Its tile is drawn from the setup itself (a box as the camera shows one, cut across).
     assert row["thumb"].startswith("sketch:")
