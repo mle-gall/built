@@ -549,7 +549,18 @@ pub fn thumbnail(key: &str, px: u32) -> Result<Vec<u8>, &'static str> {
     let fastener = [40, 44, 52];
     // The members, by meeting.
     let (meet_x, meet_y) = match meeting {
-        "end_face" | "parts" => {
+        // A weld: a member standing on a plate; fasteners: two plies.
+        "parts" if flags.contains('w') && !flags.contains('b') => {
+            fill(&mut pix, member, 10., 72., 80., 12.);
+            fill(&mut pix, joining, 38., 10., 24., 62.);
+            (50., 72.)
+        }
+        "parts" => {
+            fill(&mut pix, member, 10., 40., 80., 12.);
+            fill(&mut pix, joining, 10., 54., 80., 12.);
+            (50., 53.)
+        }
+        "end_face" => {
             fill(&mut pix, member, 14., 8., 16., 84.);
             fill(&mut pix, joining, 34., 40., 58., 20.);
             (32., 50.)
@@ -601,6 +612,15 @@ pub fn thumbnail(key: &str, px: u32) -> Result<Vec<u8>, &'static str> {
                 "end_end" | "corner" => fill(&mut pix, part, meet_x - 3., meet_y - 2., 6., 30.),
                 _ => fill(&mut pix, part, meet_x - 2., 26., 6., 48.),
             },
+            'b' if meeting == "parts" => {
+                fill(&mut pix, fastener, 44., 34., 12., 6.);
+                fill(&mut pix, fastener, 47., 34., 6., 38.);
+                fill(&mut pix, fastener, 44., 66., 12., 6.);
+            }
+            'w' if meeting == "parts" => {
+                fill(&mut pix, [230, 140, 50], 33., 66., 5., 6.);
+                fill(&mut pix, [230, 140, 50], 62., 66., 5., 6.);
+            }
             'b' => {
                 let spots: &[(f32, f32)] = match meeting {
                     "base" => &[(32., 73.), (68., 73.)],
