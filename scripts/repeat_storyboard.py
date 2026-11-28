@@ -19,13 +19,13 @@ def build(folder):
         if not result["ok"]:
             raise ValueError(result)
 
-    def member(name, start, end, profile="basic/timber", **params):
+    def member(name, start, end, profile="basic/rectangle", **params):
         spec = {"profile": {"library": profile, "params": params},
                 "path": {"points": [start, end]}, "attachment": "centre"}
         apply("create_sweeps", sweeps=[spec])
         g = scene.groups[-1]
         g.name = name
-        if profile == "basic/timber":
+        if profile == "basic/rectangle":
             g.material = {"mat": "Glulam", "color": [.74, .53, .32]}
         else:
             g.material = {"mat": "Wall panel", "color": [.80, .81, .79]}

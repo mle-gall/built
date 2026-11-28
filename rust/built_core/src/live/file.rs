@@ -98,13 +98,43 @@ struct FileRows {
     rows: Vec<Row>,
 }
 
+/// Older sweeps saved just a catalogue key and the dimensions the user
+/// overrode. Recover the base dimensions from an installed pack once on open.
+fn installed_profiles(scene: &Obj<'_>) -> PyResult<HashMap<String, profile::Profile>> {
+    let mut sizes = HashMap::new();
+    let rows = scene.py().import("built_render.wgpu_library")?
+        .call_method1("library_items", ("presets", scene))?;
+    for row in rows.try_iter()? {
+        let preset = row?.get_item("preset")?;
+        if preset.call_method1("get", ("profile_size", false))?.is_truthy()? {
+            let size: profile::Profile = json(&preset.get_item("values")?.get_item("profile")?)?;
+            sizes.entry(size.library.clone()).or_insert(size);
+        }
+    }
+    Ok(sizes)
+}
+
+fn recover_size(profile: &mut profile::Profile, scene: &Obj<'_>, sizes: &mut Option<HashMap<String, profile::Profile>>) {
+    if profile.sketch.is_some() || profile.drawing.is_some() || !profile.family.is_empty()
+        || profile.library.is_empty() || profile::built_in(&profile.library) { return; }
+    if let Some(size) = sizes.get_or_insert_with(|| installed_profiles(scene).unwrap_or_default()).get(&profile.library) {
+        let mut recovered = size.clone();
+        recovered.params.append(&mut profile.params);
+        *profile = recovered;
+    }
+}
+
 fn load_rows(scene: &Obj<'_>, ext: &Bound<'_, PyDict>, rows: Vec<Row>) -> PyResult<bool> {
     let py = scene.py();
     let mut t = LiveTable::default();
     t.groups = Arc::new(index(root(scene)?));
     let mut stamps = HashMap::new();
     let attr = doc::attr_id("ext").map_err(PyValueError::new_err)?;
+    let mut sizes = None;
     for mut row in rows {
+        if let Some(sweep) = row.sweep.as_mut() {
+            recover_size(&mut sweep.profile, scene, &mut sizes);
+        }
         let id = row.uid.clone();
         if row.uid.is_empty()
             || row.v != 1
@@ -180,7 +210,15 @@ fn load_rows(scene: &Obj<'_>, ext: &Bound<'_, PyDict>, rows: Vec<Row>) -> PyResu
                 .ok()
                 .and_then(|r| json::<Vec<presets::Preset>>(&r).ok())
             {
-                for p in rows {
+                for mut p in rows {
+                    if let Some(v) = p.values.get_mut("profile") {
+                        if let Ok(mut profile) = serde_json::from_value::<profile::Profile>(v.clone()) {
+                            if profile.family.is_empty() && !profile.library.is_empty() && !profile::built_in(&profile.library) {
+                                recover_size(&mut profile, scene, &mut sizes);
+                                if !profile.family.is_empty() { *v = serde_json::json!(profile); }
+                            }
+                        }
+                    }
                     Arc::make_mut(&mut t.presets).insert(p.uid.clone(), p);
                 }
                 ext.del_item("built.presets")?;

@@ -1,0 +1,240 @@
+{
+  "uid": "3774c4d6bf717d74",
+  "name": "End plate, 4 bolts",
+  "pack": "Steel connections · EN",
+  "primitive": "junction",
+  "rev": 1,
+  "values": {
+    "meeting": "end_face",
+    "roles": {
+      "main": {
+        "name": "Column",
+        "prompt": "The member whose flange is met"
+      },
+      "joining": {
+        "name": "Beam"
+      }
+    },
+    "params": [
+      {
+        "key": "plate_t",
+        "expr": "15",
+        "name": "Plate thickness",
+        "unit": "mm",
+        "group": "Plate",
+        "limits": {
+          "list": [
+            10,
+            12,
+            15,
+            20,
+            25
+          ]
+        }
+      },
+      {
+        "key": "edge",
+        "expr": "40",
+        "name": "Edge distance",
+        "unit": "mm",
+        "group": "Plate"
+      },
+      {
+        "key": "gauge",
+        "expr": "max(60, joining.width - 30)",
+        "name": "Bolt gauge (across)",
+        "unit": "mm",
+        "group": "Bolts"
+      },
+      {
+        "key": "pitch",
+        "expr": "joining.height + 2 * edge",
+        "name": "Bolt pitch (along the depth)",
+        "unit": "mm",
+        "group": "Bolts"
+      },
+      {
+        "key": "plate_w",
+        "expr": "pitch + 2 * edge",
+        "name": "Plate depth",
+        "unit": "mm",
+        "group": "Plate"
+      },
+      {
+        "key": "plate_h",
+        "expr": "gauge + 2 * edge",
+        "name": "Plate width",
+        "unit": "mm",
+        "group": "Plate"
+      },
+      {
+        "key": "bolt_d",
+        "expr": "16",
+        "name": "Bolt Ø",
+        "unit": "mm",
+        "group": "Bolts",
+        "limits": {
+          "list": [
+            12,
+            16,
+            20,
+            24
+          ]
+        }
+      },
+      {
+        "key": "weld_a",
+        "expr": "4",
+        "name": "Weld throat",
+        "unit": "mm",
+        "group": "Weld"
+      }
+    ],
+    "contents": [
+      {
+        "key": "end_cut",
+        "on": "joining",
+        "row": {
+          "kind": "cut",
+          "operation": "trim",
+          "end": "@joining.end",
+          "cutter": {
+            "plane": {}
+          },
+          "anchor": {
+            "ref": "@meet",
+            "offset": "plate_t"
+          }
+        }
+      },
+      {
+        "key": "plate",
+        "part": {
+          "preset": "9090f8e107a037c2",
+          "fields": {
+            "profile.params.width": "plate_w",
+            "profile.params.height": "plate_h",
+            "thickness": "plate_t"
+          },
+          "at": {
+            "frame": "@meet"
+          }
+        }
+      },
+      {
+        "key": "bolts",
+        "junction": {
+          "detail": "bcb26d949f754449",
+          "roles": {
+            "ply_1": "@plate",
+            "ply_2": "@main"
+          },
+          "params": {
+            "d": "bolt_d",
+            "x": "-pitch / 2",
+            "y": "-gauge / 2"
+          },
+          "repeat": {
+            "rule": {
+              "count": 2,
+              "step": "gauge"
+            },
+            "run": "@meet.y",
+            "nest": {
+              "count": 2,
+              "step": "pitch"
+            }
+          }
+        }
+      },
+      {
+        "key": "weld",
+        "junction": {
+          "detail": "1fa8a4f99a56a112",
+          "roles": {
+            "a": "@joining",
+            "b": {
+              "placement": "@plate",
+              "face": "end"
+            }
+          },
+          "params": {
+            "throat": "weld_a"
+          }
+        }
+      }
+    ],
+    "rule": {
+      "meeting": "end_face",
+      "roles": {
+        "main": {
+          "class": [
+            "IfcColumn",
+            "IfcBeam",
+            "IfcMember"
+          ],
+          "profile": [
+            {
+              "family": "i"
+            }
+          ],
+          "face": [
+            "flange_outer"
+          ]
+        },
+        "joining": {
+          "profile": [
+            {
+              "family": "i"
+            }
+          ],
+          "size": {
+            "height": [
+              100,
+              400
+            ]
+          },
+          "end": "any"
+        }
+      },
+      "angle": {
+        "value": 90,
+        "tol": 20
+      },
+      "mirror": "allow"
+    }
+  },
+  "locks": {},
+  "record": {
+    "class": "IfcElementAssembly",
+    "predefined_type": "ACCESSORY_ASSEMBLY"
+  },
+  "naming": "",
+  "node": "",
+  "provenance": {
+    "created": "2026-11-28",
+    "created_with": "Built",
+    "derived_from": null
+  },
+  "depends": [
+    {
+      "kind": "preset",
+      "key": "9090f8e107a037c2",
+      "bundled": "rows/9090f8e107a037c2.builtpreset",
+      "rev": 1
+    },
+    {
+      "kind": "detail",
+      "key": "bcb26d949f754449",
+      "bundled": "rows/bcb26d949f754449.builtpreset",
+      "rev": 1
+    },
+    {
+      "kind": "detail",
+      "key": "1fa8a4f99a56a112",
+      "bundled": "rows/1fa8a4f99a56a112.builtpreset",
+      "rev": 1
+    }
+  ],
+  "hash": "sha256:63ff4e06c445e1fac4d953ffbe5deb3930fde4c482d869d130d611d565c67ffd"
+}

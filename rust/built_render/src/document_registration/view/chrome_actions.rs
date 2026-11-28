@@ -771,6 +771,8 @@ fn command_action<'py>(a: &Args<'py>) -> Reply<'py> {
                         }else if let Ok(preset)=action.get_item("preset"){
                             machine.call_method1("set",("preset",preset))?;
                             py.import("built_render.wgpu_library")?.call_method1("_remember",(&view,action.get_item("key")?))?;
+                        }else if let Ok(size)=action.get_item("profile_preset"){
+                            machine.call_method1("set",("preset",size))?;
                         }else if let Ok(sketch)=action.get_item("sketch"){
                             machine.call_method1("set",("sketch",sketch))?;
                         }else{
@@ -809,6 +811,7 @@ pub(super) fn command_query<'py>(a: &Args<'py>) -> Reply<'py> {
         for entry in presets.call_method1("items",(&ctx,))?.try_iter()?{
             let entry=entry?;
             let p=entry.get_item("preset")?;
+            if p.call_method1("get", ("source",))?.call_method1("get", ("profile_size", false)).is_ok_and(|v| v.is_truthy().unwrap_or(false)) {continue;}
             if !p.get_item("primitive")?.eq(if junction {"junction"} else if cut {"cut"}else{"sweep"})?{continue;}
             let name=entry.get_item("name")?.str()?.to_string();
             let pack=entry.get_item("category")?.str()?.to_string();

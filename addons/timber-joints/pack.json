@@ -1,0 +1,46 @@
+{
+  "format": "built.presets",
+  "v": 2,
+  "pack": {
+    "id": "a395e4f4904bef36b1302788102cd3b5",
+    "name": "Timber joints",
+    "version": "1.0.0",
+    "author": {
+      "name": "Built"
+    },
+    "licence": "CC0-1.0",
+    "description": "Timber joints cut in the members, with their screws, dowels, nails and hangers.",
+    "units": {
+      "length": "mm",
+      "angle": "deg"
+    },
+    "requires": {
+      "built": ">= 1.0",
+      "features": [
+        "junction.v1",
+        "hole.v1",
+        "block.v1",
+        "fastener.v1",
+        "weld.v1"
+      ]
+    },
+    "files": {
+      "rows/5395e365d471d6aa.builtpreset": "sha256:6637a481c756dcae698b3f1ea27de63c000449d772257fa8a98a45c1d074d67c",
+      "rows/e411026fad6643b4.builtpreset": "sha256:897cf6afd30256d786bf890775b1a823bdafba50cd6604ebddc2b01105b234bf",
+      "rows/c1f7c7eaf2692e34.builtpreset": "sha256:c8d8b85334f275ea0d5d628bb35fe140900fcf61993121e9bfc50974465fd933",
+      "rows/5476620a856d333e.builtpreset": "sha256:896e5bf0e7d5127607fcfb0135b28a69320e50e08d0f6d24c1e98e081bcd862a",
+      "rows/2fd29d6163395519.builtpreset": "sha256:1597cd582ce157d372958d0e0a2847d57b591b6caaaabb16dba73149a0c5f977",
+      "rows/153da99b8ea1b1ce.builtpreset": "sha256:af86cfb6935c6030571abf42f73f77eeb85332c0bfb395d5de2b606766655e28",
+      "rows/9090f8e107a037c2.builtpreset": "sha256:e9c9eb83b5b47481dff5bafb8e44994c9fee238efed5a58be692240050107e61"
+    }
+  },
+  "rows": [
+    "rows/5395e365d471d6aa.builtpreset",
+    "rows/e411026fad6643b4.builtpreset",
+    "rows/c1f7c7eaf2692e34.builtpreset",
+    "rows/5476620a856d333e.builtpreset",
+    "rows/2fd29d6163395519.builtpreset",
+    "rows/153da99b8ea1b1ce.builtpreset",
+    "rows/9090f8e107a037c2.builtpreset"
+  ]
+}

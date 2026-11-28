@@ -1,0 +1,30 @@
+{
+  "uid": "95f3d998bf6c7707",
+  "name": "End plate",
+  "pack": "Steel EN 10365",
+  "primitive": "cut",
+  "rev": 1,
+  "values": {
+    "operation": "trim",
+    "role": "end",
+    "cutter_kind": "plane",
+    "on": true,
+    "offset": 0
+  },
+  "record": {},
+  "locks": {
+    "operation": "fixed",
+    "role": "fixed",
+    "cutter_kind": "free",
+    "on": "free",
+    "offset": "free"
+  },
+  "naming": "",
+  "node": "",
+  "provenance": {
+    "created_with": "Built",
+    "created": "2026-11-28"
+  },
+  "depends": [],
+  "hash": "sha256:238d52d6b67cfe23c23a3da8a3e8099fdf765653a49bf054e3c2af86328bb788"
+}

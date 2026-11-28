@@ -1580,7 +1580,7 @@ impl ProfilesProvider {
             }
             serde_json::json!({"key":size["key"],"name":size["label"],"category":size["family"],
                 "thumb":format!("profile:{}",size["key"].as_str().unwrap()),"defaults":details,
-                "source":"bundled","verbs":["apply"]})
+                "source":"bundled","dimensions":size["params"],"verbs":["apply","size"]})
         }).collect();
         let scene=ctx.getattr_opt("scene")?.filter(|s|!s.is_none() && s.hasattr("_root").unwrap_or(false));
         let saved:std::collections::HashSet<String>=destinations::saved_ids(py,scene.as_ref(),"profiles")?.into_iter().chain(destinations::saved_ids(py,scene.as_ref(),"sections")?).collect();
@@ -1605,6 +1605,18 @@ impl ProfilesProvider {
                 items.push(serde_json::json!({"key":format!("sketch:{}",row["uid"].as_str().unwrap_or_default()),"name":row["name"].as_str().unwrap_or("Drawn profile"),"category":"Sketches","source":"model","sketch":row,"verbs":["apply","edit"]}));
             }
         }
+        let mut catalog = presets::listed(ctx)?;
+        for entry in destinations::entries(py,scene.as_ref(), &["presets"])? {
+            catalog.push((entry.entry.data, entry.dest.key));
+        }
+        for (preset, source) in catalog {
+            if preset["source"]["profile_size"] == true {
+                let profile = &preset["values"]["profile"];
+                items.push(serde_json::json!({"key":format!("size:{source}:{}",preset["uid"]),
+                    "name":preset["name"],"category":profile["family"],"source":source,
+                    "profile_preset":preset,"thumb":presets::profile_thumb(profile),"verbs":["apply"]}));
+            }
+        }
         // Saved profiles; saved sections are Library › Sections (SectionsProvider).
         for row in destinations::items(py,scene.as_ref(),&["profiles"])? {
             items.push(row);
@@ -1613,15 +1625,20 @@ impl ProfilesProvider {
     }
     /// The header's New profile… and Import drawing… (sketch_workspace.rs).
     fn type_action(&self, ctx: &Bound<'_, PyAny>, action: &str) -> PyResult<()> {
+        if action == "pack" { return packs::ask_import(ctx); }
         sketch_entry(ctx, action, false)
     }
     #[pyo3(signature=(ctx,verb,item,_arg=""))]
     fn run(&self,ctx:&Bound<'_,PyAny>,verb:&str,item:&Bound<'_,PyAny>,_arg:&str)->PyResult<()> {
+        if verb == "size" {
+            return profile_dimensions(ctx, item);
+        }
         if verb=="apply" {
             let win=ctx.getattr("win")?;
             win.call_method1("_activate_tool",("sweep",))?;
             let machine=win.getattr("_tools")?.get_item("sweep")?.getattr("_machine")?;
-            if item.contains("sketch")? {machine.call_method1("set",("sketch",item.get_item("sketch")?))?;}
+            if item.contains("profile_preset")? { machine.call_method1("set",("preset",item.get_item("profile_preset")?))?; }
+            else if item.contains("sketch")? {machine.call_method1("set",("sketch",item.get_item("sketch")?))?;}
             else {machine.call_method1("set",("profile",item.get_item("key")?))?;}
         }
         if verb=="edit" {
@@ -1644,6 +1661,61 @@ impl ProfilesProvider {
         }
         Ok(())
     }
+}
+
+/// Arm Sweep with a user-sized family without changing its Library defaults.
+fn profile_dimensions(ctx: &Bound<'_, PyAny>, item: &Bound<'_, PyAny>) -> PyResult<()> {
+    let py = ctx.py();
+    let forms = py.import("built_render.chrome_forms")?;
+    let fields = PyList::empty(py);
+    let params = item.get_item("dimensions")?;
+    let circular = matches!(item.get_item("category")?.extract::<String>()?.as_str(), "round" | "chs");
+    let mut keys = Vec::new();
+    for key in ["width", "height", "web", "flange", "radius"] {
+        if !params.contains(key)? || (circular && key == "height") { continue; }
+        let value = params.get_item(key)?.extract::<f64>()?;
+        if matches!(key, "web" | "flange") && value == 0. { continue; }
+        let label = if circular && key == "width" { "Diameter" } else { key };
+        fields.append(forms.getattr("Field")?.call1((key, "edit", format!("{label} (mm)"), value.to_string()))?)?;
+        keys.push(key);
+    }
+    let library = item.get_item("key")?.extract::<String>()?;
+    let win = ctx.getattr("win")?;
+    let window = win.clone().unbind();
+    let done = func(py, move |py, args| {
+        if args.get_item(0)?.eq("ok")? {
+            let values = args.get_item(1)?;
+            let dims = PyDict::new(py);
+            for key in &keys {
+                let text = values.get_item(key)?.str()?.to_string();
+                let Some(num) = text.trim().parse::<f64>().ok().filter(|n| n.is_finite()) else {
+                    window.bind(py).call_method1("notify", ("warning", "Invalid profile dimensions"))?;
+                    return Ok(none(py));
+                };
+                dims.set_item(key, num)?;
+                if circular && *key == "width" {
+                    dims.set_item("height", num)?;
+                }
+            }
+            let profile = PyDict::new(py);
+            profile.set_item("library", &library)?;
+            profile.set_item("params", dims)?;
+            let win = window.bind(py);
+            win.call_method1("_activate_tool", ("sweep",))?;
+            let machine = win.getattr("_tools")?.get_item("sweep")?.getattr("_machine")?;
+            if machine.call_method1("set", ("dimensions", profile))?.is_truthy()? {
+                cs(py)?.call_method1("close", (win,))?;
+            } else {
+                win.call_method1("notify", ("warning", "Invalid profile dimensions"))?;
+            }
+        }
+        Ok(none(py))
+    })?;
+    let kw = PyDict::new(py);
+    kw.set_item("on_done", done)?;
+    let form = forms.getattr("Form")?.call(("Profile dimensions", fields), Some(&kw))?;
+    forms.call_method1("show", (win, form))?;
+    Ok(())
 }
 
 /// New and Import from the Profiles and Sections tabs: the sheet goes and
@@ -2357,8 +2429,7 @@ impl LibrarySheet {
         if prov_id=="presets" {
             sheet.call_method1("verb",("typeact:import","Import pack…"))?;
         }else if prov_id=="profiles" {
-            sheet.call_method1("verb",("typeact:new","New profile…"))?;
-            sheet.call_method1("verb",("typeact:import","Import drawing…"))?;
+            sheet.call_method1("verb",("typeact:pack","Import pack…"))?;
         }else if prov_id=="sections" {
             sheet.call_method1("verb",("typeact:new","New section…"))?;
         }else if !has_target {
@@ -2438,6 +2509,10 @@ impl LibrarySheet {
                 content.call_method("buttons", (acts,), Some(&[("align", "left")].into_py_dict(py)?))?;
             }
         }
+        // A search that hides the cursor moves it to the first row shown;
+        // the sheet's focus follows so Enter uses the row on screen.
+        let previous = st.call_method1("get", ("cursor",))?;
+        let moved = previous.is_truthy()? && !previous.eq(out.get_item("cursor")?)?;
         st.set_item("cursor", out.get_item("cursor")?)?;
         let detail = sheet.call_method("detail", (), Some(&[("width", (if faceted {260i32} else {340}).into_pyobject(py)?.into_any()), ("empty", s(py, "Pick an item to see it here."))].into_py_dict(py)?))?;
         let cursor = st.call_method1("get", ("cursor",))?;
@@ -2458,10 +2533,16 @@ impl LibrarySheet {
         } else if !e.is_none() && prov_id == "components" {
             slf.call_method1("_component_detail", (&detail, &prov, ctx, &e))?;
         }
-        let hint = if matches!(prov_id.as_str(), "components" | "families") { "Click or drag to place · … for actions · Esc back to the model" } else { "Click to use · … for actions · Esc back to the model" };
-        sheet.call_method1("footer", (PyTuple::empty(py), hint))?;
+        let hint = if prov_id == "profiles" && !st.get_item("items")?.call_method0("values")?.try_iter()?.any(|r| r.is_ok_and(|r| r.contains("profile_preset").unwrap_or(false))) { "More profiles and details come as packs: Import pack…" } else if matches!(prov_id.as_str(), "components" | "families") { "Click or drag to place · … for actions · Esc back to the model" } else { "Click to use · … for actions · Esc back to the model" };
+        let links = PyList::empty(py);
+        if prov_id == "profiles" {
+            for (id, label) in [("typeact:new", "New profile…"), ("typeact:import", "Import drawing…")] {
+                links.append((id, crate::settings_rows::tr(py, label)?))?;
+            }
+        }
+        sheet.call_method1("footer", (links, crate::settings_rows::tr(py, hint)?))?;
         if cursor.is_truthy()? {
-            let force = st.call_method1("pop", ("force_focus", false))?.is_truthy()?;
+            let force = st.call_method1("pop", ("force_focus", false))?.is_truthy()? || moved;
             sheet.call_method("focus", (&cursor,), Some(&[("force", force)].into_py_dict(py)?))?;
         }
         let catalogue = slf.getattr("catalogue")?;
@@ -2687,7 +2768,7 @@ impl LibrarySheet {
                 }
                 if ok {
                     st.set_item("type", &arg)?;
-                    st.set_item("scope", if matches!(arg.as_str(), "presets" | "profiles" | "styles") {"s:bundled"} else if matches!(arg.as_str(), "families" | "sections") { "s:all" } else { "s:model" })?;
+                    st.set_item("scope", if matches!(arg.as_str(), "styles") {"s:bundled"} else if matches!(arg.as_str(), "families" | "sections" | "presets" | "profiles") { "s:all" } else { "s:model" })?;
                     st.set_item("cursor", py.None())?;
                     _save_state(&st)?;
                 }
@@ -2896,8 +2977,7 @@ fn open_library(py: Python<'_>, win: &Bound<'_, PyAny>, type_id: Option<String>,
     let st = _state(&view)?;
     _land(&view, win)?;
     if let Some(t) = type_id.filter(|t| !t.is_empty()) {
-        if matches!(t.as_str(),"profiles"|"presets") && !st.get_item("type")?.eq(&t)?{st.set_item("scope","s:bundled")?;}
-        if matches!(t.as_str(), "families" | "sections") && !st.get_item("type")?.eq(&t)? { st.set_item("scope", "s:all")?; }
+        if matches!(t.as_str(), "families" | "sections" | "profiles" | "presets") && !st.get_item("type")?.eq(&t)? { st.set_item("scope", "s:all")?; }
         st.set_item("type", t)?;
     }
     if let Some(sc) = scope.filter(|s| !s.is_empty()) {

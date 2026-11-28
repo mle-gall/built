@@ -1,0 +1,66 @@
+{
+  "uid": "7a95d540b258c430",
+  "name": "Steel rafter",
+  "pack": "Steel EN 10365",
+  "primitive": "sweep",
+  "rev": 1,
+  "values": {
+    "profile": {
+      "library": "en/ipe240",
+      "family": "i",
+      "params": {
+        "height": 240,
+        "width": 120,
+        "web": 6.2,
+        "flange": 9.8,
+        "radius": 15
+      },
+      "catalogue": {
+        "name": "IPE 240",
+        "series": [
+          [
+            "en/ipe200",
+            200
+          ],
+          [
+            "en/ipe240",
+            240
+          ]
+        ]
+      }
+    },
+    "attachment": "centre",
+    "rotation": 0,
+    "mirror": false
+  },
+  "record": {
+    "class": "IfcBeam",
+    "predefined_type": "BEAM",
+    "material": "S355",
+    "object_type": "Steel rafter"
+  },
+  "naming": "R-{n}",
+  "node": "Rafters",
+  "locks": {
+    "profile": "fixed",
+    "attachment": "free",
+    "rotation": "free",
+    "mirror": "free",
+    "material": "fixed",
+    "class": "fixed",
+    "predefined_type": "fixed",
+    "object_type": "fixed"
+  },
+  "provenance": {
+    "created_with": "Built",
+    "created": "2026-11-28"
+  },
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/ipe240",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:e78f86016d61bab96c46d6e10a85a30f6229b910ab6f3e3ef00641013a84225c"
+}

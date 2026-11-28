@@ -1,0 +1,50 @@
+{
+  "uid": "75676207356b2ed1",
+  "name": "RHS 100 × 50 × 4",
+  "rev": 1,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/rhs100x4",
+      "family": "rhs",
+      "params": {
+        "width": 50,
+        "height": 100,
+        "web": 4,
+        "radius": 8
+      },
+      "catalogue": {
+        "name": "RHS 100 × 50 × 4",
+        "series": [
+          [
+            "en/rhs100x5",
+            100
+          ],
+          [
+            "en/rhs100x4",
+            100
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "source": "https://www.tatasteeluk.com/sites/default/files/pimcore_doc/tata-steel-uk-hybox-technical-guide-en.pdf",
+    "standard": "EN 10219"
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/rhs100x4",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:a1b35efc1c5d83baa6126e8747526edf43bea43be564731e4c13789d181dad04"
+}

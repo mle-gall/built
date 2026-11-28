@@ -27,6 +27,7 @@ pub struct CutTool {
     fitting: Json,
     pointer: Option<Pointer>,
     typed_offset: bool,
+    flush_clearance: Option<f64>,
     anchor: Json,
     picking_anchor: bool,
     operation: usize,
@@ -175,6 +176,7 @@ impl Tool for CutTool {
     fn event(&mut self, e: &ToolEvent, host: &mut dyn ToolHost) -> Reply {
         match e {
             ToolEvent::Activate => {
+                self.flush_clearance = host.call("cut_shortcut", json!("c"))["values"]["clearance"].as_f64();
                 self.targets = host
                     .call("cut_selection", Json::Null)
                     .as_str()
@@ -362,7 +364,7 @@ impl Tool for CutTool {
                     self.fitting = host.call(
                         "cut_end_fit",
                         json!({"target":target, "span":span,
-                        "body":placed,"face":self.face,"explicit":!automatic,"offset":self.offset,"typed":self.typed_offset}),
+                        "body":placed,"face":self.face,"explicit":!automatic,"offset":self.offset,"typed":self.typed_offset,"flush_clearance":self.flush_clearance}),
                     );
                     if let Some(reason) = self.fitting["reason"].as_str() {
                         self.refusal = Some(reason.to_owned());

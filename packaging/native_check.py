@@ -7,6 +7,8 @@ from pathlib import Path
 
 def check():
     root = Path(sys._MEIPASS)
+    if (root / "addons").exists() or any(root.rglob("*.builtpack")):
+        raise AssertionError("Trade add-ons were copied into the application")
     for name in ('numpy', 'openskp',
                  'manifold3d', 'built_core', 'built_render',
                  'ifcopenshell'):

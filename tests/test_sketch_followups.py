@@ -127,7 +127,8 @@ def test_a_catalogue_member_opens_as_a_drawing_and_done_adopts_it_in_one_step():
     (g,) = scene.groups
     (row,) = rows_of(scene, "sweep")
     size = extent(g)
-    drawn = command_protocol.profile_sketch("en/ipe240")
+    from tests.addon_cases import profile
+    drawn = command_protocol.profile_sketch(profile("en/ipe240"))
     assert drawn["name"] == "IPE 240" and drawn["use"] == "profile"
     kinds = sorted({c["kind"] for c in drawn["curves"]})
     assert kinds == ["arc", "line"], "root fillets stay exact arcs"

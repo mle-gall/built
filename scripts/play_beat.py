@@ -48,6 +48,7 @@ class Beat:
         self.steps: list[str] = []
         self.size = (1600, 1000)
         self.model: str | None = None
+        self.addons: list[str] = []
         self.keystrokes = True
         self.at = (800.0, 500.0)
         self.rng = random.Random(seed)
@@ -157,6 +158,8 @@ def compile_beat(text: str, seed: int = 7) -> Beat:
             beat.size = (int(_num(words[1], n)), int(_num(words[2], n)))
         elif verb == "model":
             beat.model = words[1]
+        elif verb == "addon":
+            beat.addons += [w for w in words[1:] if w not in beat.addons]
         elif verb == "keystrokes":
             beat.keystrokes = words[1:] != ["off"]
         else:
@@ -215,6 +218,37 @@ def compile_beat(text: str, seed: int = 7) -> Beat:
     return beat
 
 
+ADDON_PLUGIN = """\
+# Installs the beat's add-ons into this private profile's My library.
+PACKS = {packs!r}
+
+
+def setup(app):
+    from built_render import wgpu_library
+    for path in PACKS:
+        report = wgpu_library.import_pack(app.window, path, "mine")
+        print(f"add-on {{path.rsplit('/', 1)[-1]}}: {{report['ok']}} rows in My library", flush=True)
+"""
+
+
+def install_addons(settings: Path, packs: list[str]) -> Path | None:
+    """Build each add-on from addons/ and import it into My library at start,
+    the same way the tests do (a start-up plugin in the private profile)."""
+    if not packs:
+        return None
+    sys.path.insert(0, str(ROOT))
+    from scripts.build_addons import ADDONS, build
+    plugins = settings / "data" / "built" / "plugins"
+    plugins.mkdir(parents=True, exist_ok=True)
+    missing = [p for p in packs if not (ADDONS / p / "pack.json").is_file()]
+    if missing:
+        raise BeatError(f"unknown add-on {', '.join(missing)} (see addons/)")
+    paths = [str(build(ADDONS / p, settings / "addons")) for p in packs]
+    plugin = plugins / "beat_addons.py"
+    plugin.write_text(ADDON_PLUGIN.format(packs=paths))
+    return plugin
+
+
 def _binary() -> Path:
     env = os.environ.get("BUILT_BINARY")
     return Path(env) if env else ROOT / "rust/built_app/target/release/built"
@@ -243,6 +277,7 @@ def play(beat: Beat, *, background: bool, shots: Path | None, quit_at_end: bool,
         home = folder / "home"
         settings.mkdir()
         home.mkdir()
+        install_addons(settings, beat.addons)
         env = dict(os.environ)
         env.update(
             BUILT_SETTINGS_DIR=str(settings), BUILT_LOG_DIR=str(settings / "logs"),
@@ -271,12 +306,15 @@ def main(argv=None) -> int:
     ap.add_argument("--shots", type=Path, help="the app's own frames for `capture` steps (tests)")
     ap.add_argument("--quit", action="store_true", help="quit when the beat ends")
     ap.add_argument("--seed", type=int, default=7, help="another, still repeatable, human timing")
+    ap.add_argument("--addon", action="append", default=[], metavar="PACK",
+                    help="install this add-on from addons/ into My library first (repeatable)")
     a = ap.parse_args(argv)
     try:
         beat = compile_beat(a.beat.read_text(), a.seed)
     except BeatError as e:
         print(f"{a.beat}: {e}", file=sys.stderr)
         return 2
+    beat.addons += [p for p in a.addon if p not in beat.addons]
     if a.print:
         print("\n".join(beat.steps))
         return 0

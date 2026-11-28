@@ -281,7 +281,7 @@ mod tests {
             let profile = if library == "basic/flat" {
                 json!({"library":library,"params":{"width":190,"height":12}})
             } else {
-                json!({"library":library})
+                json!({"library":library,"params":{"width":200,"height":190,"flange":10,"web":6.5}})
             };
             let sweep: sweep::Sweep =
                 serde_json::from_value(json!({"profile":profile,"path":{"points":path}})).unwrap();
@@ -290,7 +290,7 @@ mod tests {
             st
         };
         let plate = stock("basic/flat");
-        let flange = stock("en/he200a");
+        let flange = stock("basic/i");
         let hole: Hole = serde_json::from_value(json!({"d":18,"segments":24})).unwrap();
         let mut samples = Vec::new();
         let mut expected = None;

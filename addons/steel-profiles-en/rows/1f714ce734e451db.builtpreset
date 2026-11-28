@@ -1,0 +1,46 @@
+{
+  "uid": "1f714ce734e451db",
+  "name": "SHS 80 × 80 × 4",
+  "rev": 1,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/shs80x4",
+      "family": "rhs",
+      "params": {
+        "width": 80,
+        "height": 80,
+        "web": 4,
+        "radius": 8
+      },
+      "catalogue": {
+        "name": "SHS 80 × 80 × 4",
+        "series": [
+          [
+            "en/shs80x4",
+            80
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "source": "https://www.tatasteeluk.com/sites/default/files/pimcore_doc/tata-steel-uk-hybox-technical-guide-en.pdf",
+    "standard": "EN 10219"
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/shs80x4",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:1555e4e63ac9771046fb583947193548d5483a0b4743946900ba892607ed36b3"
+}

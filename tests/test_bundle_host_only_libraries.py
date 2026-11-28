@@ -25,3 +25,16 @@ def test_the_bundle_never_carries_the_driver_side_libraries():
     for name in ("libX11.so.6", "libX11-xcb.so.1", "libxcb-glx.so.0",
                  "libstdc++.so.6", "libgcc_s.so.1", "libglib-2.0.so.0"):
         assert name in host, name
+
+
+def test_trade_addons_are_outside_packaged_data(tmp_path, monkeypatch):
+    import runpy
+    import sys
+    import pytest
+
+    check = runpy.run_path(str(SPEC.with_name("native_check.py")))["check"]
+    monkeypatch.setattr(sys, "_MEIPASS", str(tmp_path), raising=False)
+    (tmp_path / "addons").mkdir()
+    with pytest.raises(AssertionError, match="Trade add-ons"):
+        check()
+    assert not any((SPEC.parents[1] / "resources").rglob("*.builtpack"))

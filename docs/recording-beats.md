@@ -5,6 +5,14 @@ player that replays a short scene ("beat") in a clean window exactly the
 same way every time, and camera moves that glide. You record with your own
 screen recorder; nothing here captures the screen.
 
+For a steel recording, import the steel packs first: the app ships no
+steel sections or connection details (they are add-ons, addons/README.md).
+By hand, build them with `scripts/build_addons.py`, then in Library ›
+Profiles use Import pack… for `dist/addons/steel-profiles-en.builtpack`
+and `steel-connections-en.builtpack`, keeping them in My library. A beat
+does it with an `addon` line (below) or `--addon`, since every beat
+plays on a fresh profile.
+
 ## The keystroke overlay
 
 View ▸ Show Keystrokes (also Settings › Display › Recording, and the
@@ -56,6 +64,7 @@ on a 2× display the frames are twice that). Times are milliseconds.
 |---|---|
 | `size 1600 1000` | the window's size (once, at the top; default 1600 × 1000) |
 | `model examples/x.built` | start from a copy of this model (default: a blank model) |
+| `addon steel-profiles-en steel-connections-en` | install these add-ons from addons/ into the fresh profile's My library before the first step (also `--addon`) |
 | `keystrokes off` | do not show the keystroke overlay (default: shown) |
 | `pause 500` | wait |
 | `key r` / `key z shift` / `key 4 cmd` | press a key, with modifiers (`shift`, `cmd`, `alt`, `ctrl`, joined with `+`) |

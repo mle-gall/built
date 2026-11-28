@@ -1,0 +1,86 @@
+{
+  "uid": "b07a16e8a0000001",
+  "name": "Bolt M16 · 8.8",
+  "pack": "Steel",
+  "primitive": "junction",
+  "rev": 1,
+  "values": {
+    "meeting": "parts",
+    "roles": {
+      "ply_1": {
+        "name": "Outer ply"
+      },
+      "ply_2": {
+        "name": "Inner ply"
+      }
+    },
+    "params": [
+      {
+        "key": "d",
+        "name": "Bolt diameter",
+        "group": "Bolt",
+        "expr": "16",
+        "unit": "mm"
+      },
+      {
+        "key": "clearance",
+        "name": "Hole clearance",
+        "group": "Bolt",
+        "expr": "2",
+        "unit": "mm"
+      },
+      {
+        "key": "ox",
+        "name": "Offset across",
+        "group": "Bolt",
+        "expr": "0",
+        "unit": "mm"
+      },
+      {
+        "key": "oy",
+        "name": "Offset along",
+        "group": "Bolt",
+        "expr": "0",
+        "unit": "mm"
+      }
+    ],
+    "contents": [
+      {
+        "key": "bolt",
+        "part": {
+          "fastener": {
+            "d": "d",
+            "clearance": "clearance",
+            "grade": "8.8"
+          },
+          "at": {
+            "frame": "@meet",
+            "offset": [
+              "ox",
+              "oy",
+              0
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "record": {
+    "class": "IfcElementAssembly"
+  },
+  "naming": "",
+  "node": "",
+  "locks": {},
+  "provenance": {
+    "created_with": "Built",
+    "created": "2026-11-28"
+  },
+  "depends": [
+    {
+      "kind": "fastener",
+      "key": "metric",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:06baaa65b501fc1468fa5deb5a764105072e3aaa9adbfcf62b21f88fd3e66b50"
+}

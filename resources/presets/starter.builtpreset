@@ -3,108 +3,9 @@
   "v": 1,
   "rows": [
     {
-      "uid": "8bf3783ccf48197f",
-      "name": "Steel member",
-      "pack": "Steel EN 10365",
-      "primitive": "sweep",
-      "rev": 1,
-      "values": {
-        "profile": {
-          "library": "en/ipe240"
-        },
-        "attachment": "centre",
-        "rotation": 0,
-        "mirror": false
-      },
-      "record": {
-        "class": "IfcMember",
-        "predefined_type": "MEMBER",
-        "material": "S355",
-        "object_type": "Steel member"
-      },
-      "naming": "M-{n}",
-      "node": "Members",
-      "locks": {
-        "profile": "fixed",
-        "attachment": "free",
-        "rotation": "free",
-        "mirror": "free",
-        "material": "fixed",
-        "class": "fixed",
-        "predefined_type": "fixed",
-        "object_type": "fixed"
-      }
-    },
-    {
-      "uid": "c13fabbf1bad8d59",
-      "name": "Steel column",
-      "pack": "Steel EN 10365",
-      "primitive": "sweep",
-      "rev": 1,
-      "values": {
-        "profile": {
-          "library": "en/he200a"
-        },
-        "attachment": "centre",
-        "rotation": 0,
-        "mirror": false
-      },
-      "record": {
-        "class": "IfcColumn",
-        "predefined_type": "COLUMN",
-        "material": "S355",
-        "object_type": "Steel column"
-      },
-      "naming": "C-{n}",
-      "node": "Columns",
-      "locks": {
-        "profile": "fixed",
-        "attachment": "free",
-        "rotation": "free",
-        "mirror": "free",
-        "material": "fixed",
-        "class": "fixed",
-        "predefined_type": "fixed",
-        "object_type": "fixed"
-      }
-    },
-    {
-      "uid": "7a95d540b258c430",
-      "name": "Steel rafter",
-      "pack": "Steel EN 10365",
-      "primitive": "sweep",
-      "rev": 1,
-      "values": {
-        "profile": {
-          "library": "en/ipe240"
-        },
-        "attachment": "centre",
-        "rotation": 0,
-        "mirror": false
-      },
-      "record": {
-        "class": "IfcBeam",
-        "predefined_type": "BEAM",
-        "material": "S355",
-        "object_type": "Steel rafter"
-      },
-      "naming": "R-{n}",
-      "node": "Rafters",
-      "locks": {
-        "profile": "fixed",
-        "attachment": "free",
-        "rotation": "free",
-        "mirror": "free",
-        "material": "fixed",
-        "class": "fixed",
-        "predefined_type": "fixed",
-        "object_type": "fixed"
-      }
-    },
-    {
       "uid": "732730a077d0b9f2",
       "name": "Plate",
-      "pack": "Steel",
+      "pack": "Generic",
       "primitive": "sweep",
       "rev": 1,
       "values": {
@@ -120,114 +21,13 @@
       "record": {
         "class": "IfcPlate",
         "predefined_type": "SHEET",
-        "material": "S355",
         "object_type": "Plate"
       },
       "naming": "PL-{n}",
       "node": "Plates",
       "locks": {
         "profile": "free",
-        "material": "free",
         "class": "fixed"
-      }
-    },
-    {
-      "uid": "0d988538e2d3c915",
-      "name": "Wide flange beam",
-      "pack": "Steel AISC",
-      "primitive": "sweep",
-      "rev": 1,
-      "values": {
-        "profile": {
-          "library": "aisc/w8x18"
-        },
-        "attachment": "centre",
-        "rotation": 0,
-        "mirror": false
-      },
-      "record": {
-        "class": "IfcBeam",
-        "predefined_type": "BEAM",
-        "material": "A992",
-        "object_type": "Wide flange beam"
-      },
-      "naming": "B-{n}",
-      "node": "Beams",
-      "locks": {
-        "profile": "fixed",
-        "attachment": "free",
-        "rotation": "free",
-        "mirror": "free",
-        "material": "fixed",
-        "class": "fixed",
-        "predefined_type": "fixed",
-        "object_type": "fixed"
-      }
-    },
-    {
-      "uid": "2fd29d6163395519",
-      "name": "Timber joist",
-      "pack": "Timber C16/C24",
-      "primitive": "sweep",
-      "rev": 1,
-      "values": {
-        "profile": {
-          "library": "basic/timber"
-        },
-        "attachment": "centre",
-        "rotation": 0,
-        "mirror": false
-      },
-      "record": {
-        "class": "IfcBeam",
-        "predefined_type": "JOIST",
-        "material": "C24",
-        "object_type": "Timber joist"
-      },
-      "naming": "J-{n}",
-      "node": "Joists",
-      "locks": {
-        "profile": "fixed",
-        "attachment": "free",
-        "rotation": "free",
-        "mirror": "free",
-        "material": "fixed",
-        "class": "fixed",
-        "predefined_type": "fixed",
-        "object_type": "fixed"
-      }
-    },
-    {
-      "uid": "153da99b8ea1b1ce",
-      "name": "Timber stud",
-      "pack": "Timber C16/C24",
-      "primitive": "sweep",
-      "rev": 1,
-      "values": {
-        "profile": {
-          "library": "basic/stud"
-        },
-        "attachment": "centre",
-        "rotation": 0,
-        "mirror": false
-      },
-      "record": {
-        "class": "IfcMember",
-        "predefined_type": "STUD",
-        "material": "C16",
-        "object_type": "Timber stud"
-      },
-      "naming": "S-{n}",
-      "node": "Studs",
-      "locks": {
-        "profile": "fixed",
-        "attachment": "free",
-        "rotation": "free",
-        "mirror": "free",
-        "material": "fixed",
-        "class": "fixed",
-        "predefined_type": "fixed",
-        "object_type": "fixed"
       }
     },
     {
@@ -363,166 +163,6 @@
       }
     },
     {
-      "uid": "2673a97782a6a5f7",
-      "name": "Duct",
-      "pack": "MEP",
-      "primitive": "sweep",
-      "rev": 1,
-      "values": {
-        "profile": {
-          "library": "basic/duct"
-        },
-        "attachment": "centre",
-        "rotation": 0,
-        "mirror": false
-      },
-      "record": {
-        "class": "IfcDuctSegment",
-        "predefined_type": "RIGIDSEGMENT",
-        "material": "Galvanised steel",
-        "object_type": "Duct"
-      },
-      "naming": "D-{n}",
-      "node": "Ducts",
-      "locks": {
-        "profile": "fixed",
-        "attachment": "free",
-        "rotation": "free",
-        "mirror": "free",
-        "material": "fixed",
-        "class": "fixed",
-        "predefined_type": "fixed",
-        "object_type": "fixed"
-      }
-    },
-    {
-      "uid": "3725dbfedcd5114e",
-      "name": "Pipe",
-      "pack": "MEP",
-      "primitive": "sweep",
-      "rev": 1,
-      "values": {
-        "profile": {
-          "library": "en/chs114.3x5"
-        },
-        "attachment": "centre",
-        "rotation": 0,
-        "mirror": false
-      },
-      "record": {
-        "class": "IfcPipeSegment",
-        "predefined_type": "RIGIDSEGMENT",
-        "material": "Steel",
-        "object_type": "Pipe"
-      },
-      "naming": "P-{n}",
-      "node": "Pipes",
-      "locks": {
-        "profile": "fixed",
-        "attachment": "free",
-        "rotation": "free",
-        "mirror": "free",
-        "material": "fixed",
-        "class": "fixed",
-        "predefined_type": "fixed",
-        "object_type": "fixed"
-      }
-    },
-    {
-      "uid": "81f3c1507efa12f3",
-      "name": "Mitre",
-      "pack": "Steel EN 10365",
-      "primitive": "cut",
-      "rev": 1,
-      "values": {
-        "operation": "trim",
-        "role": "end",
-        "cutter_kind": "bisector",
-        "on": true
-      },
-      "record": {},
-      "locks": {
-        "operation": "fixed",
-        "role": "fixed",
-        "cutter_kind": "free",
-        "on": "free"
-      },
-      "naming": "",
-      "node": ""
-    },
-    {
-      "uid": "78d69d1a1cd30f54",
-      "name": "Cope",
-      "pack": "Steel EN 10365",
-      "primitive": "cut",
-      "rev": 1,
-      "values": {
-        "operation": "subtract",
-        "role": "body",
-        "cutter_kind": "body",
-        "on": true,
-        "clearance": 2
-      },
-      "record": {},
-      "locks": {
-        "operation": "fixed",
-        "role": "fixed",
-        "cutter_kind": "free",
-        "on": "free",
-        "clearance": "free"
-      },
-      "naming": "",
-      "node": ""
-    },
-    {
-      "uid": "5392afd385895e8a",
-      "name": "Notch",
-      "pack": "Steel EN 10365",
-      "primitive": "cut",
-      "rev": 1,
-      "values": {
-        "operation": "subtract",
-        "role": "body",
-        "cutter_kind": "section",
-        "on": true,
-        "depth": 40
-      },
-      "record": {},
-      "locks": {
-        "operation": "fixed",
-        "role": "fixed",
-        "cutter_kind": "free",
-        "on": "free",
-        "depth": "free"
-      },
-      "naming": "",
-      "node": ""
-    },
-    {
-      "uid": "95f3d998bf6c7707",
-      "name": "End plate",
-      "pack": "Steel EN 10365",
-      "primitive": "cut",
-      "rev": 1,
-      "values": {
-        "operation": "trim",
-        "role": "end",
-        "cutter_kind": "plane",
-        "on": true,
-        "offset": 0
-      },
-      "record": {},
-      "locks": {
-        "operation": "fixed",
-        "role": "fixed",
-        "cutter_kind": "free",
-        "on": "free",
-        "offset": "free"
-      },
-      "naming": "",
-      "node": ""
-    },
-    {
       "uid": "bc53c618674d0e15",
       "name": "Opening",
       "pack": "Construction",
@@ -566,30 +206,6 @@
         "cutter_kind": "free",
         "on": "free",
         "clearance": "free"
-      },
-      "naming": "",
-      "node": ""
-    },
-    {
-      "uid": "d514908360f1b4c2",
-      "name": "Purlins at 1200 mm maximum",
-      "pack": "Steel EN 10365",
-      "primitive": "repeat",
-      "rev": 1,
-      "values": {
-        "rule": {
-          "fit_max": 1200
-        },
-        "measure": "pitch",
-        "orientation": "follow",
-        "adapt": "auto"
-      },
-      "record": {},
-      "locks": {
-        "rule": "free",
-        "measure": "fixed",
-        "orientation": "free",
-        "adapt": "free"
       },
       "naming": "",
       "node": ""
@@ -655,11 +271,14 @@
       "rev": 1,
       "values": {
         "profile": {
-          "library": "basic/timber",
+          "library": "basic/rectangle",
           "params": {
             "width": 25,
-            "height": 50
-          }
+            "height": 50,
+            "web": 0,
+            "flange": 0
+          },
+          "family": "rectangle"
         },
         "attachment": "centre"
       },
@@ -676,11 +295,14 @@
       "rev": 1,
       "values": {
         "profile": {
-          "library": "basic/timber",
+          "library": "basic/rectangle",
           "params": {
             "width": 25,
-            "height": 50
-          }
+            "height": 50,
+            "web": 0,
+            "flange": 0
+          },
+          "family": "rectangle"
         },
         "attachment": "centre"
       },
@@ -697,11 +319,14 @@
       "rev": 1,
       "values": {
         "profile": {
-          "library": "basic/timber",
+          "library": "basic/rectangle",
           "params": {
             "width": 25,
-            "height": 50
-          }
+            "height": 50,
+            "web": 0,
+            "flange": 0
+          },
+          "family": "rectangle"
         },
         "attachment": "centre"
       },
@@ -718,11 +343,14 @@
       "rev": 1,
       "values": {
         "profile": {
-          "library": "basic/timber",
+          "library": "basic/rectangle",
           "params": {
             "width": 25,
-            "height": 50
-          }
+            "height": 50,
+            "web": 0,
+            "flange": 0
+          },
+          "family": "rectangle"
         },
         "attachment": "centre"
       },
@@ -740,11 +368,14 @@
       "rev": 1,
       "values": {
         "profile": {
-          "library": "basic/timber",
+          "library": "basic/rectangle",
           "params": {
             "width": 25,
-            "height": 50
-          }
+            "height": 50,
+            "web": 0,
+            "flange": 0
+          },
+          "family": "rectangle"
         },
         "attachment": "centre"
       },
@@ -761,11 +392,14 @@
       "rev": 1,
       "values": {
         "profile": {
-          "library": "basic/timber",
+          "library": "basic/rectangle",
           "params": {
             "width": 25,
-            "height": 50
-          }
+            "height": 50,
+            "web": 0,
+            "flange": 0
+          },
+          "family": "rectangle"
         },
         "attachment": "centre"
       },
@@ -1058,11 +692,14 @@
       "rev": 1,
       "values": {
         "profile": {
-          "library": "basic/timber",
+          "library": "basic/rectangle",
           "params": {
             "width": 25,
-            "height": 50
-          }
+            "height": 50,
+            "web": 0,
+            "flange": 0
+          },
+          "family": "rectangle"
         },
         "attachment": "centre"
       },
@@ -1660,9 +1297,9 @@
       }
     },
     {
-      "uid": "b07a16e8a0000001",
-      "name": "Bolt M16 · 8.8",
-      "pack": "Steel",
+      "uid": "746b67bac131d4fb",
+      "name": "Bolt",
+      "pack": "Generic",
       "primitive": "junction",
       "rev": 1,
       "values": {
@@ -1734,9 +1371,9 @@
       "locks": {}
     },
     {
-      "uid": "b07a16e8a0000002",
-      "name": "Bolt group M16 · 2 × 2",
-      "pack": "Steel",
+      "uid": "92cfddfa028a0f80",
+      "name": "Bolt group",
+      "pack": "Generic",
       "primitive": "junction",
       "rev": 1,
       "values": {
@@ -1777,13 +1414,20 @@
             "group": "Bolts",
             "expr": "110",
             "unit": "mm"
+          },
+          {
+            "key": "d",
+            "name": "Diameter",
+            "expr": "12",
+            "unit": "mm",
+            "group": "Bolts"
           }
         ],
         "contents": [
           {
             "key": "bolts",
             "junction": {
-              "detail": "b07a16e8a0000001",
+              "detail": "746b67bac131d4fb",
               "roles": {
                 "ply_1": "@ply_1",
                 "ply_2": "@ply_2"
@@ -1801,7 +1445,8 @@
               },
               "params": {
                 "ox": "-(columns - 1) * gauge / 2",
-                "oy": "-(rows - 1) * pitch / 2"
+                "oy": "-(rows - 1) * pitch / 2",
+                "d": "d"
               }
             }
           }

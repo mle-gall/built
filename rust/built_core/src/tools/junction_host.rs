@@ -40,17 +40,22 @@ fn to_py<'p>(py: Python<'p>, v: &Value) -> PyResult<Obj<'p>> {
     py.import("json")?.call_method1("loads", (v.to_string(),))
 }
 
-/// The project's junction details (and the bundled ones), as presets.
-fn details(scene: &Obj<'_>) -> PyResult<Vec<Value>> {
+/// Include installed Library presets when browsing and resolving child details.
+fn catalog(scene: &Obj<'_>) -> PyResult<Vec<Value>> {
     let py = scene.py();
-    let catalog = to_json(&api(py)?.call_method1("preset_catalog", (scene,))?)?;
-    Ok(catalog
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter_map(|e| e.get(0).cloned())
-        .filter(|p| p["primitive"] == "junction")
-        .collect())
+    let mut rows: Vec<Value> = to_json(&api(py)?.call_method1("preset_catalog", (scene,))?)?
+        .as_array().into_iter().flatten().filter_map(|e| e.get(0).cloned()).collect();
+    let saved = py.import("built_render.wgpu_library")?.call_method1("library_items", ("presets", scene))?;
+    for entry in saved.try_iter()? {
+        let row = to_json(&entry?.get_item("preset")?)?;
+        if row.get("needs").is_none() && !rows.iter().any(|p| p["uid"] == row["uid"]) {
+            rows.push(row);
+        }
+    }
+    Ok(rows)
+}
+fn details(scene: &Obj<'_>) -> PyResult<Vec<Value>> {
+    Ok(catalog(scene)?.into_iter().filter(|p| p["primitive"] == "junction").collect())
 }
 fn by_uid(scene: &Obj<'_>, uid: &str) -> PyResult<Value> {
     Ok(details(scene)?.into_iter().find(|p| p["uid"] == uid).unwrap_or(Value::Null))
@@ -72,6 +77,10 @@ impl ViewportToolHost {
         let view = self.vp.bind(py);
         let scene = view.getattr("scene")?;
         Ok(match verb {
+            "junction_pack_hint" => {
+                let installed = details(&scene)?.iter().any(|p| p["source"]["path"].is_string());
+                if installed { Value::Null } else { json!(tr(py, "More profiles and details come as packs: Import pack…")?) }
+            }
             "junction_default" => {
                 let all = details(&scene)?;
                 let remembered = view.getattr_opt("_junction_detail")?.and_then(|v| v.extract::<String>().ok());
@@ -113,8 +122,8 @@ impl ViewportToolHost {
                 // A flange of an I-section member: bolts measure through it.
                 let row = api(py)?.call_method1("live_sweep", (&scene, &uid))?;
                 if !row.is_none() && !face.is_none() {
-                    let library = row.get_item("profile")?.call_method1("get", ("library", ""))?.extract::<String>()?;
-                    if ["en/he", "en/ipe", "aisc/w"].iter().any(|p| library.starts_with(p)) {
+                    let profile = row.get_item("profile")?;
+                    if profile.call_method1("get", ("family", ""))?.eq("i")? || profile.call_method1("get", ("library", ""))?.eq("basic/i")? {
                         let normal = xyz(&face.call_method0("normal")?)?;
                         let path: Vec<[f64; 3]> = row.call_method1("get", ("resolved_points",))?.extract().unwrap_or_default();
                         if path.len() >= 2 {
@@ -128,7 +137,7 @@ impl ViewportToolHost {
                 out
             }
             "junction_hover" => {
-                let detail = arg["detail"].as_str().unwrap_or_default();
+                let detail = to_py(py, &arg["detail"])?;
                 let px: (f64, f64) = serde_json::from_value(arg["px"].clone()).unwrap_or_default();
                 let meetings = to_json(&api(py)?.call_method1("meetings", (&scene,))?)?;
                 let path: Vec<String> = match picked(view, px)? {
@@ -165,15 +174,15 @@ impl ViewportToolHost {
                     .collect();
                 let mut out = json!({"key": key, "kind": m["kind"], "at": m["at"], "label": names.join(" × "), "fit": "other",
                                      "roles": {"main": m["roles"]["main"], "joining": m["roles"]["other"]}, "arrangement": m["arrangement"]});
-                if !detail.is_empty() {
-                    let reply = to_json(&api(py)?.call_method1("junction_suggest", (&scene, detail))?)?;
+                if arg["detail"].is_object() {
+                    let reply = to_json(&api(py)?.call_method1("junction_suggest", (&scene, &detail))?)?;
                     if let Some(s) = reply["suggestions"].as_array().into_iter().flatten().find(|s| s["key"] == key) {
                         for f in ["fit", "roles", "why", "near", "existing", "mirrored"] {
                             out[f] = s[f].clone();
                         }
                     }
                     if matches!(out["fit"].as_str(), Some("match" | "near" | "other")) {
-                        if let Ok(g) = api(py)?.call_method1("junction_ghosts", (&scene, detail, vec![key])) {
+                        if let Ok(g) = api(py)?.call_method1("junction_ghosts", (&scene, &detail, vec![key])) {
                             if let Some(lines) = to_json(&g)?.get(0).map(|g| g["lines"].clone()) {
                                 out["ghost"] = lines;
                             }
@@ -199,7 +208,7 @@ impl ViewportToolHost {
                     if p["uid"] == current {
                         continue;
                     }
-                    let reply = to_json(&api(py)?.call_method1("junction_suggest", (&scene, p["uid"].as_str().unwrap_or("")))?)?;
+                    let reply = to_json(&api(py)?.call_method1("junction_suggest", (&scene, to_py(py, p)?))?)?;
                     if key.is_empty() || reply["suggestions"].as_array().into_iter().flatten().any(|s| s["key"] == key && s["fit"] == "match") {
                         found = p.clone();
                         break;
@@ -214,6 +223,8 @@ impl ViewportToolHost {
                 let detail = arg["detail"].as_str().unwrap_or_default().to_string();
                 let win = view.call_method0("window")?;
                 let history = view.getattr("history")?;
+                let rows = catalog(&scene)?;
+                let defs = api(py)?.call_method1("junction_definitions", (to_py(py, &arg["preset"])?, to_py(py, &json!(rows))?))?.unbind();
                 if arg["repeat"] == true && arg["force"] != true {
                     let name = by_uid(&scene, &detail)?["name"].as_str().unwrap_or("Junction").to_string();
                     let tr = |s: &str| tr(py, s);
@@ -227,6 +238,7 @@ impl ViewportToolHost {
                         let Ok(choice) = args.get_item(0)?.extract::<String>() else { return Ok(()) };
                         let kw = PyDict::new(py);
                         kw.set_item("detail", &detail)?;
+                        kw.set_item("definitions", defs.bind(py))?;
                         kw.set_item("bindings", to_py(py, &bindings)?)?;
                         if choice == choices[0] {
                             kw.set_item("along", to_py(py, &json!({"end": "both"}))?)?;
@@ -255,6 +267,7 @@ impl ViewportToolHost {
                 }
                 let kw = PyDict::new(py);
                 kw.set_item("detail", &detail)?;
+                        kw.set_item("definitions", defs.bind(py))?;
                 kw.set_item("bindings", to_py(py, &arg["bindings"])?)?;
                 kw.set_item("force", arg["force"] == true)?;
                 let reply = outcome(&py.import("built_core.protocol.commands")?.call_method("run", (&history, "junction_apply"), Some(&kw))?)?;

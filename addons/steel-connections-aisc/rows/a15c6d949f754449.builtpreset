@@ -1,0 +1,103 @@
+{
+  "uid": "a15c6d949f754449",
+  "name": "Bolt ¾ in",
+  "pack": "Steel connections · AISC",
+  "primitive": "junction",
+  "rev": 1,
+  "values": {
+    "meeting": "parts",
+    "roles": {
+      "ply_1": {
+        "name": "Plate"
+      },
+      "ply_2": {
+        "name": "Member"
+      }
+    },
+    "params": [
+      {
+        "key": "d",
+        "expr": "19.05",
+        "name": "Bolt Ø",
+        "unit": "mm",
+        "group": "Bolt",
+        "limits": {
+          "list": [
+            12.7,
+            15.875,
+            19.05,
+            22.225,
+            25.4
+          ]
+        }
+      },
+      {
+        "key": "clearance",
+        "expr": "2",
+        "name": "Hole clearance",
+        "unit": "mm",
+        "group": "Bolt"
+      },
+      {
+        "key": "x",
+        "expr": "0",
+        "name": "Offset across",
+        "unit": "mm",
+        "group": "Position"
+      },
+      {
+        "key": "y",
+        "expr": "0",
+        "name": "Offset along",
+        "unit": "mm",
+        "group": "Position"
+      }
+    ],
+    "contents": [
+      {
+        "key": "bolt",
+        "part": {
+          "fastener": {
+            "d": "d",
+            "clearance": "clearance",
+            "grade": "A325",
+            "standard": "Inch UNC",
+            "table": "inch"
+          },
+          "at": {
+            "frame": "@meet",
+            "offset": [
+              "x",
+              "y",
+              0
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "locks": {},
+  "record": {
+    "class": "IfcElementAssembly",
+    "predefined_type": "ACCESSORY_ASSEMBLY"
+  },
+  "naming": "",
+  "node": "",
+  "provenance": {
+    "created": "2026-11-28",
+    "created_with": "Built",
+    "derived_from": {
+      "pack": "ac868834411f84b1d4d61a14b0c89c6a",
+      "uid": "bcb26d949f754449",
+      "rev": 1
+    }
+  },
+  "depends": [
+    {
+      "kind": "fastener",
+      "key": "inch",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:fc732568e3246dfad12fe06c64a39b11375cc7000c49b5bde6cb26f6947c1820"
+}

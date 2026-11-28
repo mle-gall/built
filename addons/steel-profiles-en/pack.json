@@ -1,0 +1,50 @@
+{
+  "format": "built.presets",
+  "v": 2,
+  "pack": {
+    "id": "585cd0c42f30ad311b4ab77cb80d0b19",
+    "name": "Steel profiles · EN",
+    "version": "1.0.0",
+    "author": {
+      "name": "Built"
+    },
+    "licence": "CC0-1.0",
+    "description": "Standard EN steel sections (IPE, HE, UPE, angles, hollow sections) with their catalogue dimensions and steel member presets.",
+    "units": {
+      "length": "mm",
+      "angle": "deg"
+    },
+    "requires": {
+      "built": ">= 1.0",
+      "features": []
+    },
+    "files": {
+      "rows/8bf3783ccf48197f.builtpreset": "sha256:95f22776c106bf418526b3896f567089e8add93656ac344a071b08ed214b40aa",
+      "rows/c13fabbf1bad8d59.builtpreset": "sha256:82e99543ad632ac2a30df2cb612fdbcc092631e7d2299f2bd917f840f904c541",
+      "rows/7a95d540b258c430.builtpreset": "sha256:09e59cfde76119e9a7ef2299e4e19cd18f12904de768b24cf7a005ef39be866c",
+      "rows/b9e25a2c531a7322.builtpreset": "sha256:68886b8690a02bc46459e204f09fa9adc56a6da961aaa8e7d0e2458bd0b865af",
+      "rows/8ac0ca60033d0135.builtpreset": "sha256:8cf7fa3269f899390fe6168c462ae1f3323e838bc06de5d048ed1596448b4031",
+      "rows/e150271952831c8a.builtpreset": "sha256:51139b5de6f60dc6024f91202a19f8d4f6da5c87f593a9e6605d5c6792f0ee8b",
+      "rows/10b9a84ae7e2d54c.builtpreset": "sha256:09b82f2aab4f57cc1ce8c19403e81246c3aa0ebe2303b2abeafdc1639411d5fe",
+      "rows/dc77a4a5046c823d.builtpreset": "sha256:c86e4cf6bfb0f4c8ccac8e03035a4fc86cae2abbb775b88ede87d1c799e14744",
+      "rows/f358ac6ac0727f21.builtpreset": "sha256:6620d811b5dcc188dc68ace6270389251fcc0bc84957ac4ade594f9b6ec08cbd",
+      "rows/75676207356b2ed1.builtpreset": "sha256:78839d05f0910ecdad68a5b993306be95094dceb19e59361eee375f8cbd13a61",
+      "rows/39903890771bfa9a.builtpreset": "sha256:3d291a47aef344c64274a9bd45d8fcdc95a620b327084608add4b18825f9c60e",
+      "rows/1f714ce734e451db.builtpreset": "sha256:ec08474626e08c92868e9da1b8c25b2f0189f347933e8f8204fbfbc80472c313"
+    }
+  },
+  "rows": [
+    "rows/8bf3783ccf48197f.builtpreset",
+    "rows/c13fabbf1bad8d59.builtpreset",
+    "rows/7a95d540b258c430.builtpreset",
+    "rows/b9e25a2c531a7322.builtpreset",
+    "rows/8ac0ca60033d0135.builtpreset",
+    "rows/e150271952831c8a.builtpreset",
+    "rows/10b9a84ae7e2d54c.builtpreset",
+    "rows/dc77a4a5046c823d.builtpreset",
+    "rows/f358ac6ac0727f21.builtpreset",
+    "rows/75676207356b2ed1.builtpreset",
+    "rows/39903890771bfa9a.builtpreset",
+    "rows/1f714ce734e451db.builtpreset"
+  ]
+}

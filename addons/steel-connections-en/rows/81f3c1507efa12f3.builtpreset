@@ -1,0 +1,28 @@
+{
+  "uid": "81f3c1507efa12f3",
+  "name": "Mitre",
+  "pack": "Steel EN 10365",
+  "primitive": "cut",
+  "rev": 1,
+  "values": {
+    "operation": "trim",
+    "role": "end",
+    "cutter_kind": "bisector",
+    "on": true
+  },
+  "record": {},
+  "locks": {
+    "operation": "fixed",
+    "role": "fixed",
+    "cutter_kind": "free",
+    "on": "free"
+  },
+  "naming": "",
+  "node": "",
+  "provenance": {
+    "created_with": "Built",
+    "created": "2026-11-28"
+  },
+  "depends": [],
+  "hash": "sha256:a0ea7428f887f2c7c88fef4aa03dca35b3ae8800c39528b4508de73de073a365"
+}

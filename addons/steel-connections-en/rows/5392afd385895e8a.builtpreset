@@ -1,0 +1,30 @@
+{
+  "uid": "5392afd385895e8a",
+  "name": "Notch",
+  "pack": "Steel EN 10365",
+  "primitive": "cut",
+  "rev": 1,
+  "values": {
+    "operation": "subtract",
+    "role": "body",
+    "cutter_kind": "section",
+    "on": true,
+    "depth": 40
+  },
+  "record": {},
+  "locks": {
+    "operation": "fixed",
+    "role": "fixed",
+    "cutter_kind": "free",
+    "on": "free",
+    "depth": "free"
+  },
+  "naming": "",
+  "node": "",
+  "provenance": {
+    "created_with": "Built",
+    "created": "2026-11-28"
+  },
+  "depends": [],
+  "hash": "sha256:b32440920d90b26b8f0eeadccc5377f223893e1ec8da969ac01ff085fb4f8406"
+}

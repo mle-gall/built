@@ -36,6 +36,10 @@ def rows_of(scene, kind):
 
 
 def member(profile, points=((0, 0, 0), (2, 0, 0))):
+    if "library" in profile and "family" not in profile:
+        from tests import addon_cases
+        size = addon_cases.profile(profile["library"])
+        profile = dict(size, params={**size.get("params", {}), **profile.get("params", {})})
     return dict(profile=profile, path=dict(points=[list(p) for p in points]))
 
 

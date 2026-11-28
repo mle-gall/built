@@ -7,6 +7,7 @@ import shutil
 import zipfile
 
 import pytest
+from tests import addon_cases
 
 from built_core import command_protocol as live
 from built_core.history import History
@@ -109,7 +110,7 @@ def import_plan(path, known=None):
 
 def test_pack_from_the_garage_imports_without_its_model_and_applies_to_a_new_frame(tmp_path):
     source, root, dest, report = export_knee(tmp_path)
-    assert report["rows"] == 3          # the knee, its bolt and its weld
+    assert report["rows"] == 4          # the knee, plate, bolt and weld
     with zipfile.ZipFile(dest) as z:
         manifest = json.loads(z.read("pack.json"))
         names = set(z.namelist())
@@ -121,7 +122,7 @@ def test_pack_from_the_garage_imports_without_its_model_and_applies_to_a_new_fra
     by_name = {r["name"]: r for r in plan["rows"]}
     knee = by_name[root["name"]]
     assert "needs" not in knee and knee["source"]["pack"] == pack["id"] and knee["author"]["name"] == "Workshop"
-    assert {(d["kind"], d["bundled"] is None) for d in knee["depends"]} == {("preset", True), ("detail", False)}
+    assert {(d["kind"], d["bundled"] is None) for d in knee["depends"]} == {("preset", False), ("detail", False)}
     # No document id, path or user name travels.
     assert "provenance" in knee and str(tmp_path) not in json.dumps(plan["rows"])
 
@@ -152,7 +153,7 @@ def test_folder_packs_tampering_and_missing_dependencies(tmp_path):
     folder = tmp_path / "folder"
     assert (folder / "pack.json").is_file()
     assert any(p.name.endswith(".png") for p in (folder / "thumbnails").iterdir())
-    assert len(import_plan(folder)["rows"]) == 3
+    assert len(import_plan(folder)["rows"]) == 4
     # A changed file is refused by its hash, with nothing read from it.
     tampered = tmp_path / "tampered"
     shutil.copytree(folder, tampered)
@@ -236,7 +237,7 @@ def test_apply_refuses_a_wrong_selection_with_the_roles_it_needs():
     h = History(scene)
     one, = sweeps(h, (HE, [[0, 0, 0], [0, 0, 3]]))
     with pytest.raises(ValueError, match="Select 2 members"):
-        live.junction_bind(scene, p["uid"], [one])
+        live.junction_bind(scene, p, [one])
     reply = commands.run(h, "junction_apply", detail=p["uid"], bindings={"main": {"placement": one}})
     assert not reply["ok"]
 
@@ -260,13 +261,13 @@ def test_imperial_steel_details_follow_units():
     name = "Steel connections · AISC"
     assert all(p["pack"] != name for p, _ in live.preset_catalog(scene))
     scene.units = {"length": "ft-in-frac"}
-    rows = [p for p, _ in live.preset_catalog(scene) if p["pack"] == name]
-    assert len(rows) == 8
+    assert all(p["pack"] != name for p, _ in live.preset_catalog(scene))
+    rows = addon_cases.rows("steel-connections-aisc")
     h = History(scene)
-    w = {"library": "aisc/w8x18"}
+    w = addon_cases.profile("aisc/w8x18")
     picks = sweeps(h, (w, [[0, 0, 0], [0, 0, 3]]), (w, [[0, 0, 2], [0, 2, 2]]))
     detail = next(p for p in rows if p["name"] == "Fin plate")
-    apply(h, "junction_apply", detail=detail["uid"], bindings=live.junction_bind(scene, detail, picks))
+    apply(h, "junction_apply", detail=detail["uid"], bindings=live.junction_bind(scene, detail, picks), definitions=rows)
     assert all(r["state"] == "ok" for r in rows_of(scene))
     bolts = [g for g in scene.groups_by_uid().values() if (g.ifc or {}).get("d") == 19.05]
     assert bolts and all("3/4" in g.name for g in bolts)
@@ -300,10 +301,10 @@ def test_component_bundle_embeds_once_on_apply(tmp_path):
 
 @pytest.mark.parametrize("filename", [
     "steel-connections-en", "steel-connections-aisc", "purlin-connections-en", "mep-penetrations",
+    "steel-profiles-en", "steel-profiles-aisc", "timber-joints",
 ])
-def test_inline_pack_hashes_and_dependencies(filename):
-    from pathlib import Path
-    path = Path(__file__).resolve().parents[1] / "resources" / "presets" / "packs" / (filename + ".builtpreset")
+def test_inline_pack_hashes_and_dependencies(filename, tmp_path):
+    path = addon_cases.build(addon_cases.ADDONS / filename, tmp_path)
     pack = live.pack_read(str(path))
     assert pack["v"] == 2
     assert all("needs" not in row and row["source"]["hash"] == row["hash"] for row in pack["rows"])
@@ -314,6 +315,7 @@ def test_purlin_seats_at_an_oblique_crossing():
     h = History(scene)
     a, b = sweeps(h, (HE, [[-1.5, 0, 0], [1.5, 0, 0]]), (IPE, [[-.4, -1, 0], [.4, 1, 0]]))
     p = next(p for p in starter_details() if p["name"] == "Purlin cleat")
+    apply(h, "preset_update", rows=addon_cases.rows("purlin-connections-en"))
     suggestion, = live.junction_suggest(scene, p["uid"])["suggestions"]
     uid = apply(h, "junction_apply", detail=p["uid"], bindings=suggestion["roles"])["uid"]
     rows = rows_of(scene)

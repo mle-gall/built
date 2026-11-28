@@ -8,7 +8,7 @@
   "author": {
    "name": "Built"
   },
-  "licence": "GPL-3.0-or-later",
+  "licence": "CC0-1.0",
   "description": "Cuts and fixings for any two members: a mitred corner and a screwed butt joint.",
   "units": {
    "length": "mm",

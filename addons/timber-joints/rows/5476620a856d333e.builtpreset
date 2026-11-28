@@ -1,0 +1,286 @@
+{
+  "uid": "5476620a856d333e",
+  "name": "Joist hanger",
+  "pack": "Timber joints",
+  "primitive": "junction",
+  "rev": 1,
+  "values": {
+    "meeting": "end_face",
+    "roles": {
+      "main": {
+        "name": "Beam"
+      },
+      "joining": {
+        "name": "Joist"
+      }
+    },
+    "params": [
+      {
+        "key": "t",
+        "expr": "2",
+        "name": "Steel thickness",
+        "unit": "mm",
+        "group": "Hanger"
+      },
+      {
+        "key": "gap",
+        "expr": "3",
+        "name": "Gap",
+        "unit": "mm",
+        "group": "Joist"
+      },
+      {
+        "key": "seat_l",
+        "expr": "60",
+        "name": "Seat length",
+        "unit": "mm",
+        "group": "Hanger"
+      },
+      {
+        "key": "flange_w",
+        "expr": "35",
+        "name": "Flange width",
+        "unit": "mm",
+        "group": "Hanger"
+      }
+    ],
+    "contents": [
+      {
+        "key": "end_cut",
+        "on": "joining",
+        "row": {
+          "kind": "cut",
+          "operation": "trim",
+          "end": "@joining.end",
+          "cutter": {
+            "plane": {}
+          },
+          "anchor": {
+            "ref": "@meet",
+            "offset": "gap"
+          }
+        }
+      },
+      {
+        "key": "seat",
+        "part": {
+          "preset": "9090f8e107a037c2",
+          "fields": {
+            "profile.params.width": "joining.width + 2 * t",
+            "profile.params.height": "seat_l",
+            "thickness": "t"
+          },
+          "at": {
+            "frame": "@meet",
+            "axis": "y",
+            "offset": [
+              0,
+              "-joining.height / 2 - t",
+              "gap + seat_l / 2"
+            ]
+          }
+        }
+      },
+      {
+        "key": "side_a",
+        "part": {
+          "preset": "9090f8e107a037c2",
+          "fields": {
+            "profile.params.width": "seat_l",
+            "profile.params.height": "joining.height",
+            "thickness": "t"
+          },
+          "at": {
+            "frame": "@meet",
+            "axis": "x",
+            "offset": [
+              "joining.width / 2",
+              0,
+              "gap + seat_l / 2"
+            ]
+          }
+        }
+      },
+      {
+        "key": "side_b",
+        "part": {
+          "preset": "9090f8e107a037c2",
+          "fields": {
+            "profile.params.width": "seat_l",
+            "profile.params.height": "joining.height",
+            "thickness": "t"
+          },
+          "at": {
+            "frame": "@meet",
+            "axis": "x",
+            "offset": [
+              "-joining.width / 2 - t",
+              0,
+              "gap + seat_l / 2"
+            ]
+          }
+        }
+      },
+      {
+        "key": "flange_a",
+        "part": {
+          "preset": "9090f8e107a037c2",
+          "fields": {
+            "profile.params.width": "flange_w",
+            "profile.params.height": "joining.height",
+            "thickness": "t"
+          },
+          "at": {
+            "frame": "@meet",
+            "offset": [
+              "joining.width / 2 + t + flange_w / 2",
+              0,
+              0
+            ]
+          }
+        }
+      },
+      {
+        "key": "flange_b",
+        "part": {
+          "preset": "9090f8e107a037c2",
+          "fields": {
+            "profile.params.width": "flange_w",
+            "profile.params.height": "joining.height",
+            "thickness": "t"
+          },
+          "at": {
+            "frame": "@meet",
+            "offset": [
+              "-joining.width / 2 - t - flange_w / 2",
+              0,
+              0
+            ]
+          }
+        }
+      },
+      {
+        "key": "nail_1",
+        "part": {
+          "fastener": {
+            "kind": "nail",
+            "d": 4,
+            "length": 35
+          },
+          "at": {
+            "frame": "@meet",
+            "offset": [
+              "joining.width / 2 + t + flange_w / 2",
+              "joining.height / 4",
+              "t"
+            ]
+          }
+        }
+      },
+      {
+        "key": "nail_2",
+        "part": {
+          "fastener": {
+            "kind": "nail",
+            "d": 4,
+            "length": 35
+          },
+          "at": {
+            "frame": "@meet",
+            "offset": [
+              "joining.width / 2 + t + flange_w / 2",
+              "-joining.height / 4",
+              "t"
+            ]
+          }
+        }
+      },
+      {
+        "key": "nail_3",
+        "part": {
+          "fastener": {
+            "kind": "nail",
+            "d": 4,
+            "length": 35
+          },
+          "at": {
+            "frame": "@meet",
+            "offset": [
+              "-joining.width / 2 - t - flange_w / 2",
+              "joining.height / 4",
+              "t"
+            ]
+          }
+        }
+      },
+      {
+        "key": "nail_4",
+        "part": {
+          "fastener": {
+            "kind": "nail",
+            "d": 4,
+            "length": 35
+          },
+          "at": {
+            "frame": "@meet",
+            "offset": [
+              "-joining.width / 2 - t - flange_w / 2",
+              "-joining.height / 4",
+              "t"
+            ]
+          }
+        }
+      }
+    ],
+    "rule": {
+      "meeting": "end_face",
+      "roles": {
+        "main": {
+          "profile": [
+            {
+              "family": "rectangle"
+            }
+          ]
+        },
+        "joining": {
+          "profile": [
+            {
+              "family": "rectangle"
+            }
+          ],
+          "end": "any"
+        }
+      },
+      "angle": {
+        "value": 90,
+        "tol": 5
+      },
+      "mirror": "allow"
+    }
+  },
+  "locks": {},
+  "record": {
+    "class": "IfcElementAssembly"
+  },
+  "naming": "",
+  "node": "",
+  "provenance": {
+    "created": "2026-11-28",
+    "created_with": "Built",
+    "derived_from": null
+  },
+  "depends": [
+    {
+      "kind": "preset",
+      "key": "9090f8e107a037c2",
+      "bundled": "rows/9090f8e107a037c2.builtpreset",
+      "rev": 1
+    },
+    {
+      "kind": "fastener",
+      "key": "metric",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:c0736f719f7c4bf8fda04a3b4f73952a2bbcb36489011771430d895d777c2ca6"
+}

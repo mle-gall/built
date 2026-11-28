@@ -1,0 +1,53 @@
+{
+  "uid": "2fd29d6163395519",
+  "name": "Timber joist",
+  "pack": "Timber C16/C24",
+  "primitive": "sweep",
+  "rev": 1,
+  "values": {
+    "profile": {
+      "library": "basic/timber",
+      "family": "rectangle",
+      "params": {
+        "width": 45,
+        "height": 145,
+        "web": 0,
+        "flange": 0
+      }
+    },
+    "attachment": "centre",
+    "rotation": 0,
+    "mirror": false
+  },
+  "record": {
+    "class": "IfcBeam",
+    "predefined_type": "JOIST",
+    "material": "C24",
+    "object_type": "Timber joist"
+  },
+  "naming": "J-{n}",
+  "node": "Joists",
+  "locks": {
+    "profile": "fixed",
+    "attachment": "free",
+    "rotation": "free",
+    "mirror": "free",
+    "material": "fixed",
+    "class": "fixed",
+    "predefined_type": "fixed",
+    "object_type": "fixed"
+  },
+  "provenance": {
+    "created_with": "Built",
+    "created": "2026-11-28"
+  },
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "basic/timber",
+      "bundled": null
+    }
+  ],
+  "profile_size": true,
+  "hash": "sha256:e5dcef060d44bffb055473d16905e631d0f3fef2cff2af8fe82f4d59cc010851"
+}

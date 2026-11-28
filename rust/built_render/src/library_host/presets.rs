@@ -3,6 +3,15 @@ use super::*;
 use pyo3::exceptions::PyValueError;
 use serde_json::{json, Value};
 
+pub(super) fn profile_thumb(profile: &Value) -> Option<String> {
+    let key = profile["library"].as_str()?;
+    if profile["family"].is_string() {
+        Some(format!("profile:{profile}"))
+    } else {
+        Some(format!("profile:{key}"))
+    }
+}
+
 pub(super) fn listed(ctx: &Bound<'_, PyAny>) -> PyResult<Vec<(Value, String)>> {
     rows(ctx)
 }
@@ -222,10 +231,9 @@ fn export_v1(ctx: &Bound<'_, PyAny>, pack: String) -> PyResult<()> {
             path.push("pack.json");
         }
         let ctx = c.bind(py);
-        let rows: Vec<_> = rows(ctx)?
+        let rows: Vec<_> = super::packs::all_rows(ctx)?
             .into_iter()
-            .filter(|(p, _)| p["pack"] == pack.as_str())
-            .map(|(p, _)| p)
+            .filter(|p| p["pack"] == pack.as_str())
             .collect();
         let encoded = serde_json::to_vec_pretty(&json!({"format":"built.presets","v":1,"rows":rows}))
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
@@ -310,7 +318,7 @@ impl PresetsProvider {
                 details.insert(0, (crate::settings_rows::tr(py, "Similar meetings")?, open.to_string(), "free".into()));
             }
             let mut row = json!({"key":p["uid"],"name":p["name"],"category":p["pack"],"source":source,"verbs":verbs,"defaults":details,
-                "base":p["primitive"],"thumb":p["values"]["profile"]["library"].as_str().map(|k|format!("profile:{k}"))});
+                "base":p["primitive"],"thumb":profile_thumb(&p["values"]["profile"])});
             if junction {
                 row["thumb"] = json!(super::packs::junction_thumb(py, &p)?);
                 row["uses"] = json!(uses.get(p["uid"].as_str().unwrap_or("")).copied().unwrap_or(0));
@@ -345,7 +353,7 @@ impl PresetsProvider {
             let mut rows: Vec<Value> = details(&row["preset"]).into_iter().map(|d| json!(d)).collect();
             rows.extend(row["defaults"].as_array().cloned().unwrap_or_default());
             row["defaults"] = json!(rows);
-            row["thumb"] = json!(row["preset"]["values"]["profile"]["library"].as_str().map(|k| format!("profile:{k}")));
+            row["thumb"] = json!(profile_thumb(&row["preset"]["values"]["profile"]));
             items.push(row);
         }
         json(py)?.call_method1("loads", (json!(items).to_string(),))

@@ -1,0 +1,52 @@
+{
+  "uid": "3725dbfedcd5114e",
+  "name": "Pipe",
+  "pack": "MEP",
+  "primitive": "sweep",
+  "rev": 1,
+  "values": {
+    "profile": {
+      "library": "en/chs114.3x5",
+      "family": "chs",
+      "params": {
+        "width": 114.3,
+        "height": 114.3,
+        "web": 5,
+        "radius": 0
+      }
+    },
+    "attachment": "centre",
+    "rotation": 0,
+    "mirror": false
+  },
+  "record": {
+    "class": "IfcPipeSegment",
+    "predefined_type": "RIGIDSEGMENT",
+    "material": "Steel",
+    "object_type": "Pipe"
+  },
+  "naming": "P-{n}",
+  "node": "Pipes",
+  "locks": {
+    "profile": "fixed",
+    "attachment": "free",
+    "rotation": "free",
+    "mirror": "free",
+    "material": "fixed",
+    "class": "fixed",
+    "predefined_type": "fixed",
+    "object_type": "fixed"
+  },
+  "provenance": {
+    "created_with": "Built",
+    "created": "2026-11-28"
+  },
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/chs114.3x5",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:29c3683fdf49458d72154894ebbfeadeea4ce63b2a29470a085f50c263374fb1"
+}

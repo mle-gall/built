@@ -10,8 +10,8 @@ in the same Save to Library drawer for every kind:
 | **My library** | A folder on this machine for this user (below) | You, in every model |
 | **Shared libraries** | Folders added in Settings › Library, each with a name and a read-only flag | Everyone who adds the same folder |
 
-Built's own bundled content (RAL colours, starter components, steel
-profiles, built-in styles) is a fifth *source* in the browser, never a
+Built's own bundled content (RAL colours, starter components, parametric
+profile families, built-in styles) is a fifth *source* in the browser, never a
 destination, and is read-only.
 
 The code: `rust/built_render/src/library_store.rs` (the folders, plain Rust,
@@ -150,3 +150,30 @@ shared library appear when they hold something of the open type. The
 Components tab has the same sources as Source facets. A saved item's menu and
 details offer Use, Edit name and tags…, Copy to…, Move to…, Update, Reveal in
 Finder (folder destinations) and Delete… (writable ones).
+
+
+## Trade add-ons
+
+Build the portable archives with `python3 scripts/build_addons.py`. Each
+source folder under `addons/` produces one format-2 archive in
+`dist/addons/`. Import pack… in Profiles or Presets verifies the content
+hashes and installs the rows together in the chosen destination. Pack
+content is CC0-1.0. The website will host these packs later. The folder
+layout, row rules and `--rehash` for authors are in addons/README.md.
+
+New members store their section dimensions in the model. For older models
+that saved only a catalogue key, import the matching profile pack into My
+library before opening the model. Built then restores the dimensions, keeps
+any overrides, and includes the recovered section on the next save.
+
+| Resource | Where it lives and why |
+|---|---|
+| Steel profiles · EN and · AISC | Add-ons containing the standard catalogue sizes, provenance and steel sweep presets. Each size carries its family and dimensions into the model. |
+| Steel connections · EN and · AISC | Add-ons containing plates, fastener and weld details and steel-specific cuts. The EN pack includes the original M16 group and an S355 plate. The connection packs carry the plates their details use so plate schedules retain the material and mass. |
+| Purlin connections · EN | Add-on containing the cleat and the bolt detail it uses. |
+| MEP penetrations | Add-on containing Duct, Pipe and their wall and slab penetrations. |
+| Timber joints | Add-on containing timber section presets and four framing joints. |
+| Generic profile families | Bundled editable section geometry including I, C, L, T, Z, rectangle, round bar, round tube and rectangular tube. |
+| Generic and Architecture presets | Bundled general fittings, a plate with user-chosen material, wall, opening, lining, frame, lintel, sill, corner and slab tools. |
+| Metric and inch fastener tables | Bundled dimensions for the user-sized bolt primitive and for evaluating embedded fastener details after a pack is removed. |
+| Colours, textures, styles, entourage and other starter components | Bundled appearance and scene resources. |

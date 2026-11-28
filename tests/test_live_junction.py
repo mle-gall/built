@@ -286,7 +286,8 @@ def knee_fixture(stage=3, bead=False, portal=False):
                    member({"library": "basic/timber"}, [[1, 0, 0], [1, 0, 1]])]
     apply(history, "create_sweeps", sweeps=members)
     column, beam = scene.groups
-    plate = next(p for p, _ in live.preset_catalog(scene) if p["name"] == "Plate")
+    from tests import addon_cases
+    plate = next(p for p in addon_cases.rows("steel-connections-en") if p["name"] == "S355 plate")
 
     def detail(n, name, roles, contents):
         return dict(uid=f"c081{n:012x}", name=name, primitive="junction", pack="Project",
@@ -316,7 +317,7 @@ def knee_fixture(stage=3, bead=False, portal=False):
                             "nest": {"count": 2, "step": 110}}}),
             dict(key="weld", junction={"detail": weld["uid"], "roles": {
                 "a": "@joining", "b": {"placement": "@plate", "face": "end"}}})])
-    apply(history, "preset_update", rows=[bolt, weld, root])
+    apply(history, "preset_update", rows=[plate, bolt, weld, root])
     uid = apply(history, "junction_apply", detail=root["uid"], bindings={
         "main": dict(placement=column.uid, face="flange_outer"),
         "joining": dict(placement=beam.uid, end="start")})["uid"]

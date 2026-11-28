@@ -1,0 +1,223 @@
+{
+  "uid": "0627197caa2068eb",
+  "name": "Fin plate",
+  "pack": "Steel connections · EN",
+  "primitive": "junction",
+  "rev": 2,
+  "values": {
+    "meeting": "end_face",
+    "roles": {
+      "main": {
+        "name": "Supporting member"
+      },
+      "joining": {
+        "name": "Beam"
+      }
+    },
+    "params": [
+      {
+        "key": "gap",
+        "expr": "10",
+        "name": "Gap",
+        "unit": "mm",
+        "group": "Beam"
+      },
+      {
+        "key": "fin_t",
+        "expr": "10",
+        "name": "Fin thickness",
+        "unit": "mm",
+        "group": "Fin",
+        "limits": {
+          "list": [
+            8,
+            10,
+            12,
+            15
+          ]
+        }
+      },
+      {
+        "key": "fin_l",
+        "expr": "gap + 90",
+        "name": "Fin length",
+        "unit": "mm",
+        "group": "Fin"
+      },
+      {
+        "key": "fin_h",
+        "expr": "max(120, joining.height * 0.6)",
+        "name": "Fin height",
+        "unit": "mm",
+        "group": "Fin"
+      },
+      {
+        "key": "weld_a",
+        "expr": "4",
+        "name": "Weld throat",
+        "unit": "mm",
+        "group": "Weld"
+      },
+      {
+        "key": "pitch",
+        "expr": "fin_h / 2",
+        "name": "Bolt pitch",
+        "unit": "mm",
+        "group": "Bolts"
+      },
+      {
+        "key": "bolt_d",
+        "expr": "16",
+        "name": "Bolt Ø",
+        "unit": "mm",
+        "group": "Bolts",
+        "limits": {
+          "list": [
+            12,
+            16,
+            20,
+            24
+          ]
+        }
+      }
+    ],
+    "contents": [
+      {
+        "key": "end_cut",
+        "on": "joining",
+        "row": {
+          "kind": "cut",
+          "operation": "trim",
+          "end": "@joining.end",
+          "cutter": {
+            "plane": {}
+          },
+          "anchor": {
+            "ref": "@meet",
+            "offset": "gap"
+          }
+        }
+      },
+      {
+        "key": "fin",
+        "part": {
+          "preset": "9090f8e107a037c2",
+          "fields": {
+            "profile.params.width": "fin_h",
+            "profile.params.height": "fin_t",
+            "thickness": "fin_l"
+          },
+          "at": {
+            "frame": "@joining.depth",
+            "offset": [
+              0,
+              "joining.web / 2 + fin_t / 2",
+              0
+            ]
+          }
+        }
+      },
+      {
+        "key": "bolts",
+        "junction": {
+          "detail": "bcb26d949f754449",
+          "roles": {
+            "ply_1": {
+              "placement": "@fin",
+              "face": "top"
+            },
+            "ply_2": {
+              "placement": "@joining",
+              "face": "web_left"
+            }
+          },
+          "params": {
+            "d": "bolt_d",
+            "x": "-pitch / 2",
+            "y": 0
+          },
+          "repeat": {
+            "rule": {
+              "count": 2,
+              "step": "pitch"
+            },
+            "run": "@joining.depth.x"
+          }
+        }
+      },
+      {
+        "key": "weld",
+        "junction": {
+          "detail": "1fa8a4f99a56a112",
+          "roles": {
+            "a": {
+              "placement": "@fin",
+              "face": "end"
+            },
+            "b": "@main"
+          },
+          "params": {
+            "throat": "weld_a"
+          }
+        }
+      }
+    ],
+    "rule": {
+      "meeting": "end_face",
+      "roles": {
+        "main": {
+          "profile": [
+            {
+              "family": "i"
+            }
+          ]
+        },
+        "joining": {
+          "profile": [
+            {
+              "family": "i"
+            }
+          ],
+          "end": "any"
+        }
+      },
+      "angle": {
+        "value": 90,
+        "tol": 5
+      },
+      "mirror": "allow"
+    }
+  },
+  "locks": {},
+  "record": {
+    "class": "IfcElementAssembly"
+  },
+  "naming": "",
+  "node": "",
+  "provenance": {
+    "created": "2026-11-28",
+    "created_with": "Built",
+    "derived_from": null
+  },
+  "depends": [
+    {
+      "kind": "preset",
+      "key": "9090f8e107a037c2",
+      "bundled": "rows/9090f8e107a037c2.builtpreset",
+      "rev": 1
+    },
+    {
+      "kind": "detail",
+      "key": "bcb26d949f754449",
+      "bundled": "rows/bcb26d949f754449.builtpreset",
+      "rev": 1
+    },
+    {
+      "kind": "detail",
+      "key": "1fa8a4f99a56a112",
+      "bundled": "rows/1fa8a4f99a56a112.builtpreset",
+      "rev": 1
+    }
+  ],
+  "hash": "sha256:5364f3bf4f2d4856eceadb60cc693118c812877a02b7f73a741a22b1f3656ecb"
+}

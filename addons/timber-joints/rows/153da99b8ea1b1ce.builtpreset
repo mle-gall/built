@@ -1,0 +1,54 @@
+{
+  "uid": "153da99b8ea1b1ce",
+  "name": "Timber stud",
+  "pack": "Timber C16/C24",
+  "primitive": "sweep",
+  "rev": 1,
+  "values": {
+    "profile": {
+      "library": "basic/stud",
+      "family": "rectangle",
+      "params": {
+        "width": 45,
+        "height": 95,
+        "web": 0,
+        "flange": 0,
+        "radius": 0
+      }
+    },
+    "attachment": "centre",
+    "rotation": 0,
+    "mirror": false
+  },
+  "record": {
+    "class": "IfcMember",
+    "predefined_type": "STUD",
+    "material": "C16",
+    "object_type": "Timber stud"
+  },
+  "naming": "S-{n}",
+  "node": "Studs",
+  "locks": {
+    "profile": "fixed",
+    "attachment": "free",
+    "rotation": "free",
+    "mirror": "free",
+    "material": "fixed",
+    "class": "fixed",
+    "predefined_type": "fixed",
+    "object_type": "fixed"
+  },
+  "provenance": {
+    "created_with": "Built",
+    "created": "2026-11-28"
+  },
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "basic/stud",
+      "bundled": null
+    }
+  ],
+  "profile_size": true,
+  "hash": "sha256:2c73b0e87985c2da70e12ca0486e2cab0c3379475fe694b370e76dab4ae1a369"
+}

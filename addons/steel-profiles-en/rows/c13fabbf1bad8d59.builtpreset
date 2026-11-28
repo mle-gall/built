@@ -1,0 +1,62 @@
+{
+  "uid": "c13fabbf1bad8d59",
+  "name": "Steel column",
+  "pack": "Steel EN 10365",
+  "primitive": "sweep",
+  "rev": 1,
+  "values": {
+    "profile": {
+      "library": "en/he200a",
+      "family": "i",
+      "params": {
+        "height": 190,
+        "width": 200,
+        "web": 6.5,
+        "flange": 10,
+        "radius": 18
+      },
+      "catalogue": {
+        "name": "HE 200 A",
+        "series": [
+          [
+            "en/he200a",
+            190
+          ]
+        ]
+      }
+    },
+    "attachment": "centre",
+    "rotation": 0,
+    "mirror": false
+  },
+  "record": {
+    "class": "IfcColumn",
+    "predefined_type": "COLUMN",
+    "material": "S355",
+    "object_type": "Steel column"
+  },
+  "naming": "C-{n}",
+  "node": "Columns",
+  "locks": {
+    "profile": "fixed",
+    "attachment": "free",
+    "rotation": "free",
+    "mirror": "free",
+    "material": "fixed",
+    "class": "fixed",
+    "predefined_type": "fixed",
+    "object_type": "fixed"
+  },
+  "provenance": {
+    "created_with": "Built",
+    "created": "2026-11-28"
+  },
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/he200a",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:a75b471bd59acc408551ab43a9dfe953a9fd39ac07273c79aef53b84e7082ca3"
+}

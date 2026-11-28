@@ -1,0 +1,46 @@
+{
+  "uid": "39903890771bfa9a",
+  "name": "CHS 114.3 × 5",
+  "rev": 1,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/chs114.3x5",
+      "family": "chs",
+      "params": {
+        "width": 114.3,
+        "height": 114.3,
+        "web": 5,
+        "radius": 0
+      },
+      "catalogue": {
+        "name": "CHS 114.3 × 5",
+        "series": [
+          [
+            "en/chs114.3x5",
+            114.3
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "source": "https://www.tatasteeluk.com/sites/default/files/pimcore_doc/tata-steel-uk-hybox-technical-guide-en.pdf",
+    "standard": "EN 10219"
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/chs114.3x5",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:7a625db55435bbf5813675517c27568ad9ec8846e38e0ecb1bc950f0247f74a5"
+}

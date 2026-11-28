@@ -1,0 +1,282 @@
+{
+  "uid": "c1f7c7eaf2692e34",
+  "name": "Tenon and mortise",
+  "pack": "Timber joints",
+  "primitive": "junction",
+  "rev": 1,
+  "values": {
+    "meeting": "end_face",
+    "roles": {
+      "main": {
+        "name": "Post"
+      },
+      "joining": {
+        "name": "Rail"
+      }
+    },
+    "params": [
+      {
+        "key": "tenon_t",
+        "expr": "round(joining.width / 3, 1)",
+        "name": "Tenon thickness",
+        "unit": "mm",
+        "group": "Tenon"
+      },
+      {
+        "key": "tenon_h",
+        "expr": "joining.height - 40",
+        "name": "Tenon height",
+        "unit": "mm",
+        "group": "Tenon"
+      },
+      {
+        "key": "tenon_l",
+        "expr": "min(main.width, main.height) * 0.6",
+        "name": "Tenon length",
+        "unit": "mm",
+        "group": "Tenon"
+      },
+      {
+        "key": "dowel_d",
+        "expr": "12",
+        "name": "Dowel Ø",
+        "unit": "mm",
+        "group": "Dowels",
+        "limits": {
+          "list": [
+            10,
+            12,
+            16
+          ]
+        }
+      }
+    ],
+    "contents": [
+      {
+        "key": "end_cut",
+        "on": "joining",
+        "row": {
+          "kind": "cut",
+          "operation": "trim",
+          "end": "@joining.end",
+          "cutter": {
+            "plane": {}
+          },
+          "anchor": {
+            "ref": "@meet",
+            "offset": "-tenon_l"
+          }
+        }
+      },
+      {
+        "key": "cheek_a",
+        "on": "joining",
+        "row": {
+          "kind": "cut",
+          "operation": "subtract",
+          "cutter": {
+            "block": {
+              "size": [
+                1000,
+                500,
+                "tenon_l + 1"
+              ],
+              "at": [
+                -500,
+                "tenon_t / 2",
+                "-tenon_l - 1"
+              ]
+            }
+          },
+          "anchor": {
+            "ref": "@meet"
+          }
+        }
+      },
+      {
+        "key": "cheek_b",
+        "on": "joining",
+        "row": {
+          "kind": "cut",
+          "operation": "subtract",
+          "cutter": {
+            "block": {
+              "size": [
+                1000,
+                500,
+                "tenon_l + 1"
+              ],
+              "at": [
+                -500,
+                "-tenon_t / 2 - 500",
+                "-tenon_l - 1"
+              ]
+            }
+          },
+          "anchor": {
+            "ref": "@meet"
+          }
+        }
+      },
+      {
+        "key": "shoulder_a",
+        "on": "joining",
+        "row": {
+          "kind": "cut",
+          "operation": "subtract",
+          "cutter": {
+            "block": {
+              "size": [
+                "500",
+                1000,
+                "tenon_l + 1"
+              ],
+              "at": [
+                "tenon_h / 2",
+                -500,
+                "-tenon_l - 1"
+              ]
+            }
+          },
+          "anchor": {
+            "ref": "@meet"
+          }
+        }
+      },
+      {
+        "key": "shoulder_b",
+        "on": "joining",
+        "row": {
+          "kind": "cut",
+          "operation": "subtract",
+          "cutter": {
+            "block": {
+              "size": [
+                "500",
+                1000,
+                "tenon_l + 1"
+              ],
+              "at": [
+                "-tenon_h / 2 - 500",
+                -500,
+                "-tenon_l - 1"
+              ]
+            }
+          },
+          "anchor": {
+            "ref": "@meet"
+          }
+        }
+      },
+      {
+        "key": "mortise",
+        "on": "main",
+        "row": {
+          "kind": "cut",
+          "operation": "subtract",
+          "cutter": {
+            "block": {
+              "size": [
+                "tenon_h",
+                "tenon_t",
+                "tenon_l + 1"
+              ],
+              "at": [
+                "-tenon_h / 2",
+                "-tenon_t / 2",
+                "-tenon_l"
+              ]
+            }
+          },
+          "anchor": {
+            "ref": "@meet"
+          }
+        }
+      },
+      {
+        "key": "dowel_1",
+        "part": {
+          "fastener": {
+            "kind": "dowel",
+            "d": "dowel_d",
+            "clearance": 0,
+            "length": "main.width"
+          },
+          "at": {
+            "frame": "@meet",
+            "axis": "y",
+            "offset": [
+              "tenon_h / 4",
+              "main.width / 2",
+              "-tenon_l / 2"
+            ]
+          }
+        }
+      },
+      {
+        "key": "dowel_2",
+        "part": {
+          "fastener": {
+            "kind": "dowel",
+            "d": "dowel_d",
+            "clearance": 0,
+            "length": "main.width"
+          },
+          "at": {
+            "frame": "@meet",
+            "axis": "y",
+            "offset": [
+              "-tenon_h / 4",
+              "main.width / 2",
+              "-tenon_l / 2"
+            ]
+          }
+        }
+      }
+    ],
+    "rule": {
+      "meeting": "end_face",
+      "roles": {
+        "main": {
+          "profile": [
+            {
+              "family": "rectangle"
+            }
+          ]
+        },
+        "joining": {
+          "profile": [
+            {
+              "family": "rectangle"
+            }
+          ],
+          "end": "any"
+        }
+      },
+      "angle": {
+        "value": 90,
+        "tol": 2
+      },
+      "mirror": "allow"
+    }
+  },
+  "locks": {},
+  "record": {
+    "class": "IfcElementAssembly"
+  },
+  "naming": "",
+  "node": "",
+  "provenance": {
+    "created": "2026-11-28",
+    "created_with": "Built",
+    "derived_from": null
+  },
+  "depends": [
+    {
+      "kind": "fastener",
+      "key": "metric",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:05201eadcd9c92ab482fa8d278600978b7ae56c99c6f88ed546a766a241331de"
+}

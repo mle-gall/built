@@ -1,0 +1,136 @@
+{
+  "uid": "665afd6942bfa0b5",
+  "name": "Pipe through slab",
+  "pack": "MEP penetrations",
+  "primitive": "junction",
+  "rev": 1,
+  "values": {
+    "meeting": "end_face",
+    "params": [
+      {
+        "key": "clearance",
+        "expr": "5",
+        "name": "Radial clearance",
+        "unit": "mm",
+        "group": "Dimensions"
+      },
+      {
+        "key": "opening_w",
+        "expr": "joining.width + 2 * clearance",
+        "name": "Opening width",
+        "unit": "mm",
+        "group": "Dimensions"
+      },
+      {
+        "key": "opening_h",
+        "expr": "joining.height + 2 * clearance",
+        "name": "Opening height",
+        "unit": "mm",
+        "group": "Dimensions"
+      },
+      {
+        "key": "rim",
+        "expr": "8",
+        "name": "Collar wall",
+        "unit": "mm",
+        "group": "Dimensions"
+      },
+      {
+        "key": "depth",
+        "expr": "40",
+        "name": "Collar depth",
+        "unit": "mm",
+        "group": "Dimensions"
+      }
+    ],
+    "contents": [
+      {
+        "key": "opening",
+        "on": "main",
+        "row": {
+          "kind": "cut",
+          "operation": "subtract",
+          "cutter": {
+            "hole": {
+              "d": "opening_w",
+              "depth": "through"
+            }
+          },
+          "anchor": {
+            "ref": "@joining.section"
+          }
+        }
+      },
+      {
+        "key": "fire_collar",
+        "part": {
+          "sweep": {
+            "profile": {
+              "library": "basic/rail"
+            }
+          },
+          "record": {
+            "class": "IfcDiscreteAccessory",
+            "name": "Fire collar"
+          },
+          "at": {
+            "frame": "@joining.section"
+          },
+          "fields": {
+            "thickness": "depth",
+            "profile.params.width": "opening_w + 2 * rim",
+            "profile.params.height": "opening_h + 2 * rim",
+            "profile.params.web": "rim"
+          }
+        }
+      }
+    ],
+    "roles": {
+      "main": {
+        "name": "Slab"
+      },
+      "joining": {
+        "name": "Pipe"
+      }
+    },
+    "rule": {
+      "meeting": "end_face",
+      "roles": {
+        "main": {
+          "class": [
+            "IfcSlab"
+          ],
+          "face": [
+            "top"
+          ]
+        },
+        "joining": {
+          "profile": [
+            {
+              "family": "chs"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "locks": {},
+  "record": {
+    "class": "IfcElementAssembly"
+  },
+  "naming": "",
+  "node": "",
+  "provenance": {
+    "created": "2026-11-28",
+    "created_with": "Built",
+    "derived_from": null
+  },
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "basic/rail",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:9a807795f4dd82053e190131315530dd5a51a11a4a0012433e8adbadfbfead65"
+}

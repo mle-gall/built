@@ -31,10 +31,11 @@ def _model(path):
     from built_core.scene import Scene
     from formats import igz
 
+    from tests.addon_cases import profile
     s = Scene()
     h = History(s)
     assert commands.run(h, "create_sweeps", sweeps=[
-        dict(profile=dict(library="en/ipe240"), path=dict(points=[[0, 0, 0], [0, 3, 0]]))])["ok"]
+        dict(profile=profile("en/ipe240"), path=dict(points=[[0, 0, 0], [0, 3, 0]]))])["ok"]
     square = [[0, 0], [80, 0], [80, 80], [0, 80]]
     curves = [dict(id=i + 1, kind="line", a=square[i], b=square[(i + 1) % 4]) for i in range(4)]
     assert commands.run(h, "sketch_commit", row=dict(uid="5ce7c40000000201", use="profile", name="Post",

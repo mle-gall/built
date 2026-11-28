@@ -1,0 +1,62 @@
+{
+  "uid": "0d988538e2d3c915",
+  "name": "Wide flange beam",
+  "pack": "Steel AISC",
+  "primitive": "sweep",
+  "rev": 1,
+  "values": {
+    "profile": {
+      "library": "aisc/w8x18",
+      "family": "i",
+      "params": {
+        "width": 133.35,
+        "height": 206.756,
+        "web": 5.842,
+        "flange": 8.382,
+        "radius": 0
+      },
+      "catalogue": {
+        "name": "W8 × 18",
+        "series": [
+          [
+            "aisc/w8x18",
+            206.756
+          ]
+        ]
+      }
+    },
+    "attachment": "centre",
+    "rotation": 0,
+    "mirror": false
+  },
+  "record": {
+    "class": "IfcBeam",
+    "predefined_type": "BEAM",
+    "material": "A992",
+    "object_type": "Wide flange beam"
+  },
+  "naming": "B-{n}",
+  "node": "Beams",
+  "locks": {
+    "profile": "fixed",
+    "attachment": "free",
+    "rotation": "free",
+    "mirror": "free",
+    "material": "fixed",
+    "class": "fixed",
+    "predefined_type": "fixed",
+    "object_type": "fixed"
+  },
+  "provenance": {
+    "created_with": "Built",
+    "created": "2026-11-28"
+  },
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/w8x18",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:a2bc792bd07d66c5bd8f776f3c7c418153e58c3c8ee2d33ab3893d0ac9489884"
+}

@@ -977,7 +977,7 @@ J6.
 | J2 Capture and editing | gathering, the capture popover (roles painted, Swap, Includes, rule with live count, parameters found with relations), conversion to frames; the Junction tool (J, chip, L, ↓, Alt-click, Repeat question); `along` junctions; tree rows under members, the Junctions view and By arrangement; the record (All / This one, overrides, Upgrade, Detach, Release); edit inside; adopt by drag | J1, J3 | L | the storyboard beat frames 4–7 from the tool and chip only; a captured detail applied to the 7 other knees gives the same parts as the source, mirrored where needed; overrides survive a detail revision |
 | J4 Hosting and walls | the `hosted` meeting with attached roles; migration of hosted openings on open; the Opening detail; door and window components with hosted details (lining, frame, lintel, sill); wall corner, tee and wall-on-slab details; the Wall tool applying corners | J0, J1 | M | every existing hosted-opening test passes on the junction path; a moved and lengthened wall carries its doors; old files open with the same opening GUIDs; an overlap is `failed` with the last good opening, not an error |
 | J5 Export and schedules | IFC assemblies and assembly types, connection relationships, fasteners with types, weld and glue fasteners, voiding features for holes, `IfcRelConnectsPathElements`, `Built_Junction`, the export report; STEP product structure; the junction schedules in Deliverables; BCF on junctions | J1 (J4 for openings and walls) | M | IfcOpenShell validation of the garage; GlobalIds stable across two exports without saving; the frame-8 counts exact; a released junction exports the same relationships |
-| J6 Library and packs | the junction primitive in Library › Presets (filter, thumbnail, rule in words, Apply…, update offers); pack format version 2 (identity, provenance, licence, units, dependencies, hashes); import without the source model, with dependency resolution and validation; Share pack…; starter packs: Steel connections · EN (end plate 4 bolts, fin plate, base plate, apex haunch, purlin cleat), Timber joints (birdsmouth, half-lap, tenon and mortise with dowels, joist hanger), Generic (corner mitre, butt with screws), Architecture (door and window openings, wall corner, wall tee, wall on slab), MEP (flange, coupler) | J0, J1 (J4 for the Architecture pack) | M | every starter detail applies in an empty document; a pack exported from the garage imports on a clean profile and applies to a new frame; a missing dependency is reported, nothing half-imported; a tampered file is refused by its hash |
+| J6 Library and packs | the junction primitive in Library › Presets (filter, thumbnail, rule in words, Apply…, update offers); pack format version 2 (identity, provenance, licence, units, dependencies, hashes); import without the source model, with dependency resolution and validation; Share pack…; starter packs (trade ones now CC0-1.0 add-ons in `addons/`): Steel connections · EN (end plate 4 bolts, fin plate, base plate, apex haunch, purlin cleat), Timber joints (birdsmouth, half-lap, tenon and mortise with dowels, joist hanger), Generic (corner mitre, butt with screws), Architecture (door and window openings, wall corner, wall tee, wall on slab), MEP (flange, coupler) | J0, J1 (J4 for the Architecture pack) | M | every starter detail applies in an empty document; a pack exported from the garage imports on a clean profile and applies to a new frame; a missing dependency is reported, nothing half-imported; a tampered file is refused by its hash |
 
 The demo beat (pass-6 storyboard: knees saved once and re-applied, purlin
 cleats across the Repeat, schedules and IFC) is the acceptance test for J0–J5
@@ -1179,13 +1179,10 @@ Two template additions came with the starter packs:
 | `part.at.axis`: `x`, `y`, `z`, `-x`, `-y`, `-z` (which frame axis the part's own Z follows) | fin plates, hanger sides, dowels across a tenon |
 | `part.fastener.kind`: `bolt` (default), `screw`, `nail`, `dowel`, `anchor`; `holes` overrides the bore default (screws and nails none) | timber fixings, anchors |
 
-The starter packs ship as format 2 packs with inline rows in
-`resources/presets/packs/`. They are Steel connections · EN (End plate,
-4 bolts; Fin plate; Base plate; Apex haunch; Bolt M16 8.8; Anchor M16;
-Fillet weld), Timber joints (Birdsmouth, Half-lap, Tenon and mortise,
-Joist hanger) and Generic (Corner mitre, Butt with screws). The
-Architecture pack is J4's. `tests/junction_starter_cases.py` draws the
-members for each one in an empty document.
+Generic details ship in the app. Trade details ship separately as format-2
+CC0-1.0 add-ons. Each source pack under `addons/` builds into one
+`.builtpack` for Import pack…. The website will host them later.
+See docs/library.md for the pack inventory and build command.
 
 ### Capture and editing (J2)
 
@@ -1288,12 +1285,10 @@ problems; its context menu switches.
 
 ### Steel connections and service penetrations
 
-The original **Bolt group M16 · 2 × 2** lives in
-`resources/presets/starter.builtpreset`. The EN pack's **Bolt M16 8.8**
-and **Anchor M16** live in
-`resources/presets/packs/steel-connections-en.builtpreset`.
-Both sets remain available pending the owner's choice. Pack authorship
-and licence continue to use the existing bundled-pack values.
+The generic Bolt group exposes diameter, rows, columns, pitch and gauge.
+Steel connections · EN carries the original M16 group and the steel bolt
+and anchor details. Both metric and inch fastener tables ship with the
+generator so embedded junctions retain their geometry.
 
 **Fin plate** drills the fin and joining web together. Its pitch follows
 the fin height. For **Purlin cleat**, pick the rafter first and the purlin
@@ -1302,7 +1297,6 @@ turns with the crossing purlin. For a pipe or duct penetration, select
 the wall or slab and the service, then apply the matching MEP detail.
 Opening clearance and collar dimensions are editable.
 
-The AISC steel pack appears in Library › Presets when the model or the
-new-document preference uses inches or feet. It has its own pack and
+Import the AISC steel pack to see its details in Library › Presets. It has its own pack and
 detail IDs. Each row's provenance identifies its metric counterpart.
 Plate sizes and bolt geometry use millimetres internally.

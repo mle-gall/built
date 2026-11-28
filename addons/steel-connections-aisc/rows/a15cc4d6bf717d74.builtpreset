@@ -1,0 +1,246 @@
+{
+  "uid": "a15cc4d6bf717d74",
+  "name": "End plate, 4 bolts",
+  "pack": "Steel connections · AISC",
+  "primitive": "junction",
+  "rev": 1,
+  "values": {
+    "meeting": "end_face",
+    "roles": {
+      "main": {
+        "name": "Column",
+        "prompt": "The member whose flange is met"
+      },
+      "joining": {
+        "name": "Beam"
+      }
+    },
+    "params": [
+      {
+        "key": "plate_t",
+        "expr": "15.875",
+        "name": "Plate thickness",
+        "unit": "mm",
+        "group": "Plate",
+        "limits": {
+          "list": [
+            6.35,
+            9.525,
+            12.7,
+            15.875,
+            19.05,
+            25.4
+          ]
+        }
+      },
+      {
+        "key": "edge",
+        "expr": "38.1",
+        "name": "Edge distance",
+        "unit": "mm",
+        "group": "Plate"
+      },
+      {
+        "key": "gauge",
+        "expr": "max(60, joining.width - 30)",
+        "name": "Bolt gauge (across)",
+        "unit": "mm",
+        "group": "Bolts"
+      },
+      {
+        "key": "pitch",
+        "expr": "joining.height + 2 * edge",
+        "name": "Bolt pitch (along the depth)",
+        "unit": "mm",
+        "group": "Bolts"
+      },
+      {
+        "key": "plate_w",
+        "expr": "pitch + 2 * edge",
+        "name": "Plate depth",
+        "unit": "mm",
+        "group": "Plate"
+      },
+      {
+        "key": "plate_h",
+        "expr": "gauge + 2 * edge",
+        "name": "Plate width",
+        "unit": "mm",
+        "group": "Plate"
+      },
+      {
+        "key": "bolt_d",
+        "expr": "19.05",
+        "name": "Bolt Ø",
+        "unit": "mm",
+        "group": "Bolts",
+        "limits": {
+          "list": [
+            12.7,
+            15.875,
+            19.05,
+            22.225,
+            25.4
+          ]
+        }
+      },
+      {
+        "key": "weld_a",
+        "expr": "4",
+        "name": "Weld throat",
+        "unit": "mm",
+        "group": "Weld"
+      }
+    ],
+    "contents": [
+      {
+        "key": "end_cut",
+        "on": "joining",
+        "row": {
+          "kind": "cut",
+          "operation": "trim",
+          "end": "@joining.end",
+          "cutter": {
+            "plane": {}
+          },
+          "anchor": {
+            "ref": "@meet",
+            "offset": "plate_t"
+          }
+        }
+      },
+      {
+        "key": "plate",
+        "part": {
+          "preset": "5085428b43db75b4",
+          "fields": {
+            "profile.params.width": "plate_w",
+            "profile.params.height": "plate_h",
+            "thickness": "plate_t"
+          },
+          "at": {
+            "frame": "@meet"
+          }
+        }
+      },
+      {
+        "key": "bolts",
+        "junction": {
+          "detail": "a15c6d949f754449",
+          "roles": {
+            "ply_1": "@plate",
+            "ply_2": "@main"
+          },
+          "params": {
+            "d": "bolt_d",
+            "x": "-pitch / 2",
+            "y": "-gauge / 2"
+          },
+          "repeat": {
+            "rule": {
+              "count": 2,
+              "step": "gauge"
+            },
+            "run": "@meet.y",
+            "nest": {
+              "count": 2,
+              "step": "pitch"
+            }
+          }
+        }
+      },
+      {
+        "key": "weld",
+        "junction": {
+          "detail": "a15ca4f99a56a112",
+          "roles": {
+            "a": "@joining",
+            "b": {
+              "placement": "@plate",
+              "face": "end"
+            }
+          },
+          "params": {
+            "throat": "weld_a"
+          }
+        }
+      }
+    ],
+    "rule": {
+      "meeting": "end_face",
+      "roles": {
+        "main": {
+          "class": [
+            "IfcColumn",
+            "IfcBeam",
+            "IfcMember"
+          ],
+          "profile": [
+            {
+              "library": "aisc/w"
+            }
+          ],
+          "face": [
+            "flange_outer"
+          ]
+        },
+        "joining": {
+          "profile": [
+            {
+              "library": "aisc/w"
+            }
+          ],
+          "size": {
+            "height": [
+              100,
+              400
+            ]
+          },
+          "end": "any"
+        }
+      },
+      "angle": {
+        "value": 90,
+        "tol": 20
+      },
+      "mirror": "allow"
+    }
+  },
+  "locks": {},
+  "record": {
+    "class": "IfcElementAssembly",
+    "predefined_type": "ACCESSORY_ASSEMBLY"
+  },
+  "naming": "",
+  "node": "",
+  "provenance": {
+    "created": "2026-11-28",
+    "created_with": "Built",
+    "derived_from": {
+      "pack": "ac868834411f84b1d4d61a14b0c89c6a",
+      "uid": "3774c4d6bf717d74",
+      "rev": 1
+    }
+  },
+  "depends": [
+    {
+      "kind": "preset",
+      "key": "5085428b43db75b4",
+      "bundled": "rows/5085428b43db75b4.builtpreset",
+      "rev": 1
+    },
+    {
+      "kind": "detail",
+      "key": "a15c6d949f754449",
+      "bundled": "rows/a15c6d949f754449.builtpreset",
+      "rev": 1
+    },
+    {
+      "kind": "detail",
+      "key": "a15ca4f99a56a112",
+      "bundled": "rows/a15ca4f99a56a112.builtpreset",
+      "rev": 1
+    }
+  ],
+  "hash": "sha256:f27d549edbb268fae936560a812cef4995b4341efccf081353fbb3039d8eeeb5"
+}

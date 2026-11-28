@@ -270,8 +270,8 @@ pub fn enter(win: &Obj<'_>, how: &str, arg: &str) -> PyResult<bool> {
             if let Some(uid) = row["profile"]["sketch"].as_str() {
                 return enter(win, "edit", uid);
             }
-            let key = row["profile"]["library"].as_str().unwrap_or("");
-            let sketch = to_value(&api.call_method1("profile_sketch", (key,))?)?;
+            let profile = py.import("json")?.call_method1("loads", (row["profile"].to_string(),))?;
+            let sketch = to_value(&api.call_method1("profile_sketch", (profile,))?)?;
             if sketch.is_null() {
                 win.call_method1("notify", ("info", tr(py, "This member's profile cannot be drawn")))?;
                 return Ok(false);

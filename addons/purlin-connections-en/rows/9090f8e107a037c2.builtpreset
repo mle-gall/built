@@ -1,0 +1,41 @@
+{
+  "uid": "9090f8e107a037c2",
+  "name": "S355 plate",
+  "pack": "Steel plates",
+  "primitive": "sweep",
+  "rev": 1,
+  "values": {
+    "profile": {
+      "library": "basic/flat",
+      "params": {
+        "width": 180,
+        "height": 240
+      }
+    },
+    "attachment": "centre"
+  },
+  "record": {
+    "class": "IfcPlate",
+    "predefined_type": "SHEET",
+    "material": "S355",
+    "object_type": "Plate"
+  },
+  "naming": "PL-{n}",
+  "node": "Plates",
+  "locks": {
+    "profile": "free",
+    "material": "free",
+    "class": "fixed"
+  },
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "basic/flat",
+      "bundled": null
+    }
+  ],
+  "provenance": {
+    "created_with": "Built"
+  },
+  "hash": "sha256:883cbbea1f367d84fc188c538348c9c2f5c05d681be910ca200ec7ac2145b799"
+}

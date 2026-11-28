@@ -1,0 +1,111 @@
+{
+  "uid": "a15c49d4e28ababb",
+  "name": "Anchor ¾ in",
+  "pack": "Steel connections · AISC",
+  "primitive": "junction",
+  "rev": 1,
+  "values": {
+    "meeting": "parts",
+    "roles": {
+      "ply_1": {
+        "name": "Plate"
+      },
+      "ply_2": {
+        "name": "Base"
+      }
+    },
+    "params": [
+      {
+        "key": "d",
+        "expr": "19.05",
+        "name": "Anchor Ø",
+        "unit": "mm",
+        "group": "Anchor",
+        "limits": {
+          "list": [
+            12.7,
+            15.875,
+            19.05,
+            22.225,
+            25.4
+          ]
+        }
+      },
+      {
+        "key": "clearance",
+        "expr": "4",
+        "name": "Hole clearance",
+        "unit": "mm",
+        "group": "Anchor"
+      },
+      {
+        "key": "length",
+        "expr": "250",
+        "name": "Embedment",
+        "unit": "mm",
+        "group": "Anchor"
+      },
+      {
+        "key": "x",
+        "expr": "0",
+        "name": "Offset across",
+        "unit": "mm",
+        "group": "Position"
+      },
+      {
+        "key": "y",
+        "expr": "0",
+        "name": "Offset along",
+        "unit": "mm",
+        "group": "Position"
+      }
+    ],
+    "contents": [
+      {
+        "key": "anchor",
+        "part": {
+          "fastener": {
+            "kind": "anchor",
+            "d": "d",
+            "clearance": "clearance",
+            "length": "length",
+            "grade": "A307",
+            "standard": "Inch UNC",
+            "table": "inch"
+          },
+          "at": {
+            "frame": "@meet",
+            "offset": [
+              "x",
+              "y",
+              0
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "locks": {},
+  "record": {
+    "class": "IfcElementAssembly"
+  },
+  "naming": "",
+  "node": "",
+  "provenance": {
+    "created": "2026-11-28",
+    "created_with": "Built",
+    "derived_from": {
+      "pack": "ac868834411f84b1d4d61a14b0c89c6a",
+      "uid": "a67d49d4e28ababb",
+      "rev": 1
+    }
+  },
+  "depends": [
+    {
+      "kind": "fastener",
+      "key": "inch",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:03792b22ef9ffc7791d3306874cdf479acb53ffeb6a923029864bd3255f948ee"
+}

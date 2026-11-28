@@ -1,0 +1,66 @@
+{
+  "uid": "8bf3783ccf48197f",
+  "name": "Steel member",
+  "pack": "Steel EN 10365",
+  "primitive": "sweep",
+  "rev": 1,
+  "values": {
+    "profile": {
+      "library": "en/ipe240",
+      "family": "i",
+      "params": {
+        "height": 240,
+        "width": 120,
+        "web": 6.2,
+        "flange": 9.8,
+        "radius": 15
+      },
+      "catalogue": {
+        "name": "IPE 240",
+        "series": [
+          [
+            "en/ipe200",
+            200
+          ],
+          [
+            "en/ipe240",
+            240
+          ]
+        ]
+      }
+    },
+    "attachment": "centre",
+    "rotation": 0,
+    "mirror": false
+  },
+  "record": {
+    "class": "IfcMember",
+    "predefined_type": "MEMBER",
+    "material": "S355",
+    "object_type": "Steel member"
+  },
+  "naming": "M-{n}",
+  "node": "Members",
+  "locks": {
+    "profile": "fixed",
+    "attachment": "free",
+    "rotation": "free",
+    "mirror": "free",
+    "material": "fixed",
+    "class": "fixed",
+    "predefined_type": "fixed",
+    "object_type": "fixed"
+  },
+  "provenance": {
+    "created_with": "Built",
+    "created": "2026-11-28"
+  },
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/ipe240",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:54e0f36ff322ec024243da9625496b93ac98de313a1be3e14a1d6b2bb2952cb4"
+}

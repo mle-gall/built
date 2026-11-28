@@ -1,0 +1,44 @@
+{
+  "format": "built.presets",
+  "v": 2,
+  "pack": {
+    "id": "a8000621ef5697f7c93de35cea4d22ca",
+    "name": "MEP penetrations",
+    "version": "1.0.0",
+    "author": {
+      "name": "Built"
+    },
+    "licence": "CC0-1.0",
+    "description": "Openings and fire collars sized from the penetrating service.",
+    "units": {
+      "length": "mm",
+      "angle": "deg"
+    },
+    "requires": {
+      "built": ">= 1.0",
+      "features": [
+        "junction.v1",
+        "hole.v1",
+        "block.v1",
+        "fastener.v1",
+        "weld.v1"
+      ]
+    },
+    "files": {
+      "rows/60cc1c9900a5e55d.builtpreset": "sha256:39391caf4b304aa36e824981840fc74ea27a1f3f6d193a0d8d614bb5b6c04fa4",
+      "rows/665afd6942bfa0b5.builtpreset": "sha256:0091534777abb7359979ce9b344a00dc7c978fe05a05eacbb266794ef999a0a1",
+      "rows/c92fe71b45b91d6c.builtpreset": "sha256:0f5e0fedc8f4f84933f7d3984821d54a34e07bace6fbff0bafc4a2bfcfe243f9",
+      "rows/27d2efac91caf7ef.builtpreset": "sha256:37328c3eaf5b52f9dc83aaa098f242a2455e1485a082cf0593c48416a24e9df8",
+      "rows/2673a97782a6a5f7.builtpreset": "sha256:38713ab1b841c97dda65af0c6a67bfef1fc0cefc36ba872c8d94b01ff03c8fa2",
+      "rows/3725dbfedcd5114e.builtpreset": "sha256:e19b6cd263cfb6076f975bf99960b162bed7c4e2852cf9399dde3fb91e2bf4a1"
+    }
+  },
+  "rows": [
+    "rows/60cc1c9900a5e55d.builtpreset",
+    "rows/665afd6942bfa0b5.builtpreset",
+    "rows/c92fe71b45b91d6c.builtpreset",
+    "rows/27d2efac91caf7ef.builtpreset",
+    "rows/2673a97782a6a5f7.builtpreset",
+    "rows/3725dbfedcd5114e.builtpreset"
+  ]
+}
