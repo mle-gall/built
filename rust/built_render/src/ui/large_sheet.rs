@@ -1170,6 +1170,7 @@ impl Ui {
         self.lsheet.rect = Some(sheet);
         let icons = &self.icons;
         let st = &mut self.lsheet;
+        let previous_menu = st.menu.as_ref().map(|(id, _, anchor)| (id.clone(), *anchor));
         st.grids.clear();
         let mut rects: Vec<(String, Rect)> = Vec::new();
         let area = egui::Area::new(egui::Id::new("lsheet"))
@@ -1305,7 +1306,8 @@ impl Ui {
                         }
                     });
                 });
-            let pressed_out = ctx.input(|i| i.pointer.any_pressed() && i.pointer.interact_pos().is_some_and(|p| !r.response.rect.contains(p)));
+            let already_open = previous_menu.as_ref().is_some_and(|(id, anchor)| *id == item && *anchor == at);
+            let pressed_out = already_open && ctx.input(|i| i.pointer.any_pressed() && i.pointer.interact_pos().is_some_and(|p| !r.response.rect.contains(p)));
             if close || (pressed_out && !ctx.input(|i| i.pointer.secondary_pressed())) { st.menu = None; }
         }
         // A header menu.
@@ -1760,6 +1762,50 @@ mod tests {
         let later=requests(-1200., &mut state);
         assert_ne!(later,first);
         assert!(!later.is_empty() && !later[0].contains("component:1:0:0"));
+    }
+
+    #[test]
+    fn library_row_and_menu_dispatch_distinct_actions() {
+        let ctx = egui::Context::default();
+        fonts(&ctx);
+        let mut state = LargeSheet::default();
+        let item = Item {
+            id: "oak".into(), kind: "library".into(), label: "Oak".into(),
+            menu: vec![("apply".into(), "Use".into()), ("edit".into(), "Edit".into())],
+            ..Default::default()
+        };
+        let block = Block { items: vec![item].into(), ..Default::default() };
+        let icons = HashMap::new();
+        let mut out = vec![];
+        let mut bounds = Rect::NOTHING;
+        let mut frame = |events: Vec<egui::Event>| {
+            let input = egui::RawInput {
+                screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(320.,240.))),
+                events, ..Default::default()
+            };
+            let _ = ctx.run(input, |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    let mut d = Draw { st: &mut state, icons: &icons, out: &mut out, focusable: true, pane: "c", rects: vec![] };
+                    d.rows(ui,&block,0);
+                    bounds = d.rects[0].1;
+                });
+            });
+            (bounds, state.menu.take().map(|m|m.0), std::mem::take(&mut out))
+        };
+        let (r,_,_) = frame(vec![]);
+        let mut click = |at, button| {
+            let event = |pressed| egui::Event::PointerButton { pos:at, button, pressed, modifiers: Default::default() };
+            frame(vec![egui::Event::PointerMoved(at),event(true)]);
+            frame(vec![event(false)])
+        };
+        let (_,menu,actions) = click(r.center(),egui::PointerButton::Primary);
+        assert!(menu.is_none());
+        assert_eq!(actions, [format!("open{SEP}oak")]);
+        for (at,button) in [(r.right_top()+vec2(-BUTTON_H/2.,BUTTON_H/2.),egui::PointerButton::Primary),(r.center(),egui::PointerButton::Secondary)] {
+            let (_,menu,actions) = click(at,button);
+            assert_eq!(menu.as_deref(), Some("oak"));
+            assert!(!actions.iter().any(|a| a.starts_with("open")));
+        }
     }
 
     #[test]

@@ -61,14 +61,14 @@ pub(super) fn destination(ui: &mut egui::Ui, report: &Value, jobs: &[super::Job]
     if schedules_only {
         kit::inspector_title(ui, "Junction schedules", "");
     } else {
-    ui.horizontal(|ui| {
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if kit::panel_button(ui, "+ New", "", 0, Some(super::BUTTON_H * 2.)).clicked() {
-                cmds.push("deliver:new".into());
-            }
-            kit::inspector_title(ui, "Deliveries", "");
+        ui.horizontal(|ui| {
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if kit::panel_button(ui, "+ New", "", 0, Some(super::BUTTON_H * 2.)).clicked() {
+                    cmds.push("deliver:new".into());
+                }
+                kit::inspector_title(ui, "Deliveries", "");
+            });
         });
-    });
     }
     ui.separator();
     ui.add_space(super::SPACE_S);
@@ -82,7 +82,7 @@ pub(super) fn destination(ui: &mut egui::Ui, report: &Value, jobs: &[super::Job]
                 kit::prop_row(ui,"IDS",review["ids_result"].as_str().unwrap_or(""));
             }
             if let Some(schedules) = review["schedules"].as_object() {
-                if review["schedules_only"] == true && schedules.is_empty() {
+                if schedules_only && schedules.is_empty() {
                     kit::empty_state(ui, "No junction quantities in this model");
                 }
                 for (name, table) in schedules {
@@ -108,7 +108,7 @@ pub(super) fn destination(ui: &mut egui::Ui, report: &Value, jobs: &[super::Job]
                     });
                 }
             }
-            if review["schedules_only"] == true {
+            if schedules_only {
                 if kit::quiet(ui, "Back to deliveries").clicked() { cmds.push("deliver:back".into()); }
                 return;
             }

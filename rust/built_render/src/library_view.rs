@@ -527,6 +527,9 @@ fn tile(t: &str, e: &Item, current: Option<&str>, thumbs: &mut Vec<String>, labe
     for (id, label) in &mut menu {
         *label = match id.as_str() {
             "apply" if t == "presets" => preset_apply_label(e).into(),
+            "edit" if e.key.starts_with("cm:") => "Open definition".into(),
+            "select" if e.key.starts_with("cm:") => format!("Select copies ({})", e.uses),
+            "rename" if e.key.starts_with("cm:") => "Rename…".into(),
             "review" => "Review similar…".into(),
             "follow" => "Follow new meetings".into(),
             "unfollow" => "Stop following".into(),
@@ -674,7 +677,7 @@ fn saved_detail(inp: &Input, e: &Item, mut out: Vec<Value>) -> Vec<Value> {
     }
     if first.is_empty() && e.verbs.iter().any(|v| v == "edit") {
         let label = if inp.kind == "presets" { "Edit…" } else { "Open the drawing" };
-        first.push(verb("edit", label, if first.is_empty() { "↩" } else { "" }, if first.is_empty() { PRIMARY } else { 0 }));
+        first.push(verb("edit", label, "↩", PRIMARY));
     }
     if !first.is_empty() {
         out.push(block("buttons", json!({"buttons": first, "align": "fill"})));
