@@ -63,7 +63,29 @@ impl PathEdit {
             };
             let mut row = self.row.clone();
             let pos = self.frame.inverse().transform_point3(end.into());
-            if row["path"]["ends"].is_array() && row["path"]["ends"][i].is_object() {
+            if row["path"]["depth"].is_number() {
+                // An extrusion: its far end sets the thickness, its near
+                // end moves it (unless a host holds it).
+                let (a, b) = (DVec3::from(self.points[0]), DVec3::from(self.points[1]));
+                let Some(dir) = (b - a).try_normalize() else {
+                    return Reply::ignored();
+                };
+                if i == 1 {
+                    let depth = (DVec3::from(end) - a).dot(dir) * 1000.;
+                    if depth < 1. {
+                        return Reply::ignored();
+                    }
+                    row["path"]["depth"] = json!(depth);
+                } else if row["path"]["points"][0].is_array() {
+                    row["path"]["points"][0] = json!(pos);
+                    if row["path"]["points"][1].is_array() {
+                        let reach = self.frame.inverse().transform_vector3(b - a);
+                        row["path"]["points"][1] = json!((pos + reach).to_array());
+                    }
+                } else {
+                    return Reply::ignored();
+                }
+            } else if row["path"]["ends"].is_array() && row["path"]["ends"][i].is_object() {
                 let Some(dir) =
                     (DVec3::from(self.points[1 - i]) - DVec3::from(self.points[i])).try_normalize()
                 else {
@@ -118,6 +140,16 @@ pub struct SweepTool {
     chosen: Option<Json>,
     rotation: f64,
     mirror: bool,
+    /// An extrusion preset's thickness in millimetres: the pointer then
+    /// draws the outline, or picks the face or the host that gives it.
+    depth: Option<f64>,
+    /// The preset's edge profile and its sized-from expressions.
+    edge: Json,
+    fit: Json,
+    /// What the pointer is over (`sweep_target`): a host member, a face.
+    target: Json,
+    /// The plane of the outline being drawn (its normal).
+    normal: Option<P3>,
 }
 impl Default for SweepTool {
     fn default() -> Self {
@@ -139,7 +171,242 @@ impl Default for SweepTool {
             chosen: None,
             rotation: 0.,
             mirror: false,
+            depth: None,
+            edge: Json::Null,
+            fit: Json::Null,
+            target: Json::Null,
+            normal: None,
         }
+    }
+}
+/// The section frame the generator gives a path direction (live/sweep.rs).
+fn section_frame(dir: DVec3) -> (DVec3, DVec3) {
+    let across = DVec3::Z.cross(dir).try_normalize().unwrap_or(DVec3::X);
+    (across, dir.cross(across))
+}
+fn vec3(v: &Json) -> Option<DVec3> {
+    json_p3(v).map(DVec3::from)
+}
+impl SweepTool {
+    /// The base of every member this tool makes: the preset and the section.
+    fn spec(&self, path: Json) -> Json {
+        let mut spec = json!({
+            "preset":self.preset(),"preset_definition":self.chosen,"preset_uid":self.chosen.as_ref().map(|p|&p["uid"]),"profile":self.profile,"path":path,
+            "rotation":self.rotation,"mirror":self.mirror,"attachment":self.attachment_name()
+        });
+        if self.edge.is_object() {
+            spec["edge"] = self.edge.clone();
+        }
+        spec
+    }
+    fn run_specs(&self, specs: Vec<Json>, host: &mut dyn ToolHost) -> bool {
+        !specs.is_empty()
+            && host
+                .run(&Command {
+                    name: "create_sweeps",
+                    args: if self.profile.library == "basic/wall" { json!({"sweeps":specs,"wall_junctions":true}) } else { json!({"sweeps":specs}) },
+                })
+                .ok
+    }
+    /// The way an extrusion goes from a plane seen from `normal`: into it
+    /// (a slab below the outline), or out of it once flipped (F).
+    fn extrude_dir(&self, normal: DVec3) -> DVec3 {
+        if self.mirror { normal } else { -normal }
+    }
+    fn rectangular(&self) -> bool {
+        self.profile.drawing.is_none() && self.profile.outline(24).is_ok_and(|o| o.family == "rectangle")
+    }
+    /// An extrusion from two opposite corners on a plane.
+    fn rectangle_spec(&self, a: DVec3, c: DVec3, normal: DVec3) -> Option<Json> {
+        let dir = self.extrude_dir(normal);
+        let (across, up) = section_frame(dir);
+        let (dx, dy) = ((c - a).dot(across), (c - a).dot(up));
+        if dx.abs() < 1e-3 || dy.abs() < 1e-3 {
+            return None;
+        }
+        let mut spec = self.spec(json!({"points":[a.to_array()],"depth":self.depth?,"dir":dir.to_array()}));
+        spec["profile"] = json!({"library":self.profile.library,"params":{"width":dx.abs()*1000.,"height":dy.abs()*1000.}});
+        spec["attachment"] = json!(match (dx >= 0., dy >= 0.) {
+            (true, true) => "bottom_left",
+            (false, true) => "bottom_right",
+            (true, false) => "top_left",
+            (false, false) => "top_right",
+        });
+        spec["rotation"] = json!(0.);
+        spec["mirror"] = json!(false);
+        Some(spec)
+    }
+    /// An extrusion of a face's outline, holes included, from where it is.
+    fn face_spec(&self, face: &Json) -> Option<Json> {
+        let rings: Vec<Vec<P3>> = serde_json::from_value(face["rings"].clone()).ok()?;
+        let normal = vec3(&face["normal"])?;
+        let dir = self.extrude_dir(normal);
+        let (across, up) = section_frame(dir);
+        let origin = DVec3::from(*rings.first()?.first()?);
+        let mut curves = Vec::new();
+        for ring in &rings {
+            let xy = |p: &P3| { let v = DVec3::from(*p) - origin; [v.dot(across) * 1000., v.dot(up) * 1000.] };
+            for (a, b) in ring.iter().zip(ring.iter().cycle().skip(1)) {
+                curves.push(json!({"id":curves.len()+1,"kind":"line","a":xy(a),"b":xy(b)}));
+            }
+        }
+        let name = format!("{} outline", self.preset());
+        let mut spec = self.spec(json!({"points":[origin.to_array()],"depth":self.depth?,"dir":dir.to_array()}));
+        spec["profile"] = json!({"drawing":{"name":name,"use":"profile","curves":curves,"next_id":curves.len()+1,"origin":[0.,0.]}});
+        spec["attachment"] = json!("origin");
+        spec["rotation"] = json!(0.);
+        spec["mirror"] = json!(false);
+        Some(spec)
+    }
+    /// The preset's profile as it is, extruded at a point.
+    fn point_spec(&self, at: DVec3, normal: DVec3) -> Option<Json> {
+        let dir = self.extrude_dir(normal);
+        let mut spec = self.spec(json!({"points":[at.to_array()],"depth":self.depth?,"dir":dir.to_array()}));
+        // Under a point the mirror key means the side, not the section.
+        spec["mirror"] = json!(false);
+        Some(spec)
+    }
+    /// A member sized from `host` (`sweep_target`): an extrusion under its
+    /// lower end (a pad), else a run along its axis under its section (a
+    /// strip). The relation is kept: `fit` and the anchored path.
+    fn host_spec(&self, host: &Json) -> Option<Json> {
+        let points: Vec<P3> = serde_json::from_value(host["points"].clone()).ok()?;
+        let (hx, hy, centre) = (vec3(&host["x"])?, vec3(&host["y"])?, vec3(&host["centre"])?);
+        let row = host["row"].as_str()?;
+        let mut values = self.fit["values"].clone();
+        let turn = |across: DVec3, up: DVec3| hx.dot(up).atan2(hx.dot(across)).to_degrees();
+        let mut spec;
+        if let Some(depth) = self.depth {
+            let (first, last) = (DVec3::from(*points.first()?), DVec3::from(*points.last()?));
+            let at = if first.z <= last.z { "start" } else { "end" };
+            let dir = self.extrude_dir(DVec3::Z);
+            let (across, up) = section_frame(dir);
+            let anchor = json!({"to":{"sweep":row,"at":at}});
+            spec = self.spec(json!({"ends":[anchor, anchor],"depth":depth,"dir":dir.to_array()}));
+            spec["attachment"] = json!("centre");
+            spec["rotation"] = json!(turn(across, up));
+            spec["shift"] = json!([centre.dot(across) * 1000., centre.dot(up) * 1000.]);
+            spec["fit"] = json!({"host":{"sweep":row,"at":at},"values":values});
+        } else {
+            let dir = (DVec3::from(*points.get(1)?) - DVec3::from(points[0])).try_normalize()?;
+            let (across, up) = section_frame(dir);
+            let height = host["dims"]["height"].as_f64()?;
+            let width = host["dims"]["width"].as_f64()?;
+            // Under the section: its centre, down half its height.
+            let under = centre - hy * (height / 2000.);
+            let shift = [under.dot(across) * 1000., under.dot(up) * 1000.];
+            // Resting on one of the nine points with a square section, the
+            // shift follows the host's size as well.
+            if let (Some(uv), true) = (serde_json::from_value::<[f64; 2]>(host["attach"].clone()).ok(), host["rotation"].as_f64() == Some(0.)) {
+                let mx = if host["mirror"] == true { -1. } else { 1. };
+                for (field, k, dim, now) in [("shift.x", (0.5 - uv[0]) * mx, "width", shift[0]), ("shift.y", -uv[1], "height", shift[1])] {
+                    let size = if dim == "width" { width } else { height };
+                    if k != 0. && (k * size - now).abs() < 1e-6 && values.is_object() {
+                        values[field] = json!(format!("host.{dim} * {k}"));
+                    }
+                }
+            }
+            let resolved = self.fitted(host);
+            let reach = resolved["profile.params.width"].as_f64().map_or(0., |w| ((w - width) / 2.).max(0.));
+            let path = if points.len() == 2 {
+                json!({"ends":[{"to":{"sweep":row,"at":"start"},"offset":-reach,"extend":true},{"to":{"sweep":row,"at":"end"},"offset":-reach,"extend":true}]})
+            } else {
+                json!({"points":points})
+            };
+            spec = self.spec(path);
+            spec["attachment"] = json!("top");
+            spec["rotation"] = json!(turn(across, up));
+            spec["mirror"] = json!(false);
+            spec["shift"] = json!(shift);
+            spec["fit"] = json!({"host":{"sweep":row,"at":"start"},"values":values});
+        }
+        Some(spec)
+    }
+    /// The preset's fitted fields for this host, as numbers.
+    fn fitted(&self, host: &Json) -> Json {
+        let dims: std::collections::BTreeMap<String, f64> = serde_json::from_value(host["dims"].clone()).unwrap_or_default();
+        crate::live::fit::resolve(&self.fit["values"], &json!(dims))
+    }
+    /// Ghost lines of what a click would make: an extrusion's two outlines
+    /// and their risers, or a run's section along its host.
+    fn ghost(&self, spec: &Json, out: &mut Preview) {
+        let host = &self.target["host"];
+        let fitted = if spec["fit"].is_object() { self.fitted(host) } else { Json::Null };
+        let mut profile = spec["profile"].clone();
+        for (field, n) in fitted.as_object().into_iter().flatten() {
+            if let Some(name) = field.strip_prefix("profile.params.") {
+                profile["params"][name] = n.clone();
+            }
+        }
+        let Ok(profile) = serde_json::from_value::<Profile>(profile) else { return };
+        let Ok(outline) = profile.outline(24) else { return };
+        let host_points: Vec<P3> = serde_json::from_value(host["points"].clone()).unwrap_or_default();
+        let depth = spec["path"]["depth"].as_f64();
+        // The run: from the first outline to the second.
+        let (start, run) = if let (Some(depth), Some(dir)) = (depth, vec3(&spec["path"]["dir"])) {
+            let start = json_p3(&spec["path"]["points"][0]).map(DVec3::from).or_else(|| {
+                let (first, last) = (DVec3::from(*host_points.first()?), DVec3::from(*host_points.last()?));
+                Some(if first.z <= last.z { first } else { last })
+            });
+            let Some(start) = start else { return };
+            (start, dir * depth / 1000.)
+        } else if host_points.len() == 2 {
+            let (a, b) = (DVec3::from(host_points[0]), DVec3::from(host_points[1]));
+            let Some(dir) = (b - a).try_normalize() else { return };
+            let reach = -spec["path"]["ends"][0]["offset"].as_f64().unwrap_or(0.) / 1000.;
+            (a - dir * reach, b - a + dir * (2. * reach))
+        } else {
+            return;
+        };
+        let Some(dir) = run.try_normalize() else { return };
+        let (across, up) = section_frame(dir);
+        let mut origin = outline.attachment(spec["attachment"].as_str().unwrap_or("centre")).unwrap_or_default();
+        if spec["attachment"] == "origin" {
+            origin = outline.named.get("origin").copied().unwrap_or(origin);
+        }
+        let turn = DVec2::from_angle(spec["rotation"].as_f64().unwrap_or(0.).to_radians());
+        let mut shift = serde_json::from_value::<[f64; 2]>(spec["shift"].clone()).unwrap_or_default();
+        for (i, key) in ["shift.x", "shift.y"].into_iter().enumerate() {
+            if let Some(n) = fitted[key].as_f64() {
+                shift[i] = n;
+            }
+        }
+        for ring in &outline.rings {
+            let pts: Vec<DVec3> = ring.iter().map(|n| {
+                let p = turn.rotate((n.p - origin) / 1000.) + DVec2::from(shift) / 1000.;
+                start + across * p.x + up * p.y
+            }).collect();
+            let sharp = pts.len() <= 16;
+            for i in 0..pts.len() {
+                let k = (i + 1) % pts.len();
+                out.lines.push(Preview::rubber(pts[i].to_array(), pts[k].to_array()));
+                out.lines.push(Preview::rubber((pts[i] + run).to_array(), (pts[k] + run).to_array()));
+                if sharp {
+                    out.lines.push(Preview::rubber(pts[i].to_array(), (pts[i] + run).to_array()));
+                }
+            }
+        }
+    }
+    /// What a click would make, here and now, in the extrusion and
+    /// sized-from modes (None: the path mode's own points).
+    fn pending(&self) -> Option<Json> {
+        let host = &self.target["host"];
+        if self.fit.is_object() && host.is_object() && self.start.is_none() {
+            return self.host_spec(host);
+        }
+        self.depth?;
+        let hover = DVec3::from(self.hover?);
+        if let Some(a) = self.start {
+            return self.rectangle_spec(a.into(), hover, self.normal.map_or(DVec3::Z, DVec3::from));
+        }
+        let face = &self.target["face"];
+        if !self.fit.is_object() && face.is_object() && face["live"] != true {
+            return self.face_spec(face);
+        }
+        if self.rectangular() && !self.fit.is_object() {
+            return None;
+        }
+        self.point_spec(hover, DVec3::Z)
     }
 }
 impl SweepTool {
@@ -164,8 +431,14 @@ impl SweepTool {
             )
         })
     }
-    /// The profile the chip names: a drawing by its name, a size by its label.
-    fn profile_name(&self) -> &str {
+    /// The profile the chip names: a drawing by its name, a size by its
+    /// label, a size the preset re-dimensions by its own width and height.
+    fn profile_name(&self) -> std::borrow::Cow<'_, str> {
+        if self.profile.drawing.is_none() {
+            if let (Some(w), Some(h)) = (self.profile.params.get("width"), self.profile.params.get("height")) {
+                return format!("{w:.0} × {h:.0}").into();
+            }
+        }
         self.profile
             .drawing
             .as_ref()
@@ -173,6 +446,7 @@ impl SweepTool {
             .filter(|n| !n.is_empty())
             .or_else(|| self.profile.name())
             .unwrap_or(if self.profile.drawing.is_some() { "Drawn profile" } else { "Sweep" })
+            .into()
     }
     /// *preset · profile · attachment · rotation*; a profile size picked
     /// from the Library is its own preset, so its name shows once.
@@ -193,18 +467,7 @@ impl SweepTool {
         }
     }
     fn run_paths(&self, paths: Vec<Json>, host: &mut dyn ToolHost) -> bool {
-        if paths.is_empty() {
-            return false;
-        }
-        let specs:Vec<_>=paths.into_iter().map(|path|json!({
-            "preset":self.preset(),"preset_definition":self.chosen,"preset_uid":self.chosen.as_ref().map(|p|&p["uid"]),"profile":self.profile,"path":path,
-            "rotation":self.rotation,"mirror":self.mirror,"attachment":self.attachment_name()
-        })).collect();
-        host.run(&Command {
-            name: "create_sweeps",
-            args: if self.profile.library == "basic/wall" {json!({"sweeps":specs,"wall_junctions":true})} else {json!({"sweeps":specs})},
-        })
-        .ok
+        self.run_specs(paths.into_iter().map(|path| self.spec(path)).collect(), host)
     }
     fn commit(
         &self,
@@ -275,7 +538,45 @@ impl Tool for SweepTool {
         } else {
             None
         };
-        json!({"section_inset":inset,"length":self.start.zip(self.hover).map(|(a,b)|DVec3::from(a).distance(b.into())),"start_point":self.start,"hover_point":self.hover,"profile":self.profile.library,"chip":self.chip(),"attachment":self.attachment_name(),"rotation":self.rotation,"mirror":self.mirror})
+        let extruding = self.depth.is_some();
+        // The start is the tool's own while an outline is drawn: the
+        // inference must not pull the opposite corner onto an axis from it.
+        let length = match self.depth {
+            Some(depth) => Some(depth / 1000.),
+            None => self.start.zip(self.hover).map(|(a, b)| DVec3::from(a).distance(b.into())),
+        };
+        let chip = if extruding || (self.fit.is_object() && self.target["host"].is_object()) {
+            let what = if self.target["host"].is_object() && self.fit.is_object() && self.start.is_none() {
+                "sized from the member".to_owned()
+            } else if self.start.is_some() {
+                match self.pending() {
+                    Some(spec) => format!("{:.0} × {:.0} mm", spec["profile"]["params"]["width"].as_f64().unwrap_or(0.), spec["profile"]["params"]["height"].as_f64().unwrap_or(0.)),
+                    None => "opposite corner".to_owned(),
+                }
+            } else if !self.fit.is_object() && self.target["face"].is_object() && self.target["face"]["live"] != true {
+                "from this face".to_owned()
+            } else if self.rectangular() && !self.fit.is_object() {
+                "first corner, or a face".to_owned()
+            } else if self.rectangular() {
+                // A free pad: its catalogue size.
+                let o = self.profile.outline(24).ok();
+                o.map_or_else(|| self.profile_name().into_owned(), |o| format!("{:.0} × {:.0} mm", o.width, o.height))
+            } else {
+                self.profile_name().into_owned()
+            };
+            let edge = match self.edge["shape"].as_str() {
+                Some("chamfer") => " · chamfered edge",
+                Some("round") => " · rounded edge",
+                Some("step") => " · stepped edge",
+                Some("downstand") => " · edge beam",
+                _ => "",
+            };
+            format!("{} · {}{}{}", self.preset(), what, edge, if self.mirror && extruding { " · above" } else { "" })
+        } else {
+            self.chip()
+        };
+        json!({"section_inset":inset,"length":length,"start_point":if extruding { None } else { self.start },"corner_point":if extruding { self.start } else { None },"hover_point":self.hover,"profile":self.profile.library,"chip":chip,"attachment":self.attachment_name(),"rotation":self.rotation,"mirror":self.mirror,
+            "caption":if extruding { "Thickness" } else { "Length" },"depth":self.depth,"extruding":extruding,"sized":self.fit.is_object() && self.edit.is_none(),"target":if self.target["host"].is_object() && self.fit.is_object() { "host" } else if self.target["face"].is_object() { "face" } else { "" }})
     }
     fn set(&mut self, key: &str, value: &Json) -> bool {
         match key {
@@ -300,7 +601,21 @@ impl Tool for SweepTool {
                     .unwrap_or(0);
                 self.attachment = index;
                 self.chosen = Some(value.clone());
+                self.depth = fields["depth"].as_f64().filter(|d| *d > 0.);
+                self.edge = if fields["edge"].is_object() { fields["edge"].clone() } else { Json::Null };
+                self.fit = if fields["fit"]["values"].is_object() { fields["fit"].clone() } else { Json::Null };
+                self.start = None;
+                self.normal = None;
+                self.target = Json::Null;
             }
+            "depth" => {
+                let Some(depth) = value.as_f64().filter(|d| *d > 0.) else { return false };
+                if self.depth.is_none() {
+                    return false;
+                }
+                self.depth = Some(depth);
+            }
+            "target" => self.target = value.clone(),
             "edit" => {
                 self.edit = PathEdit::from_row(value.clone());
                 return self.edit.is_some();
@@ -319,6 +634,7 @@ impl Tool for SweepTool {
                 }
                 self.edit = None;
                 self.chosen = None;
+                (self.depth, self.edge, self.fit) = (None, Json::Null, Json::Null);
                 self.profile = profile;
                 let name = match value["attach"].as_str().unwrap_or("centre") {
                     "middle_left" => "left",
@@ -349,6 +665,7 @@ impl Tool for SweepTool {
                     return false;
                 };
                 self.chosen = None;
+                (self.depth, self.edge, self.fit) = (None, Json::Null, Json::Null);
                 self.profile = Profile {
                     catalogue: None,
                     library: k.into(),
@@ -360,7 +677,7 @@ impl Tool for SweepTool {
                 self.attachment = if k == "basic/wall" { 2 } else { 0 };
             }
             "hover_point" => self.hover = json_p3(value),
-            "start_point" => self.start = json_p3(value),
+            "start_point" | "corner_point" => self.start = json_p3(value),
             _ => return false,
         }
         true
@@ -372,6 +689,8 @@ impl Tool for SweepTool {
                 self.start_anchor = None;
                 self.hover = None;
                 self.edit = None;
+                self.normal = None;
+                self.target = Json::Null;
             }
             ToolEvent::DoubleClick(_) => {
                 self.start = None;
@@ -386,7 +705,11 @@ impl Tool for SweepTool {
             ToolEvent::Hover(p) => {
                 self.hover = p.world;
                 self.inset = false;
-                if self.edit.is_none() && self.hover.is_some() {
+                let aware = self.depth.is_some() || self.fit.is_object();
+                if aware && self.edit.is_none() && self.start.is_none() {
+                    self.target = host.call("sweep_target", json!({"px":p.px}));
+                }
+                if self.edit.is_none() && self.hover.is_some() && self.depth.is_none() {
                     let pre = self.preview();
                     let section: Vec<_> = pre
                         .lines
@@ -414,6 +737,37 @@ impl Tool for SweepTool {
             ToolEvent::Click(p) => {
                 if let Some(edit) = self.edit.as_mut() {
                     return edit.click(p, host);
+                }
+                if self.depth.is_some() || self.fit.is_object() {
+                    if self.start.is_none() {
+                        self.target = host.call("sweep_target", json!({"px":p.px}));
+                        // Alt keeps a plain point: the face only gives its plane.
+                        if p.mods.alt && self.target["face"].is_object() {
+                            self.target["face"]["live"] = json!(true);
+                            self.target["host"] = Json::Null;
+                        }
+                    }
+                    self.hover = p.world.or(self.hover);
+                    let hosted = self.fit.is_object() && self.target["host"].is_object();
+                    let from_face = self.depth.is_some() && !self.fit.is_object() && self.target["face"].is_object() && self.target["face"]["live"] != true;
+                    let drawn = self.depth.is_some() && self.rectangular() && !self.fit.is_object();
+                    if self.start.is_some() || hosted || from_face || (self.depth.is_some() && !drawn) {
+                        if let Some(spec) = self.pending() {
+                            if self.run_specs(vec![spec], host) {
+                                self.start = None;
+                                self.normal = None;
+                                self.target = Json::Null;
+                                return Reply::committed();
+                            }
+                        }
+                        return Reply::redraw();
+                    }
+                    if self.depth.is_some() {
+                        let Some(at) = p.world else { return Reply::ignored() };
+                        self.start = Some(at);
+                        self.normal = json_p3(&self.target["face"]["normal"]);
+                        return Reply::redraw();
+                    }
                 }
                 if p.mods.alt && self.start.is_none() {
                     let sketch = host.call("sweep_face_profile", json!(p.px));
@@ -447,6 +801,29 @@ impl Tool for SweepTool {
                     } else {
                         self.start = Some(end);
                         self.start_anchor = anchor;
+                    }
+                }
+            }
+            // An extrusion: a typed length is its thickness, a typed pair
+            // the outline's two sides from the first corner.
+            ToolEvent::Value(Value::Length(n)) if self.depth.is_some() => {
+                if *n <= 0. {
+                    return Reply::ignored();
+                }
+                self.depth = Some(*n * 1000.);
+            }
+            ToolEvent::Value(Value::Pair(w, h)) if self.depth.is_some() => {
+                let (Some(a), Some(b)) = (self.start, self.hover) else { return Reply::ignored() };
+                let normal = self.normal.map_or(DVec3::Z, DVec3::from);
+                let (across, up) = section_frame(self.extrude_dir(normal));
+                let v = DVec3::from(b) - DVec3::from(a);
+                let sign = |x: f64| if x < 0. { -1. } else { 1. };
+                let c = DVec3::from(a) + across * (sign(v.dot(across)) * w.abs()) + up * (sign(v.dot(up)) * h.abs());
+                if let Some(spec) = self.rectangle_spec(a.into(), c, normal) {
+                    if self.run_specs(vec![spec], host) {
+                        self.start = None;
+                        self.normal = None;
+                        return Reply::committed();
                     }
                 }
             }
@@ -533,6 +910,17 @@ impl Tool for SweepTool {
                 }
             }
             return out;
+        }
+        if self.depth.is_some() || (self.fit.is_object() && self.target["host"].is_object() && self.start.is_none()) {
+            if let Some(spec) = self.pending() {
+                self.ghost(&spec, &mut out);
+            }
+            if self.depth.is_some() || !out.lines.is_empty() {
+                if let Some(b) = self.hover {
+                    out.value = Some(preview::ValueAnchor { at: b, label: if self.depth.is_some() { "Thickness" } else { "Sweep" } });
+                }
+                return out;
+            }
         }
         let Some(b) = self.hover else { return out };
         let dir = self

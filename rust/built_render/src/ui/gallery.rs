@@ -931,7 +931,9 @@ mod coverage {
     /// Kit functions that are not components drawn on their own: the style
     /// installer, state helpers every molecule uses, and a variant of a
     /// component the gallery already shows.
-    const NOT_COMPONENTS: [&str; 6] = [
+    const NOT_COMPONENTS: [&str; 8] = [
+        "underline_tabs_width", // what a tab row takes, measured before it is drawn
+        "panel_button_width",   // what panel_button takes, measured before it is drawn
         "popover_pos",   // where a menu opens, not something drawn
         "install_style", // style, not a component
         "state_of",      // reads a response's state for every molecule

@@ -42,7 +42,7 @@ pub const PALETTE_ONLY: &str = "";
 /// Rows a submenu separates from the rows before them.
 const BREAKS: &[&str] = &[
     "export:ifc", "export_image", "export_igz",
-    "scene_previous", "organise-scenes",
+    "scene_previous", "organise-scenes", "view_template:save",
     "rest_intensity", "hide_similar",
     "form-style", "maximize_model_view",
 ];
@@ -200,6 +200,8 @@ fn build_entries() -> Vec<MenuEntry> {
     add("scene_previous", "View ▸ Scenes", "Previous Scene", "PgUp", Step(-1));
     add("scene_next", "View ▸ Scenes", "Next Scene", "PgDown", Step(1));
     add("organise-scenes", "View ▸ Scenes", "Organise Scenes", "", View("organise-scenes"));
+    // The view's setup (camera kind, style, tags, section) kept in the Library.
+    add("view_template:save", "View ▸ Scenes", "Save View as Template…", "", Shell);
     add("scene_transitions", "View ▸ Animation", "Scene Transitions", "", Transitions);
     add("scene_play", "View ▸ Animation", "Play / Stop", "", Playback);
     add("animation_settings", "View ▸ Animation", "Animation Settings…", "", Window("ask_animation"));

@@ -651,6 +651,32 @@ pub mod molecules {
         draw_underline_tabs(ui, tabs, at, true)
     }
 
+    /// What an inline tab row takes with every label and the current tab's
+    /// count: drawn close together (the least), or with its usual room.
+    pub fn underline_tabs_width(ui: &egui::Ui, tabs: &[(String, String, bool)], at: usize, least: bool) -> f32 {
+        let gap = if least { TAB_GAP_LEAST } else { TAB_GAP };
+        tabs.iter()
+            .enumerate()
+            .map(|(i, t)| {
+                let label = ui.painter().layout_no_wrap(t.0.clone(), strong(TYPE_BODY), INK).size().x;
+                let count = if i == at && !t.1.is_empty() { ui.painter().layout_no_wrap(t.1.clone(), meta(), FAINT).size().x + 4.0 } else { 0.0 };
+                label + count + gap
+            })
+            .sum()
+    }
+
+    /// The width `panel_button` gives a button left to size itself.
+    pub fn panel_button_width(ui: &egui::Ui, label: &str, hint: &str) -> f32 {
+        let g = ui.painter().layout_no_wrap(label.to_owned(), strong(TYPE_BODY), INK).size().x;
+        let k = if hint.is_empty() { 0.0 } else { ui.painter().layout_no_wrap(hint.to_owned(), meta(), FAINT).size().x + 8.0 };
+        (g + k + 2.0 * SPACE_M).max(72.0)
+    }
+
+    /// The room between two tab labels, and the least it shrinks to when a
+    /// row of many tabs has to fit a narrow header.
+    const TAB_GAP: f32 = 16.0;
+    const TAB_GAP_LEAST: f32 = 8.0;
+
     fn draw_underline_tabs(ui: &mut egui::Ui, tabs: &[(String, String, bool)], at: usize, inline: bool) -> Option<usize> {
         let forced = specimen_state(ui);
         let first_other = (0..tabs.len()).find(|&i| i != at && tabs[i].2);
@@ -667,20 +693,27 @@ pub mod molecules {
         let natural: f32 = measure
             .iter()
             .zip(&counts)
-            .map(|(l, c)| l + c.as_ref().map_or(0.0, |c| c.size().x + 4.0) + 16.0)
+            .map(|(l, c)| l + c.as_ref().map_or(0.0, |c| c.size().x + 4.0) + TAB_GAP)
             .sum();
         // Too wide: drop the counts of the tabs that are not current.
         let width = if inline { natural.min(ui.available_width()) } else { ui.available_width() };
         let (row, _) = ui.allocate_exact_size(vec2(width, CONTROL_H), Sense::hover());
         ui.painter().hline(row.x_range(), row.max.y - 0.5, Stroke::new(1.0_f32, DIVIDER));
         let squeeze = natural > width;
+        // Still too wide without them: the tabs draw closer together.
+        let gap = if squeeze {
+            let labels: f32 = measure.iter().sum::<f32>() + counts.get(at).and_then(|c| c.as_ref()).map_or(0.0, |c| c.size().x + 4.0);
+            ((width - labels) / tabs.len().max(1) as f32).clamp(TAB_GAP_LEAST, TAB_GAP)
+        } else {
+            TAB_GAP
+        };
         let mut x = row.min.x;
         let mut hit = None;
         for (i, (t, count)) in tabs.iter().zip(counts).enumerate() {
             let on = i == at;
             let show_count = count.filter(|_| on || !squeeze);
             let lw = measure[i];
-            let w = lw + show_count.as_ref().map_or(0.0, |c| c.size().x + 4.0) + 16.0;
+            let w = lw + show_count.as_ref().map_or(0.0, |c| c.size().x + 4.0) + gap;
             let r = Rect::from_min_size(pos2(x, row.min.y), vec2(w, row.height()));
             let sense = if t.2 { Sense::click() } else { Sense::hover() };
             let resp = ui.interact(r, ui.id().with(("utab", i)), sense);
@@ -697,12 +730,12 @@ pub mod molecules {
             };
             let font = if on { strong(TYPE_BODY) } else { body() };
             let label = ui.painter().layout_no_wrap(t.0.clone(), font, ink);
-            let text = Rect::from_min_size(pos2(r.min.x + 8.0, r.min.y), vec2(lw, r.height() - 2.0));
+            let text = Rect::from_min_size(pos2(r.min.x + gap / 2.0, r.min.y), vec2(lw, r.height() - 2.0));
             leading(ui.painter(), text, text.min.x, label, ink);
             if let Some(c) = show_count {
                 leading(ui.painter(), text, text.max.x + 4.0, c, if st == State::Off { OFF } else { FAINT });
             }
-            let underline = Rect::from_min_max(pos2(r.min.x + 8.0, r.max.y - 2.0), pos2(r.max.x - 8.0, r.max.y));
+            let underline = Rect::from_min_max(pos2(r.min.x + gap / 2.0, r.max.y - 2.0), pos2(r.max.x - gap / 2.0, r.max.y));
             if on {
                 ui.painter().rect_filled(underline, CornerRadius::same(1), if st == State::Off { OFF } else { ACCENT });
             } else if st == State::Press {

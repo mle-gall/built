@@ -107,7 +107,7 @@ fn template(t: &LiveTable, row: &Row, path: Vec<DVec3>, class: &str) -> Option<T
 }
 impl Template {
     fn new(s: &sweep::Sweep, o: &profile::Outline, path: Vec<DVec3>, class: &str) -> Option<Self> {
-        let origin = o.attachment(&s.attachment).ok()?;
+        let origin = s.origin(o).ok()?;
         let (sin, cos) = s.rotation.to_radians().sin_cos();
         let mx = if s.mirror { -1. } else { 1. };
         let mut sections = Vec::new();
@@ -278,6 +278,10 @@ impl Walk<'_> {
     fn sweep_template(&self, d: &doc::Doc, owner: &str, class: &str) -> Option<Template> {
         let row = self.t.rows.get(self.t.owners.get(owner)?)?;
         if row.kind != "sweep" || row.junction.is_some() {
+            return None;
+        }
+        // An extrusion (a slab, a pad) meets by its box, not along an axis.
+        if row.sweep.as_ref().is_some_and(|s| s.path.depth.is_some()) {
             return None;
         }
         let path = match self.t.stock.get(&row.uid).filter(|s| s.state == "ok") {

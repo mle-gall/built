@@ -9,6 +9,7 @@ pub(crate) use cut_display::live_cut_display;
 mod drawn_profile;
 mod expr;
 mod file;
+pub(crate) mod fit;
 mod geometry;
 mod hole;
 mod joints;
@@ -301,6 +302,7 @@ fn run(scene: &Obj<'_>, t: &mut LiveTable, seeds: HashSet<String>) -> PyResult<(
                 if matches!(t.rows[id].state.as_str(), "stale" | "cycle") {
                     continue;
                 }
+                fit::apply(scene, t, id)?;
                 let downstream = t.next_nodes(&node);
                 if t.rows[id].kind != "repeat" && downstream.len() == 1 {
                     t.stock.remove(id);
@@ -332,6 +334,7 @@ fn run(scene: &Obj<'_>, t: &mut LiveTable, seeds: HashSet<String>) -> PyResult<(
             checked.insert(owner.clone());
         }
         reference::bind_frames(t, &uid);
+        fit::apply(scene, t, &uid)?;
         if t.rows[&uid].kind == "junction" {
             if junction::evaluate(scene, t, &uid)? {
                 dirty.extend(t.next_nodes(&node));
@@ -821,8 +824,10 @@ enum Edit {
     /// model does not hold yet (a Library detail applied in one step).
     Set(Vec<Row>, Vec<presets::Preset>),
     /// Done in the Sketch workspace: the sketch row, and the sweeps whose
-    /// profile becomes it (a catalogue size edited as a drawing).
-    Commit(Row, Vec<String>),
+    /// profile becomes it (a catalogue size edited as a drawing). Released
+    /// (the flag): the same step then gives each user its own frozen copy
+    /// and removes the shared row.
+    Commit(Row, Vec<String>, bool),
     Release(String),
     ReleaseTree(String),
     Reevaluate(String),
@@ -1031,7 +1036,23 @@ impl Mutation {
                         }
 
                         let name = if p.naming.contains("{n}") {
-                            p.naming.replace("{n}", &(t.serial + 1).to_string())
+                            // The next number of this pattern in the model
+                            // (SL-1, SL-2…), whatever else was made between.
+                            let (head, tail) = p.naming.split_once("{n}").unwrap_or((p.naming.as_str(), ""));
+                            let mut next = 1u64;
+                            {
+                                // Names read from the document, not through
+                                // Python: a model may hold thousands of members.
+                                let d = doc::lock();
+                                for row in t.rows.values().filter(|r| r.kind == "sweep") {
+                                    let Some(Data::Placement(other)) = t.groups.get(&row.owner).and_then(|k| d.node(*k)).map(|n| &n.data) else { continue };
+                                    let Some(other) = other.name.as_deref() else { continue };
+                                    if let Some(n) = other.strip_prefix(head).and_then(|r| r.strip_suffix(tail)).and_then(|n| n.parse::<u64>().ok()) {
+                                        next = next.max(n.saturating_add(1));
+                                    }
+                                }
+                            }
+                            p.naming.replace("{n}", &next.to_string())
                         } else {
                             p.name.clone()
                         };
@@ -1051,6 +1072,9 @@ impl Mutation {
                             if let sweep::End::Point(p) = end {
                                 *p = inverse.transform_point3((*p).into()).to_array();
                             }
+                        }
+                        if let Some(dir) = &mut spec.path.dir {
+                            *dir = inverse.transform_vector3((*dir).into()).normalize_or_zero().to_array();
                         }
                         parent.getattr("children")?.call_method1("append", (&g,))?;
                     }
@@ -1129,7 +1153,7 @@ impl Mutation {
                     set_row(scene, &mut t, request)?;
                 }
             }
-            Edit::Commit(row, adopt) => {
+            Edit::Commit(row, adopt, release) => {
                 set_row(scene, &mut t, row)?;
                 for id in adopt {
                     let mut user = t
@@ -1150,6 +1174,22 @@ impl Mutation {
                     user.state.clear();
                     t.insert(user).map_err(PyValueError::new_err)?;
                     t.pending.insert(id.clone());
+                }
+                if *release {
+                    // Release from the workspace: the drawing as it is now
+                    // goes to each user as its own; nothing is shared after.
+                    if sketch::evaluate(&t.rows[&row.uid]).is_some() {
+                        return Err(PyValueError::new_err("Close the drawing before releasing it"));
+                    }
+                    let shared = t.remove(&row.uid).ok_or_else(|| PyValueError::new_err("unknown recipe"))?;
+                    let users: Vec<_> = t.users(&Key::Row(row.uid.clone())).cloned().collect();
+                    let frozen = freeze_users(&mut t, &shared)?;
+                    if frozen.is_empty() {
+                        return Err(PyValueError::new_err("Nothing uses this sketch"));
+                    }
+                    scene.setattr("_sketch_released", frozen.len())?;
+                    t.pending.extend(frozen);
+                    t.pending.extend(users);
                 }
             }
             Edit::ReleaseTree(id) => {
@@ -1410,6 +1450,14 @@ fn set_row(scene: &Obj<'_>, t: &mut LiveTable, request: &Row) -> PyResult<()> {
             }
         }
     }
+    if let Some(new) = row.sweep.as_deref_mut() {
+        if let Some(old) = t.rows.get(&row.uid).and_then(|r| r.sweep.as_deref()) {
+            fit::release_edited(old, new);
+        }
+        if let Some(f) = &new.fit {
+            fit::validate(f).map_err(PyValueError::new_err)?;
+        }
+    }
     if row.kind == "cut" {
         cut::attach(scene, t, &mut row)?;
     } else if let Some(old) = t.rows.get(&row.uid) {
@@ -1653,6 +1701,14 @@ fn live_sweep<'p>(scene: &Obj<'p>, owner: &str) -> PyResult<Obj<'p>> {
             .and_then(|r| r.sketch_fields.name.as_str())
             .or_else(|| spec.profile.name())
             .unwrap_or("Drawn profile");
+        // A size the element re-dimensions reads by its own width and height.
+        let name = match (spec.profile.sketch.is_none(), spec.profile.params.get("width"), spec.profile.params.get("height")) {
+            (true, Some(w), Some(h)) => {
+                let stem = name.find(|c: char| c.is_ascii_digit()).map_or(name, |at| name[..at].trim_end());
+                format!("{stem} {w:.0} × {h:.0}")
+            }
+            _ => name.to_owned(),
+        };
         value.set_item("profile_name", name)?;
         if let Some(g) = group(scene.py(), &t, owner) {
             if let Ok(path) = g.getattr("ext")?.get_item(EXT)?.get_item("path") {
@@ -1727,7 +1783,7 @@ fn sweep_profile<'p>(row: &Obj<'p>) -> PyResult<Obj<'p>> {
         .collect();
     to_py(
         row.py(),
-        &serde_json::json!({"family":outline.family,"web":outline.web,"flange":outline.flange,"radius":outline.radius,"width":outline.width,"height":outline.height,"rings":rings,"offset":outline.attachment(&spec.attachment).map_err(PyValueError::new_err)?,"name":spec.profile.name()}),
+        &serde_json::json!({"family":outline.family,"web":outline.web,"flange":outline.flange,"radius":outline.radius,"width":outline.width,"height":outline.height,"rings":rings,"offset":spec.origin(&outline).map_err(PyValueError::new_err)?,"name":spec.profile.name()}),
     )
 }
 #[pyfunction(signature = (history, sweeps, wall_junctions=false))]
@@ -1749,7 +1805,23 @@ fn create_sweeps<'p>(
                 .as_object_mut()
                 .ok_or_else(|| PyValueError::new_err("Expected sweep fields"))?;
             for (k, v) in p.values {
-                obj.entry(k).or_insert(v);
+                match k.as_str() {
+                    // The preset's thickness, unless the tool gave one.
+                    "depth" => {
+                        if let Some(path) = obj.get_mut("path").and_then(|p| p.as_object_mut()) {
+                            path.entry("depth").or_insert(v);
+                        }
+                    }
+                    // The preset's sizes with the element's own host.
+                    "fit" => {
+                        if let Some(fit) = obj.get_mut("fit").and_then(|f| f.as_object_mut()) {
+                            fit.entry("values").or_insert(v["values"].clone());
+                        }
+                    }
+                    _ => {
+                        obj.entry(k).or_insert(v);
+                    }
+                }
             }
         }
         specs.push(
@@ -1761,12 +1833,19 @@ fn create_sweeps<'p>(
         return Err(PyValueError::new_err("expected a sweep"));
     }
     for spec in &specs {
+        if let Some(f) = &spec.fit {
+            fit::validate(f).map_err(PyValueError::new_err)?;
+        }
         if spec.profile.sketch.is_none() {
             spec.profile
                 .outline(spec.segments)
                 .map_err(PyValueError::new_err)?;
         }
-        if (spec.path.chain.is_empty() && spec.path.ends.is_none() && spec.path.points.len() < 2)
+        let extruded = spec.path.depth.is_some_and(|d| d > 0.)
+            && (spec.path.dir.is_some() || spec.path.points.len() == 2)
+            && (!spec.path.points.is_empty() || spec.path.ends.is_some());
+        if (spec.path.chain.is_empty() && spec.path.ends.is_none() && spec.path.points.len() < 2 && !extruded)
+            || (spec.path.depth.is_some() && !extruded)
             || spec
                 .path
                 .points
@@ -1829,9 +1908,13 @@ fn live_set<'p>(history: &Obj<'p>, row: &Obj<'p>) -> PyResult<Bound<'p, PyDict>>
 ///
 /// `adopt`: sweep row uids whose profile becomes this sketch in the same
 /// step (a member's catalogue size opened as a drawing).
+///
+/// `release`: leave the sketch and keep the result (general-base §4.4): in
+/// the same step every user gets this drawing as its own frozen copy and
+/// the shared row goes. The reply's `released` counts them.
 #[pyfunction]
-#[pyo3(signature = (history, row, adopt=None))]
-fn sketch_commit<'p>(history: &Obj<'p>, row: &Obj<'p>, adopt: Option<Vec<String>>) -> PyResult<Bound<'p, PyDict>> {
+#[pyo3(signature = (history, row, adopt=None, release=false))]
+fn sketch_commit<'p>(history: &Obj<'p>, row: &Obj<'p>, adopt: Option<Vec<String>>, release: bool) -> PyResult<Bound<'p, PyDict>> {
     let row = row.call_method0("copy")?.cast_into::<PyDict>()?;
     row.set_item("kind", "sketch")?;
     if row.get_item("uid")?.is_none_or(|u| u.is_none()) {
@@ -1839,7 +1922,7 @@ fn sketch_commit<'p>(history: &Obj<'p>, row: &Obj<'p>, adopt: Option<Vec<String>
     }
     let _ = row.del_item("state");
     let adopt = adopt.unwrap_or_default();
-    let reply = if adopt.is_empty() {
+    let reply = if adopt.is_empty() && !release {
         live_set(history, row.as_any())?
     } else {
         let parsed: Row = json(row.as_any())?;
@@ -1847,8 +1930,15 @@ fn sketch_commit<'p>(history: &Obj<'p>, row: &Obj<'p>, adopt: Option<Vec<String>
             return Err(PyValueError::new_err("expected 16-hex uid"));
         }
         sketch::validate(&parsed).map_err(PyValueError::new_err)?;
-        edit(history, Edit::Commit(parsed, adopt))?
+        edit(history, Edit::Commit(parsed, adopt, release))?
     };
+    if release {
+        let scene = history.getattr("scene")?;
+        if let Some(n) = scene.getattr_opt("_sketch_released")?.filter(|n| !n.is_none()) {
+            reply.set_item("released", n)?;
+            scene.setattr("_sketch_released", scene.py().None())?;
+        }
+    }
     reply.set_item("uid", row.get_item("uid")?)?;
     Ok(reply)
 }

@@ -64,6 +64,162 @@
       }
     },
     {
+      "uid": "bf366b71dc9da331",
+      "name": "Slab",
+      "pack": "Construction",
+      "primitive": "sweep",
+      "rev": 1,
+      "values": {
+        "profile": {
+          "library": "basic/flat",
+          "params": {
+            "width": 4000,
+            "height": 3000
+          }
+        },
+        "attachment": "bottom_left",
+        "depth": 200
+      },
+      "record": {
+        "class": "IfcSlab",
+        "predefined_type": "FLOOR",
+        "material": "Concrete",
+        "object_type": "Slab"
+      },
+      "naming": "SL-{n}",
+      "node": "Slabs",
+      "locks": {
+        "profile": "free",
+        "depth": "free",
+        "edge": "free",
+        "material": "free",
+        "class": "fixed",
+        "predefined_type": "fixed",
+        "object_type": "fixed"
+      }
+    },
+    {
+      "uid": "b1be625968523f4c",
+      "name": "Raft slab",
+      "pack": "Construction",
+      "primitive": "sweep",
+      "rev": 1,
+      "values": {
+        "profile": {
+          "library": "basic/flat",
+          "params": {
+            "width": 4000,
+            "height": 3000
+          }
+        },
+        "attachment": "bottom_left",
+        "depth": 250,
+        "edge": {
+          "shape": "downstand",
+          "size": 400,
+          "depth": 350,
+          "side": "end"
+        }
+      },
+      "record": {
+        "class": "IfcSlab",
+        "predefined_type": "BASESLAB",
+        "material": "Concrete",
+        "object_type": "Raft slab"
+      },
+      "naming": "RS-{n}",
+      "node": "Slabs",
+      "locks": {
+        "profile": "free",
+        "depth": "free",
+        "edge": "free",
+        "material": "free",
+        "class": "fixed",
+        "predefined_type": "fixed",
+        "object_type": "fixed"
+      }
+    },
+    {
+      "uid": "abb98f7c7eaa1870",
+      "name": "Pad footing",
+      "pack": "Construction",
+      "primitive": "sweep",
+      "rev": 1,
+      "values": {
+        "profile": {
+          "library": "basic/flat",
+          "params": {
+            "width": 600,
+            "height": 600
+          }
+        },
+        "attachment": "centre",
+        "depth": 400,
+        "fit": {
+          "values": {
+            "profile.params.width": "host.width + 400",
+            "profile.params.height": "host.height + 400"
+          }
+        }
+      },
+      "record": {
+        "class": "IfcFooting",
+        "predefined_type": "PAD_FOOTING",
+        "material": "Concrete",
+        "object_type": "Pad footing"
+      },
+      "naming": "PF-{n}",
+      "node": "Footings",
+      "locks": {
+        "profile": "free",
+        "depth": "free",
+        "edge": "free",
+        "fit": "free",
+        "material": "free",
+        "class": "fixed",
+        "predefined_type": "fixed",
+        "object_type": "fixed"
+      }
+    },
+    {
+      "uid": "9b4a42cd7deca2f8",
+      "name": "Strip footing",
+      "pack": "Construction",
+      "primitive": "sweep",
+      "rev": 1,
+      "values": {
+        "profile": {
+          "library": "basic/flat",
+          "params": {
+            "width": 500,
+            "height": 250
+          }
+        },
+        "attachment": "top",
+        "fit": {
+          "values": {
+            "profile.params.width": "host.thickness + 300"
+          }
+        }
+      },
+      "record": {
+        "class": "IfcFooting",
+        "predefined_type": "STRIP_FOOTING",
+        "material": "Concrete",
+        "object_type": "Strip footing"
+      },
+      "naming": "SF-{n}",
+      "node": "Footings",
+      "locks": {
+        "profile": "free",
+        "fit": "free",
+        "material": "free",
+        "class": "fixed",
+        "predefined_type": "fixed",
+        "object_type": "fixed"
+      }
+    },
+    {
       "uid": "5b2a3a7a09860758",
       "name": "Handrail",
       "pack": "Architecture",

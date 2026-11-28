@@ -34,6 +34,12 @@ pub enum Reference {
     },
 }
 
+impl PartialEq for Reference {
+    fn eq(&self, other: &Self) -> bool {
+        serde_json::json!(self) == serde_json::json!(other)
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum Station {
@@ -199,7 +205,7 @@ impl Row {
             .iter()
             .chain(self.slots.values())
             .chain(self.anchor.iter().map(|a| &a.reference))
-            .chain(self.sweep.iter().flat_map(|s| s.path.references()))
+            .chain(self.sweep.iter().flat_map(|s| s.references()))
     }
     fn keys(&self) -> HashSet<Key> {
         let mut keys: HashSet<_> = self.cuts.iter().cloned().map(Key::Row).collect();

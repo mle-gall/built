@@ -317,6 +317,10 @@ pub fn sheet_menu(doc: &crate::sheet_page::Snapshot, keys: &[u64], clip: Option<
         format!("{} {}", items.len(), tr("items"))
     };
     let first = items[0];
+    // A title block is kept for other sheets and models in the Library.
+    if items.len() == 1 && first.kind == "titleblock" {
+        rows.one(vec![e("sheets:save_titleblock", &tr("Save to Library…"))]);
+    }
     let movable = items.iter().any(|i| i.kind != "titleblock");
     let mut one = |id: &str, label: &str| rows.one(vec![e(id, &tr(label))]);
     if !style_fields(&first.kind).is_empty() && items.len() == 1 { one("page:copy_style", "Copy style"); }

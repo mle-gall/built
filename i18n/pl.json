@@ -3913,5 +3913,8 @@
  "{n} edges [few]": "{n} krawędzie",
  "{n} objects [one]": "{n} obiekt",
  "{n} faces [one]": "{n} ściana",
- "{n} edges [one]": "{n} krawędź"
+ "{n} edges [one]": "{n} krawędź",
+ "Click a face to take its outline, or two opposite corners. Type the thickness. F = above. Alt = draw on a face.": "Kliknij ścianę bryły, aby przejąć jej obrys, albo dwa przeciwległe rogi. Wpisz grubość. F = powyżej. Alt = rysuj na ścianie bryły.",
+ "Click the opposite corner, or type width;height and Enter. One number is the thickness.": "Kliknij przeciwny róg lub wpisz szerokość;wysokość i Enter. Jedna liczba to grubość.",
+ "Click a column or a wall to size it from that member, or click a free point. Type the thickness. L = presets.": "Kliknij słup lub ścianę, aby dobrać wymiary do tego elementu, albo kliknij wolny punkt. Wpisz grubość. L = ustawienia wstępne."
 }

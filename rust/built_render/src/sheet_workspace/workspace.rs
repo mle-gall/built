@@ -855,6 +855,62 @@ impl Workspace {
         }
         Self::_edit(s, edits.as_any())
     }
+    /// The sheet's title block, None when it has none (Library › Title
+    /// blocks saves it: library_host/views.rs).
+    fn titleblock<'py>(s: &Bound<'py, Self>) -> PyResult<Obj<'py>> {
+        let comp = s.getattr("composer")?.getattr("comp")?;
+        if comp.is_none() {
+            return Ok(comp);
+        }
+        comp.getattr("cajetin")
+    }
+    /// A Library title block's fields on this sheet: onto its title block,
+    /// which stays docked in its corner whatever its new size, or as a new
+    /// one when the sheet has none. One History step.
+    fn use_titleblock(s: &Bound<'_, Self>, fields: &Bound<'_, PyDict>) -> PyResult<()> {
+        let py = s.py();
+        let comp = s.getattr("composer")?.getattr("comp")?;
+        if comp.is_none() {
+            return Ok(());
+        }
+        let place = ["x_mm", "y_mm", "z", "locked", "group_id", "uid"];
+        let wanted = PyDict::new(py);
+        for (k, v) in fields.iter() {
+            if !place.iter().any(|p| k.eq(*p).unwrap_or(false)) {
+                wanted.set_item(k, v)?;
+            }
+        }
+        let num = |o: &Obj<'_>, k: &str| -> PyResult<f64> { o.getattr(k)?.extract() };
+        let size = |k: &str, old: f64| -> PyResult<f64> {
+            Ok(match wanted.get_item(k)? {
+                Some(v) => v.extract::<f64>().unwrap_or(old),
+                None => old,
+            })
+        };
+        let block = comp.getattr("cajetin")?;
+        if block.is_none() {
+            let item = comp.call_method0("default_cajetin")?;
+            let known = item.getattr("_record_fields")?;
+            let (x, y, w, h) = (num(&item, "x_mm")?, num(&item, "y_mm")?, num(&item, "w_mm")?, num(&item, "h_mm")?);
+            for (k, v) in wanted.iter() {
+                if known.contains(&k)? {
+                    item.setattr(k.cast::<pyo3::types::PyString>()?, v)?;
+                }
+            }
+            item.setattr("x_mm", x + w - size("w_mm", w)?)?;
+            item.setattr("y_mm", y + h - size("h_mm", h)?)?;
+            add_item(s, &comp, &item)?;
+            select_item(s, &item)?;
+        } else {
+            let (x, y, w, h) = (num(&block, "x_mm")?, num(&block, "y_mm")?, num(&block, "w_mm")?, num(&block, "h_mm")?);
+            wanted.set_item("x_mm", x + w - size("w_mm", w)?)?;
+            wanted.set_item("y_mm", y + h - size("h_mm", h)?)?;
+            Self::_edit(s, PyList::new(py, [(block.clone(), wanted)])?.as_any())?;
+            s.setattr("_page", py.None())?;
+            select_item(s, &block)?;
+        }
+        Ok(())
+    }
     fn _lock_items(s: &Bound<'_, Self>) -> PyResult<()> {
         let py = s.py();
         let comp = s.getattr("composer")?.getattr("comp")?;
@@ -1769,6 +1825,9 @@ impl Workspace {
         match verb {
             "tool" if rest == "imagen" => Self::_add_image(s)?,
             "tool" if mode(rest).is_some() => Self::_tool(s, rest)?,
+            "save_titleblock" => {
+                crate::library_host::views::save_title_block(&host_window(s)?)?;
+            }
             "lock_items" => Self::_lock_items(s)?,
             "delete_items" => Self::_delete(s)?,
             "duplicate_items" => Self::_duplicate(s)?,

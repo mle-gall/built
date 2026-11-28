@@ -20,7 +20,8 @@
 //!   member takes as its profile on Done (`sketch_commit(adopt=…)`).
 //!
 //! Done runs `sketch_commit`: the row and every user of it in one History
-//! step. Save to Library opens the shared Save to Library drawer
+//! step. Release runs it with `release`: the same step also gives each user
+//! its own frozen copy of the drawing and removes the shared row. Save to Library opens the shared Save to Library drawer
 //! (library_host/destinations.rs); `save_profile` still writes the older
 //! `.builtprofile` folder for scripts.
 use pyo3::{
@@ -217,12 +218,12 @@ pub fn enter(win: &Obj<'_>, how: &str, arg: &str) -> PyResult<bool> {
     let py = win.py();
     let vp = win.getattr("viewport")?;
     let scene = vp.getattr("scene")?;
-    if !matches!(how, "done" | "cancel") {
+    if !matches!(how, "done" | "cancel" | "release") {
         win.setattr("_library_sketch", py.None())?;
     }
     match how {
         // Scripts and other surfaces leave it as the top bar's buttons do.
-        "done" | "cancel" => command(win, how),
+        "done" | "cancel" | "release" => command(win, how),
         "library" => {
             // A saved Library item: `{"id", "rev", "data"}` (its profile file).
             let item: serde_json::Value = serde_json::from_str(arg).map_err(|e| PyValueError::new_err(e.to_string()))?;
@@ -414,11 +415,15 @@ pub fn action(win: &Obj<'_>, arg: &str) -> PyResult<()> {
     let (verb, payload) = arg.split_once(SEP).unwrap_or((arg, ""));
     let vp = win.getattr("viewport")?;
     match verb {
-        "done" => {
+        "done" | "release" => {
+            let release = verb == "release";
             let row: serde_json::Value = serde_json::from_str(payload).map_err(|e| PyValueError::new_err(e.to_string()))?;
             let then = session(win);
             let kwargs = PyDict::new(py);
             kwargs.set_item("row", json(py, &row)?)?;
+            if release {
+                kwargs.set_item("release", true)?;
+            }
             if let Some(adopt) = then["adopt"].as_array().filter(|a| !a.is_empty()) {
                 kwargs.set_item("adopt", json(py, &serde_json::json!(adopt))?)?;
             }
@@ -433,6 +438,18 @@ pub fn action(win: &Obj<'_>, arg: &str) -> PyResult<()> {
                     let users = users_text(py, &rows, &uid);
                     let name = row["name"].as_str().filter(|n| !n.is_empty()).map(str::to_owned).unwrap_or_else(|| tr(py, "Sketch"));
                     win.setattr(SESSION, py.None())?;
+                    if release {
+                        // The shared sketch is gone: each user has its own copy.
+                        let kept: usize = reply.get_item("released").ok().and_then(|n| n.extract().ok()).unwrap_or(0);
+                        let text = match kept {
+                            1 => format!("{name} {}", tr(py, "released: its member keeps the drawing as its own")),
+                            n => format!("{name} {} {n} {}", tr(py, "released:"), tr(py, "members each keep the drawing as their own")),
+                        };
+                        win.call_method1("notify", ("success", text))?;
+                        vp.call_method0("notify_scene_changed")?;
+                        vp.call_method0("update")?;
+                        return Ok(());
+                    }
                     if then["then"] == "sweep" {
                         let named = row["name"].as_str().filter(|n| !n.is_empty()).map(str::to_owned).unwrap_or_else(|| tr(py, "The drawn profile"));
                         return back_to_sweep(win, rows.iter().find(|r| r["uid"] == uid.as_str()), &named, &state);

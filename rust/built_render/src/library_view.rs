@@ -169,7 +169,7 @@ pub const REVEAL: &str = "Show in folder";
 
 
 /// What differs per resource type: (id, apply label, empty text).
-const TYPES: [(&str, &str, &str); 7] = [
+const TYPES: [(&str, &str, &str); 9] = [
     ("styles", "Use this style", "Save a style from the Display panel: Save style…"),
     ("presets","Use in Sweep","No presets in this collection."),
     ("materials", "Paint with it", "No materials yet."),
@@ -177,6 +177,8 @@ const TYPES: [(&str, &str, &str); 7] = [
     ("families", "Place type", "Import a collection folder to browse its family types."),
     ("profiles", "Use in Sweep", "No profiles in this collection."),
     ("sections", "Edit drawing", "No sections yet: New section… draws one."),
+    ("scenes", "Apply to this view", "No view templates yet: Save current view… keeps this view's camera kind, style, tags and section."),
+    ("title_blocks", "Use on this sheet", "No title blocks yet: on a sheet, right-click its title block › Save to Library…"),
 ];
 
 fn kind(t: &str) -> (&'static str, &'static str, &'static str) {
@@ -703,6 +705,8 @@ fn saved_detail(inp: &Input, e: &Item, mut out: Vec<Value>) -> Vec<Value> {
         "styles" => "Use this style",
         "presets" => preset_apply_label(e),
         "profiles" => "Use in Sweep",
+        "scenes" => "Apply to this view",
+        "title_blocks" => "Use on this sheet",
         _ => "Use",
     };
     let mut first = Vec::new();
@@ -800,7 +804,7 @@ pub(crate) fn sheet_rows(inp: &Input, mut native: Option<&mut RowGroups>) -> Val
         let n = in_scope(&inp.items, &scope, &st.recent).len();
         let where_ = if scope.starts_with("c:bundled") { "Bundled" } else { "" };
         let sub = [where_.to_owned(), n.to_string()].into_iter().filter(|x| !x.is_empty()).collect::<Vec<_>>().join(" · ");
-        json!({"title": scope_title(&scope), "sub": sub, "empty": if matches!(t, "families" | "sections") { kind(t).2.into() } else { empty_text(t, &scope) }})
+        json!({"title": scope_title(&scope), "sub": sub, "empty": if matches!(t, "families" | "sections" | "scenes" | "title_blocks") { kind(t).2.into() } else { empty_text(t, &scope) }})
     };
     let current = inp.current.as_deref();
     let labels = verbs_of(t).into_iter().collect();
@@ -822,7 +826,7 @@ pub(crate) fn sheet_rows(inp: &Input, mut native: Option<&mut RowGroups>) -> Val
     };
     let blocks = cursor.as_deref().and_then(|k| inp.items.iter().find(|e| e.key == k))
         .map(|e| detail(inp, e, &mut thumbs)).unwrap_or_default();
-    json!({"scope": if faceted {"s:all"} else {&scope}, "tokens":tokens, "matches":faceted.then(||shown.iter().map(|e|&e.key).collect::<Vec<_>>()), "online": online, "searching": search, "search": format!("Search all {t}"), "sort": sort, "show": show,
+    json!({"scope": if faceted {"s:all"} else {&scope}, "tokens":tokens, "matches":faceted.then(||shown.iter().map(|e|&e.key).collect::<Vec<_>>()), "online": online, "searching": search, "search": match t { "scenes" => "Search templates".to_owned(), "title_blocks" => "Search title blocks".to_owned(), other => format!("Search all {other}") }, "sort": sort, "show": show,
            "side": side, "content": content, "groups": groups, "type_actions": inp.kind=="presets" || faceted || (!search && scope.starts_with("s:model")),
            "cursor": cursor, "detail": blocks, "thumbs": thumbs})
 }

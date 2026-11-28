@@ -28,7 +28,51 @@ pub struct Path {
     /// (docs/junctions.md §5): capture still gathers it with that member.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rests_on: Option<String>,
+    /// An extrusion (a slab, a pad): the path runs this far, in millimetres,
+    /// from its first point, along `dir` or towards its second point.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub depth: Option<f64>,
+    /// The extrusion's direction in the parent's frame.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dir: Option<[f64; 3]>,
 }
+/// The shape of an extrusion's edge between its outline and an end face:
+/// the profile of a slab's edge, a footing's step.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Edge {
+    /// `square`, `chamfer`, `round`, `step` or `downstand`.
+    pub shape: String,
+    /// How far the edge reaches in from the outline, millimetres (negative:
+    /// out from it).
+    #[serde(default)]
+    pub size: f64,
+    /// How far it reaches along the thickness, millimetres (the size when 0).
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub depth: f64,
+    /// Which end face it meets: `start`, `end` or `both`.
+    #[serde(default = "start")]
+    pub side: String,
+}
+fn is_zero(n: &f64) -> bool {
+    *n == 0.
+}
+fn start() -> String {
+    "start".into()
+}
+/// Sized from another member: each field is an expression over the host's
+/// dimensions (`host.width`, `host.height`, `host.thickness`, `host.length`,
+/// millimetres), written into this member before it is evaluated.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Fit {
+    /// The host: `{"sweep": "<row uid>", "at": "start" | "end"}`. A preset
+    /// has none: the element names its own.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub host: Option<super::Reference>,
+    /// `profile.params.<name>`, `path.depth`, `shift.x`, `shift.y` or
+    /// `rotation` → expression.
+    pub values: std::collections::BTreeMap<String, String>,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(untagged, try_from = "serde_json::Value")]
 pub enum End {
@@ -75,6 +119,25 @@ impl Path {
             }))
     }
 }
+impl Sweep {
+    /// Every reference the member resolves: its path's, and its host's.
+    pub fn references(&self) -> impl Iterator<Item = &super::Reference> {
+        self.path.references().chain(self.fit.iter().filter_map(|f| f.host.as_ref()))
+    }
+    /// The profile point that sits on the path: the attachment, moved by
+    /// the section shift (which is given in the path's frame).
+    pub fn origin(&self, outline: &super::profile::Outline) -> Result<DVec2, &'static str> {
+        let at = outline.attachment(&self.attachment)?;
+        if self.shift == [0.; 2] {
+            return Ok(at);
+        }
+        let mut back = DVec2::from_angle(-self.rotation.to_radians()).rotate(DVec2::from(self.shift));
+        if self.mirror {
+            back.x = -back.x;
+        }
+        Ok(at - back)
+    }
+}
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Sweep {
     pub profile: Profile,
@@ -99,6 +162,19 @@ pub struct Sweep {
     pub preset_rev: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub preset_definition: Option<super::presets::Preset>,
+    /// The edge of an extrusion (`path.depth`): a slab's edge profile.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub edge: Option<Edge>,
+    /// The section moved off the path, in the path's own frame (across, up),
+    /// millimetres.
+    #[serde(default, skip_serializing_if = "no_shift")]
+    pub shift: [f64; 2],
+    /// Sized from a host member (a footing from its column or wall).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fit: Option<Fit>,
+}
+fn no_shift(v: &[f64; 2]) -> bool {
+    *v == [0.; 2]
 }
 fn mitre() -> String {
     "mitre".into()
@@ -204,7 +280,10 @@ pub fn generate(
         .ok_or("invalid_path")?;
     let across = DVec3::Z.cross(dir).try_normalize().unwrap_or(DVec3::X);
     let up = dir.cross(across);
-    let offset = outline.attachment(&sweep.attachment)?;
+    let offset = sweep.origin(&outline)?;
+    if let Some(edge) = sweep.edge.as_ref().filter(|e| e.shape != "square") {
+        return extrude_with_edge(store, sweep, &outline, edge, path, planes, [start, dir, across, up], offset);
+    }
     let local = |pt: DVec2| {
         let mut p = (pt - offset) / 1000.;
         if sweep.mirror {
@@ -478,5 +557,241 @@ pub fn generate(
     Ok(SpanGeometry {
         butt_planes: trims,
         zones,
+    })
+}
+
+/// The rings of an edge treatment at one end, from the end face inwards:
+/// `(inset mm, distance from the end plane mm, smooth)` for each extra ring,
+/// then where the full outline starts.
+fn edge_levels(edge: &Edge, segments: usize) -> Result<(Vec<(f64, f64, bool)>, f64), &'static str> {
+    let size = edge.size;
+    let depth = if edge.depth == 0. { size.abs() } else { edge.depth };
+    if !(size.is_finite() && depth.is_finite()) || size == 0. || depth <= 0. {
+        return Err("invalid_edge");
+    }
+    Ok(match edge.shape.as_str() {
+        "chamfer" => (vec![(size, 0., false)], depth),
+        "round" => {
+            let n = segments.div_ceil(4).max(2);
+            (
+                (0..n)
+                    .map(|k| {
+                        let a = std::f64::consts::FRAC_PI_2 * k as f64 / n as f64;
+                        (size * (1. - a.sin()), depth * (1. - a.cos()), k > 0)
+                    })
+                    .collect(),
+                depth,
+            )
+        }
+        "step" => (vec![(size, 0., false), (size, depth, false)], depth),
+        // An edge beam under a slab: past the end face by `depth`, `size` wide.
+        "downstand" if size > 0. => (vec![(size, 0., false), (size, -depth, false)], -depth),
+        _ => return Err("invalid_edge"),
+    })
+}
+
+/// The outer ring moved in by `inset` millimetres (mitred corners).
+fn inset_ring(ring: &[super::profile::Node], inset: f64) -> Result<Vec<DVec2>, &'static str> {
+    let n = ring.len();
+    if inset == 0. {
+        return Ok(ring.iter().map(|node| node.p).collect());
+    }
+    let normal = |i: usize| {
+        let d = ring[(i + 1) % n].p - ring[i].p;
+        d.try_normalize().map(|d| DVec2::new(-d.y, d.x))
+    };
+    let mut out = Vec::with_capacity(n);
+    for i in 0..n {
+        let (Some(a), Some(b)) = (normal((i + n - 1) % n), normal(i)) else {
+            return Err("invalid_profile");
+        };
+        let den = 1. + a.dot(b);
+        if den < 1e-6 {
+            return Err("edge_too_large");
+        }
+        out.push(ring[i].p + (a + b) * (inset / den));
+    }
+    // An edge that turned round means the inset ate a side.
+    for i in 0..n {
+        let k = (i + 1) % n;
+        if (out[k] - out[i]).dot(ring[k].p - ring[i].p) <= 1e-9 {
+            return Err("edge_too_large");
+        }
+    }
+    Ok(out)
+}
+
+/// An extrusion whose outline changes near its end faces (`Sweep::edge`):
+/// a stack of rings, the full outline between them. Holes run straight
+/// from one end face to the other.
+#[allow(clippy::too_many_arguments)]
+fn extrude_with_edge(
+    store: &mut Store,
+    sweep: &Sweep,
+    outline: &super::profile::Outline,
+    edge: &Edge,
+    path: &[[f64; 3]],
+    planes: &[super::cut::EndPlane],
+    [start, dir, across, up]: [DVec3; 4],
+    offset: DVec2,
+) -> Result<SpanGeometry, &'static str> {
+    if path.len() != 2 || sweep.path.closed || !planes.is_empty() {
+        return Err("edge_needs_extrusion");
+    }
+    let length = (DVec3::from(path[1]) - start).length();
+    let (extras, main) = edge_levels(edge, sweep.segments)?;
+    // (role, inset mm, station along the path in metres, smooth ring)
+    let mut levels: Vec<(String, f64, f64, bool)> = Vec::new();
+    let (at_start, at_end) = match edge.side.as_str() {
+        "start" => (true, false),
+        "end" => (false, true),
+        "both" => (true, true),
+        _ => return Err("invalid_edge"),
+    };
+    let mut first = 0.;
+    let mut last = length;
+    if at_start {
+        for (i, (inset, z, smooth)) in extras.iter().enumerate() {
+            levels.push((format!("s{i}"), *inset, z / 1000., *smooth));
+        }
+        first = main / 1000.;
+    }
+    levels.push(("0".into(), 0., first, false));
+    if at_end {
+        last = length - main / 1000.;
+    }
+    levels.push(("1".into(), 0., last, false));
+    if at_end {
+        for (i, (inset, z, smooth)) in extras.iter().enumerate().rev() {
+            levels.push((format!("e{i}"), *inset, length - z / 1000., *smooth));
+        }
+    }
+    if last - first <= 1e-9 {
+        return Err("edge_too_large");
+    }
+    let local = |pt: DVec2| {
+        let mut p = (pt - offset) / 1000.;
+        if sweep.mirror {
+            p.x = -p.x
+        }
+        let p = DVec2::from_angle(sweep.rotation.to_radians()).rotate(p);
+        across * p.x + up * p.y
+    };
+    let namespace = sweep
+        .profile
+        .sketch
+        .as_ref()
+        .map(|id| format!("sketch/{id}"))
+        .unwrap_or_else(|| outline.family.clone());
+    let mut change = Change::default();
+    let mut roles = Vec::new();
+    let mut vertices = HashMap::new();
+    let mut ring_slots = |store: &mut Store, r: usize, tag: &str, points: Vec<DVec2>, z: f64| -> Result<Vec<u32>, &'static str> {
+        let mut slots = Vec::with_capacity(points.len());
+        for (j, p) in points.into_iter().enumerate() {
+            let slot = store
+                .vertex((start + dir * z + local(p)).to_array(), &mut change)
+                .map_err(|_| "invalid_profile")?;
+            let role = format!("{namespace}/{r}/{}/station/{tag}", outline.rings[r][j].role);
+            if vertices.insert(slot, role.clone()).is_some() {
+                return Err("edge_too_large");
+            }
+            roles.push((format!("vertex/{role}"), Kind::Vertex, slot));
+            slots.push(slot);
+        }
+        Ok(slots)
+    };
+    // The outer ring at every level; holes at the two end faces only.
+    let mut outer = Vec::new();
+    for (tag, inset, z, _) in &levels {
+        outer.push(ring_slots(store, 0, tag, inset_ring(&outline.rings[0], *inset)?, *z)?);
+    }
+    let (z0, z1) = (levels[0].2, levels[levels.len() - 1].2);
+    let mut holes = Vec::new();
+    for r in 1..outline.rings.len() {
+        let points = || outline.rings[r].iter().map(|n| n.p).collect::<Vec<_>>();
+        holes.push([ring_slots(store, r, "0", points(), z0)?, ring_slots(store, r, "1", points(), z1)?]);
+    }
+    drop(ring_slots);
+    let mut faces = Vec::new();
+    let mut wall = |store: &mut Store, r: usize, tag: &str, a: &[u32], b: &[u32]| -> Result<(), &'static str> {
+        let nodes = &outline.rings[r];
+        let reversed = (r > 0) ^ sweep.mirror;
+        for j in 0..a.len() {
+            let k = (j + 1) % a.len();
+            let mut quad = vec![a[j], a[k], b[k], b[j]];
+            if reversed {
+                quad.reverse()
+            }
+            let face = store.add_welded_face(&[quad], &mut change).map_err(|_| "edge_too_large")?;
+            faces.push((format!("side/{namespace}/{r}/{}/station/{tag}", nodes[j].role), face));
+            let prev = (j + nodes.len() - 1) % nodes.len();
+            if nodes[j].arc.is_some() || nodes[prev].arc.is_some() {
+                let seam = store.find_edge(a[j], b[j]).ok_or("invalid_profile")?;
+                let flags = if nodes[j].arc == nodes[prev].arc { crate::store::SOFT } else { crate::store::SOFT | crate::store::FLAT };
+                store.set_edge_flags(seam, flags);
+            }
+        }
+        Ok(())
+    };
+    let mut ledges = Vec::new();
+    for (i, pair) in outer.windows(2).enumerate() {
+        if (levels[i].2 - levels[i + 1].2).abs() < 1e-12 {
+            ledges.push(i);
+        } else {
+            wall(store, 0, &levels[i].0, &pair[0], &pair[1])?;
+        }
+    }
+    for (r, [a, b]) in holes.iter().enumerate() {
+        wall(store, r + 1, "0", a, b)?;
+    }
+    drop(wall);
+    // Two rings at one station: a flat ledge, one face with the inner ring
+    // as its hole, facing the way the solid narrows.
+    for i in ledges {
+        let (a, mut b) = (outer[i].clone(), outer[i + 1].clone());
+        let forward = levels[i + 1].1 > levels[i].1;
+        b.reverse();
+        let mut rings = if forward { vec![a, b] } else { vec![b, a] };
+        if sweep.mirror {
+            rings.iter_mut().for_each(|r| r.reverse());
+        }
+        let face = store.add_welded_face(&rings, &mut change).map_err(|_| "edge_too_large")?;
+        faces.push((format!("ledge/{namespace}/{}", levels[i].0), face));
+    }
+    // A rounded edge shades as one surface.
+    for (i, (_, _, _, smooth)) in levels.iter().enumerate() {
+        if *smooth {
+            let ring = &outer[i];
+            for j in 0..ring.len() {
+                if let Some(e) = store.find_edge(ring[j], ring[(j + 1) % ring.len()]) {
+                    store.set_edge_flags(e, crate::store::SOFT);
+                }
+            }
+        }
+    }
+    for (name, is_start) in [("cap/start", true), ("cap/end", false)] {
+        let mut cap = Vec::new();
+        let level = if is_start { 0 } else { outer.len() - 1 };
+        for r in 0..outline.rings.len() {
+            let mut ring = if r == 0 { outer[level].clone() } else { holes[r - 1][usize::from(!is_start)].clone() };
+            if ((r > 0) ^ sweep.mirror) ^ is_start {
+                ring.reverse()
+            }
+            cap.push(ring);
+        }
+        let f = store.add_welded_face(&cap, &mut change).map_err(|_| "edge_too_large")?;
+        faces.push((name.into(), f));
+    }
+    roles.extend(faces.into_iter().map(|(role, f)| (role, Kind::Face, f)));
+    for e in store.live_slots(Kind::Edge) {
+        let mut ends = store.state.ends.get(e as usize).map(|v| &vertices[&v]);
+        ends.sort();
+        roles.push((format!("edge/{}/{}", ends[0], ends[1]), Kind::Edge, e));
+    }
+    geometry::assign_roles(store, roles)?;
+    Ok(SpanGeometry {
+        butt_planes: Vec::new(),
+        zones: vec![[[0., 0.], [0., length], [length, length]]],
     })
 }

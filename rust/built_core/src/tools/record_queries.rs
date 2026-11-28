@@ -151,6 +151,49 @@ impl ViewportToolHost {
                 }
                 json!({"name":"Face profile","use":"profile","curves":curves,"next_id":curves.len()+1})
             }
+            // What an extrusion or a sized-from preset takes under the
+            // pointer: a swept member (the host of a footing), else a face
+            // (the outline of a slab), in world coordinates.
+            "sweep_target" => {
+                let px: (f64, f64) = args(&arg["px"])?;
+                let Some(pair) = hit(view, "pick_face_placement", px)? else { return Ok(Some(Value::Null)) };
+                let (face, placement) = (pair.get_item(0)?, pair.get_item(1)?);
+                if face.is_none() {
+                    return Ok(Some(Value::Null));
+                }
+                let scene = view.getattr("scene")?;
+                let owner = if placement.is_none() { None } else {
+                    Some(placement.getattr_opt("source_occurrence")?.filter(|o| !o.is_none()).unwrap_or(placement.clone()))
+                };
+                let mut host = Value::Null;
+                let mut live = false;
+                if let Some(owner) = &owner {
+                    if let Some(uid) = owner.getattr_opt("uid")?.and_then(|u| u.extract::<String>().ok()) {
+                        host = crate::live::fit::host(&scene, &uid)?;
+                        live = !host.is_null() || owner.getattr_opt("ext")?.is_some_and(|e| !e.is_none() && e.contains("built.live").unwrap_or(false));
+                    }
+                }
+                let matrix = placement.getattr_opt("xform")?.filter(|m| !m.is_none()).map(|m| m.call_method0("data")?.extract::<[f64; 16]>()).transpose()?.map(|a| DMat4::from_cols_array(&a)).unwrap_or(DMat4::IDENTITY);
+                let mut rings = Vec::new();
+                for ring in std::iter::once(Ok(face.getattr("loop")?)).chain(face.getattr("holes")?.try_iter()?) {
+                    let ring = ring?.try_iter()?.map(|v| Ok(matrix.transform_point3(DVec3::from(v?.call_method0("position_tuple")?.extract::<P3>()?)).to_array())).collect::<PyResult<Vec<_>>>()?;
+                    if ring.len() < 3 {
+                        return Ok(Some(Value::Null));
+                    }
+                    rings.push(ring);
+                }
+                let Some((_, normal)) = crate::snap_planes::face_plane(rings[0].clone()) else { return Ok(Some(Value::Null)) };
+                // The side the pointer sees is the face's front.
+                let mut normal = DVec3::from(normal);
+                if let Some(ray) = hit(view, "_pixel_to_ray", px)? {
+                    let direction = ray.get_item(1)?;
+                    if !direction.is_none() && xyz(&direction)?.dot(normal) > 0. {
+                        normal = -normal;
+                    }
+                }
+                json!({"host": host, "face": {"rings": rings, "normal": normal.to_array(), "live": live, "loose": owner.is_none()}})
+            }
+            "sweep_fit" => crate::live::fit::resolve(&arg["values"], &arg["dims"]),
             "repeat_edge" => {
                 let px: (f64, f64) = args(arg)?;
                 let Some(edge) = hit(view, "pick_edge_any", px)? else {

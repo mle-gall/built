@@ -222,7 +222,7 @@ pub(super) fn resize(
     let across = DVec3::Z.cross(axis).try_normalize().unwrap_or(DVec3::X);
     let up = axis.cross(across);
     let section = s.profile.outline(s.segments).map_err(err)?;
-    let attachment = section.attachment(&s.attachment).map_err(err)?;
+    let attachment = s.origin(&section).map_err(err)?;
     let section_point = |u: f64, v: f64| {
         let mut p = (glam::DVec2::new(u, v) - attachment) / 1000.;
         if s.mirror {

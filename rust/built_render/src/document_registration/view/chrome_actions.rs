@@ -825,13 +825,17 @@ pub(super) fn command_query<'py>(a: &Args<'py>) -> Reply<'py> {
                 let source:String=entry.get_item("source")?.extract()?;
                 let at=recent.iter().position(|r|r==&id);
                 let group=if at.is_some(){"Recent".to_string()}else{match source.as_str(){"model"=>"This project".into(),"mine"=>"My presets".into(),_=>pack}};
-                matches.push((at.unwrap_or(usize::MAX),group,name,detail,entry));
+                // What was typed, as a name, comes first: "slab" is Slab
+                // before Raft slab.
+                let lower=name.to_lowercase();
+                let rank=if needle.is_empty(){2}else if lower==needle{0}else if lower.starts_with(&needle){1}else{2};
+                matches.push((rank,at.unwrap_or(usize::MAX),group,name,detail,entry));
             }
         }
-        // Recent first, then the project's own, then the user's, then packs.
-        let rank=|group:&str|match group{"Recent"=>0,"This project"=>1,"My presets"=>2,_=>3};
-        matches.sort_by(|a,b|(&a.0,rank(&a.1),&a.1,&a.2).cmp(&(&b.0,rank(&b.1),&b.1,&b.2)));
-        for (_,group,name,detail,entry) in matches{
+        // What was typed first, then recent, the project's own, the user's, packs.
+        let place=|group:&str|match group{"Recent"=>0,"This project"=>1,"My presets"=>2,_=>3};
+        matches.sort_by(|a,b|(&a.0,&a.1,place(&a.2),&a.2,&a.3).cmp(&(&b.0,&b.1,place(&b.2),&b.2,&b.3)));
+        for (_,_,group,name,detail,entry) in matches{
             results.append((name,group,detail,true))?;
             actions.append(entry)?;
         }

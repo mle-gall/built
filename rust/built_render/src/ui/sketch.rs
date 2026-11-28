@@ -2,7 +2,7 @@
 //! owner's layout): a flat, true-size drawing space entered like group
 //! editing. Tools on the left in the rail's place, the sketch's settings
 //! on the right in the dock's place, the canvas between them with the live
-//! 3D inset in its bottom-left corner, a breadcrumb with Cancel and Done in
+//! 3D inset in its bottom-left corner, a breadcrumb with Cancel, Release and Done in
 //! the top bar.
 //!
 //! The working sketch and its local history live here (built_draft2d);
@@ -975,6 +975,7 @@ impl Ui {
             "redo" => self.sketch.local_undo(true),
             "done" => self.sketch_done(),
             "cancel" => self.sketch_cancel(),
+            "release" => self.sketch_release(),
             _ => return false,
         }
         true
@@ -982,6 +983,22 @@ impl Ui {
     fn sketch_done(&mut self) {
         let row = self.sketch.row_json();
         self.actions.push(format!("sketch:done{SEP_S}{row}"));
+        self.sketch.shown = false;
+        self.sketch.discarded = None;
+    }
+    /// Release: leave the sketch and keep the result. The drawing is baked
+    /// into each member that uses it (its own copy); the shared sketch goes.
+    fn sketch_release(&mut self) {
+        if self.sketch.users.is_empty() {
+            self.sketch.say(tr("Nothing uses this sketch yet: Done keeps it in the model"), None);
+            return;
+        }
+        if !self.sketch.profile().ok() {
+            self.sketch.say(tr("Close the drawing before releasing it: what uses it needs a closed outline"), None);
+            return;
+        }
+        let row = self.sketch.row_json();
+        self.actions.push(format!("sketch:release{SEP_S}{row}"));
         self.sketch.shown = false;
         self.sketch.discarded = None;
     }
@@ -1035,7 +1052,7 @@ impl Ui {
             }
         }
     }
-    /// The top bar's right end: scale and unit, Cancel, Done.
+    /// The top bar's right end: scale and unit, Cancel, Release, Done.
     pub(super) fn sketch_bar_right(&mut self, ui: &mut egui::Ui) {
         ui.spacing_mut().item_spacing = vec2(SPACE_S, 0.0);
         ui.label(egui::RichText::new(format!("{} · 1:1 · mm", tr("Sketch"))).font(meta()).color(FAINT));
@@ -1043,6 +1060,18 @@ impl Ui {
         self.cluster_buttons.push(("sketch_cancel".into(), cancel.rect.center().into()));
         if cancel.clicked() {
             self.sketch_cancel();
+        }
+        // Release sits between them, as in the other edit sessions: leave
+        // and keep the result, no longer driven by this sketch.
+        let used = !self.sketch.users.is_empty();
+        let release = ui
+            .add_enabled_ui(used, |ui| kit::panel_button(ui, &tr("Release"), "", 0, None))
+            .inner
+            .on_hover_text(tr("Leave the sketch and bake it in: each member keeps this drawing as its own"))
+            .on_disabled_hover_text(tr("Nothing uses this sketch yet: Done keeps it in the model"));
+        self.cluster_buttons.push(("sketch_release".into(), release.rect.center().into()));
+        if release.clicked() {
+            self.sketch_release();
         }
         let done = kit::panel_button(ui, &tr("Done"), "↩", 1, None).on_hover_text(tr("Keep the sketch: one step in the model's history"));
         self.cluster_buttons.push(("sketch_done".into(), done.rect.center().into()));

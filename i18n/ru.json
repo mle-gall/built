@@ -3905,5 +3905,8 @@
  "{n} faces [one]": "{n} грань",
  "{n} faces [few]": "{n} грани",
  "{n} edges [one]": "{n} ребро",
- "{n} edges [few]": "{n} ребра"
+ "{n} edges [few]": "{n} ребра",
+ "Click a face to take its outline, or two opposite corners. Type the thickness. F = above. Alt = draw on a face.": "Кликните грань, чтобы взять её контур, или два противоположных угла. Введите толщину. F = сверху. Alt = рисовать на грани.",
+ "Click the opposite corner, or type width;height and Enter. One number is the thickness.": "Кликните противоположный угол или введите 'ширина;высота' и Enter. Одно число — толщина.",
+ "Click a column or a wall to size it from that member, or click a free point. Type the thickness. L = presets.": "Кликните колонну или стену, чтобы задать размеры по этому элементу, или свободную точку. Введите толщину. L — наборы."
 }

@@ -110,7 +110,10 @@ fn frame<'py>(view: &Obj<'py>) -> PyResult<(Obj<'py>, Obj<'py>, f64)> {
             .is_ok_and(|v| v.is_truthy().unwrap_or(false))
     {
         calls::sheet_and_jobs(view, &win)?;
+        // Forms too: a form opened from the page (Save to Library… on a
+        // title block) is drawn over the sheet like any prompt.
         for module in [
+            "built_render.chrome_forms",
             "built_render.wgpu_start",
             "built_render.chrome_sheet",
         ] {

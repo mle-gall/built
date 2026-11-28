@@ -221,6 +221,7 @@ fn place_group_tool_offset<'py>(a: &Args<'py>) -> Reply<'py> {
 fn sweep_key(code:i32)->Option<&'static str>{
     match code{0x1000001=>Some("Tab"),82=>Some("R"),70=>Some("F"),76=>Some("L"),68=>Some("D"),0x1000004|0x1000005=>Some("Enter"),_=>None}
 }
+fn sweep_caption<'p>(a:&Args<'p>)->Reply<'p>{a.get_item(0)?.call_method1("_state",("caption",))}
 fn sweep_claims<'p>(a:&Args<'p>)->Reply<'p>{
     let code=a.get_item(1)?.extract()?;
     (a.get_item(2)?.extract::<i32>()?==0 && sweep_key(code).is_some_and(|key|key!="Enter")).into_bound_py_any(a.py())
@@ -286,6 +287,7 @@ pub(super) fn install(module: &Bound<PyModule>) -> PyResult<()> {
         sweep.set_item("kind","sweep")?;
         let sweep=define(module,"SweepTool",&[cls.clone()],&sweep)?;
         install_methods(module,&sweep,&[
+            ("vcb_caption",Mode::Method,sweep_caption,&["self"],"str",""),
             ("claims_key",Mode::Method,sweep_claims,&["self","key","modifiers"],"bool",""),
             ("on_key",Mode::Method,sweep_on_key,&["self","viewport","key","modifiers"],"bool",""),
         ])?;

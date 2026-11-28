@@ -328,6 +328,96 @@ impl Records {
                         let mut on=self.sweep["mirror"]==true;
                         if kit::toggle(ui,&mut on,"Mirror section").clicked(){send(out,"sweep.field",json!([owner,"mirror",on]));}
                     });
+                    // An extrusion (a slab, a pad): its thickness and the
+                    // profile of its edge.
+                    if let Some(depth)=self.sweep["path"]["depth"].as_f64(){
+                        let number=|ui:&mut egui::Ui,title:&str,key:&str,old:f64,unit:&str|->Option<f64>{
+                            let mut out=None;
+                            kit::property_control(ui,title,|ui|{
+                                let id=ui.make_persistent_id((key,owner.as_str()));
+                                let mut value=ui.data(|d|d.get_temp(id)).unwrap_or(old);
+                                let response=ui.add(kit::number(&mut value,unit));
+                                if response.changed(){ui.data_mut(|d|d.insert_temp(id,value));}
+                                if response.drag_stopped() || response.lost_focus() || (response.changed() && !response.has_focus() && !response.dragged()){
+                                    ui.data_mut(|d|d.remove::<f64>(id));
+                                    if value!=old{out=Some(value);}
+                                }
+                            });
+                            out
+                        };
+                        // A rectangular outline is two numbers.
+                        let params=&self.sweep["profile"]["params"];
+                        if let (Some(w),Some(h),false)=(params["width"].as_f64(),params["height"].as_f64(),self.sweep["profile"]["sketch"].is_string()){
+                            let resize=|out:&mut Vec<String>,w:f64,h:f64|{
+                                let mut profile=self.sweep["profile"].clone();
+                                profile["params"]["width"]=json!(w);
+                                profile["params"]["height"]=json!(h);
+                                send(out,"sweep.field",json!([owner,"profile",profile]));
+                            };
+                            if let Some(v)=number(ui,"Width","sweep outline width",w," mm"){if v>0.{resize(out,v,h);}}
+                            if let Some(v)=number(ui,"Length","sweep outline length",h," mm"){if v>0.{resize(out,w,v);}}
+                        }
+                        if let Some(v)=number(ui,"Thickness","sweep depth",depth," mm"){
+                            if v>0.{send(out,"sweep.field",json!([owner,"depth",v]));}
+                        }
+                        let edge=&self.sweep["edge"];
+                        let shapes=["square","chamfer","round","step","downstand"];
+                        let names=["Square","Chamfered","Rounded","Stepped","Edge beam"];
+                        let at=shapes.iter().position(|s|edge["shape"]==*s).unwrap_or(0);
+                        let size=edge["size"].as_f64().unwrap_or(50.);
+                        let reach=edge["depth"].as_f64().filter(|d|*d>0.).unwrap_or(size.abs());
+                        // Which end face the edge meets, in the slab's own words.
+                        let down=self.sweep["path"]["dir"][2].as_f64().unwrap_or(0.);
+                        let sides=if down< -0.5{["Top","Bottom","Both"]}else if down>0.5{["Bottom","Top","Both"]}else{["Near face","Far face","Both"]};
+                        let side_keys=["start","end","both"];
+                        let side=side_keys.iter().position(|k|edge["side"]==*k).unwrap_or(0);
+                        let set=|out:&mut Vec<String>,shape:&str,size:f64,reach:f64,side:&str|{
+                            let value=if shape=="square"{Value::Null}else{json!({"shape":shape,"size":size,"depth":reach,"side":side})};
+                            send(out,"sweep.field",json!([owner,"edge",value]));
+                        };
+                        kit::property_control(ui,"Edge",|ui|{
+                            let (choice,popup)=kit::select(ui,"sweep edge",names[at],&names);
+                            layers.extend(popup);
+                            if let Some(i)=choice{
+                                // An edge beam hangs under the far face; the others start at the drawn one.
+                                let side=if shapes[i]=="downstand"{"end"}else if edge["shape"]=="downstand"{"start"}else{side_keys[side]};
+                                // A beam and a chamfer are not the same size: each kind starts from its own.
+                                let kept=edge.is_object() && (shapes[i]=="downstand")==(edge["shape"]=="downstand");
+                                let (size,reach)=if kept{(size,reach)}else if shapes[i]=="downstand"{(300.,300.)}else{(50.,50.)};
+                                set(out,shapes[i],size,reach,side);
+                            }
+                        });
+                        if at>0{
+                            if let Some(v)=number(ui,if shapes[at]=="downstand"{"Beam width"}else{"Edge size"},"sweep edge size",size," mm"){
+                                if v!=0.{set(out,shapes[at],v,reach,side_keys[side]);}
+                            }
+                            if let Some(v)=number(ui,if shapes[at]=="downstand"{"Beam depth"}else{"Edge depth"},"sweep edge depth",reach," mm"){
+                                if v>0.{set(out,shapes[at],size,v,side_keys[side]);}
+                            }
+                            if shapes[at]!="downstand"{
+                                kit::property_control(ui,"Edge at",|ui|{
+                                    let (choice,popup)=kit::select(ui,"sweep edge side",sides[side],&sides);
+                                    layers.extend(popup);
+                                    if let Some(i)=choice{set(out,shapes[at],size,reach,side_keys[i]);}
+                                });
+                            }
+                        }
+                    }
+                    // Sized from a host member: what follows it, and a way out.
+                    if let Some(values)=self.sweep["fit"]["values"].as_object().filter(|v|!v.is_empty()){
+                        let host=self.sweep["fit_host"].as_str().unwrap_or("its host");
+                        let words:Vec<String>=values.iter().map(|(field,e)|{
+                            let name=match field.as_str(){"profile.params.width"=>"width","profile.params.height"=>"depth","path.depth"=>"thickness","shift.x"|"shift.y"=>"position",other=>other.rsplit('.').next().unwrap_or(other)};
+                            format!("{name} = {}",e.as_str().unwrap_or("").replace("host.",""))
+                        }).collect();
+                        kit::property_control(ui,"Sized from",|ui|{ui.label(host).on_hover_text(words.join("\n"));});
+                        for line in &words{
+                            ui.label(egui::RichText::new(line).small().weak());
+                        }
+                        if kit::quiet(ui,"Keep these sizes").on_hover_text("Stop following the host: the sizes stay as they are").clicked(){
+                            send(out,"sweep.field",json!([owner,"fit",Value::Null]));
+                        }
+                    }
                 });
                 if let Some(state)=row.get("state").and_then(Value::as_str){property(ui,"State",state);}
                 if let Some(path) = self.sweep["resolved_points"].as_array() {

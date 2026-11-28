@@ -374,6 +374,43 @@ pub(super) fn sweep_path(
             points.push(p);
         }
     }
+    if let Some(depth) = path.depth {
+        // An extrusion: one point (drawn, or a host's), a direction, a depth.
+        if points.is_empty() {
+            if let Some(end) = path.ends.as_ref().map(|e| &e[0]) {
+                let r = match end {
+                    sweep::End::Point(p) => Reference::Point(*p),
+                    sweep::End::Anchored { to, .. } => to.clone(),
+                };
+                let p = match &r {
+                    Reference::Point(p) if path.definition_space => Some(DVec3::from(*p)),
+                    _ => origin(scene, t, &r, row)?,
+                };
+                points.extend(p);
+            }
+        }
+        let Some(&start) = points.first() else {
+            return Ok(None);
+        };
+        let reach = match path.dir {
+            Some(dir) if path.definition_space => DVec3::from(dir).try_normalize().map(|d| d * depth / 1000.),
+            Some(dir) => {
+                let local = {
+                    let d = doc::lock();
+                    let Some(Data::Placement(placement)) = d.node(t.groups[&row.owner]).map(|n| &n.data) else {
+                        return Ok(None);
+                    };
+                    placement.xform.as_ref().map(|x| DMat4::from_cols_array(&x.doubles())).unwrap_or(DMat4::IDENTITY)
+                };
+                DVec3::from(dir).try_normalize().map(|d| local.inverse().transform_vector3(d * depth / 1000.))
+            }
+            None => points.get(1).and_then(|end| (*end - start).try_normalize()).map(|d| d * depth / 1000.),
+        };
+        let Some(reach) = reach.filter(|r| depth > 0. && r.length() > 1e-9) else {
+            return Ok(None);
+        };
+        return Ok(Some(vec![start.to_array(), (start + reach).to_array()]));
+    }
     if let Some(ends) = &path.ends {
         if points.is_empty() {
             for end in ends {

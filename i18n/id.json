@@ -3902,5 +3902,8 @@
  "{n} texture image could not be read, so it was not packed into the document — those faces will lose their texture on another computer.": "{n} gambar tekstur tidak dapat dibaca, sehingga tidak dikemas ke dalam dokumen — bidang tersebut akan kehilangan teksturnya di komputer lain.",
  "{n} texture images could not be read, so they were not packed into the document — those faces will lose their texture on another computer.": "{n} gambar tekstur tidak dapat dibaca, sehingga tidak dikemas ke dalam dokumen — bidang tersebut akan kehilangan teksturnya di komputer lain.",
  "Click or drag to place · … for actions · Esc back to the model": "Klik atau seret untuk menempatkan · … untuk tindakan · Esc untuk kembali ke model",
- "Click to use · … for actions · Esc back to the model": "Klik untuk menggunakan · … untuk tindakan · Esc untuk kembali ke model"
+ "Click to use · … for actions · Esc back to the model": "Klik untuk menggunakan · … untuk tindakan · Esc untuk kembali ke model",
+ "Click a face to take its outline, or two opposite corners. Type the thickness. F = above. Alt = draw on a face.": "Klik sebuah muka untuk mengambil garis luarnya, atau dua sudut yang berseberangan. Ketik tebalnya. F = di atas. Alt = menggambar pada muka.",
+ "Click the opposite corner, or type width;height and Enter. One number is the thickness.": "Klik sudut yang berseberangan, atau ketik lebar;tinggi lalu Enter. Satu angka berarti tebal.",
+ "Click a column or a wall to size it from that member, or click a free point. Type the thickness. L = presets.": "Klik kolom atau dinding untuk menyesuaikan ukurannya dengan elemen itu, atau klik titik bebas. Ketik tebalnya. L = preset."
 }

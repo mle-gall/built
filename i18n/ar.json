@@ -3942,5 +3942,8 @@
  "{n} faces [many]": "{n} وجهًا",
  "2 edges": "حافتين",
  "{n} edges [few]": "{n} حواف",
- "{n} edges [many]": "{n} حافةً"
+ "{n} edges [many]": "{n} حافةً",
+ "Click a face to take its outline, or two opposite corners. Type the thickness. F = above. Alt = draw on a face.": "انقر على وجه لأخذ محيطه، أو على زاويتين متقابلتين. اكتب السمك. F = أعلى. Alt = الرسم على وجه.",
+ "Click the opposite corner, or type width;height and Enter. One number is the thickness.": "انقر على الزاوية المقابلة، أو اكتب العرض;الارتفاع ثم Enter. رقم واحد يعني السمك.",
+ "Click a column or a wall to size it from that member, or click a free point. Type the thickness. L = presets.": "انقر على عمود أو جدار لتحديد المقاس من ذلك العنصر، أو انقر على نقطة حرة. اكتب السمك. L = الإعدادات المسبقة."
 }

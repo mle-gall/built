@@ -3902,5 +3902,8 @@
  "{n} texture image could not be read, so it was not packed into the document — those faces will lose their texture on another computer.": "ບໍ່ສາມາດອ່ານຮູບພື້ນຜິວ {n} ຮູບໄດ້, ຈຶ່ງບໍ່ໄດ້ບັນຈຸລົງໃນເອກະສານ — ໜ້າພື້ນຜິວເຫຼົ່ານັ້ນຈະບໍ່ສະແດງລວດລາຍເມື່ອເປີດໃນຄອມພິວເຕີເຄື່ອງອື່ນ.",
  "{n} texture images could not be read, so they were not packed into the document — those faces will lose their texture on another computer.": "ບໍ່ສາມາດອ່ານຮູບພື້ນຜິວ {n} ຮູບໄດ້, ຈຶ່ງບໍ່ໄດ້ບັນຈຸລົງໃນເອກະສານ — ໜ້າພື້ນຜິວເຫຼົ່ານັ້ນຈະບໍ່ສະແດງລວດລາຍເມື່ອເປີດໃນຄອມພິວເຕີເຄື່ອງອື່ນ.",
  "Click or drag to place · … for actions · Esc back to the model": "ຄລິກ ຫຼື ລາກເພື່ອວາງ · … ເພື່ອເບິ່ງຄຳສັ່ງ · Esc ເພື່ອກັບໄປຫາແບບຈຳລອງ",
- "Click to use · … for actions · Esc back to the model": "ຄລິກເພື່ອໃຊ້ · … ເພື່ອເບິ່ງຄຳສັ່ງ · Esc ເພື່ອກັບໄປຫາແບບຈຳລອງ"
+ "Click to use · … for actions · Esc back to the model": "ຄລິກເພື່ອໃຊ້ · … ເພື່ອເບິ່ງຄຳສັ່ງ · Esc ເພື່ອກັບໄປຫາແບບຈຳລອງ",
+ "Click a face to take its outline, or two opposite corners. Type the thickness. F = above. Alt = draw on a face.": "ຄລິກໜ້າເພື່ອໃຊ້ເສັ້ນຂອບຂອງມັນ, ຫຼື ຄລິກສອງມຸມກົງກັນຂ້າມ. ພິມຄວາມໜາ. F = ດ້ານເທິງ. Alt = ແຕ້ມເທິງໜ້າ.",
+ "Click the opposite corner, or type width;height and Enter. One number is the thickness.": "ຄລິກມຸມກົງກັນຂ້າມ, ຫຼື ພິມ ຄວາມກວ້າງ;ຄວາມສູງ ແລ້ວກົດ Enter. ຕົວເລກດຽວແມ່ນຄວາມໜາ.",
+ "Click a column or a wall to size it from that member, or click a free point. Type the thickness. L = presets.": "ຄລິກເສົາ ຫຼື ຝາ ເພື່ອກຳນົດຂະໜາດຕາມຊິ້ນສ່ວນນັ້ນ, ຫຼື ຄລິກຈຸດອິດສະຫຼະ. ພິມຄວາມໜາ. L = ຄ່າທີ່ຕັ້ງໄວ້."
 }
