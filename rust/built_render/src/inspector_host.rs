@@ -171,6 +171,18 @@ fn selection(view: &Bound<'_, PyAny>, win: &Bound<'_, PyAny>) -> PyResult<()> {
                     for (field,provider) in [("profile_options","ProfilesProvider"),("preset_options","PresetsProvider")]{
                         sweep.set_item(field,lib.getattr(provider)?.call0()?.call_method1("items",(&ctx,))?)?;
                     }
+                    // The member this one is sized from, by its name.
+                    if let Ok(host)=sweep.get_item("fit").and_then(|f|f.get_item("host")).and_then(|h|h.get_item("sweep")){
+                        let rows=py.import("built_core.command_protocol")?.call_method1("live_rows",(&scene,))?;
+                        for r in rows.try_iter()?{
+                            let r=r?;
+                            if r.get_item("uid")?.eq(&host)?{
+                                let owner=scene.call_method0("groups_by_uid")?.call_method1("get",(r.get_item("owner")?,))?;
+                                if !owner.is_none(){sweep.set_item("fit_host",owner.getattr("name")?)?;}
+                                break;
+                            }
+                        }
+                    }
                     record.set_item("sweep",sweep)?;
                 }
             }
@@ -742,10 +754,22 @@ fn inspector_action(win: &Bound<'_, PyAny>, view: &Bound<'_, PyAny>, payload: &s
                         let val=v.get_item(2)?;
                         if field=="preset"{
                             let values=val.get_item("values")?;
-                            for (k,value) in values.cast::<PyDict>()?{row.set_item(k,value)?;}
+                            for (k,value) in values.cast::<PyDict>()?{
+                                let key:String=k.extract()?;
+                                match key.as_str(){
+                                    // A thickness is the path's; a host stays the member's own.
+                                    "depth"=>row.get_item("path")?.set_item("depth",value)?,
+                                    "fit"=>{if let Ok(fit)=row.get_item("fit"){fit.set_item("values",value.get_item("values")?)?;}}
+                                    _=>row.set_item(k,value)?,
+                                }
+                            }
                             row.set_item("preset_uid",val.get_item("uid")?)?;
                             row.set_item("preset_definition",&val)?;
                         }else if matches!(field.as_str(),"profile"|"rotation"|"attachment"|"mirror"){row.set_item(field,val)?;}
+                        else if field=="depth"{row.get_item("path")?.set_item("depth",val)?;}
+                        else if matches!(field.as_str(),"edge"|"fit"){
+                            if val.is_none(){if row.contains(&field)?{row.del_item(&field)?;}}else{row.set_item(field,val)?;}
+                        }
                     }else{row.set_item("corner",verb)?;}
                     let kw=PyDict::new(py);kw.set_item("row",&row)?;
                     commands(py)?.call((vp.getattr("history")?,"live_set"),Some(&kw))?;

@@ -188,6 +188,32 @@ fn edit(ctx: &Bound<'_, PyAny>, preset: Value, title: &str, lib: Option<String>)
     forms.call_method1("show", (ctx.getattr("win")?, form))?;
     Ok(())
 }
+/// An extrusion's edge profile in words.
+fn edge_words(edge: &Value) -> String {
+    let size = edge["size"].as_f64().unwrap_or(0.);
+    let depth = edge["depth"].as_f64().filter(|d| *d > 0.).unwrap_or(size.abs());
+    let shape = match edge["shape"].as_str().unwrap_or("") {
+        "chamfer" => "Chamfered",
+        "round" => "Rounded",
+        "step" => "Stepped",
+        "downstand" => "Edge beam",
+        _ => return "Square".into(),
+    };
+    let side = match edge["side"].as_str().unwrap_or("start") {
+        "end" => "far face",
+        "both" => "both faces",
+        _ => "drawn face",
+    };
+    format!("{shape} {} × {} mm · {side}", mm(&json!(size)), mm(&json!(depth)))
+}
+/// A length in millimetres as it is typed: 300, 2997.7.
+fn mm(v: &Value) -> String {
+    match v.as_f64() {
+        Some(n) if (n - n.round()).abs() < 0.05 => format!("{}", n.round() as i64),
+        Some(n) => format!("{n:.1}"),
+        None => shown(v),
+    }
+}
 /// A preset's values and record defaults as detail rows.
 fn details(p: &Value) -> Vec<(String, String, String)> {
     let mut details = Vec::new();
@@ -205,11 +231,25 @@ fn details(p: &Value) -> Vec<(String, String, String)> {
                         "mirror" => "Mirror",
                         "rotation" => "Rotation",
                         "attachment" => "Attachment",
+                        "depth" => "Thickness",
+                        "edge" => "Edge profile",
+                        "fit" => "Sized from host",
+                        "shift" => "Section shift",
                         _ => key,
                     },
                     if p["locks"][key] == "fixed" { "Fixed" } else { "Free" }
                 ),
-                shown(if key == "profile" && v["library"].is_string() { &v["library"] } else { v }),
+                match key.as_str() {
+                    "depth" => format!("{} mm", mm(v)),
+                    "edge" => edge_words(v),
+                    "fit" => v["values"].as_object().into_iter().flatten()
+                        .map(|(field, e)| format!("{} = {}", field.rsplit('.').next().unwrap_or(field), e.as_str().unwrap_or("").replace("host.", "host ")))
+                        .collect::<Vec<_>>().join("; "),
+                    "profile" if v["library"].is_string() && v["params"]["width"].is_number() =>
+                        format!("{} · {} × {} mm", shown(&v["library"]), mm(&v["params"]["width"]), mm(&v["params"]["height"])),
+                    "profile" if v["library"].is_string() => shown(&v["library"]),
+                    _ => shown(v),
+                },
                 p["locks"][key].as_str().unwrap_or("free").to_owned(),
             ));
         }
@@ -555,6 +595,17 @@ pub(crate) fn capture_preset(win: &Bound<'_, PyAny>, group: &Bound<'_, PyAny>) -
     ] {
         values[key] = row[key].clone();
     }
+    // An extrusion keeps its thickness and edge profile; a member sized
+    // from a host keeps how it is sized (the host is each element's own).
+    if row["path"]["depth"].is_number() {
+        values["depth"] = row["path"]["depth"].clone();
+    }
+    if row["edge"].is_object() {
+        values["edge"] = row["edge"].clone();
+    }
+    if row["fit"]["values"].is_object() {
+        values["fit"] = json!({"values": row["fit"]["values"]});
+    }
     if let Some(cuts)=row["cut_rows"].as_array().filter(|c|!c.is_empty()) {
         let mut cuts=cuts.clone();
         for cut in &mut cuts {
@@ -574,6 +625,9 @@ pub(crate) fn capture_preset(win: &Bound<'_, PyAny>, group: &Bound<'_, PyAny>) -
     }
     let name = group.getattr("name")?.str()?.to_string();
     let id = uid(py)?;
-    let preset = json!({"uid":id,"name":name,"pack":"My presets","node":"","primitive":"sweep","values":values,"record":record,"locks":{"profile":"fixed"},"naming":"","rev":1});
+    // A member's section is what the preset is; an extrusion's outline is
+    // each element's own (drawn, or picked from a face).
+    let locks = if values["depth"].is_number() { json!({"profile":"free","depth":"free","edge":"free"}) } else { json!({"profile":"fixed"}) };
+    let preset = json!({"uid":id,"name":name,"pack":"My presets","node":"","primitive":"sweep","values":values,"record":record,"locks":locks,"naming":"","rev":1});
     super::destinations::save_preset(win, &name, preset)
 }

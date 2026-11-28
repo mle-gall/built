@@ -55,6 +55,11 @@ const TOOLS: &[(&str, Phases)] = &[
     ("sweep", &[
         ("idle","Pick a start, or press Enter to sweep selected edges."),
         ("started","Pick the end or enter a length. Alt keeps the end free."),
+        // A preset with a thickness (a slab): the pointer gives its outline.
+        ("outline","Click a face to take its outline, or two opposite corners. Type the thickness. F = above. Alt = draw on a face."),
+        ("corner","Click the opposite corner, or type width;height and Enter. One number is the thickness."),
+        // A preset sized from its host (a footing): the pointer gives the host.
+        ("host","Click a column or a wall to size it from that member, or click a free point. Type the thickness. L = presets."),
     ]),
     ("line_on_surface", &[
         ("idle", "Click the start point on a curved face."),
@@ -214,6 +219,20 @@ fn phase_of(key: &str, tool: &Bound<PyAny>) -> PyResult<&'static str> {
         "arc" => "idle",
         "fillet" | "chamfer" if truth(tool, "sizing", false)? => "sizing",
         "fillet" | "chamfer" => "idle",
+        "sweep" if tool.hasattr("_state")? => {
+            let state = |name: &str| -> PyResult<bool> { Ok(tool.call_method1("_state", (name,)).is_ok_and(|v| v.is_truthy().unwrap_or(false))) };
+            if state("corner_point")? {
+                "corner"
+            } else if state("sized")? {
+                "host"
+            } else if state("extruding")? {
+                "outline"
+            } else if started("start_point")? {
+                "started"
+            } else {
+                "idle"
+            }
+        }
         _ if started("start_point")?
             || truth(tool, "dragging", false)?
             || truth(tool, "nodes", false)? =>
