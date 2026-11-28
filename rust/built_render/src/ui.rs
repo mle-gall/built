@@ -1223,7 +1223,7 @@ impl Ui {
         if self.fillet_key(name) { return true; }
         let filing = self.column.as_ref().is_some_and(|c| c.filing.is_some() || c.row_menu.is_some()
             || c.kind_menu.is_some() || c.head_menu.is_some() || c.prompt.is_some() || c.edits.contains_key("\u{1d}pick"));
-        self.column.as_ref().is_some_and(|c| !self.review && c.claims_row_key(name, mods)) || self.sheet.is_some() || self.dialog.is_some() || self.cmd_open || (name == "Escape" && (self.view_open || self.menu.is_some() || self.form.is_some() || filing
+        self.column.as_ref().is_some_and(|c| !self.review && !self.cmd_open && !self.ctx.wants_keyboard_input() && c.claims_row_key(name, mods)) || self.sheet.is_some() || self.dialog.is_some() || self.cmd_open || (name == "Escape" && (self.view_open || self.menu.is_some() || self.form.is_some() || filing
             || self.ctx_menu.is_some() || self.strip.menus_open()))
             || self.ctx.wants_keyboard_input()
     }
@@ -1389,7 +1389,11 @@ impl Ui {
                 }
             }
         }
-        if self.form.is_none() && self.menu.is_none() && !self.review {
+        // A focused tree row's keys (Space shows/hides it) never take a key
+        // while a text field has the keyboard: typing "Bolt group" in the
+        // details picker hid the plate selected in the tree.
+        let typing = self.cmd_open || self.sheet.is_some() || self.dialog.is_some() || self.ctx.wants_keyboard_input();
+        if self.form.is_none() && self.menu.is_none() && !self.review && !typing {
             if let Some(col) = self.column.as_mut().filter(|c| c.claims_row_key(name, mods)) {
                 if pressed {
                     if let Some(action) = col.row_key(name, mods) { self.actions.push(action); }
