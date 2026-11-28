@@ -17,9 +17,19 @@ fn schedule<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let tool = a.get_item(0)?;
     let vp = a.get_item(1)?;
-    let group = tool.getattr("_target_group")?;
+    let mut group = tool.getattr("_target_group")?;
+    if group.is_none() {
+        let selection = vp.getattr("scene")?.getattr("selection")?;
+        if selection.len()? == 1 {
+            if let Some(item) = selection.try_iter()?.next().transpose()? {
+                if item.is_instance(&py.import("built_core.group")?.getattr("Group")?)? {
+                    group = item;
+                }
+            }
+        }
+    }
     tool.setattr("_target_group", py.None())?;
-    if a.get_item(2)?.is_none() {
+    if group.is_none() {
         let text = imported(py, "built_core.i18n")?
             .call_method1("tr", ("Select one group or component first",))?;
         vp.call_method1("flash_status", (text,))?;

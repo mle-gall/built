@@ -708,10 +708,16 @@ impl Draw<'_> {
     }
 
     /// Report a click / double-click / right-click on an item.
-    fn item_input(&mut self, resp: &egui::Response, it: &Item) {
+    fn item_input(&mut self, ui: &mut egui::Ui, resp: &egui::Response, it: &Item) {
         if it.id.is_empty() { return; }
-        if resp.secondary_clicked() && !it.menu.is_empty() {
-            let at = resp.interact_pointer_pos().unwrap_or(resp.rect.left_bottom());
+        let library = matches!(it.kind.as_str(), "library" | "placeable");
+        let more = if library && !it.menu.is_empty() {
+            let rect = Rect::from_min_size(resp.rect.right_top() - vec2(BUTTON_H, 0.), vec2(BUTTON_H, BUTTON_H));
+            let mut cell = ui.new_child(egui::UiBuilder::new().id_salt(("item actions", &it.id)).max_rect(rect));
+            Some(kit::panel_button(&mut cell, "…", "", 0, Some(BUTTON_H)))
+        } else { None };
+        if let Some(at) = more.as_ref().filter(|r| r.clicked() || r.secondary_clicked()).map(|r| r.rect.left_bottom())
+            .or_else(|| (resp.secondary_clicked() && !it.menu.is_empty()).then(|| resp.interact_pointer_pos().unwrap_or(resp.rect.left_bottom()))) {
             self.st.menu = Some((it.id.clone(), it.menu.clone(), at));
             if self.focusable && !it.fixed {
                 self.st.focused = Some(it.id.clone());
@@ -723,7 +729,7 @@ impl Draw<'_> {
             if resp.clicked() { self.out.push(format!("pick{SEP}{}", it.id)); }
             return;
         }
-        if resp.double_clicked() {
+        if (library && resp.clicked() && it.menu.iter().any(|(id,_)| id == "apply")) || resp.double_clicked() {
             self.out.push(format!("open{SEP}{}", it.id));
         } else if resp.clicked() {
             if self.st.focused.as_deref() != Some(it.id.as_str()) {
@@ -814,7 +820,7 @@ impl Draw<'_> {
                 ui.painter().galley(pos2(r.min.x, pic.max.y + 20.0), s, FAINT);
             }
             let resp = if it.tip.is_empty() { resp } else { resp.on_hover_text(&it.tip) };
-            self.item_input(&resp, it);
+            self.item_input(ui, &resp, it);
         }
         if !components.is_empty() {
             self.out.push(std::iter::once("component-previews").chain(components).collect::<Vec<_>>().join(&SEP.to_string()));
@@ -883,6 +889,7 @@ impl Draw<'_> {
             }
             // Right: the dot and its words, then the right text.
             let mut right_x = r.max.x - SPACE_S;
+            if matches!(it.kind.as_str(), "library" | "placeable") && !it.menu.is_empty() { right_x -= BUTTON_H; }
             if let Some(mut enabled) = it.toggle {
                 let track = Rect::from_center_size(pos2(right_x - 21., r.center().y), vec2(42., CONTROL_H));
                 let mut cell = ui.new_child(egui::UiBuilder::new().id_salt(("row toggle", &it.id)).max_rect(track));
@@ -945,7 +952,7 @@ impl Draw<'_> {
                 paint_dot(ui, pos2(bx - 8.0, r.center().y), "warn");
             }
             let resp = if it.tip.is_empty() { resp } else { resp.on_hover_text(&it.tip) };
-            self.item_input(&resp, it);
+            self.item_input(ui, &resp, it);
         }
 
         if !components.is_empty() {
@@ -1163,6 +1170,7 @@ impl Ui {
         self.lsheet.rect = Some(sheet);
         let icons = &self.icons;
         let st = &mut self.lsheet;
+        let previous_menu = st.menu.as_ref().map(|(id, _, anchor)| (id.clone(), *anchor));
         st.grids.clear();
         let mut rects: Vec<(String, Rect)> = Vec::new();
         let area = egui::Area::new(egui::Id::new("lsheet"))
@@ -1298,7 +1306,8 @@ impl Ui {
                         }
                     });
                 });
-            let pressed_out = ctx.input(|i| i.pointer.any_pressed() && i.pointer.interact_pos().is_some_and(|p| !r.response.rect.contains(p)));
+            let already_open = previous_menu.as_ref().is_some_and(|(id, anchor)| *id == item && *anchor == at);
+            let pressed_out = already_open && ctx.input(|i| i.pointer.any_pressed() && i.pointer.interact_pos().is_some_and(|p| !r.response.rect.contains(p)));
             if close || (pressed_out && !ctx.input(|i| i.pointer.secondary_pressed())) { st.menu = None; }
         }
         // A header menu.
@@ -1753,6 +1762,50 @@ mod tests {
         let later=requests(-1200., &mut state);
         assert_ne!(later,first);
         assert!(!later.is_empty() && !later[0].contains("component:1:0:0"));
+    }
+
+    #[test]
+    fn library_row_and_menu_dispatch_distinct_actions() {
+        let ctx = egui::Context::default();
+        fonts(&ctx);
+        let mut state = LargeSheet::default();
+        let item = Item {
+            id: "oak".into(), kind: "library".into(), label: "Oak".into(),
+            menu: vec![("apply".into(), "Use".into()), ("edit".into(), "Edit".into())],
+            ..Default::default()
+        };
+        let block = Block { items: vec![item].into(), ..Default::default() };
+        let icons = HashMap::new();
+        let mut out = vec![];
+        let mut bounds = Rect::NOTHING;
+        let mut frame = |events: Vec<egui::Event>| {
+            let input = egui::RawInput {
+                screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(320.,240.))),
+                events, ..Default::default()
+            };
+            let _ = ctx.run(input, |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    let mut d = Draw { st: &mut state, icons: &icons, out: &mut out, focusable: true, pane: "c", rects: vec![] };
+                    d.rows(ui,&block,0);
+                    bounds = d.rects[0].1;
+                });
+            });
+            (bounds, state.menu.take().map(|m|m.0), std::mem::take(&mut out))
+        };
+        let (r,_,_) = frame(vec![]);
+        let mut click = |at, button| {
+            let event = |pressed| egui::Event::PointerButton { pos:at, button, pressed, modifiers: Default::default() };
+            frame(vec![egui::Event::PointerMoved(at),event(true)]);
+            frame(vec![event(false)])
+        };
+        let (_,menu,actions) = click(r.center(),egui::PointerButton::Primary);
+        assert!(menu.is_none());
+        assert_eq!(actions, [format!("open{SEP}oak")]);
+        for (at,button) in [(r.right_top()+vec2(-BUTTON_H/2.,BUTTON_H/2.),egui::PointerButton::Primary),(r.center(),egui::PointerButton::Secondary)] {
+            let (_,menu,actions) = click(at,button);
+            assert_eq!(menu.as_deref(), Some("oak"));
+            assert!(!actions.iter().any(|a| a.starts_with("open")));
+        }
     }
 
     #[test]

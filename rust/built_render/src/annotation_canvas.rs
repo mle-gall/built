@@ -508,6 +508,10 @@ impl AnnotationCanvas {
     }
 
     fn text(&mut self, text: &str, at: (f64, f64), anchor: &str, ink: Color) -> PyResult<()> {
+        self.text_with_background(text, at, anchor, ink, None)
+    }
+
+    fn text_with_background(&mut self, text: &str, at: (f64, f64), anchor: &str, ink: Color, background: Option<Color>) -> PyResult<()> {
         let tree = text_run(&self.state.font, text, anchor, ink)
             .ok_or_else(|| PyValueError::new_err("invalid annotation text"))?;
         // Placed in device pixels, after the scale: a whole-pixel move then
@@ -518,6 +522,12 @@ impl AnnotationCanvas {
         let transform = scale.post_translate(at.0 as f32 * scale.sx, at.1 as f32 * scale.sy);
         let b = tree.root().abs_stroke_bounding_box();
         let (x, y) = (at.0 as f32, at.1 as f32);
+        if let Some(color) = background {
+            if let Some(rect) = Rect::from_ltrb(b.left()+x-3., b.top()+y-2., b.right()+x+3., b.bottom()+y+2.) {
+                self.mark_logical(rect, 1.);
+                self.target()?.fill_rect(rect, &color.paint(), scale, None);
+            }
+        }
         if let Some(bounds) = Rect::from_ltrb(b.left() + x, b.top() + y, b.right() + x, b.bottom() + y) {
             self.mark_logical(bounds, 2.);
         }
@@ -900,7 +910,7 @@ impl AnnotationCanvas {
                     self.path(rect.map(PathBuilder::from_rect), true)?
                 }
                 "point" => self.circle(*points.first().unwrap_or(&(0., 0.)), width)?,
-                "text" => self.text(&text, *points.first().unwrap_or(&(0., 0.)), "start", ink)?,
+                "text" => self.text_with_background(&text, *points.first().unwrap_or(&(0., 0.)), "start", ink, self.state.brush)?,
                 other => return Err(PyValueError::new_err(format!("Unknown overlay primitive: {other}"))),
             }
         }

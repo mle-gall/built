@@ -44,7 +44,8 @@ def test_junction_filter_rule_in_words_and_apply_on_the_selection(win):
     rows = detail_rows(sheet)
     assert rows["Adds"] == "cut, part, 4 bolts, weld" and rows["Pack"].startswith("Steel connections · EN")
     assert rows["Licence"] == "GPL-3.0-or-later" and rows["Plate thickness"] == "15 mm"
-    assert "Apply…" in buttons(sheet) and "Share pack…" in buttons(sheet)
+    assert buttons(sheet) == ["Apply…"]
+    assert dict(end_plate["menu"])["share"] == "Share pack…"
     # Apply… binds the selection: two members, either order.
     sc = win.viewport.scene
     h = win.viewport.history

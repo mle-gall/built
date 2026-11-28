@@ -438,7 +438,7 @@ pub fn linked_split(model: Vec<Item>, per_file: &[(String, Vec<(String, i64)>)],
         for (name, n) in counts {
             if let Some(e) = by_name.get(name.as_str()) {
                 linked.push(Item { key: format!("lk:{path}|{name}"), source: "linked".into(), file: Some(path.clone()),
-                                   uses: *n, category: String::new(), verbs: vec!["apply".into(), "select".into()],
+                                   uses: *n, category: String::new(), verbs: vec!["apply".into(), "select".into(), "opensource".into()],
                                    ..(*e).clone() });
             }
         }
@@ -465,7 +465,6 @@ fn verb(id: &str, label: &str, key: &str, role: i64) -> Value {
     json!({"id": id, "label": label, "key": key, "role": role, "enabled": true, "tip": ""})
 }
 const PRIMARY: i64 = 1;
-const QUIET: i64 = 3;
 
 fn prune(v: Value) -> Value {
     match v {
@@ -522,6 +521,22 @@ fn tile(t: &str, e: &Item, current: Option<&str>, thumbs: &mut Vec<String>, labe
     let mut menu: Vec<_> = e.verbs.iter().map(|v| if v == "-" { (v.clone(), String::new()) } else {
         (v.clone(), labels.get(v).cloned().unwrap_or_else(|| v.clone()))
     }).collect();
+    if e.key.starts_with("cm:") && e.verbs.iter().any(|v| v == "edit") {
+        menu.push(("unique-choose".into(), "Make unique…".into()));
+    }
+    for (id, label) in &mut menu {
+        *label = match id.as_str() {
+            "apply" if t == "presets" => preset_apply_label(e).into(),
+            "edit" if e.key.starts_with("cm:") => "Open definition".into(),
+            "select" if e.key.starts_with("cm:") => format!("Select copies ({})", e.uses),
+            "rename" if e.key.starts_with("cm:") => "Rename…".into(),
+            "review" => "Review similar…".into(),
+            "follow" => "Follow new meetings".into(),
+            "unfollow" => "Stop following".into(),
+            "opensource" => format!("Open {}", base_name(e.file.as_deref().unwrap_or(""))),
+            _ => continue,
+        };
+    }
     while menu.last().is_some_and(|m| m.0 == "-") {
         menu.pop();
     }
@@ -550,7 +565,7 @@ fn tile(t: &str, e: &Item, current: Option<&str>, thumbs: &mut Vec<String>, labe
     SheetItem {
         id: e.key.clone(), right: if t=="components" {if matches!(e.source.as_str(),"model"|"linked") {e.uses.to_string()} else {"—".into()}} else {host.cloned().unwrap_or_default()}, label: shown, sub: if t=="components"{facets::class(e).into()}else{sub},
         component_source: if t=="components" {facets::source(e).into()} else {String::new()},
-        kind: if matches!(t, "components" | "families") { "placeable".into() } else { String::new() },
+        kind: if matches!(t, "components" | "families") { "placeable".into() } else { "library".into() },
         icon: icon(e, thumbs), hex: e.hex.clone().unwrap_or_default(), menu,
         place: if t == "components" { String::new() } else { e.place() },
         on: current.is_some_and(|c| c == e.name), tip: e.name.clone(), fold: -1, ..Default::default()
@@ -574,17 +589,11 @@ pub(crate) fn detail(inp: &Input, e: &Item, thumbs: &mut Vec<String>) -> Vec<Val
     if inp.kind=="presets" {
         if e.verbs.iter().any(|v|v=="apply"){out.push(block("buttons",json!({"buttons":[verb("apply",preset_apply_label(e),"↩",PRIMARY)],"align":"fill"})));}
         out.push(block("kv",json!({"rows":e.defaults})));
-        if e.verbs.iter().any(|v|v=="review"){out.push(block("buttons",json!({"buttons":[verb("review","Review similar…",if e.verbs.iter().any(|v|v=="apply") {""} else {"↩"},if e.verbs.iter().any(|v|v=="apply") {0} else {PRIMARY})],"align":"fill"})));}
-        let actions:Vec<_>=[("follow","Follow new meetings"),("unfollow","Stop following"),("edit","Edit…"),("duplicate","Duplicate"),("export","Export pack…"),("share","Share pack…"),("delete","Delete…")].into_iter().filter(|(id,_)|e.verbs.iter().any(|v|v==id)).map(|(id,title)|verb(id,title,"",0)).collect();
-        out.push(block("buttons",json!({"buttons":actions})));
         return out;
     }
     if inp.kind=="profiles" {
         out.push(block("buttons",json!({"buttons":[verb("apply","Use in Sweep","↩",PRIMARY)],"align":"fill"})));
         out.push(block("kv",json!({"rows":e.defaults})));
-        if e.verbs.iter().any(|v|v=="edit") {
-            out.push(block("buttons",json!({"buttons":[verb("edit","Edit drawing","",0)]})));
-        }
         return out;
     }
     if inp.kind=="sections" {
@@ -614,8 +623,7 @@ pub(crate) fn detail(inp: &Input, e: &Item, thumbs: &mut Vec<String>) -> Vec<Val
             out.push(block("text", json!({"text": "A colour painted before materials had names (an older file). \
                                                    Name these makes each a material."})));
             out.push(block("kv", json!({"rows": [["Colour", e.name, ""], ["Used by", objects(e.uses), ""]]})));
-            out.push(buttons(vec![verb("apply", "Paint with it", "↩", PRIMARY), verb("select", "Select uses", "", 0),
-                                  verb("name", &format!("Name these ({})", inp.unnamed), "", 0)], "fill"));
+            out.push(buttons(vec![verb("apply", "Paint with it", "↩", PRIMARY)], "fill"));
         }
         "m" => {
             if inp.usage_pending {
@@ -623,10 +631,7 @@ pub(crate) fn detail(inp: &Input, e: &Item, thumbs: &mut Vec<String>) -> Vec<Val
                 return out;
             }
             out.push(block("kv", json!({"rows": [["Used by", objects(e.uses), ""]]})));
-            out.push(buttons(vec![verb("apply", "Paint with it", "↩", PRIMARY), verb("edit", "Edit in inspector", "", 0),
-                                  verb("select", "Select uses", "", 0)], "fill"));
-            out.push(buttons(vec![verb("duplicate", "Duplicate", "", QUIET), verb("keep", "Save to Library…", "", QUIET),
-                                  verb("delete", "Delete…", "", QUIET)], "left"));
+            out.push(buttons(vec![verb("apply", "Paint with it", "↩", PRIMARY)], "fill"));
         }
         _ => {
             let base = match (e.base.as_deref(), e.thumb.as_deref()) {
@@ -640,16 +645,12 @@ pub(crate) fn detail(inp: &Input, e: &Item, thumbs: &mut Vec<String>) -> Vec<Val
             let used = inp.model_uses.get(&e.name).copied().unwrap_or(0);
             if !inp.usage_pending { rows.push(json!(["In this model", if used != 0 { format!("used by {used}") } else { "not used".into() }, ""])); }
             out.push(block("kv", json!({"rows": rows})));
-            let mut verbs = vec![verb("apply", "Paint with it", "↩", PRIMARY)];
-            if e.source == "mine" {
-                verbs.push(verb("unkeep", "Remove from My library", "", 0));
-            }
             if e.source == "linked" {
                 out.push(block("text", json!({"text": "Edit it in its own file: the change comes in when the link reloads.",
                                               "tone": "faint"})));
-                verbs.push(verb("opensource", &format!("Open {}", base_name(e.file.as_deref().unwrap_or(""))), "", 0));
+
             }
-            out.push(buttons(verbs, "fill"));
+            out.push(buttons(vec![verb("apply", "Paint with it", "↩", PRIMARY)], "fill"));
         }
     }
     out
@@ -674,24 +675,14 @@ fn saved_detail(inp: &Input, e: &Item, mut out: Vec<Value>) -> Vec<Value> {
     if e.verbs.iter().any(|v| v == "apply") {
         first.push(verb("apply", primary, "↩", PRIMARY));
     }
-    if e.verbs.iter().any(|v| v == "edit") {
+    if first.is_empty() && e.verbs.iter().any(|v| v == "edit") {
         let label = if inp.kind == "presets" { "Edit…" } else { "Open the drawing" };
-        first.push(verb("edit", label, if first.is_empty() { "↩" } else { "" }, if first.is_empty() { PRIMARY } else { 0 }));
+        first.push(verb("edit", label, "↩", PRIMARY));
     }
     if !first.is_empty() {
         out.push(block("buttons", json!({"buttons": first, "align": "fill"})));
     }
     out.push(block("kv", json!({"rows": e.defaults})));
-    // Two short rows: where it goes, then what it is (the pane is narrow).
-    for row in [&[("modelupdate", "Update this model"), ("share", "Share pack…")][..], &[("update", "Update"), ("copyto", "Copy to…"), ("moveto", "Move to…")][..], &[("libedit", "Edit…"), ("reveal", REVEAL), ("libdelete", "Delete…")][..]] {
-        let actions: Vec<Value> = row.iter()
-            .filter(|(id, _)| e.verbs.iter().any(|v| v == id))
-            .map(|(id, title)| verb(id, title, "", QUIET))
-            .collect();
-        if !actions.is_empty() {
-            out.push(block("buttons", json!({"buttons": actions, "align": "left"})));
-        }
-    }
     out
 }
 
@@ -921,8 +912,9 @@ mod tests {
         let inp = Input { kind: "styles".into(), ..Default::default() };
         let blocks = detail(&inp, &saved, &mut Vec::new());
         assert_eq!(blocks[1]["right"], "My library");
-        let ids: Vec<&str> = blocks[blocks.len() - 2..].iter().flat_map(|b| b["buttons"].as_array().unwrap()).map(|b| b["id"].as_str().unwrap()).collect();
-        assert_eq!(ids, ["copyto", "moveto", "reveal", "libdelete"]);
+        assert_eq!(blocks.iter().filter(|b| b["buttons"].is_array()).count(), 1);
+        let item = tile("styles", &saved, None, &mut vec![], &HashMap::new());
+        assert_eq!(item.menu.iter().map(|m| &m.0).collect::<Vec<_>>(), saved.verbs.iter().collect::<Vec<_>>());
         saved.verbs = vec!["apply".into(), "copyto".into()];
         assert_eq!(detail(&inp, &saved, &mut Vec::new())[1]["right"], "Read-only");
     }

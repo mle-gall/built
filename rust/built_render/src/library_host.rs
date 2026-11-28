@@ -2458,7 +2458,7 @@ impl LibrarySheet {
         } else if !e.is_none() && prov_id == "components" {
             slf.call_method1("_component_detail", (&detail, &prov, ctx, &e))?;
         }
-        let hint = if matches!(prov_id.as_str(), "components" | "families") { "Drag into the model to place · double-click or ↩ to place · Esc back to the model" } else { "Click to see it · double-click or ↩ uses it · Esc back to the model" };
+        let hint = if matches!(prov_id.as_str(), "components" | "families") { "Click or drag to place · … for actions · Esc back to the model" } else { "Click to use · … for actions · Esc back to the model" };
         sheet.call_method1("footer", (PyTuple::empty(py), hint))?;
         if cursor.is_truthy()? {
             let force = st.call_method1("pop", ("force_focus", false))?.is_truthy()?;
@@ -2529,27 +2529,9 @@ impl LibrarySheet {
                 }
             }
         }
-        let mut vs = vec![cs_verb(py, "apply", "Place a copy", &[("key", s(py, "↩")), ("primary", true.into_pyobject(py)?.to_owned().into_any())])?];
+        let primary = cs_verb(py, "apply", "Place a copy", &[("key", s(py, "↩")), ("primary", true.into_pyobject(py)?.to_owned().into_any())])?;
+        d.call_method("buttons", (vec![primary],), Some(&[("align", "fill")].into_py_dict(py)?))?;
         if model {
-            if e.get_item("verbs")?.contains("edit")? {
-                vs.push(cs_verb(py,"unique-choose","Make unique…",&[])?);
-            }
-            for (id,label) in [("select","Select copies"),("replace","Replace selection with this"),("edit","Open definition")] {
-                if e.get_item("verbs")?.contains(id)? { let label=if id=="select" {format!("Select copies ({})",e.get_item("uses")?)} else {label.into()}; vs.push(cs_verb(py,id,&label,&[])?);}
-            }
-        }
-        d.call_method("buttons", (vs,), Some(&[("align", "fill")].into_py_dict(py)?))?;
-        if model {
-            let labels = lib(py)?.getattr("VERBS")?;
-            let quiet = true.into_pyobject(py)?.to_owned().into_any();
-            let mut more = Vec::new();
-            for v in ["rename", "keepfile", "unkeepfile", "delete"] {
-                if e.get_item("verbs")?.contains(v)? {
-                    let label = if v == "rename" { "Rename…".to_owned() } else { labels.get_item(v)?.str()?.to_string() };
-                    more.push(cs_verb(py, v, &label, &[("quiet", quiet.clone())])?);
-                }
-            }
-            d.call_method("buttons", (more,), Some(&[("align", "left")].into_py_dict(py)?))?;
             if let Some(locations)=e.cast::<PyDict>()?.get_item("locations")? {
                 d.call_method1("caption",("Copies by location",))?;
                 d.call_method1("kv",(locations.call_method0("items")?,))?;
@@ -2606,8 +2588,8 @@ impl LibrarySheet {
         if st.get_item("type")?.eq("components")? && (verb.starts_with("bulk-") || verb=="verb" && arg.starts_with("bulk-")) {
             return bulk::act(&st,&lctx,if verb=="verb"{&arg}else{verb},&arg);
         }
-        if verb=="verb" && arg=="unique-choose" {
-            let cursor=st.get_item("cursor")?;
+        if (verb=="verb" && arg=="unique-choose") || (verb=="menu" && args.get(1).is_some_and(|v| v=="unique-choose")) {
+            let cursor=if verb=="menu" {s(py,&arg)} else {st.get_item("cursor")?};
             let entry=st.get_item("items")?.get_item(&cursor)?;
             let p=provider(py,"components")?;
             let row=p.call_method1("_row",(&lctx,&entry))?;

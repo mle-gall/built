@@ -73,7 +73,7 @@ pub(crate) fn alignment(win: &Obj) -> PyResult<()> {
             win,
             trf(
                 py,
-                "Imported {n} feature(s) from {name}",
+                if n == 1 { "Imported {n} feature from {name}" } else { "Imported {n} features from {name}" },
                 &[
                     ("n", n.into_bound_py_any(py)?),
                     ("name", path.getattr("name")?),
@@ -212,7 +212,7 @@ pub(crate) fn photomesh(win: &Obj) -> PyResult<()> {
     let msg = if n > 0 {
         trf(
             py,
-            "Imported {name} — {n} texture(s) not found",
+            if n == 1 { "Imported {name} — {n} texture not found" } else { "Imported {name} — {n} textures not found" },
             &[("name", name), ("n", n.into_bound_py_any(py)?)],
         )?
     } else {

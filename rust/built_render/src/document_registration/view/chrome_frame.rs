@@ -818,7 +818,14 @@ fn cursor_value<'py>(a: &Args<'py>) -> Reply<'py> {
         let prompt=tool.call_method1("_state",("prompt",))?;
         let chip=tr.call1((prompt,))?;
         let offset:f64=tool.call_method1("_state",("offset",))?.extract()?;
-        (chip,py.import("built_core.units")?.call_method1("fmt_len",(offset/1000.,))?.extract::<String>()?)
+        let units = py.import("built_core.units")?;
+        let sizes = tool.call_method1("_state",("cut_sizes",))?.extract::<Option<Vec<(String,f64)>>>()?.unwrap_or_default();
+        let value = if sizes.is_empty() {
+            units.call_method1("fmt_len",(offset/1000.,))?.extract::<String>()?
+        } else {
+            sizes.iter().map(|(label,size)| Ok(format!("{} {}", tr.call1((label,))?, units.call_method1("fmt_len", (*size,))?))).collect::<PyResult<Vec<_>>>()?.join(" · ")
+        };
+        (chip,value)
     } else {(tr.call1((&caption,))?,value)};
     // The tool's refusal reads in the error colour (Fillet: a size that
     // does not fit the selection).

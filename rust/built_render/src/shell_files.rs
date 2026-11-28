@@ -1064,7 +1064,7 @@ fn do_save<'py>(py: Python<'py>, win: &Any<'py>, path: &Any<'py>, copy: bool) ->
     let (missing, embedded) = (int("missing")?, int("embedded")?);
     let backup_failed = truthy(&stats.call_method1("get", ("backup_failed",))?);
     if missing != 0 {
-        let text = trf(py, "{n} texture image(s) could not be read, so they were not packed into the document — those faces will lose their texture on another computer.", &[("n", obj(py, missing)?.into_bound(py))])?;
+        let text = trf(py, if missing == 1 { "{n} texture image could not be read, so it was not packed into the document — those faces will lose their texture on another computer." } else { "{n} texture images could not be read, so they were not packed into the document — those faces will lose their texture on another computer." }, &[("n", obj(py, missing)?.into_bound(py))])?;
         dialogs.call_method1("warning", (win, tr(py, "Saved with missing textures")?, text))?;
     } else if backup_failed {
         status(win, tr(py, "Could not write the backup copy.")?)?;
@@ -1079,7 +1079,7 @@ fn do_save<'py>(py: Python<'py>, win: &Any<'py>, path: &Any<'py>, copy: bool) ->
     autosave.call_method1("clear", (&path,))?;
     autosave.getattr("clear")?.call((doc.getattr("path")?,), Some(&kw(py, &[("untitled", doc.getattr("untitled_no")?)])?))?;
     if missing == 0 && !backup_failed {
-        let text = if embedded != 0 { trf(py, "Saved — {n} texture(s) packed into the document.", &[("n", obj(py, embedded)?.into_bound(py))])? } else { trf(py, "Saved {name}", &[("name", name)])? };
+        let text = if embedded != 0 { trf(py, if embedded == 1 { "Saved — {n} texture packed into the document." } else { "Saved — {n} textures packed into the document." }, &[("n", obj(py, embedded)?.into_bound(py))])? } else { trf(py, "Saved {name}", &[("name", name)])? };
         status(win, text)?;
     }
     doc.setattr("path", &path)?;

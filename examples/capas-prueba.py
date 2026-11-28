@@ -184,7 +184,7 @@ def main() -> None:
     print(f"Creado: {OUT}")
     print(f"  {len(back.layers)} capas, {len(L.folders_of(back))} carpetas, "
           f"{len(back.groups)} objetos, {len(back.saved_views)} escenas, "
-          f"{len(back.compositions)} lámina(s)")
+          f"Láminas: {len(back.compositions)}")
     print(f"  capa activa: {back.active_layer}")
     print("  no se imprimen: "
           + ", ".join(ly.name for ly in L.unprinted(back)))

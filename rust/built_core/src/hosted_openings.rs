@@ -13,6 +13,27 @@ type Rect = [f64; 4]; // left, sill, right, head
 type Face = (usize, Vec<DVec3>, Vec<Vec<DVec3>>);
 const EPS: f64 = 1e-7;
 pub(crate) const INVALID: &str = "Opening overlaps another opening or the wall edge.";
+/// Conventional opening symbol in the same frame as the fitted family.
+pub(crate) fn symbol(corners: [DVec3; 4], front: DVec3, window: bool, flipped: bool) -> Vec<[DVec3; 2]> {
+    let [a, b, c, d] = corners;
+    let (hinge, tip, high) = if flipped { (b, a, c) } else { (a, b, d) };
+    if window {
+        let latch = if flipped { (a + d) * 0.5 } else { (b + c) * 0.5 };
+        return vec![[hinge, latch], [latch, high]];
+    }
+    let radial = tip - hinge;
+    let forward = front.normalize_or_zero() * radial.length();
+    let mut lines = vec![[hinge, hinge + forward]];
+    let mut previous = tip;
+    for i in 1..=16 {
+        let angle = std::f64::consts::FRAC_PI_2 * i as f64 / 16.;
+        let next = hinge + radial * angle.cos() + forward * angle.sin();
+        lines.push([previous, next]);
+        previous = next;
+    }
+    lines
+}
+
 fn err() -> PyErr {
     PyValueError::new_err(INVALID)
 }

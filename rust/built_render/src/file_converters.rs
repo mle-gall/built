@@ -234,7 +234,7 @@ fn clear_texture_cache(win: &Bound<'_, PyAny>) -> PyResult<()> {
     let kw = PyDict::new(py);
     kw.set_item("default", "no")?;
     kw.set_item("cancel", "no")?;
-    let msg = "Delete {count} image(s) ({mb:.1f} MB) from:\n{path}\n\nSaved .igz documents carry their own copy and rebuild it when opened. Faces textured by a .skp import that was never saved lose their texture until you import the .skp again.";
+    let msg = if count == 1 { "Delete {count} image ({mb:.1f} MB) from:\n{path}\n\nSaved .igz documents carry their own copy and rebuild it when opened. Faces textured by a .skp import that was never saved lose their texture until you import the .skp again." } else { "Delete {count} images ({mb:.1f} MB) from:\n{path}\n\nSaved .igz documents carry their own copy and rebuild it when opened. Faces textured by a .skp import that was never saved lose their texture until you import the .skp again." };
     if dialogs
         .getattr("ask")?
         .call(

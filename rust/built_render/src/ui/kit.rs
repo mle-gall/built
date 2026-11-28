@@ -919,16 +919,25 @@ pub mod molecules {
 
     /// Equal column widths keep the selectable row and its headings aligned.
     pub fn table_row(ui: &mut egui::Ui, cells: &[String], selected: bool, header: bool) -> egui::Response {
+        table_row_aligned(ui, cells, selected, header, &[])
+    }
+
+    /// Optional fixed widths and numeric alignment shared by every row of a table.
+    pub fn table_row_aligned(ui: &mut egui::Ui, cells: &[String], selected: bool, header: bool, columns: &[(f32, bool)]) -> egui::Response {
         let (rect, response) = if header {
             ui.allocate_exact_size(vec2(ui.available_width(), CONTROL_H), Sense::hover())
         } else { list_row(ui, CONTROL_H, selected) };
         let width = rect.width() / cells.len().max(1) as f32;
+        let mut start = rect.left();
         for (index, cell) in cells.iter().enumerate() {
-            let left = rect.left() + width * index as f32 + SPACE_XS;
+            let (width, numeric) = columns.get(index).copied().unwrap_or((width, false));
+            let left = start + SPACE_XS;
+            start += width;
             let ink = if header { DIM } else { INK };
             let text = super::fit(ui, cell, if header { meta() } else { body() }, ink,
                                   (width - 2. * SPACE_XS).max(1.), 1);
-            leading(ui.painter(), rect, left, text, ink);
+            let x = if numeric { start - SPACE_XS - text.size().x } else { left };
+            leading(ui.painter(), rect, x, text, ink);
         }
         ui.painter().hline(rect.x_range(), rect.bottom(), Stroke::new(1_f32, DIVIDER));
         response

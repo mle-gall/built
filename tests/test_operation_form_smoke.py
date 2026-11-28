@@ -74,7 +74,7 @@ quit
               if line.startswith("[built] state ")]
     assert len(states) >= 2 and all(s["errors"] == 0 for s in states), log
     assert states[0]["input"]["drawer_operation"], log
-    assert states[1]["status"] == "Smoothed 12 edge(s)", log
+    assert states[1]["status"] == "Smoothed 12 edges", log
     image = SurveyRaster.open(picture)
     assert image.width == 3520 and image.height > 0, log
 

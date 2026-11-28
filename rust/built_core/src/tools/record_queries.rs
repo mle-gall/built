@@ -294,6 +294,7 @@ impl ViewportToolHost {
                 hit
             }
             "cut_shortcut" => crate::live::cut_shortcut(&view.getattr("scene")?, arg.as_str().unwrap_or(""))?,
+            "cut_body_preview" => crate::live::cut_display::body_preview(&view.getattr("scene")?, arg)?,
             "cut_corner" => crate::live::cut_fit::corner(&view.getattr("scene")?, arg)?,
             "cut_end_fit" => crate::live::cut_fit::offer(&view.getattr("scene")?, arg)?,
             "cut_feedback" => json!(crate::live::cut_feedback(&view.getattr("scene")?, &args::<Vec<String>>(arg)?)?),
@@ -528,7 +529,7 @@ impl ViewportToolHost {
             "opening_feedback" => {
                 let (invalid,warn):(bool,bool)=args(arg)?;
                 if let Some(tool)=&self.tool {
-                    tool.bind(py).setattr("wireframe_color",if invalid {(0.85,0.16,0.16,1.)}else{(0.13,0.17,0.23,1.)})?;
+                    tool.bind(py).setattr("wireframe_color",if invalid {(0.85,0.16,0.16,1.)}else{(0.96,0.72,0.29,1.)})?;
                 }
                 if warn { view.call_method0("window")?.call_method1("notify",("warning",py.import("built_core.i18n")?.call_method1("tr",(crate::hosted_openings::INVALID,))?))?; }
                 Value::Null

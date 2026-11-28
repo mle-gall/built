@@ -41,6 +41,15 @@ pub(super) fn strip(ui: &mut egui::Ui, report: &Value) -> bool {
     }).inner
 }
 
+fn schedule_cell(cell: &Value) -> String {
+    match cell {
+        Value::Null => "—".into(),
+        Value::String(s) => s.clone(),
+        Value::Number(n) if n.is_f64() => format!("{:.3}", n.as_f64().unwrap()).trim_end_matches('0').trim_end_matches('.').to_owned(),
+        _ => cell.to_string(),
+    }
+}
+
 /// Kept deliveries, checks and completed runs share the active record key.
 pub(super) fn destination(ui: &mut egui::Ui, report: &Value, jobs: &[super::Job], cmds: &mut Vec<String>, actions: &mut Vec<String>, rule: &mut Option<String>) -> bool {
     let mut show = false;
@@ -48,52 +57,58 @@ pub(super) fn destination(ui: &mut egui::Ui, report: &Value, jobs: &[super::Job]
     let prefix = format!("delivery-{active}-");
     let running = jobs.iter().find(|job| job.0.starts_with(&prefix));
     let choices = report["choices"].as_array().map(Vec::as_slice).unwrap_or_default();
-    ui.horizontal(|ui| {
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if kit::panel_button(ui, "+ New", "", 0, Some(super::BUTTON_H * 2.)).clicked() {
-                cmds.push("deliver:new".into());
-            }
-            kit::inspector_title(ui, "Deliveries", "");
+    let schedules_only = report["review"]["schedules_only"] == true;
+    if schedules_only {
+        kit::inspector_title(ui, "Junction schedules", "");
+    } else {
+        ui.horizontal(|ui| {
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if kit::panel_button(ui, "+ New", "", 0, Some(super::BUTTON_H * 2.)).clicked() {
+                    cmds.push("deliver:new".into());
+                }
+                kit::inspector_title(ui, "Deliveries", "");
+            });
         });
-    });
+    }
     ui.separator();
     ui.add_space(super::SPACE_S);
     egui::ScrollArea::vertical().id_salt("delivery contents")
         .max_height(ui.available_height())
         .auto_shrink([false, false]).show(ui, |ui| {
         if let Some(review)=report["review"].as_object() {
-            if review["schedules_only"] == true {
-                kit::inspector_title(ui, "Junction schedules", "");
-            } else {
+            if !schedules_only {
                 kit::inspector_title(ui, "Review handover", delivery_name(report));
                 kit::prop_row(ui,"Model revision",&review["revision"].to_string());
                 kit::prop_row(ui,"IDS",review["ids_result"].as_str().unwrap_or(""));
             }
             if let Some(schedules) = review["schedules"].as_object() {
-                if review["schedules_only"] == true && schedules.is_empty() {
+                if schedules_only && schedules.is_empty() {
                     kit::empty_state(ui, "No junction quantities in this model");
                 }
                 for (name, table) in schedules {
                     kit::disclosure(ui, ("junction schedule", name), name, name == "fasteners", |ui| {
+                        let headers = table[0].as_array().map(Vec::as_slice).unwrap_or_default();
+                        let columns: Vec<_> = headers.iter().map(|h| {
+                            let title = h.as_str().unwrap_or("");
+                            let numeric = title.contains(" (") || matches!(title,"Count"|"Junction count"|"Uses"|"Overridden");
+                            let width = ui.painter().layout_no_wrap(title.into(), super::meta(), super::DIM).size().x
+                                + 2. * super::SPACE_S;
+                            (width.max(if numeric { 48. } else { 88. }), numeric)
+                        }).collect();
+                        egui::ScrollArea::horizontal().id_salt(name).auto_shrink([false,true]).show(ui, |ui| {
+                            ui.set_width(columns.iter().map(|c| c.0).sum::<f32>().max(ui.available_width()));
+                            for (i, row) in table.as_array().into_iter().flatten().enumerate() {
+                                let cells: Vec<_> = row.as_array().into_iter().flatten().map(schedule_cell).collect();
+                                kit::table_row_aligned(ui, &cells, false, i == 0, &columns);
+                            }
+                        });
                         if kit::quiet(ui, "Place on new sheet").clicked() {
                             cmds.push(format!("deliver:place_schedule:{name}"));
                         }
-                        egui::ScrollArea::horizontal().id_salt(name).show(ui, |ui| {
-                            let columns = table[0].as_array().map_or(1, Vec::len);
-                            ui.set_width((columns as f32 * 96.).max(ui.available_width()));
-                            for (i, row) in table.as_array().into_iter().flatten().enumerate() {
-                                let cells: Vec<_> = row.as_array().into_iter().flatten().map(|cell| match cell {
-                                    Value::String(text) => text.clone(),
-                                    Value::Null => String::new(),
-                                    _ => cell.to_string(),
-                                }).collect();
-                                kit::table_row(ui, &cells, false, i == 0);
-                            }
-                        });
                     });
                 }
             }
-            if review["schedules_only"] == true {
+            if schedules_only {
                 if kit::quiet(ui, "Back to deliveries").clicked() { cmds.push("deliver:back".into()); }
                 return;
             }
@@ -457,6 +472,13 @@ mod tests {
             }},
             "notes": [],
         })
+    }
+
+    #[test]
+    fn schedule_numbers_keep_precision_without_padding() {
+        assert_eq!(schedule_cell(&json!(120.0)), "120");
+        assert_eq!(schedule_cell(&json!(1.23456)), "1.235");
+        assert_eq!(schedule_cell(&Value::Null), "—");
     }
 
     #[test]

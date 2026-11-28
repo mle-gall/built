@@ -175,6 +175,20 @@ fn point_key(p: DVec3) -> [u64; 3] {
     p.to_array().map(|v| if v == 0. { 0 } else { v.to_bits() })
 }
 impl<'p> Sources<'p> {
+    /// Offset surfaces have no donor face. Give them a dedicated ID before
+    /// combining operands, including when several cuts share one boolean stack.
+    fn expanded_tool(&mut self, tool: &Obj<'p>, gap: f64) -> PyResult<Obj<'p>> {
+        let offset = expanded(tool, gap)?;
+        let Some((uid, _)) = &self.live else { return Ok(offset) };
+        let py = tool.py();
+        let mesh = offset.call_method0("to_mesh64")?;
+        let mut skin = Surface::read(&mesh.getattr("vert_properties")?, &mesh.getattr("tri_verts")?, &mesh.getattr("face_id")?)?;
+        skin.owners.fill(self.attrs.len() as u32);
+        self.attrs.push(PyDict::new(py));
+        self.donors.push(Default::default());
+        self.roles.push((format!("cut/{uid}/clearance"), 0, true));
+        skin.manifold(py)
+    }
     fn operand(&mut self, group: &Obj<'p>, operand: usize) -> PyResult<Obj<'p>> {
         let py = group.py();
         let definition = group.getattr("mesh")?;
@@ -394,7 +408,7 @@ pub(crate) fn body_stack<'p>(
         sources.live = Some((uid.clone(), index + 1));
         let mut cutter = sources.operand(&tool, index + 1)?;
         if gap > 0. {
-            cutter = expanded(&cutter, gap)?;
+            cutter = sources.expanded_tool(&cutter, gap)?;
         }
         let next = match op.as_str() {
             "union" => result.add(&cutter)?,
@@ -459,7 +473,7 @@ pub(crate) fn operation<'p>(
         .map(|(i, g)| sources.operand(g, i))
         .collect::<PyResult<Vec<_>>>()?;
     if clearance > 0. {
-        mans[tool] = expanded(&mans[tool], clearance)?;
+        mans[tool] = sources.expanded_tool(&mans[tool], clearance)?;
     }
     let result = PyList::empty(py);
     let name = py

@@ -230,8 +230,10 @@ impl Gallery {
                             property_control(controls, "Colour", |ui| { colour_well(ui, &mut self.sample_rgb); });
                             property_control(controls, "Lens", |ui| { select(ui, "lens_sample", "35 mm", &["24 mm", "35 mm", "50 mm"]); });
                             property_control(controls, "Render", |ui| progress_bar(ui, 0.6, 4.));
-                            table_row(controls, &["Entity".into(), "Count".into()], false, true);
-                            table_row(controls, &["Face".into(), "24".into()], true, false);
+                            table_row(controls, &["Name".into(), "Type".into()], false, true);
+                            let columns = [(100., false), (72., true)];
+                            table_row_aligned(controls, &["Entity".into(), "Count".into()], false, true, &columns);
+                            table_row_aligned(controls, &["Face".into(), "24".into()], true, false, &columns);
                             let pair = ["Keep Built".to_string(), "Take Blender".to_string()];
                             let reserve = review_actions_width(controls, &pair);
                             review_row(controls, &["Changed".into(), "Built".into(), "Blender".into()], true, false, &[], reserve);

@@ -256,9 +256,9 @@ fn soften_selection(view: &Bound<'_, PyAny>, values: &Bound<'_, PyAny>) -> PyRes
             translated(
                 py,
                 if harden {
-                    "Unsoftened {n} edge(s)"
+                    if n == 1 { "Unsoftened {n} edge" } else { "Unsoftened {n} edges" }
                 } else {
-                    "Smoothed {n} edge(s)"
+                    if n == 1 { "Smoothed {n} edge" } else { "Smoothed {n} edges" }
                 },
                 Some(&vars),
             )?,
