@@ -123,11 +123,6 @@ def window_probe(app):
     app.add_menu_action("Frame members", frame)
     app.add_menu_action("Measure pointer positions", coordinates)
     app.add_menu_action("Read cut relation", sample)
-    for kind, gap in [("body", 0), ("body", 10), ("bisector", 0), ("plane", 0)]:
-        def preset(kind=kind, gap=gap):
-            app.window._tools["cut"]._machine.set("preset", dict(name=kind, values=dict(
-                cutter_kind=kind, clearance=gap, operation="subtract")))
-        app.add_menu_action("Choose " + kind + str(gap), preset)
 
 
 @pytest.mark.window
@@ -147,8 +142,9 @@ def test_cut_member_picks(tmp_path, shape, crossing, drawn_stock):
     launch([menu+"1"])
     beam, post = [" ".join(map(str, p)) for p in json.loads((plugin.parent/"pixels.json").read_text())]
     steps = []
-    for i in range(4):
-        steps += ["tool cut", menu+str(3+i), "move "+beam, menu+"2", "click "+beam, menu+"2",
+    presets = ("Penetration", "Cope", "Mitre", "End plate")
+    for preset in presets:
+        steps += ["tool cut", "key l", "wait 150", "type "+preset, "wait 150", "key enter", "wait 100", "move "+beam, menu+"2", "click "+beam, menu+"2",
                   "move "+post, menu+"2", "click "+post, menu+"2", "tool select"]
         if shape != "loose":
             steps += ["menu undo"]
@@ -167,8 +163,9 @@ def test_cut_member_picks(tmp_path, shape, crossing, drawn_stock):
             else:
                 assert post_hover["lines"] >= 12 and post_hover["faces"] == 0
             cut, = cuts
+            assert cut["name"] == presets[i]
             assert cut["owner"] == target["target"] and kind in cut["cutter"]
-            assert cut["clearance"] == (10 if i == 1 else 0)
+            assert cut["clearance"] == (2 if i == 1 else 0)
             if i == 0 and not crossing:
                 assert cut["state"] == "cut_misses" and "do not overlap" in result["prompt"]
             elif i == 3 and not crossing:
@@ -179,4 +176,3 @@ def test_cut_member_picks(tmp_path, shape, crossing, drawn_stock):
             assert result["volumes"][1] == pytest.approx(target["volumes"][1])
             if crossing and i in (0, 1):
                 assert result["volumes"][0] < target["volumes"][0]
-
