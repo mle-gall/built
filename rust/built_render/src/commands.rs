@@ -482,7 +482,7 @@ pub fn rail_layout() -> Vec<Vec<(&'static str, &'static str)>> {
     vec![
         vec![("select", ""), ("eraser", ""), ("paint", ""), ("eyedropper", "_act_eyedropper"), ("components", "_act_library_components")],
         vec![("line", ""), ("line_on_surface", ""), ("sweep", ""), ("freehand", ""), ("rectangle", ""), ("rotated_rect", ""), ("circle", ""), ("polygon", ""), ("arc", ""), ("arc3", ""), ("center_arc", ""), ("pie", "")],
-        vec![("pushpull", ""), ("move", ""), ("rotate", ""), ("scale", ""), ("flip", ""), ("followme", ""), ("offset", ""), ("fillet", ""), ("chamfer", ""), ("bridge", "_act_bridge"), ("make_faces", "_act_make_faces"), ("cut", "")],
+        vec![("pushpull", ""), ("move", ""), ("rotate", ""), ("scale", ""), ("flip", ""), ("followme", ""), ("offset", ""), ("fillet", ""), ("chamfer", ""), ("bridge", "_act_bridge"), ("make_faces", "_act_make_faces"), ("cut", ""), ("junction", "")],
         vec![("tape", ""), ("protractor", ""), ("change_axes", ""), ("north", ""), ("dimension", ""), ("text", ""), ("text3d", "_act_3dtext"), ("geopath", ""), ("section", "")],
         vec![("outer_shell", ""), ("solid_union", ""), ("solid_subtract", ""), ("solid_trim", ""), ("solid_intersect", ""), ("solid_split", "")],
     ]

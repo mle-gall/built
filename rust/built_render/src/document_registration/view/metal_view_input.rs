@@ -386,6 +386,9 @@ fn key_press<'py>(a: &Args<'py>) -> Reply<'py> {
                 view.call_method0("update")?;
                 return Ok(none(py));
             }
+            if crate::junction_capture::key(view, escape)? {
+                return Ok(none(py));
+            }
         }
         if is_input(&key, "Key_Escape")? {
             let render = py.import("built_render")?;

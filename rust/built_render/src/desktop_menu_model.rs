@@ -161,6 +161,7 @@ pub const GROUPS: &[(&str, &[Row])] = &[
             Row::Entry("tool:line_on_surface"),
             Row::Entry("tool:sweep"),
             Row::Entry("tool:cut"),
+            Row::Entry("tool:junction"),
             Row::Entry("tool:freehand"),
             Row::Entry("tool:geopath"),
             Row::Separator,

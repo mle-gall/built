@@ -9,6 +9,7 @@ pub(super) struct Records {
     pub rows: BTreeMap<Vec<String>, Row>,
     sweep:Value,
     cuts:Value,
+    junction:Value,
     repeat:Value,
     sweep_editable:bool,
     total: usize,
@@ -39,6 +40,7 @@ impl Records {
                 result.sweep=object["sweep"].clone();
                 result.repeat=object["repeat"].clone();
                 result.cuts=object["cut_rows"].clone();
+                result.junction=object["junction"].clone();
                 result.sweep_editable=object["editable"]==true;
             }
             result.total += 1;
@@ -349,6 +351,9 @@ impl Records {
                 }));
             });
         }
+        if self.junction.is_object() {
+            self.junction_record(ui, out);
+        }
         if let Some(cuts)=self.cuts.as_array().filter(|v|!v.is_empty()){
             kit::disclosure(ui,"cut record","Cuts",true,|ui|{
                 for cut in cuts{
@@ -399,6 +404,103 @@ impl Records {
             },
         );
     }
+    /// The junction record (docs/junctions.md §6.1, §11): status with its
+    /// ways out, roles with Swap, "All N · This one", parameters with their
+    /// relation and amber overrides, parts, and the use's actions.
+    fn junction_record(&mut self, ui: &mut egui::Ui, out: &mut Vec<String>) {
+        let j = self.junction.clone();
+        let uid = j["uid"].clone();
+        let uses = j["uses"].as_u64().unwrap_or(0);
+        let editable = self.sweep_editable || !self.writable.is_empty();
+        kit::disclosure(ui, "junction record", "Junction", true, |ui| {
+            let name = j["detail"]["name"].as_str().unwrap_or("Custom junction");
+            kit::inspector_title(ui, name, &if j["detail"].is_null() { "Custom".to_string() } else if uses == 1 { "1 use".to_string() } else { format!("{uses} uses") });
+            let (status, tone) = match j["state"].as_str().unwrap_or("") {
+                "ok" if j["forced"] == true => ("custom fit · outside its rule".to_string(), tokens::WARN),
+                "ok" => ("fits".to_string(), tokens::OK),
+                "outside" => (format!("outside: {} {}", j["reason"]["criterion"].as_str().unwrap_or(""), j["reason"]["value"].as_f64().map(|v| format!("{:.1}", v)).unwrap_or_default()), tokens::WARN),
+                "failed" => (format!("failed: {}", j["reason"]["criterion"].as_str().or(j["reason"]["message"].as_str()).unwrap_or("")), tokens::WARN),
+                "lost" => ("lost: a member is gone".to_string(), tokens::WARN),
+                other => (other.to_string(), tokens::DIM),
+            };
+            kit::property_control(ui, "Status", |ui| kit::status_chip(ui, &status, tone));
+            if j["state"] == "outside" {
+                ui.horizontal(|ui| {
+                    if kit::quiet(ui, "Widen the detail").clicked() { send(out, "junction.widen", uid.clone()); }
+                    if kit::quiet(ui, "Keep as custom").clicked() { send(out, "junction.detach", uid.clone()); }
+                });
+            }
+            if let Some(parent) = j["parent"].as_object() {
+                kit::prop_row(ui, "Inside", parent.get("name").and_then(Value::as_str).unwrap_or("junction"));
+            }
+            if j["stations"].is_number() {
+                kit::prop_row(ui, "Along the Repeat", &format!("{} meetings", j["stations"]));
+            }
+            for (i, role) in j["roles"].as_array().into_iter().flatten().enumerate() {
+                let label = match role["role"].as_str().unwrap_or("") { "main" => "Main", "joining" => "Joining", r => r };
+                kit::property_control(ui, label, |ui| {
+                    ui.label(egui::RichText::new(format!("{} · {} · {}", role["name"].as_str().unwrap_or(""), role["profile"].as_str().unwrap_or(""), role["how"].as_str().unwrap_or(""))).font(tokens::meta()).color(tokens::INK_2));
+                    if i == 0 && editable && kit::row_link(ui, "Swap").clicked() { send(out, "junction.swap", uid.clone()); }
+                });
+            }
+            let id = ui.make_persistent_id(("junction scope", uid.as_str()));
+            let mut this_one = ui.data(|d| d.get_temp::<bool>(id)).unwrap_or(false);
+            if !j["detail"].is_null() && uses > 1 {
+                let all = format!("All {uses}");
+                if let Some(i) = kit::segmented(ui, &[all.as_str(), "This one"], usize::from(this_one), ui.available_width().min(220.)) {
+                    this_one = i == 1;
+                    ui.data_mut(|d| d.insert_temp(id, this_one));
+                }
+            }
+            let scope = if this_one || j["detail"].is_null() { "one" } else { "all" };
+            for p in j["params"].as_array().into_iter().flatten() {
+                let key = p["key"].as_str().unwrap_or("");
+                let overridden = !p["override"].is_null();
+                let label = format!("{}{}", if overridden { "● " } else { "" }, p["name"].as_str().unwrap_or(key));
+                kit::property_control(ui, &label, |ui| {
+                    let mut v = p["value"].as_f64().unwrap_or(0.);
+                    let before = v;
+                    ui.add_enabled_ui(editable && p["derived"] != true, |ui| {
+                        let r = ui.add(kit::number(&mut v, p["unit"].as_str().unwrap_or("mm")));
+                        if (r.lost_focus() || r.drag_stopped()) && (v - before).abs() > 1e-9 {
+                            send(out, "junction.param", json!({"uid": uid, "key": key, "value": v, "scope": scope}));
+                        }
+                    });
+                    if let Some(rel) = p["relation"].as_str().filter(|r| !r.is_empty() && !overridden) {
+                        ui.label(egui::RichText::new(rel).font(tokens::meta()).color(tokens::ACCENT));
+                    }
+                    if overridden {
+                        ui.label(egui::RichText::new("this one").font(tokens::meta()).color(tokens::WARN));
+                    } else if p["overridden_uses"].as_u64().unwrap_or(0) > 0 && scope == "all" {
+                        ui.label(egui::RichText::new(format!("{} own", p["overridden_uses"])).font(tokens::meta()).color(tokens::DIM));
+                    }
+                });
+            }
+            let contents = j["contents"].as_array().cloned().unwrap_or_default();
+            if !contents.is_empty() {
+                kit::caption(ui, &format!("Parts · {}", contents.len()));
+                for c in &contents {
+                    let class = c["class"].as_str().unwrap_or("");
+                    kit::prop_row(ui, &format!("{}{}", c["label"].as_str().unwrap_or(""), if c["local"] == true { " · this one" } else { "" }), if class == "cut" { "Cut" } else { class });
+                }
+            }
+            ui.add_enabled_ui(editable, |ui| {
+                ui.horizontal_wrapped(|ui| {
+                    if kit::quiet(ui, "Edit inside").on_hover_text("Double-click the junction marker or its row").clicked() { send(out, "junction.edit", uid.clone()); }
+                    if uses > 1 && kit::quiet(ui, &format!("Select all {uses}")).clicked() { send(out, "junction.select_all", j["detail"]["uid"].clone()); }
+                    if !j["detail"].is_null() && kit::quiet(ui, "Similar…").clicked() { send(out, "junction.review", j["detail"]["uid"].clone()); }
+                    if j["overrides"].as_array().is_some_and(|o| !o.is_empty()) {
+                        if kit::quiet(ui, "Upgrade to detail").on_hover_text("This use's values become the detail's").clicked() { send(out, "junction.upgrade", uid.clone()); }
+                        if kit::quiet(ui, "Reset").on_hover_text("Drop this use's own values").clicked() { send(out, "junction.reset", uid.clone()); }
+                    }
+                    if !j["detail"].is_null() && kit::quiet(ui, "Detach").on_hover_text("Keep it as a custom junction").clicked() { send(out, "junction.detach", uid.clone()); }
+                    if kit::quiet(ui, "Release").on_hover_text("One level: its cuts stay live, its parts stay").clicked() { send(out, "junction.release", uid.clone()); }
+                    if kit::quiet(ui, "Release all").on_hover_text("Bake its cuts and parts too").clicked() { send(out, "junction.release_all", uid.clone()); }
+                });
+            });
+        });
+    }
+
     fn properties(&mut self, ui: &mut egui::Ui, out: &mut Vec<String>) {
         for (path, r) in self
             .rows

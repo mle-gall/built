@@ -88,6 +88,8 @@ pub(super) fn drawing_drop(
 pub(super) enum DraggedRow {
     Node(String),
     Placement { key: String, selected: bool },
+    /// A cut row: dropped on a junction's row, the junction adopts it.
+    Cut(String),
 }
 
 impl DraggedRow {
@@ -138,6 +140,13 @@ pub(super) fn drop_on_occurrence(
     let Some(payload) = target.dnd_hover_payload::<DraggedRow>() else {
         return;
     };
+    if let DraggedRow::Cut(cut) = payload.as_ref() {
+        kit::paint_focus(ui, target.rect, super::R_ROW);
+        if target.dnd_release_payload::<DraggedRow>().is_some() {
+            actions.push(format!("adopt\u{1f}{cut}\u{1f}{key}"));
+        }
+        return;
+    }
     let DraggedRow::Placement { key: source, .. } = payload.as_ref() else {
         return;
     };

@@ -191,6 +191,10 @@ pub struct Ui {
     form: Option<Form>,
     /// The junction review list (title, count, rows, ticked count).
     junction_review: Option<(String, String, Vec<crate::junction_review::Row>, usize)>,
+    /// The capture chip, painted roles and popover (junction_capture.rs).
+    junction_capture: serde_json::Value,
+    junction_capture_name: (String, String),
+    junction_capture_tol: f64,
     /// Options strip: (id, label, key, state: 0 off, 1 on, 2 read-only note).
     options: Vec<(String, String, String, u8)>,
     /// Right column: project tree above, inspector below.
@@ -420,6 +424,9 @@ impl Ui {
             view_open: false,
             form: None,
             junction_review: None,
+            junction_capture: serde_json::Value::Null,
+            junction_capture_name: Default::default(),
+            junction_capture_tol: 2.0,
             options: Vec::new(),
             column: None,
             delivery: None,
@@ -779,6 +786,169 @@ impl Ui {
     /// Opens (or refreshes) the settings form; an empty title closes it.
     pub fn set_junction_review(&mut self, panel: Option<(String, String, Vec<crate::junction_review::Row>, usize)>) {
         self.junction_review = panel;
+    }
+
+    pub fn set_junction_capture(&mut self, layer: serde_json::Value) {
+        self.junction_capture = layer;
+    }
+
+    /// Capture (docs/junctions.md §5): the quiet chip at the meeting, the
+    /// roles painted on the members, and the Save as junction popover.
+    fn junction_capture_layer(&mut self, ctx: &egui::Context, screen: Rect) {
+        let layer = self.junction_capture.clone();
+        if !layer.is_object() {
+            return;
+        }
+        let mut out = Vec::new();
+        let num = |v: &serde_json::Value| v.as_f64().unwrap_or(0.) as f32;
+        if let Some(chip) = layer["chip"].as_object() {
+            let at = pos2(num(&chip["x"]), num(&chip["y"])) + vec2(12.0, -14.0);
+            let text = chip["text"].as_str().unwrap_or_default().to_string();
+            egui::Area::new(egui::Id::new("junction_capture_chip")).fixed_pos(at).order(egui::Order::Foreground).show(ctx, |ui| {
+                ui.set_opacity((num(&chip["fade"]) * 1.6).clamp(0.35, 1.0));
+                popover().inner_margin(Margin::same(2)).show(ui, |ui| {
+                    if chip_button(ui, &format!("⊢ {text}")) {
+                        out.push("jcapture:open".to_string());
+                    }
+                });
+            });
+        }
+        for (i, tag) in layer["tags"].as_array().into_iter().flatten().enumerate() {
+            let at = pos2(num(&tag["x"]), num(&tag["y"])) + vec2(8.0, 6.0);
+            let text = tag["text"].as_str().unwrap_or_default().to_string();
+            let tone = if tag["main"] == true { ACCENT } else { OK };
+            egui::Area::new(egui::Id::new(("junction_capture_tag", i))).fixed_pos(at).order(egui::Order::Foreground).interactable(false).show(ctx, |ui| {
+                popover().inner_margin(Margin::same(2)).show(ui, |ui| badge(ui, &text, tone));
+            });
+        }
+        if let Some(done) = layer["done"].as_object() {
+            let (top, _) = self.band(ctx, screen);
+            let at = pos2(GUT + self.rail_w + GUT, top);
+            egui::Area::new(egui::Id::new("junction_capture_done")).fixed_pos(at).order(egui::Order::Foreground).show(ctx, |ui| {
+                popover().inner_margin(Margin::same(8)).show(ui, |ui| {
+                    ui.label(egui::RichText::new(done["text"].as_str().unwrap_or("")).font(body()).color(INK));
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing = vec2(SPACE_S, 0.0);
+                        if sheet_button(ui, done["all"].as_str().unwrap_or(""), "", 1) {
+                            out.push("jcapture:done_all".into());
+                        }
+                        if sheet_button(ui, done["one"].as_str().unwrap_or(""), "", 0) {
+                            out.push("jcapture:done_one".into());
+                        }
+                        if sheet_button(ui, &tr("Later"), "", 3) {
+                            out.push("jcapture:done_dismiss".into());
+                        }
+                    });
+                });
+            });
+        }
+        let Some(p) = layer["popover"].as_object() else {
+            self.actions.extend(out);
+            return;
+        };
+        let name = p["name"].as_str().unwrap_or_default().to_string();
+        if self.junction_capture_name.1 != name {
+            self.junction_capture_name = (name.clone(), name.clone());
+        }
+        self.junction_capture_tol = p["tol"].as_f64().unwrap_or(2.0);
+        let (band_top, band_bottom) = self.band(ctx, screen);
+        let width = 344.0;
+        let at = pos2((self.free_right(ctx, screen) - width - 2.0 * GUT).max(GUT + self.rail_w + GUT), band_top);
+        let mut name_draft = self.junction_capture_name.0.clone();
+        let mut tol = self.junction_capture_tol;
+        egui::Area::new(egui::Id::new("junction_capture")).fixed_pos(at).order(egui::Order::Foreground).show(ctx, |ui| {
+            popover().inner_margin(Margin::same(8)).show(ui, |ui| {
+                ui.set_width(width);
+                ui.spacing_mut().item_spacing = vec2(0.0, 2.0);
+                let (hr, _) = ui.allocate_exact_size(vec2(ui.available_width(), 24.0), Sense::hover());
+                ui.painter().text(hr.left_center() + vec2(4.0, 0.0), egui::Align2::LEFT_CENTER, p["title"].as_str().unwrap_or(""), title_font(), INK);
+                ui.painter().text(hr.right_center() - vec2(4.0, 0.0), egui::Align2::RIGHT_CENTER, p["at"].as_str().unwrap_or(""), meta(), DIM);
+                kit::property_control(ui, &tr("Name"), |ui| {
+                    let r = ui.add(kit::field(&mut name_draft));
+                    if r.lost_focus() && name_draft != name {
+                        out.push(format!("jcapture:name:{name_draft}"));
+                    }
+                });
+                egui::ScrollArea::vertical().max_height((band_bottom - band_top - 120.0).max(160.0)).show(ui, |ui| {
+                    caption_at(ui, &tr("Members"), 4.0);
+                    for (i, m) in p["members"].as_array().into_iter().flatten().enumerate() {
+                        ui.horizontal(|ui| {
+                            ui.spacing_mut().item_spacing = vec2(SPACE_S, 0.0);
+                            badge(ui, m["role"].as_str().unwrap_or(""), if i == 0 { ACCENT } else { OK });
+                            ui.label(egui::RichText::new(m["name"].as_str().unwrap_or("")).font(body()).color(INK));
+                            ui.label(egui::RichText::new(m["meta"].as_str().unwrap_or("")).font(meta()).color(DIM));
+                            if i == 0 {
+                                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                    if kit::row_link(ui, &tr("Swap")).clicked() {
+                                        out.push("jcapture:swap".into());
+                                    }
+                                });
+                            }
+                        });
+                    }
+                    let items = p["items"].as_array().cloned().unwrap_or_default();
+                    caption_at(ui, &format!("{} · {}", tr("Includes"), items.iter().filter(|i| i["ticked"] == true).count()), 4.0);
+                    for item in &items {
+                        let tickable = item["problem"] != true;
+                        let status = if item["near"] == true { tr("near") } else { String::new() };
+                        let (tick, _) = check_row(ui, item["label"].as_str().unwrap_or(""), item["meta"].as_str().unwrap_or(""), &status, if tickable { DIM } else { WARN }, item["ticked"] == true, tickable, &[]);
+                        if tick {
+                            out.push(format!("jcapture:tick:{}", item["id"].as_str().unwrap_or("")));
+                        }
+                    }
+                    caption_at(ui, &tr("Matches"), 4.0);
+                    for row in p["matches"].as_array().into_iter().flatten() {
+                        kit::prop_row(ui, row[0].as_str().unwrap_or(""), row[1].as_str().unwrap_or(""));
+                    }
+                    kit::property_control(ui, &tr("Angle ±"), |ui| {
+                        let r = ui.add(kit::number(&mut tol, "°"));
+                        if (r.drag_stopped() || r.lost_focus()) && (tol - p["tol"].as_f64().unwrap_or(2.0)).abs() > 1e-9 {
+                            out.push(format!("jcapture:tol:{tol}"));
+                        }
+                    });
+                    let mut mirrored = p["mirrored"] == true;
+                    if kit::toggle(ui, &mut mirrored, &tr("Mirrored meetings fit")).changed() {
+                        out.push("jcapture:mirror".into());
+                    }
+                    let params = p["params"].as_array().cloned().unwrap_or_default();
+                    caption_at(ui, &format!("{} · {}", tr("Parameters"), params.len()), 4.0);
+                    for q in &params {
+                        ui.horizontal(|ui| {
+                            ui.spacing_mut().item_spacing = vec2(SPACE_S, 0.0);
+                            ui.label(egui::RichText::new(q["name"].as_str().unwrap_or("")).font(meta()).color(DIM));
+                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                let relation = q["relation"].as_str().unwrap_or("");
+                                let link = if relation.is_empty() { tr("fixed") } else { relation.to_string() };
+                                if kit::row_link(ui, &link).on_hover_text(tr("Click for another relation, or a fixed value")).clicked() {
+                                    out.push(format!("jcapture:param:{}", q["next"].as_str().unwrap_or("")));
+                                }
+                                ui.label(egui::RichText::new(format!("{} {}", q["value"].as_str().unwrap_or(""), q["unit"].as_str().unwrap_or(""))).font(body()).color(INK));
+                            });
+                        });
+                    }
+                    kit::prop_row(ui, &tr("Save in"), p["save_in"].as_str().unwrap_or(""));
+                });
+                if let Some(error) = p["error"].as_str().filter(|e| !e.is_empty()) {
+                    ui.label(egui::RichText::new(error).font(meta()).color(WARN));
+                }
+                ui.add_space(SPACE_S);
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing = vec2(SPACE_S, 0.0);
+                    if sheet_button(ui, &tr("Save detail"), "", 1) {
+                        out.push("jcapture:save".into());
+                    }
+                    if sheet_button(ui, &tr("Cancel"), "esc", 3) {
+                        out.push("jcapture:cancel".into());
+                    }
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        ui.label(egui::RichText::new(p["similar"].as_str().unwrap_or("")).font(meta()).color(DIM));
+                    });
+                });
+            });
+        });
+        self.junction_capture_name.0 = name_draft;
+        self.junction_capture_tol = tol;
+        self.actions.extend(out);
     }
 
     /// The junction review list beside the rail (docs/junctions.md §11): the
@@ -2707,9 +2877,11 @@ impl Ui {
                                 } else if editable {
                                     if drag_started { resp.dnd_set_drag_payload(drawing::DraggedRow::Node(n.key.clone())); }
                                     drawing::drop_on(ui, &resp, n.key.strip_prefix("n:").unwrap_or(""), &mut actions);
-                                } else if n.local_placement {
-                                    if drag_started { resp.dnd_set_drag_payload(drawing::DraggedRow::Placement { key: n.key.clone(), selected: n.selected > 0 }); }
+                                } else if n.local_placement || n.key.starts_with("g:") {
+                                    if drag_started && n.local_placement { resp.dnd_set_drag_payload(drawing::DraggedRow::Placement { key: n.key.clone(), selected: n.selected > 0 }); }
                                     drawing::drop_on_occurrence(ui, &resp, &n.key, &mut actions);
+                                } else if let Some(cut) = n.key.strip_prefix("cut:") {
+                                    if drag_started { resp.dnd_set_drag_payload(drawing::DraggedRow::Cut(cut.to_string())); }
                                 }
                                 if resp.clicked() {
                                     let p = resp.interact_pointer_pos().unwrap_or(rect.center());
@@ -3310,6 +3482,7 @@ impl Ui {
                     self.panels.frame_guide(ctx, screen);
                 }
                 if !self.review && !sheet_up { self.junction_review_panel(ctx, screen); }
+                if !self.review && !sheet_up { self.junction_capture_layer(ctx, screen); }
                 if !sheet_up { self.cursor_value(ctx, screen); }
                 if !sheet_up { self.keystrokes(ctx, screen); }
                 if !self.review && !sheet_up { self.task_pins(ctx, screen); }
@@ -3354,6 +3527,9 @@ impl Ui {
                      ("jobs", !self.jobs.is_empty() || self.activity_open),
                      ("notices", self.history.iter().any(|r| r.5 > 0.)),
                      ("junction_review", work && model && self.junction_review.is_some()),
+                     ("junction_capture", work && model && self.junction_capture["popover"].is_object()),
+                     ("junction_capture_chip", work && model && self.junction_capture["chip"].is_object()),
+                     ("junction_capture_done", work && model && self.junction_capture["done"].is_object()),
                      ("dialog", self.dialog.as_ref().is_some_and(|d| d.placement.is_empty() && !d.in_drawer())),
                      ("tab_menu", self.strip.menu_open()),
                      ("tab_overflow", self.strip.overflow_open()),

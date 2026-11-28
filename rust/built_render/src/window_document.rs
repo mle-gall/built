@@ -7,6 +7,7 @@ use pyo3::{
 const TOOLS: &[(&str, &str, &str)] = &[
     ("select", "tools.rust_tools", "SelectTool"),
     ("cut", "tools.rust_tools", "CutTool"),
+    ("junction", "tools.rust_tools", "JunctionTool"),
     ("sweep", "tools.rust_tools", "SweepTool"),
     ("line", "tools.rust_tools", "LineTool"),
     ("line_on_surface", "tools.rust_tools", "LineOnSurfaceTool"),
