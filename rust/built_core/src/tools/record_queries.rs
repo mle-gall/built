@@ -115,6 +115,9 @@ impl ViewportToolHost {
                 return Ok(Some(result));
             }
         }
+        if verb.starts_with("junction_") {
+            return Ok(Some(self.junction_service(py, verb, arg)?));
+        }
         Ok(Some(match verb {
             "begin_paste_preview" | "pose_paste_preview" | "end_paste_preview" | "can_stamp" =>
                 self.paste_service(py, verb, arg)?,
@@ -190,7 +193,24 @@ impl ViewportToolHost {
                     (owner.getattr("mesh")?,scene.call_method1("occurrence_path",(&owner,))?.extract::<Vec<String>>()?)
                 };
                 let id=mesh.getattr("_store")?.call_method1("id_of",("face",face.getattr("key")?))?.extract()?;
-                json!({"to":{"path":path,"id":crate::element_ids::to_text('f',id)},"normal":normal})
+                // A plate started on a member's face near where another
+                // member meets it snaps to that meeting's centre.
+                let mut snap=Value::Null;
+                if arg["plate"]==true {
+                    if let Some(member)=path.last() {
+                        let meetings=py.import("built_core.command_protocol")?.call_method1("meetings",(&scene,))?;
+                        let mut best=0.2;
+                        for m in super::py::py_to_json(&meetings)?.as_array().into_iter().flatten(){
+                            if !m["members"].as_array().is_some_and(|u|u.iter().any(|u|u==member.as_str())){continue;}
+                            let Ok(p)=serde_json::from_value::<[f64;3]>(m["at"].clone()) else{continue};
+                            let p=DVec3::from(p);
+                            let on=p-normal*(p-at).dot(normal);
+                            let d=on.distance(at);
+                            if d<best{best=d;snap=json!(on.to_array());}
+                        }
+                    }
+                }
+                json!({"to":{"path":path,"id":crate::element_ids::to_text('f',id)},"normal":normal,"snap":snap})
             }
             "cut_error" => {view.call_method1("flash_status",(arg.as_str().unwrap_or("Cut failed"),))?; Value::Null}
             "cut_sections" => {
@@ -328,6 +348,19 @@ impl ViewportToolHost {
                     })
                 }).collect();
                 json!({"outline":outline,"open_edges":open_edges,"repeat":repeat,"placement":group.getattr("uid")?.extract::<String>()?,"ring":ring,"face":{"path":path,"id":crate::element_ids::to_text('f',id)},"span":span,"end":if start {"start"}else{"end"}})
+            }
+            "cut_context" => {
+                let scene = view.getattr("scene")?;
+                let open = scene.getattr("edit_group")?;
+                if open.is_none() { return Ok(Some(Value::Null)); }
+                let uid: String = open.getattr("uid")?.extract()?;
+                match py.import("built_core.command_protocol")?.call_method1("junction_record", (&scene, uid)) {
+                    Ok(record) => {
+                        let j: String = record.get_item("uid")?.extract()?;
+                        json!({"junction": j, "key": format!("cut_{}", &crate::element_ids::new_uid()[..6])})
+                    }
+                    Err(_) => Value::Null,
+                }
             }
             "cut_selection" => {
                 let selected=view.getattr("scene")?.getattr("selection")?;
