@@ -571,3 +571,29 @@ def test_solid_mitre_keeps_the_uncut_source_and_follows_the_post(tmp_path):
     assert solid_volume(beam) == pytest.approx(.625)
     apply(history, "undo")
     assert solid_volume(beam) == pytest.approx(.75)
+
+
+def test_cut_refuses_open_solid_and_keeps_the_target_for_another_pick():
+    from built_core import ToolMachine
+
+    class Host:
+        def call(self, name, arg):
+            if name == "cut_pick":
+                index = int(arg[0])
+                return {"placement": str(index), "open_edges": 4 if index == 2 else 0}
+            if name == "cut_error":
+                self.message = arg
+
+        def run(self, name, payload):
+            assert name == "live_set"
+            self.saved = True
+            return True, 1, 0, None
+
+    tool, host = ToolMachine("cut"), Host()
+    for index in (2, 1, 2):
+        tool.event(dict(type="click", px=(index, 0)), host)
+    assert tool.get("target") == "1"
+    assert host.message == tool.get("prompt") == "4 open edges · Health › Fix"
+    assert not getattr(host, "saved", False)
+    tool.event(dict(type="click", px=(3, 0)), host)
+    assert host.saved
