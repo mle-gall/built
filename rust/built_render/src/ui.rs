@@ -995,15 +995,18 @@ impl Ui {
                     });
                     ui.add_space(SPACE_S);
                     ui.horizontal(|ui| {
+                        // Three equal buttons across the list's width: each
+                        // keeps its key hint and none runs past the edge.
                         ui.spacing_mut().item_spacing = vec2(SPACE_S, 0.0);
+                        let w = ((ui.available_width() - 2.0 * SPACE_S) / 3.0).floor();
                         let apply = tr("Apply {n}").replace("{n}", &ticked.to_string());
-                        if sheet_button(ui, &apply, "↩", 1) {
+                        if kit::panel_button(ui, &apply, "↩", 1, Some(w)).clicked() {
                             out.push("jreview:apply".into());
                         }
-                        if sheet_button(ui, &tr("Skip all"), "", 0) {
+                        if kit::panel_button(ui, &tr("Skip all"), "", 0, Some(w)).clicked() {
                             out.push("jreview:skip_all".into());
                         }
-                        if sheet_button(ui, &tr("Close"), "esc", 3) {
+                        if kit::panel_button(ui, &tr("Close"), "esc", 3, Some(w)).clicked() {
                             out.push("jreview:close".into());
                         }
                     });

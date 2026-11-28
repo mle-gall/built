@@ -774,6 +774,12 @@ fn cursor_value<'py>(a: &Args<'py>) -> Reply<'py> {
         _ => 0.into_bound_py_any(py)?,
     };
     let renderer = view.getattr("renderer")?;
+    // The junction review owns the viewport while it is open: the armed
+    // tool's chip (its last hover) would sit over the review list.
+    if crate::junction_review::current(&attr(&view, "scene")?)?.is_some() {
+        renderer.call_method1("ui_set_cursor_value", ("", "", false, py.None(), py.None(), py.None(), &revision, false))?;
+        return Ok(none(py));
+    }
     if renderer.hasattr("ui_set_section_inset")?{
         let inset=if sweep && !at.is_none(){tool.call_method1("_state",("section_inset",))?}else{none(py)};
         renderer.call_method1("ui_set_section_inset",(inset,))?;
