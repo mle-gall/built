@@ -1486,13 +1486,19 @@ fn rest_parts(scene: &Obj<'_>, t: &mut LiveTable, roles: &serde_json::Map<String
             })
             .filter(|m| m != uid && members.contains(m))
             .collect();
-        if on.is_empty() || s.path.definition_space {
+        if on.is_empty() {
             continue;
         }
         let Some(points) = reference::sweep_path(scene, t, &r, &s.path)? else { continue };
-        let k = t.groups[&r.owner];
-        let parent = doc::lock().node(k).and_then(|n| n.owners.first().copied());
-        let local = parent.map(reference::frame).unwrap_or(DMat4::IDENTITY).inverse() * reference::frame(k);
+        // The resolved path is in the part's own frame: kept as it is when the
+        // path is written there, else taken to its parent's space.
+        let local = if s.path.definition_space {
+            DMat4::IDENTITY
+        } else {
+            let k = t.groups[&r.owner];
+            let parent = doc::lock().node(k).and_then(|n| n.owners.first().copied());
+            parent.map(reference::frame).unwrap_or(DMat4::IDENTITY).inverse() * reference::frame(k)
+        };
         let mut row = (*r).clone();
         let spec = row.sweep.as_mut().unwrap();
         let pinned: Vec<[f64; 3]> = points.iter().map(|p| local.transform_point3(DVec3::from(*p)).to_array()).collect();

@@ -110,6 +110,24 @@ fn segments() -> usize {
     24
 }
 
+/// The placement frame of a new member: origin at the path start (the
+/// profile's attachment point), X along the first span, Y and Z the
+/// section's width and height axes as `generate` lays them out. Written in
+/// this frame the path starts at the origin along X, so the generated
+/// section is the same and the member's box and axes follow it.
+pub fn member_frame(points: &[[f64; 3]]) -> Option<glam::DMat4> {
+    let start = DVec3::from(*points.first()?);
+    let dir = (DVec3::from(*points.get(1)?) - start).try_normalize()?;
+    let across = DVec3::Z.cross(dir).try_normalize().unwrap_or(DVec3::X);
+    let up = dir.cross(across);
+    Some(glam::DMat4::from_cols(
+        dir.extend(0.),
+        across.extend(0.),
+        up.extend(0.),
+        start.extend(1.),
+    ))
+}
+
 pub struct SpanGeometry {
     pub butt_planes: Vec<[super::joints::Plane; 2]>,
     pub zones: Vec<[[f64; 2]; 3]>,

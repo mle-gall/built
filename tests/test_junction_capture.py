@@ -37,11 +37,21 @@ def world_points(scene, g):
 
 
 def facing_face(column, toward):
-    """The outermost column face whose normal points along `toward`."""
+    """The outermost column face whose world normal points along `toward`
+    (a member's own axes follow its profile, not the world's)."""
+    m = column.xform
+
+    def world(p):
+        return xyz(m.map(Vec3(*xyz(p)))) if m is not None else xyz(p)
+
+    def direction(v):
+        o, e = world(Vec3(0, 0, 0)), world(v)
+        return tuple(b - a for a, b in zip(o, e))
+
     def dot(v):
-        return sum(a * b for a, b in zip(xyz(v), toward))
-    faces = [f for f in column.mesh.faces if dot(f.normal()) > 0.99]
-    best = max(faces, key=lambda f: dot(f.centroid() if callable(f.centroid) else f.centroid))
+        return sum(a * b for a, b in zip(v, toward))
+    faces = [f for f in column.mesh.faces if dot(direction(f.normal())) > 0.99]
+    best = max(faces, key=lambda f: dot(world(f.centroid() if callable(f.centroid) else f.centroid)))
     return face_id(column.mesh, best)
 
 
