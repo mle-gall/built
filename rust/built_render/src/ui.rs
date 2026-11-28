@@ -802,7 +802,7 @@ impl Ui {
         let mut out = Vec::new();
         let num = |v: &serde_json::Value| v.as_f64().unwrap_or(0.) as f32;
         if let Some(chip) = layer["chip"].as_object() {
-            let at = pos2(num(&chip["x"]), num(&chip["y"])) + vec2(12.0, -14.0);
+            let at = pos2(num(&chip["x"]), num(&chip["y"])) + vec2(14.0, -48.0);
             let text = chip["text"].as_str().unwrap_or_default().to_string();
             egui::Area::new(egui::Id::new("junction_capture_chip")).fixed_pos(at).order(egui::Order::Foreground).show(ctx, |ui| {
                 ui.set_opacity((num(&chip["fade"]) * 1.6).clamp(0.35, 1.0));
@@ -853,7 +853,11 @@ impl Ui {
         self.junction_capture_tol = p["tol"].as_f64().unwrap_or(2.0);
         let (band_top, band_bottom) = self.band(ctx, screen);
         let width = 344.0;
-        let at = pos2((self.free_right(ctx, screen) - width - 2.0 * GUT).max(GUT + self.rail_w + GUT), band_top);
+        // Beside the meeting, never over it: the side it is not on.
+        let right = (self.free_right(ctx, screen) - width - 2.0 * GUT).max(GUT + self.rail_w + GUT);
+        let left = GUT + self.rail_w + GUT;
+        let over_right = p["meeting_x"].as_f64().is_some_and(|x| x as f32 > right - 24.0);
+        let at = pos2(if over_right { left } else { right }, band_top);
         let mut name_draft = self.junction_capture_name.0.clone();
         let mut tol = self.junction_capture_tol;
         egui::Area::new(egui::Id::new("junction_capture")).fixed_pos(at).order(egui::Order::Foreground).show(ctx, |ui| {
@@ -3122,6 +3126,7 @@ impl Ui {
                         }
                         kit::identity_card(ui, &col.identity, &mut actions);
                         if col.mode.is_empty() {
+                            self.panels.junction(ui, &mut cmds);
                             self.panels.inspector(ui, &mut cmds);
                         }
                         let native_export = self.panels.has_records() && col.mode.is_empty();

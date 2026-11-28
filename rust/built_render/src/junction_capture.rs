@@ -208,7 +208,7 @@ pub fn action(win: &Obj<'_>, text: &str) -> PyResult<()> {
                 kw.set_item("junction", &junction)?;
                 kw.set_item("rows", items)?;
                 kw.set_item("detail", verb == "done_all")?;
-                let reply = to_json(&py.import("built_core.protocol.commands")?.call_method("run", (&history, "junction_adopt"), Some(&kw))?)?;
+                let reply = outcome(&py.import("built_core.protocol.commands")?.call_method("run", (&history, "junction_adopt"), Some(&kw))?)?;
                 if reply["ok"] != true {
                     message = reply["error"]["message"].as_str().or(reply["error"].as_str()).unwrap_or("Could not add them").to_string();
                 }
@@ -225,7 +225,7 @@ pub fn action(win: &Obj<'_>, text: &str) -> PyResult<()> {
             let kw = PyDict::new(py);
             kw.set_item("seed", to_py(py, &seed)?)?;
             kw.set_item("options", to_py(py, &options)?)?;
-            let reply = to_json(&py.import("built_core.protocol.commands")?.call_method("run", (&history, "junction_capture"), Some(&kw))?)?;
+            let reply = outcome(&py.import("built_core.protocol.commands")?.call_method("run", (&history, "junction_capture"), Some(&kw))?)?;
             if reply["ok"] == true {
                 close(&scene)?;
                 s.borrow_mut().revision = history.getattr("revision")?.extract().ok();
@@ -357,9 +357,9 @@ fn layer(view: &Obj<'_>, scene: &Obj<'_>) -> PyResult<Value> {
     let py = view.py();
     let s = state(scene)?;
     let mut c = s.borrow_mut();
+    // Faded, not dismissed: more work at the meeting offers it again.
     if c.chip.as_ref().is_some_and(|ch| !c.open && ch.born.elapsed() > FADE) {
-        let key = c.chip.take().map(|ch| ch.key).unwrap_or_default();
-        c.dismissed.insert(key);
+        c.chip = None;
     }
     let mut out = json!({"chip": null, "tags": [], "popover": null, "done": null});
     if let Some((_, items, uses, name)) = &c.done {
@@ -429,6 +429,7 @@ fn layer(view: &Obj<'_>, scene: &Obj<'_>) -> PyResult<Value> {
         "similar": if similar == 1 { tr(py, "1 similar")? } else { tr(py, "{n} similar")?.replace("{n}", &similar.to_string()) },
         "near": d["near"],
         "save_in": tr(py, "This project")?,
+        "meeting_x": pixel(view, serde_json::from_value::<[f64; 3]>(d["meeting"]["at"].clone()).unwrap_or_default())?.map(|p| p.0),
         "error": c.error,
     });
     Ok(out)
@@ -506,7 +507,18 @@ fn run(history: &Obj<'_>, verb: &str, kw: Value) -> PyResult<Value> {
     for (k, v) in kw.as_object().into_iter().flatten() {
         d.set_item(k, to_py(py, v)?)?;
     }
-    to_json(&py.import("built_core.protocol.commands")?.call_method("run", (history, verb), Some(&d))?)
+    outcome(&py.import("built_core.protocol.commands")?.call_method("run", (history, verb), Some(&d))?)
+}
+/// A protocol reply's outcome (its `step` is not data).
+fn outcome(reply: &Obj<'_>) -> PyResult<Value> {
+    let ok = reply.get_item("ok")?.is_truthy()?;
+    let error = reply.get_item("error")?;
+    let message = if error.is_none() {
+        reply.get_item("rejected").ok().filter(|r| !r.is_none()).map(|r| r.str().map(|s| s.to_string())).transpose()?
+    } else {
+        Some(error.get_item("message").unwrap_or(error.clone()).str()?.to_string())
+    };
+    Ok(json!({"ok": ok, "error": {"message": message}}))
 }
 fn failed(reply: &Value) -> Option<String> {
     (reply["ok"] != true).then(|| reply["error"]["message"].as_str().or(reply["error"].as_str()).unwrap_or("Not applied").to_string())

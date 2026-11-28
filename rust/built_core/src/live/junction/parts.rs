@@ -146,6 +146,20 @@ pub(super) fn prepare(
     let part = group(py, t, &owner).ok_or_else(|| err("Missing part placement"))?;
     preset.record(&part, false)?;
     if new_part {
+        // Named as the Sweep tool names it (PL-12), not by its content key.
+        let name = if preset.naming.contains("{n}") {
+            preset.naming.replace("{n}", &(t.serial + 1).to_string())
+        } else if !preset.name.is_empty() {
+            preset.name.clone()
+        } else {
+            key.to_string()
+        };
+        part.setattr("name", &name)?;
+        if let Ok(record) = part.getattr("ifc") {
+            if !record.is_none() {
+                record.set_item("name", &name)?;
+            }
+        }
         crate::structure::file_sweep(scene, &part, &preset.node)?;
     }
     if !preset.uid.is_empty() {

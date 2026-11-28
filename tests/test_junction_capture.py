@@ -257,7 +257,7 @@ def test_offers_name_the_meeting_once_two_items_follow_it():
     assert live.junction_capture_offers(scene) == []
     source, column, rafter, pl, cut_uid, _ = handmade_knee(scene, history, bolts=False)
     (offer,) = live.junction_capture_offers(scene)
-    assert offer["key"] == source["key"] and sorted(offer["items"]) == sorted([cut_uid, live.live_sweep(scene, pl.uid)["uid"]])
+    assert offer["key"] == source["key"] and sorted(offer["items"]) == sorted([cut_uid, pl.uid])
     apply(history, "junction_capture", seed=cut_uid)
     assert live.junction_capture_offers(scene) == []
 

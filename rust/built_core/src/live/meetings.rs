@@ -1226,6 +1226,7 @@ pub(super) fn meetings_query<'p>(scene: &Obj<'p>, filter: Option<&Obj<'p>>) -> P
                 "signature": sig,
                 "arrangement": words,
                 "roles": {"main": main_binding, "other": binding(other, end_of(other, f.tags[1], f.at))},
+                "axes": [[main.a.to_array(), main.b.to_array()], [other.a.to_array(), other.b.to_array()]],
                 "members": [leaf(&main.uid), leaf(&other.uid)],
             }));
         }

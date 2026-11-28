@@ -22,6 +22,17 @@ fn api(py: Python<'_>) -> PyResult<Obj<'_>> {
 fn to_json(v: &Obj<'_>) -> PyResult<Value> {
     super::py::py_to_json(v)
 }
+/// A protocol reply's outcome (its `step` is not data).
+fn outcome(reply: &Obj<'_>) -> PyResult<Value> {
+    let ok = reply.get_item("ok")?.is_truthy()?;
+    let error = reply.get_item("error")?;
+    let message = if error.is_none() {
+        reply.get_item("rejected").ok().filter(|r| !r.is_none()).map(|r| r.str().map(|s| s.to_string())).transpose()?
+    } else {
+        Some(error.get_item("message").or_else(|_| Ok::<_, PyErr>(error.clone()))?.str()?.to_string())
+    };
+    Ok(json!({"ok": ok, "error": message}))
+}
 fn tr(py: Python<'_>, text: &str) -> PyResult<String> {
     py.import("built_core.i18n")?.call_method1("tr", (text,))?.extract()
 }
@@ -81,6 +92,17 @@ impl ViewportToolHost {
                 canvas.getattr("renderer")?.call_method1("ui_open_commands", ("", "Junction details"))?;
                 canvas.call_method0("update")?;
                 Value::Null
+            }
+            "junction_selection" => {
+                let selected = scene.getattr("selection")?;
+                if selected.len()? != 1 {
+                    return Ok(Value::Null);
+                }
+                let g = selected.try_iter()?.next().transpose()?;
+                match g.filter(|g| g.hasattr("uid").unwrap_or(false)) {
+                    Some(g) => json!({"placement": g.getattr("uid")?.extract::<String>()?, "label": g.getattr("name")?.extract::<String>().unwrap_or_default()}),
+                    None => Value::Null,
+                }
             }
             "junction_ply" => {
                 let px: (f64, f64) = serde_json::from_value(arg["px"].clone()).unwrap_or_default();
@@ -235,12 +257,12 @@ impl ViewportToolHost {
                 kw.set_item("detail", &detail)?;
                 kw.set_item("bindings", to_py(py, &arg["bindings"])?)?;
                 kw.set_item("force", arg["force"] == true)?;
-                let reply = to_json(&py.import("built_core.protocol.commands")?.call_method("run", (&history, "junction_apply"), Some(&kw))?)?;
+                let reply = outcome(&py.import("built_core.protocol.commands")?.call_method("run", (&history, "junction_apply"), Some(&kw))?)?;
                 if reply["ok"] == true {
                     view.setattr("_junction_detail", &detail)?;
                     json!({"ok": true})
                 } else {
-                    json!({"ok": false, "error": reply["error"]["message"].as_str().or(reply["error"].as_str()).unwrap_or("Could not apply the detail")})
+                    json!({"ok": false, "error": reply["error"].as_str().unwrap_or("Could not apply the detail")})
                 }
             }
             _ => Value::Null,

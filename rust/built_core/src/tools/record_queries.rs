@@ -199,14 +199,20 @@ impl ViewportToolHost {
                 if arg["plate"]==true {
                     if let Some(member)=path.last() {
                         let meetings=py.import("built_core.command_protocol")?.call_method1("meetings",(&scene,))?;
-                        let mut best=0.2;
+                        let mut best=0.4;
                         for m in super::py::py_to_json(&meetings)?.as_array().into_iter().flatten(){
                             if !m["members"].as_array().is_some_and(|u|u.iter().any(|u|u==member.as_str())){continue;}
-                            let Ok(p)=serde_json::from_value::<[f64;3]>(m["at"].clone()) else{continue};
-                            let p=DVec3::from(p);
-                            let on=p-normal*(p-at).dot(normal);
-                            let d=on.distance(at);
-                            if d<best{best=d;snap=json!(on.to_array());}
+                            // Where the other member's axis meets this face.
+                            for (i,axis) in m["axes"].as_array().into_iter().flatten().enumerate(){
+                                if m["members"][i]==member.as_str(){continue;}
+                                let (Ok(a),Ok(b))=(serde_json::from_value::<[f64;3]>(axis[0].clone()),serde_json::from_value::<[f64;3]>(axis[1].clone())) else{continue};
+                                let (a,b)=(DVec3::from(a),DVec3::from(b));
+                                let den=(b-a).dot(normal);
+                                if den.abs()<1e-9{continue;}
+                                let on=a+(b-a)*((at-a).dot(normal)/den);
+                                let d=on.distance(at);
+                                if d<best{best=d;snap=json!(on.to_array());}
+                            }
                         }
                     }
                 }

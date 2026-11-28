@@ -24,6 +24,11 @@ pub struct JunctionTool {
     plies: Vec<Json>,
     point: Option<P3>,
     message: Option<String>,
+    /// A parts detail starts from the selected part (as the Cut tool
+    /// starts from its selected target): checked once per detail.
+    selection_read: bool,
+    /// The selection when the tool armed (picking a detail may clear it).
+    armed: Json,
 }
 
 impl JunctionTool {
@@ -37,6 +42,9 @@ impl JunctionTool {
         self.detail["uid"].as_str().unwrap_or("")
     }
     fn fit_words(&self) -> &str {
+        if self.parts() {
+            return if self.hover["placement"].is_string() { "click to pick" } else { "" };
+        }
         match self.hover["fit"].as_str() {
             Some("match") => "fits",
             Some("near") => "outside",
@@ -55,7 +63,11 @@ impl JunctionTool {
             return "Save a junction first, or press L for junction details".into();
         }
         if self.parts() {
-            return if self.plies.is_empty() { "Click the first ply (the part the fasteners go through first)".into() } else { "Click the second ply".into() };
+            return if self.plies.is_empty() {
+                "Click the first ply (the part the fasteners go through first), or select it first".into()
+            } else {
+                "Click the member it is fastened to".into()
+            };
         }
         match self.hover["fit"].as_str() {
             Some("match") => "Click applies · Alt-click custom · ↓ next detail".into(),
@@ -109,6 +121,7 @@ impl Tool for JunctionTool {
             "preset" if value["primitive"] == "junction" => {
                 self.detail = value.clone();
                 self.plies.clear();
+                self.selection_read = false;
                 self.hover = Json::Null;
                 self.message = None;
                 true
@@ -128,6 +141,7 @@ impl Tool for JunctionTool {
     fn event(&mut self, e: &ToolEvent, host: &mut dyn ToolHost) -> Reply {
         match e {
             ToolEvent::Activate => {
+                self.armed = host.call("junction_selection", Json::Null);
                 let d = host.call("junction_default", Json::Null);
                 if !d.is_null() {
                     self.detail = d;
@@ -135,6 +149,7 @@ impl Tool for JunctionTool {
             }
             ToolEvent::Cancel | ToolEvent::Deactivate => {
                 self.plies.clear();
+                self.selection_read = matches!(e, ToolEvent::Cancel);
                 self.hover = Json::Null;
                 self.message = None;
             }
@@ -156,6 +171,16 @@ impl Tool for JunctionTool {
                 self.point = p.world;
                 if self.detail.is_null() {
                     return Reply::redraw();
+                }
+                if self.parts() && self.plies.is_empty() && !self.selection_read {
+                    self.selection_read = true;
+                    let mut picked = host.call("junction_selection", Json::Null);
+                    if !picked["placement"].is_string() {
+                        picked = std::mem::take(&mut self.armed);
+                    }
+                    if picked["placement"].is_string() {
+                        self.plies.push(json!({"placement": picked["placement"]}));
+                    }
                 }
                 self.hover = if self.parts() {
                     host.call("junction_ply", json!({"px": p.px}))

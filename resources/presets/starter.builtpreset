@@ -1689,6 +1689,20 @@
             "group": "Bolt",
             "expr": "2",
             "unit": "mm"
+          },
+          {
+            "key": "ox",
+            "name": "Offset across",
+            "group": "Bolt",
+            "expr": "0",
+            "unit": "mm"
+          },
+          {
+            "key": "oy",
+            "name": "Offset along",
+            "group": "Bolt",
+            "expr": "0",
+            "unit": "mm"
           }
         ],
         "contents": [
@@ -1701,7 +1715,12 @@
                 "grade": "8.8"
               },
               "at": {
-                "frame": "@meet"
+                "frame": "@meet",
+                "offset": [
+                  "ox",
+                  "oy",
+                  0
+                ]
               }
             }
           }
@@ -1779,6 +1798,10 @@
                   "count": "columns",
                   "step": "gauge"
                 }
+              },
+              "params": {
+                "ox": "-(columns - 1) * gauge / 2",
+                "oy": "-(rows - 1) * pitch / 2"
               }
             }
           }

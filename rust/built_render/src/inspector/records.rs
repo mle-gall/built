@@ -351,9 +351,6 @@ impl Records {
                 }));
             });
         }
-        if self.junction.is_object() {
-            self.junction_record(ui, out);
-        }
         if let Some(cuts)=self.cuts.as_array().filter(|v|!v.is_empty()){
             kit::disclosure(ui,"cut record","Cuts",true,|ui|{
                 for cut in cuts{
@@ -407,7 +404,10 @@ impl Records {
     /// The junction record (docs/junctions.md §6.1, §11): status with its
     /// ways out, roles with Swap, "All N · This one", parameters with their
     /// relation and amber overrides, parts, and the use's actions.
-    fn junction_record(&mut self, ui: &mut egui::Ui, out: &mut Vec<String>) {
+    pub(super) fn junction_record(&mut self, ui: &mut egui::Ui, out: &mut Vec<String>) {
+        if !self.junction.is_object() {
+            return;
+        }
         let j = self.junction.clone();
         let uid = j["uid"].clone();
         let uses = j["uses"].as_u64().unwrap_or(0);

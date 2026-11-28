@@ -323,7 +323,7 @@ fn gather(scene: &Obj<'_>, t: &LiveTable, m: &meetings::Lite) -> PyResult<Vec<It
                         placement: Some(r.owner.clone()),
                         label: name(&r.owner),
                         meta: format!("{} · {dims} × {}", s.preset.clone().unwrap_or_else(|| "Part".into()), fmt(length)),
-                        how: if anchored { "anchored" } else { "near" },
+                        how: if anchored || both >= 1 { "anchored" } else { "near" },
                         ticked: anchored || rests,
                         problem: None,
                         key: String::new(),
@@ -395,34 +395,38 @@ fn role_rule(profile: &str, dims: &BTreeMap<String, f64>, sizes: Option<&BTreeMa
 /// Relations that give `v` from a role dimension or an earlier parameter,
 /// best first (§2.5): exact, then the smallest multiple-of-5 constant, then
 /// × ½ or × 2.
-fn relations(v: f64, roles: &[(String, String, BTreeMap<String, f64>)], earlier: &[Param]) -> Vec<(String, String)> {
-    let mut found: Vec<((u8, i64), String, String)> = Vec::new();
+fn relations(v: f64, roles: &[(String, String, BTreeMap<String, f64>)], earlier: &[Param], exact_only: bool) -> Vec<(String, String)> {
+    let mut found: Vec<((u8, u8, i64), String, String)> = Vec::new();
     if v.abs() < 1e-9 {
         return Vec::new();
     }
     for p in earlier {
         if (p.value - v).abs() < 0.01 {
-            found.push(((0, 1), p.key.clone(), format!("= {}", p.name)));
+            found.push(((0, 0, 1), p.key.clone(), format!("= {}", p.name)));
         }
     }
     for (role, label, dims) in roles {
+        // A part is sized from the member it carries first (the joining one).
+        let side = u8::from(role != "joining");
         for dim in ["width", "height", "web", "flange", "thickness"] {
             let Some(d) = dims.get(dim).copied().filter(|d| *d > 0.) else { continue };
             let c = v - d;
             let words = format!("{label} {dim}");
             if c.abs() < 0.01 {
-                found.push(((0, 0), format!("{role}.{dim}"), format!("= {words}")));
+                found.push(((0, side, 0), format!("{role}.{dim}"), format!("= {words}")));
+            } else if exact_only {
+                continue;
             } else if c.abs() <= d / 2. + 1e-9 && ((c / 5.) - (c / 5.).round()).abs() < 1e-6 {
                 let sign = if c > 0. { "+" } else { "-" };
                 found.push((
-                    (1, (c.abs() * 10.) as i64),
+                    (1, side, (c.abs() * 10.) as i64),
                     format!("{role}.{dim} {sign} {}", fmt(c.abs())),
                     format!("= {words} {sign} {}", fmt(c.abs())),
                 ));
             } else {
                 for (k, text) in [(0.5, "½"), (2., "2")] {
                     if (v - d * k).abs() < 0.01 {
-                        found.push(((2, 0), format!("{role}.{dim} * {k}"), format!("= {words} × {text}")));
+                        found.push(((2, side, 0), format!("{role}.{dim} * {k}"), format!("= {words} × {text}")));
                     }
                 }
             }
@@ -434,6 +438,8 @@ fn relations(v: f64, roles: &[(String, String, BTreeMap<String, f64>)], earlier:
 }
 
 struct Builder<'a> {
+    /// A child junction's own values stay plain values.
+    plain: bool,
     params: Vec<Param>,
     roles: &'a [(String, String, BTreeMap<String, f64>)],
     exprs: &'a BTreeMap<String, Value>,
@@ -452,7 +458,8 @@ impl Builder<'_> {
             key = format!("{}_{n}", snake(field));
             n += 1;
         }
-        let found = relations(value, self.roles, &self.params);
+        // A thickness is a stock size: sized from a member only when equal.
+        let found = if self.plain { Vec::new() } else { relations(value, self.roles, &self.params, name.ends_with("thickness") || field.ends_with("_t")) };
         let (expr, relation) = match self.exprs.get(&key) {
             Some(Value::String(e)) if e.trim().is_empty() => (json!(value), String::new()),
             Some(chosen) => {
@@ -665,8 +672,11 @@ impl Convert<'_> {
                     }
                     child_roles.insert(name.clone(), if extra.as_object().is_some_and(|o| o.len() == 1) { json!(format!("@{target}")) } else { extra });
                 }
-                let key = self.unique(&snake(&detail.name));
+                // A short key: the name's words before the first size ("bolt_group").
+                let short: Vec<&str> = detail.name.split_whitespace().take_while(|w| !w.chars().any(|c| c.is_ascii_digit()) && *w != "·").collect();
+                let key = self.unique(&snake(&if short.is_empty() { detail.name.clone() } else { short.join(" ") }));
                 let mut params = serde_json::Map::new();
+                b.plain = true;
                 for def in detail.values.get("params").and_then(Value::as_array).into_iter().flatten() {
                     let Some(pk) = def["key"].as_str() else { continue };
                     let value = row.joint.overrides.get(pk).and_then(Value::as_f64).or_else(|| row.joint.params.get(pk).and_then(Value::as_f64));
@@ -676,6 +686,7 @@ impl Convert<'_> {
                         params.insert(pk.into(), b.param(&format!("{key}_{pk}"), &format!("{} {label}", detail.name), &detail.name, unit, value));
                     }
                 }
+                b.plain = false;
                 Ok(Ok((key.clone(), json!({"key": key, "junction": {"detail": detail.uid, "roles": child_roles, "params": params}}), json!({"key": key, "junction": row.uid, "placement": row.owner}))))
             }
             _ => Ok(Err("not a cut, part or junction".into())),
@@ -730,7 +741,7 @@ pub(in crate::live) fn draft(scene: &Obj<'_>, t: &LiveTable, seed: &Value, opts:
         ("main".to_string(), names[0].clone(), role_dims("main")),
         ("joining".to_string(), names[1].clone(), role_dims("joining")),
     ];
-    let mut b = Builder { params: Vec::new(), roles: &role_list, exprs: &opts.exprs };
+    let mut b = Builder { plain: false, params: Vec::new(), roles: &role_list, exprs: &opts.exprs };
     let mut contents = Vec::new();
     let mut template = Vec::new();
     let mut ctx = Convert { frames: &frames, members: &members, roles: &roles, keys: HashMap::new(), used: HashSet::new() };
@@ -963,11 +974,17 @@ pub(in crate::live) fn offers(scene: &Obj<'_>, t: &LiveTable) -> PyResult<Vec<(m
         .filter(|j| j.joint.parent.is_none())
         .map(|j| j.joint.roles.as_object().into_iter().flatten().filter_map(|(_, b)| placement(b).map(String::from)).collect())
         .collect();
-    Ok(found
-        .into_iter()
-        .filter(|(i, ids)| ids.len() >= 2 && !detailed.iter().any(|p| all[*i].members.iter().all(|u| p.contains(u))))
-        .map(|(i, ids)| (all[i].clone(), ids))
-        .collect())
+    // Everything gathered there counts, so work that goes on at the
+    // meeting (a bolt group on its plate) keeps the chip.
+    let mut out = Vec::new();
+    for (i, ids) in found {
+        if ids.len() < 2 || detailed.iter().any(|p| all[i].members.iter().all(|u| p.contains(u))) {
+            continue;
+        }
+        let items = gather(scene, t, &all[i])?.into_iter().map(|item| item.id).collect::<Vec<_>>();
+        out.push((all[i].clone(), if items.len() >= ids.len() { items } else { ids }));
+    }
+    Ok(out)
 }
 
 /// Adopt rows or parts into a junction (§2.4, §6.3): a cut dragged onto it
@@ -1021,7 +1038,7 @@ pub(in crate::live) fn adopt(scene: &Obj<'_>, t: &mut LiveTable, uid: &str, ids:
         })
         .collect();
     let exprs = BTreeMap::new();
-    let mut b = Builder { params: earlier.clone(), roles: &role_list, exprs: &exprs };
+    let mut b = Builder { plain: false, params: earlier.clone(), roles: &role_list, exprs: &exprs };
     let roles = j.joint.roles.as_object().cloned().unwrap_or_default();
     let mut ctx = Convert { frames: &frames, members: &members, roles: &roles, keys: HashMap::new(), used: HashSet::new() };
     let mut template: Vec<Value> = p.values.get("contents").and_then(Value::as_array).cloned().unwrap_or_default();
