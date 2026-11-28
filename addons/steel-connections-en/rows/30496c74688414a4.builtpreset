@@ -131,7 +131,7 @@
       {
         "key": "plate_a",
         "part": {
-          "preset": "732730a077d0b9f2",
+          "preset": "9090f8e107a037c2",
           "fields": {
             "profile.params.width": "plate_w",
             "profile.params.height": "plate_h",
@@ -150,7 +150,7 @@
       {
         "key": "plate_b",
         "part": {
-          "preset": "732730a077d0b9f2",
+          "preset": "9090f8e107a037c2",
           "fields": {
             "profile.params.width": "plate_w",
             "profile.params.height": "plate_h",
@@ -265,8 +265,8 @@
   "depends": [
     {
       "kind": "preset",
-      "key": "732730a077d0b9f2",
-      "bundled": null,
+      "key": "9090f8e107a037c2",
+      "bundled": "rows/9090f8e107a037c2.builtpreset",
       "rev": 1
     },
     {
@@ -282,5 +282,5 @@
       "rev": 1
     }
   ],
-  "hash": "sha256:52625dc5df0c2583dd2f6903c465bdc454708e1c9cc545a79b7ed71c57562b1b"
+  "hash": "sha256:9680bdc5b6c14f1f134018392ff89243451905ce1fddc490d0e304ee67cd9487"
 }

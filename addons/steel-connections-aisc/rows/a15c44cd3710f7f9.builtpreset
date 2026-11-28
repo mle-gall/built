@@ -66,7 +66,7 @@
       {
         "key": "foot",
         "part": {
-          "preset": "732730a077d0b9f2",
+          "preset": "5085428b43db75b4",
           "fields": {
             "profile.params.width": "foot_l",
             "profile.params.height": "foot_w",
@@ -85,7 +85,7 @@
       {
         "key": "leg",
         "part": {
-          "preset": "732730a077d0b9f2",
+          "preset": "5085428b43db75b4",
           "fields": {
             "profile.params.width": "foot_l",
             "profile.params.height": "leg_h",
@@ -181,8 +181,8 @@
   "depends": [
     {
       "kind": "preset",
-      "key": "732730a077d0b9f2",
-      "bundled": null,
+      "key": "5085428b43db75b4",
+      "bundled": "rows/5085428b43db75b4.builtpreset",
       "rev": 1
     },
     {
@@ -192,5 +192,5 @@
       "rev": 1
     }
   ],
-  "hash": "sha256:ed56fe39110b8f1d69886f3df8e4da478b259459c098a2b6a247a691cf07db44"
+  "hash": "sha256:aec151876ed96bb5582fc8fbcd2c14b776cbba8dacebff864415f52923e0d75b"
 }

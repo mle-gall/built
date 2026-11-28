@@ -105,11 +105,15 @@ def arrangement(scene, h, p):
     raise AssertionError(f"No arrangement for {name}")
 
 
-def starter_details(scene=None):
+def starter_catalog(scene=None):
     catalog = {p["uid"]: p for p, _ in live.preset_catalog(scene)}
     for pack in ("steel-connections-en", "timber-joints", "purlin-connections-en", "mep-penetrations"):
         catalog.update((p["uid"], p) for p in addon_cases.rows(pack))
-    return [p for p in catalog.values() if p["primitive"] == "junction" and p["pack"] in STARTER_PACKS and p["name"] not in ("Bolt", "Bolt group")]
+    return list(catalog.values())
+
+
+def starter_details(scene=None):
+    return [p for p in starter_catalog(scene) if p["primitive"] == "junction" and p["pack"] in STARTER_PACKS and p["name"] not in ("Bolt", "Bolt group")]
 
 
 def apply_in_empty_document(p, embed=()):
@@ -124,7 +128,7 @@ def apply_in_empty_document(p, embed=()):
         uid = next(r["uid"] for r in live.live_rows(scene) if r["kind"] == "junction")
         return scene, h, uid
     picks = arrangement(scene, h, p)
-    definitions = live.junction_definitions(p, starter_details(scene))
+    definitions = live.junction_definitions(p, starter_catalog(scene))
     bindings = live.junction_bind(scene, p, picks)
     uid = apply(h, "junction_apply", detail=p["uid"], bindings=bindings, definitions=definitions)["uid"]
     return scene, h, uid

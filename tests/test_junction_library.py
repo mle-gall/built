@@ -82,7 +82,7 @@ def test_import_into_my_library_needs_and_tampering(win, tmp_path):
     del manifest["pack"]["files"][weld]
     (partial / weld).unlink()
     (partial / "pack.json").write_text(json.dumps(manifest))
-    assert L.import_pack(win, str(partial), "model") == {"ok": 1, "needs": 0, "skipped": 1, "destination": "This model"}
+    assert L.import_pack(win, str(partial), "model") == {"ok": 2, "needs": 0, "skipped": 1, "destination": "This model"}
     assert L.import_pack(win, str(partial), "mine")["needs"] == 1
     sheet = presets_sheet(win, scope="s:mine")
     knee = next(i for i in tiles(sheet) if i["label"] == root["name"])
@@ -91,7 +91,7 @@ def test_import_into_my_library_needs_and_tampering(win, tmp_path):
     assert detail_rows(sheet)["Needs"].startswith("detail ") and "Apply…" not in buttons(sheet)
     # The whole pack completes it.
     report = L.import_pack(win, str(pack), "mine")
-    assert report == {"ok": 3, "needs": 0, "skipped": 0, "destination": "My library"}
+    assert report == {"ok": 4, "needs": 0, "skipped": 0, "destination": "My library"}
     sheet = presets_sheet(win, scope="s:mine")
     act(win, "focus", knee["id"])
     sheet = frame(win)

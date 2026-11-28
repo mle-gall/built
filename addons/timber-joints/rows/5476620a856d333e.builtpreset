@@ -64,7 +64,7 @@
       {
         "key": "seat",
         "part": {
-          "preset": "732730a077d0b9f2",
+          "preset": "9090f8e107a037c2",
           "fields": {
             "profile.params.width": "joining.width + 2 * t",
             "profile.params.height": "seat_l",
@@ -84,7 +84,7 @@
       {
         "key": "side_a",
         "part": {
-          "preset": "732730a077d0b9f2",
+          "preset": "9090f8e107a037c2",
           "fields": {
             "profile.params.width": "seat_l",
             "profile.params.height": "joining.height",
@@ -104,7 +104,7 @@
       {
         "key": "side_b",
         "part": {
-          "preset": "732730a077d0b9f2",
+          "preset": "9090f8e107a037c2",
           "fields": {
             "profile.params.width": "seat_l",
             "profile.params.height": "joining.height",
@@ -124,7 +124,7 @@
       {
         "key": "flange_a",
         "part": {
-          "preset": "732730a077d0b9f2",
+          "preset": "9090f8e107a037c2",
           "fields": {
             "profile.params.width": "flange_w",
             "profile.params.height": "joining.height",
@@ -143,7 +143,7 @@
       {
         "key": "flange_b",
         "part": {
-          "preset": "732730a077d0b9f2",
+          "preset": "9090f8e107a037c2",
           "fields": {
             "profile.params.width": "flange_w",
             "profile.params.height": "joining.height",
@@ -272,8 +272,8 @@
   "depends": [
     {
       "kind": "preset",
-      "key": "732730a077d0b9f2",
-      "bundled": null,
+      "key": "9090f8e107a037c2",
+      "bundled": "rows/9090f8e107a037c2.builtpreset",
       "rev": 1
     },
     {
@@ -282,5 +282,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:9b0aa78ff1ddd623669e8d52d3215e86a55338ea20b9819d5392fba626f20e8d"
+  "hash": "sha256:c0736f719f7c4bf8fda04a3b4f73952a2bbcb36489011771430d895d777c2ca6"
 }

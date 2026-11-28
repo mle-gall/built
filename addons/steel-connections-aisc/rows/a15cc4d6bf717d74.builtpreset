@@ -112,7 +112,7 @@
       {
         "key": "plate",
         "part": {
-          "preset": "732730a077d0b9f2",
+          "preset": "5085428b43db75b4",
           "fields": {
             "profile.params.width": "plate_w",
             "profile.params.height": "plate_h",
@@ -225,8 +225,8 @@
   "depends": [
     {
       "kind": "preset",
-      "key": "732730a077d0b9f2",
-      "bundled": null,
+      "key": "5085428b43db75b4",
+      "bundled": "rows/5085428b43db75b4.builtpreset",
       "rev": 1
     },
     {
@@ -242,5 +242,5 @@
       "rev": 1
     }
   ],
-  "hash": "sha256:913abf3a8356b17ba6c76c04fe4334a31be36bc061f21827ec5d9b104e08a01d"
+  "hash": "sha256:f27d549edbb268fae936560a812cef4995b4341efccf081353fbb3039d8eeeb5"
 }

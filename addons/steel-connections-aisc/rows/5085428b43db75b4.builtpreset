@@ -1,0 +1,41 @@
+{
+  "uid": "5085428b43db75b4",
+  "name": "Steel plate",
+  "pack": "Steel plates",
+  "primitive": "sweep",
+  "rev": 1,
+  "values": {
+    "profile": {
+      "library": "basic/flat",
+      "params": {
+        "width": 180,
+        "height": 240
+      }
+    },
+    "attachment": "centre"
+  },
+  "record": {
+    "class": "IfcPlate",
+    "predefined_type": "SHEET",
+    "material": "Steel",
+    "object_type": "Plate"
+  },
+  "naming": "PL-{n}",
+  "node": "Plates",
+  "locks": {
+    "profile": "free",
+    "material": "free",
+    "class": "fixed"
+  },
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "basic/flat",
+      "bundled": null
+    }
+  ],
+  "provenance": {
+    "created_with": "Built"
+  },
+  "hash": "sha256:ef4ffb659d6b30d56b22552a772a4d9c7af72265fb17c7a9473c72774a073245"
+}

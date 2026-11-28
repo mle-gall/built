@@ -101,7 +101,7 @@
       {
         "key": "fin",
         "part": {
-          "preset": "732730a077d0b9f2",
+          "preset": "9090f8e107a037c2",
           "fields": {
             "profile.params.width": "fin_h",
             "profile.params.height": "fin_t",
@@ -202,8 +202,8 @@
   "depends": [
     {
       "kind": "preset",
-      "key": "732730a077d0b9f2",
-      "bundled": null,
+      "key": "9090f8e107a037c2",
+      "bundled": "rows/9090f8e107a037c2.builtpreset",
       "rev": 1
     },
     {
@@ -219,5 +219,5 @@
       "rev": 1
     }
   ],
-  "hash": "sha256:f19eaab1abef395a51f0e7587c66f1b9d936166c1ec8750119269900ac9d0c37"
+  "hash": "sha256:5364f3bf4f2d4856eceadb60cc693118c812877a02b7f73a741a22b1f3656ecb"
 }

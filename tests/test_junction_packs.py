@@ -110,7 +110,7 @@ def import_plan(path, known=None):
 
 def test_pack_from_the_garage_imports_without_its_model_and_applies_to_a_new_frame(tmp_path):
     source, root, dest, report = export_knee(tmp_path)
-    assert report["rows"] == 3          # the knee, its bolt and its weld
+    assert report["rows"] == 4          # the knee, plate, bolt and weld
     with zipfile.ZipFile(dest) as z:
         manifest = json.loads(z.read("pack.json"))
         names = set(z.namelist())
@@ -122,7 +122,7 @@ def test_pack_from_the_garage_imports_without_its_model_and_applies_to_a_new_fra
     by_name = {r["name"]: r for r in plan["rows"]}
     knee = by_name[root["name"]]
     assert "needs" not in knee and knee["source"]["pack"] == pack["id"] and knee["author"]["name"] == "Workshop"
-    assert {(d["kind"], d["bundled"] is None) for d in knee["depends"]} == {("preset", True), ("detail", False)}
+    assert {(d["kind"], d["bundled"] is None) for d in knee["depends"]} == {("preset", False), ("detail", False)}
     # No document id, path or user name travels.
     assert "provenance" in knee and str(tmp_path) not in json.dumps(plan["rows"])
 
@@ -153,7 +153,7 @@ def test_folder_packs_tampering_and_missing_dependencies(tmp_path):
     folder = tmp_path / "folder"
     assert (folder / "pack.json").is_file()
     assert any(p.name.endswith(".png") for p in (folder / "thumbnails").iterdir())
-    assert len(import_plan(folder)["rows"]) == 3
+    assert len(import_plan(folder)["rows"]) == 4
     # A changed file is refused by its hash, with nothing read from it.
     tampered = tmp_path / "tampered"
     shutil.copytree(folder, tampered)
