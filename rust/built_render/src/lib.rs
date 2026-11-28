@@ -3773,6 +3773,7 @@ mod preferences;
 mod about;
 mod sheet_host;
 mod sheet_workspace;
+pub(crate) mod sketch_thumbs;
 pub mod sketch_workspace;
 mod sheet_frames;
 mod start_view;
