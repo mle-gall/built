@@ -253,6 +253,9 @@ pub struct LiveTable {
     pub rows: HashMap<String, Arc<Row>>,
     pub owners: HashMap<String, String>,
     pub pending: OrdSet<String>,
+    /// Placements a capture or adoption may move under their junction's
+    /// assembly during one verb (never saved, empty between steps).
+    pub adopt: HashSet<String>,
     pub(super) frames: HashMap<u64, OrdSet<String>>,
     pub(super) row_frames: HashMap<String, Vec<u64>>,
     pub(super) users: HashMap<Key, OrdSet<String>>,

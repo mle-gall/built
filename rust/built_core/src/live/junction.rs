@@ -6,6 +6,8 @@ mod grid;
 pub(super) mod hosting;
 pub(super) mod walls;
 pub(super) use grid::{attach_holes, detach_holes};
+pub(super) mod along;
+pub(super) mod capture;
 mod parts;
 mod seam;
 use serde::{Deserialize, Serialize};
@@ -37,6 +39,10 @@ pub struct Fields {
     pub bindings: Value,
     #[serde(default, skip_serializing_if = "Value::is_null")]
     pub local: Value,
+    /// Applied along a Repeat (§2.8): `{"repeat", "end", "skips"}`; one
+    /// child junction per copy and end.
+    #[serde(default, skip_serializing_if = "Value::is_null")]
+    pub along: Value,
 }
 #[derive(Clone, Debug, Default, PartialEq)]
 pub(super) struct Stock {
@@ -154,6 +160,25 @@ pub(super) fn uncut_mesh<'p>(
 }
 pub(super) fn id(uid: &str, key: &str) -> String {
     eid::derived_uid(&format!("built:junction:v1:{uid}:{key}"))
+}
+/// This use's entry for a content key, if it has one.
+fn content<'a>(row: &'a Row, key: &str) -> Option<&'a Value> {
+    row.joint.contents.as_array()?.iter().find(|c| c["key"] == key)
+}
+/// The row and placement uids of a content key: a captured item keeps its
+/// own (§5); an item a later expansion creates derives them (§2.2).
+pub(super) fn content_ids(row: &Row, key: &str) -> (String, String) {
+    let entry = content(row, key);
+    (
+        entry
+            .and_then(|c| c["row"].as_str().or_else(|| c["junction"].as_str()))
+            .map(String::from)
+            .unwrap_or_else(|| id(&row.uid, key)),
+        entry
+            .and_then(|c| c["placement"].as_str())
+            .map(String::from)
+            .unwrap_or_else(|| id(&row.uid, &format!("{key}:owner"))),
+    )
 }
 fn pose(p: DVec3, z: DVec3, x: DVec3) -> Option<DMat4> {
     let z = z.try_normalize()?;
@@ -814,6 +839,15 @@ pub(super) fn evaluate(scene: &Obj<'_>, t: &mut LiveTable, uid: &str) -> PyResul
             }
         }
     }
+    if !row.joint.along.is_null() {
+        // Its stations are its children: it is lost only with none left.
+        let kids = t.owned.get(uid).map_or(0, |o| o.len());
+        let (state, reason) = if kids == 0 { ("lost", json!({"criterion":"stations"})) } else { ("ok", Value::Null) };
+        let changed = row.state != state;
+        set_reason(&mut row, state, reason);
+        t.rows.insert(uid.into(), Arc::new(row));
+        return Ok(changed);
+    }
     let Ok(p) = detail(t, &row) else {
         set_reason(&mut row, "failed", json!({"criterion":"detail_missing"}));
         t.rows.insert(uid.into(), Arc::new(row));
@@ -821,7 +855,8 @@ pub(super) fn evaluate(scene: &Obj<'_>, t: &mut LiveTable, uid: &str) -> PyResul
     };
     if let Some((frames, dims)) = geometry(scene, t, &row)? {
         row.frames = frames;
-        let rule = p.values.get("rule").unwrap_or(&Value::Null);
+        // Alt-click applies a detail outside its rule (§11): no rule check.
+        let rule = if row.joint.local["forced"] == true { &Value::Null } else { p.values.get("rule").unwrap_or(&Value::Null) };
         let mut outside = None;
         for (role, crit) in rule["roles"].as_object().into_iter().flatten() {
             if let Some(reason) = outside_role(scene, t, &row.joint.roles[role], role, crit)? {
@@ -959,7 +994,7 @@ fn expand_field(
                     .get("end")
                     .cloned()
                     .unwrap_or(json!("end"))
-            } else if path == "/cutter/body" {
+            } else if path == "/cutter/body" || path == "/cutter/bisector" {
                 json!(placement(&row.joint.roles[frame]).ok_or_else(|| err("Unknown cutter role"))?)
             } else if path == "/anchor/ref" {
                 json!({"junction":row.uid,"frame":frame})
@@ -1031,6 +1066,9 @@ pub(super) fn prepare(
         }
         expr::validate(&defs).map_err(err)?;
     }
+    if !row.joint.along.is_null() {
+        return along::expand(scene, t, row, p);
+    }
     let roles = row
         .joint
         .roles
@@ -1043,6 +1081,7 @@ pub(super) fn prepare(
         }
     }
     row.inputs.clear();
+    rest_parts(scene, t, roles)?;
     for binding in roles.values_mut() {
         if binding["end"]
             .as_str()
@@ -1096,63 +1135,7 @@ pub(super) fn prepare(
     let main = placement(first)
         .ok_or_else(|| err("Missing main placement"))?
         .to_owned();
-    let owner = id(&row.uid, "owner");
-    if let Some(old) = t.rows.get(&row.uid) {
-        if old.kind != "junction" || old.owner != owner {
-            return Err(err("Junction identity collision"));
-        }
-        row.frames = old.frames.clone();
-        row.joint.params = old.joint.params.clone();
-    } else {
-        if t.groups.contains_key(&owner) {
-            return Err(err("Junction assembly already exists"));
-        }
-        let py = scene.py();
-        let g = py.import("built_core.group")?.getattr("Group")?.call0()?;
-        g.setattr("uid", &owner)?;
-        g.setattr("name", &p.name)?;
-        g.setattr("xform", crate::math::Matrix4::from(DMat4::IDENTITY))?;
-        g.setattr(
-            "ifc",
-            to_py(py, &json!({"class":"IfcElementAssembly","name":p.name}))?,
-        )?;
-        p.record(&g, false)?;
-        g.setattr("ext", to_py(py, &json!({"built.live":{"row":row.uid}}))?)?;
-        let parent = if let Some(parent) = row.joint.parent.as_deref() {
-            t.rows
-                .get(parent)
-                .and_then(|p| t.groups.get(&p.owner))
-                .copied()
-        } else {
-            doc::lock()
-                .node(t.groups[&main])
-                .and_then(|n| n.owners.first().copied())
-        };
-        let siblings = match parent
-            .and_then(|k| doc::lock().handle_ref(py, k))
-            .and_then(|g| g.bind(py).getattr("children").ok())
-        {
-            Some(children) => children,
-            None => scene.getattr("groups")?,
-        };
-        // A newly placed family remains the last sibling, as ordinary
-        // placement callers expect. Keep its assembly immediately beside it.
-        let fill = row
-            .joint
-            .roles
-            .get("hosted")
-            .filter(|b| b["attached"] == true)
-            .and_then(placement)
-            .and_then(|uid| group(py, t, uid));
-        if let Some(index) = fill.and_then(|f| siblings.call_method1("index", (f,)).ok()) {
-            siblings.call_method1("insert", (index, &g))?;
-        } else {
-            siblings.call_method1("append", (&g,))?;
-        }
-        crate::structure::file_sweep(scene, &g, "")?;
-        Arc::make_mut(&mut t.groups).insert(owner.clone(), g.getattr("_doc_key")?.extract()?);
-    }
-    row.owner = owner;
+    ensure_assembly(scene, t, row, p, &main)?;
     if row.joint.detail.is_null() {
         return Ok(());
     }
@@ -1202,7 +1185,7 @@ pub(super) fn prepare(
             t.insert(cut).map_err(err)?;
             continue;
         }
-        let uid = id(&row.uid, key);
+        let uid = content_ids(row, key).0;
         if !keep.insert(uid.clone()) {
             return Err(err("Duplicate junction content key"));
         }
@@ -1239,7 +1222,7 @@ pub(super) fn prepare(
                 *binding = if let Some(role) = row.joint.roles.get(name) {
                     role.clone()
                 } else {
-                    let owner = id(&row.uid, &format!("{name}:owner"));
+                    let owner = content_ids(row, name).1;
                     if !t.groups.contains_key(&owner) {
                         return Err(err("Missing child role part"));
                     }
@@ -1274,6 +1257,13 @@ pub(super) fn prepare(
             t.insert(row.clone()).map_err(err)?;
             let preset = detail(t, &child)?;
             prepare(scene, t, &mut child, &preset)?;
+            // A captured junction becomes a child: its assembly moves under ours.
+            if t.adopt.contains(&child.owner) {
+                if let Some(own) = t.groups.get(&row.owner).copied() {
+                    let _ = own;
+                    capture::reparent(scene, t, &child.owner, &row.owner)?;
+                }
+            }
             contents.push(local_content(&child));
             t.insert(child.clone()).map_err(err)?;
             if let Some(spec) = spec.get("repeat").filter(|_| {
@@ -1417,6 +1407,114 @@ pub(super) fn prepare(
     row.joint.bindings = json!(bindings);
     Ok(())
 }
+/// A loose part bound in a role and anchored to a face of another role's
+/// member (a plate drawn on a column flange, then bolted through it) would
+/// read that member's result while the junction cuts it: a cycle. Its
+/// anchored end is pinned where it is, and it remembers the member it rests
+/// on so capture still gathers it with that member.
+fn rest_parts(scene: &Obj<'_>, t: &mut LiveTable, roles: &serde_json::Map<String, Value>) -> PyResult<()> {
+    let members: HashSet<String> = roles.values().filter_map(|b| placement(b).map(String::from)).collect();
+    for b in roles.values() {
+        let Some(uid) = placement(b) else { continue };
+        let Some(r) = t.owners.get(uid).and_then(|id| t.rows.get(id)).filter(|r| r.kind == "sweep" && r.junction.is_none()).cloned() else { continue };
+        let Some(s) = r.sweep.as_deref() else { continue };
+        let Some(ends) = &s.path.ends else { continue };
+        let on: Vec<String> = ends
+            .iter()
+            .filter_map(|e| match e {
+                sweep::End::Anchored { to: Reference::Element { path, .. }, .. } => path.last().cloned(),
+                _ => None,
+            })
+            .filter(|m| m != uid && members.contains(m))
+            .collect();
+        if on.is_empty() || s.path.definition_space {
+            continue;
+        }
+        let Some(points) = reference::sweep_path(scene, t, &r, &s.path)? else { continue };
+        let k = t.groups[&r.owner];
+        let parent = doc::lock().node(k).and_then(|n| n.owners.first().copied());
+        let local = parent.map(reference::frame).unwrap_or(DMat4::IDENTITY).inverse() * reference::frame(k);
+        let mut row = (*r).clone();
+        let spec = row.sweep.as_mut().unwrap();
+        let pinned: Vec<[f64; 3]> = points.iter().map(|p| local.transform_point3(DVec3::from(*p)).to_array()).collect();
+        spec.path.points = pinned.clone();
+        spec.path.ends = None;
+        spec.path.rests_on = on.first().cloned();
+        row.inputs.retain(|i| !matches!(i, Reference::Element { path, .. } if path.last().is_some_and(|m| on.contains(m))));
+        t.pending.insert(row.uid.clone());
+        t.insert(row).map_err(err)?;
+    }
+    Ok(())
+}
+
+/// The junction's assembly: created beside `main` (in its parent's
+/// children), or under the parent junction's assembly for a child.
+pub(super) fn ensure_assembly(
+    scene: &Obj<'_>,
+    t: &mut LiveTable,
+    row: &mut Row,
+    p: &presets::Preset,
+    main: &str,
+) -> PyResult<()> {
+    let owner = id(&row.uid, "owner");
+    if let Some(old) = t.rows.get(&row.uid) {
+        if old.kind != "junction" || old.owner != owner {
+            return Err(err("Junction identity collision"));
+        }
+        row.frames = old.frames.clone();
+        row.joint.params = old.joint.params.clone();
+    } else {
+        if t.groups.contains_key(&owner) {
+            return Err(err("Junction assembly already exists"));
+        }
+        let py = scene.py();
+        let g = py.import("built_core.group")?.getattr("Group")?.call0()?;
+        g.setattr("uid", &owner)?;
+        g.setattr("name", &p.name)?;
+        g.setattr("xform", crate::math::Matrix4::from(DMat4::IDENTITY))?;
+        g.setattr(
+            "ifc",
+            to_py(py, &json!({"class":"IfcElementAssembly","name":p.name}))?,
+        )?;
+        p.record(&g, false)?;
+        g.setattr("ext", to_py(py, &json!({"built.live":{"row":row.uid}}))?)?;
+        let parent = if let Some(parent) = row.joint.parent.as_deref() {
+            t.rows
+                .get(parent)
+                .and_then(|p| t.groups.get(&p.owner))
+                .copied()
+        } else {
+            doc::lock()
+                .node(t.groups[main])
+                .and_then(|n| n.owners.first().copied())
+        };
+        let siblings = match parent
+            .and_then(|k| doc::lock().handle_ref(py, k))
+            .and_then(|g| g.bind(py).getattr("children").ok())
+        {
+            Some(children) => children,
+            None => scene.getattr("groups")?,
+        };
+        // A newly placed family remains the last sibling, as ordinary
+        // placement callers expect. Keep its assembly immediately beside it.
+        let fill = row
+            .joint
+            .roles
+            .get("hosted")
+            .filter(|b| b["attached"] == true)
+            .and_then(placement)
+            .and_then(|uid| group(py, t, uid));
+        if let Some(index) = fill.and_then(|f| siblings.call_method1("index", (f,)).ok()) {
+            siblings.call_method1("insert", (index, &g))?;
+        } else {
+            siblings.call_method1("append", (&g,))?;
+        }
+        crate::structure::file_sweep(scene, &g, "")?;
+        Arc::make_mut(&mut t.groups).insert(owner.clone(), g.getattr("_doc_key")?.extract()?);
+    }
+    row.owner = owner;
+    Ok(())
+}
 pub(super) fn release(scene: &Obj<'_>, t: &mut LiveTable, j: &Row) -> PyResult<()> {
     for uid in t.owned.get(&j.uid).cloned().unwrap_or_default() {
         let mut r = (*t.rows[&uid]).clone();
@@ -1503,6 +1601,125 @@ pub(super) fn release(scene: &Obj<'_>, t: &mut LiveTable, j: &Row) -> PyResult<(
         g.setattr("ifc", record)?;
     }
     Ok(())
+}
+
+/// The outermost Repeat a role binding's member is a copy (or the source)
+/// of: what "every copy" means for the Junction tool.
+pub(super) fn along_repeat(scene: &Obj<'_>, t: &LiveTable, roles: &Value) -> Option<String> {
+    let py = scene.py();
+    let mut found = None;
+    for b in roles.as_object()?.values() {
+        if let Some(row) = b["row"].as_str().and_then(|id| t.rows.get(id)).filter(|r| r.kind == "repeat") {
+            found = Some(row.uid.clone());
+        }
+        let Some(uid) = placement(b) else { continue };
+        let Some(g) = group(py, t, uid) else { continue };
+        let path: Vec<String> = scene.call_method1("occurrence_path", (&g,)).ok()?.extract().ok()?;
+        for p in &path {
+            if let Some(r) = t.owners.get(p).and_then(|id| t.rows.get(id)).filter(|r| r.kind == "repeat") {
+                found.get_or_insert(r.uid.clone());
+                // The outermost wins: the first along the path.
+                found = Some(r.uid.clone());
+                break;
+            }
+        }
+        if found.is_none() {
+            if let Some(r) = t.rows.values().find(|r| r.kind == "repeat" && r.source.as_deref() == Some(uid)) {
+                found = Some(r.uid.clone());
+            }
+        }
+    }
+    // A Repeat whose source is this one's owner is outer still.
+    let mut out = found?;
+    while let Some(outer) = t
+        .rows
+        .values()
+        .find(|r| r.kind == "repeat" && t.rows.get(&out).is_some_and(|inner| r.source.as_deref() == Some(inner.owner.as_str())))
+    {
+        out = outer.uid.clone();
+    }
+    Some(out)
+}
+
+/// The project Junctions view: by detail (default), by arrangement (the
+/// meeting signatures, with how many are detailed), or the problems.
+/// Rows: (key, name, label, kind, depth, count, expandable).
+#[allow(clippy::type_complexity)]
+pub(crate) fn view_rows(scene: &Obj<'_>, expanded: &HashSet<String>) -> PyResult<Vec<(String, String, String, &'static str, usize, usize, bool)>> {
+    let py = scene.py();
+    let mut out = Vec::new();
+    let Some(t) = root(scene).ok().and_then(|k| current(py, k)) else { return Ok(out) };
+    let tops: Vec<&Arc<Row>> = t.junctions.iter().filter_map(|id| t.rows.get(id)).filter(|r| r.joint.parent.is_none()).collect();
+    let details = t.presets.values().filter(|p| p.primitive == "junction").count();
+    if tops.is_empty() && details == 0 {
+        return Ok(out);
+    }
+    let mode = scene.getattr_opt("_junction_view")?.and_then(|v| v.extract::<String>().ok()).unwrap_or_else(|| "detail".into());
+    let words = match mode.as_str() { "arrangement" => "By arrangement", "problems" => "Problems", _ => "By detail" };
+    let problems = tops.iter().filter(|j| j.state != "ok").count();
+    let head = if problems > 0 { format!("{words} · {problems} to fix") } else { words.to_string() };
+    out.push(("jv:".to_string(), "Junctions".to_string(), head, "junctions", 0, tops.len(), true));
+    if !expanded.contains("jv:") {
+        return Ok(out);
+    }
+    let link = |j: &Row| -> PyResult<Option<(String, String)>> {
+        let Some(g) = group(py, &t, &j.owner) else { return Ok(None) };
+        let address = scene.call_method1("occurrence_path", (&g,))?;
+        let path: String = py.import("built_core.link_structure")?.call_method1("row_id", (address,))?.extract()?;
+        let name: String = g.getattr("name")?.extract()?;
+        Ok(Some((format!("g:{path}"), name)))
+    };
+    let state_words = |j: &Row| match j.state.as_str() {
+        "ok" => "fits".to_string(),
+        s => format!("{s}{}", j.joint.reason["criterion"].as_str().map(|c| format!(": {c}")).unwrap_or_default()),
+    };
+    match mode.as_str() {
+        "arrangement" => {
+            let groups = super::meetings::junction_arrangements(scene)?;
+            for g in groups.try_iter()? {
+                let g = g?;
+                let sig: String = g.get_item("signature")?.extract()?;
+                let words: String = g.get_item("arrangement")?.extract()?;
+                let count: usize = g.get_item("count")?.extract()?;
+                let detailed: usize = g.get_item("detailed")?.extract()?;
+                let status: String = g.get_item("status")?.extract()?;
+                let label = match status.as_str() { "all" => format!("all {count} detailed"), "none" => "none detailed".into(), _ => format!("{detailed} of {count} detailed") };
+                out.push((format!("ja:{sig}"), words, label, "arrangement", 1, count, false));
+            }
+        }
+        "problems" => {
+            for j in tops.iter().filter(|j| j.state != "ok") {
+                if let Some((key, name)) = link(j)? {
+                    out.push((key, name, state_words(j), "group", 1, 0, false));
+                }
+            }
+        }
+        _ => {
+            let mut by: BTreeMap<String, (String, Vec<&Arc<Row>>)> = BTreeMap::new();
+            for j in &tops {
+                let uid = j.joint.detail["uid"].as_str().unwrap_or("custom").to_string();
+                let name = j.joint.detail["name"].as_str().unwrap_or("Custom").to_string();
+                by.entry(uid).or_insert_with(|| (name, Vec::new())).1.push(j);
+            }
+            let mut groups: Vec<_> = by.into_iter().collect();
+            groups.sort_by(|a, b| a.1 .0.cmp(&b.1 .0));
+            for (uid, (name, uses)) in groups {
+                let key = format!("jd:{uid}");
+                let bad = uses.iter().filter(|j| j.state != "ok").count();
+                let label = if bad > 0 { format!("Detail · {bad} to fix") } else { "Detail".into() };
+                let open = expanded.contains(&key);
+                out.push((key, name, label, "detail", 1, uses.len(), true));
+                if open {
+                    for j in uses {
+                        if let Some((key, name)) = link(j)? {
+                            out.push((key, name, state_words(j), "group", 2, 0, false));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    Ok(out)
 }
 
 pub(crate) fn labels(scene: &Obj<'_>) -> PyResult<HashMap<String, Vec<(String, String, String)>>> {
@@ -1655,7 +1872,13 @@ pub(super) fn place_owned_sweep(scene: &Obj<'_>, t: &mut LiveTable, row: &Row) -
         return Ok(());
     };
     let key = row.key.as_deref().ok_or_else(|| err("Missing part key"))?;
-    if row.owner != id(parent, &format!("{key}:owner")) {
+    let recorded = t
+        .rows
+        .get(parent)
+        .and_then(|j| content(j, key))
+        .and_then(|c| c["placement"].as_str())
+        .is_some_and(|p| p == row.owner);
+    if row.owner != id(parent, &format!("{key}:owner")) && !recorded && !t.adopt.contains(&row.owner) {
         return Err(err("Invalid junction part placement"));
     }
     let owner = &t
@@ -1672,6 +1895,10 @@ pub(super) fn place_owned_sweep(scene: &Obj<'_>, t: &mut LiveTable, row: &Row) -
             .node(*existing)
             .is_none_or(|n| !n.owners.contains(&parent_key))
         {
+            if t.adopt.contains(&row.owner) {
+                let owner = owner.clone();
+                return capture::reparent(scene, t, &row.owner, &owner);
+            }
             return Err(err("Part must be under its junction assembly"));
         }
         return Ok(());

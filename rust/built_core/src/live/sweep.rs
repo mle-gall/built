@@ -24,6 +24,10 @@ pub struct Path {
     pub ends: Option<[End; 2]>,
     #[serde(default)]
     pub closed: bool,
+    /// The member a part rested on when a junction pinned its anchored end
+    /// (docs/junctions.md §5): capture still gathers it with that member.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rests_on: Option<String>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(untagged, try_from = "serde_json::Value")]

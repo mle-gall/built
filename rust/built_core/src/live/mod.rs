@@ -715,6 +715,7 @@ pub(crate) fn finish(
     }
     if journalled {
         run(scene, &mut t, seeds)?;
+        along_sync(scene, &mut t)?;
         if let Some(uid) = command.getattr_opt("_repeat_selection_row")? {
             if let Some(row) = t.rows.get(&uid.extract::<String>()?) {
                 if let Some(owner) = group(py, &t, &row.owner) {
@@ -739,7 +740,9 @@ pub(crate) fn finish(
     // accompany it on replay. A savepoint prevents coalescing with the input.
     let api = py.import("built_core.doc_model")?;
     api.call_method1("begin", (document,))?;
-    let result = run(scene, &mut t, seeds).and_then(|()| put(scene, t));
+    let result = run(scene, &mut t, seeds)
+        .and_then(|()| along_sync(scene, &mut t))
+        .and_then(|()| put(scene, t));
     if let Err(error) = result {
         api.call_method0("rollback")?;
         return Err(error);
@@ -759,6 +762,17 @@ pub(crate) fn finish(
     )
 }
 
+/// A Repeat's copies changed: junctions applied along it follow in the same
+/// step (docs/junctions.md §2.8).
+fn along_sync(scene: &Obj<'_>, t: &mut LiveTable) -> PyResult<()> {
+    if t.junctions.iter().any(|id| t.rows.get(id).is_some_and(|r| !r.joint.along.is_null()))
+        && junction::along::sync(scene, t)?
+    {
+        let more: HashSet<String> = std::mem::take(&mut t.pending).into_iter().collect();
+        run(scene, t, more)?;
+    }
+    Ok(())
+}
 #[derive(Clone)]
 enum Edit {
     Presets(Vec<presets::Preset>),
@@ -777,6 +791,12 @@ enum Edit {
     Skip(String, Vec<String>, bool),
     /// Follow a detail: new matching meetings are listed, never applied.
     Follow(String, bool),
+    /// Capture a meeting's items as a detail and its first use (§5).
+    Capture(serde_json::Value, serde_json::Value),
+    /// Adopt rows or parts into a junction: this use only, or its detail.
+    Adopt(String, Vec<String>, bool),
+    /// A use's overrides pushed into its detail.
+    Upgrade(String),
 }
 #[pyclass(frozen, dict, name = "LiveCommand")]
 struct Mutation(Edit);
@@ -1182,6 +1202,40 @@ impl Mutation {
                 if !changed {
                     return Err(PyValueError::new_err("Nothing to change"));
                 }
+            }
+            Edit::Capture(seed, options) => {
+                let opts: junction::capture::Options = serde_json::from_value(options.clone())
+                    .map_err(|e| PyValueError::new_err(e.to_string()))?;
+                let draft = junction::capture::draft(scene, &t, seed, &opts)?;
+                let uid = junction::capture::convert(scene, &mut t, &draft)?;
+                scene.setattr("_junction_saved", vec![(draft.detail.uid.clone(), draft.detail.name.clone())])?;
+                scene.setattr("_junction_captured", (uid, draft.detail.uid.clone()))?;
+            }
+            Edit::Adopt(junction_uid, items, to_detail) => {
+                junction::capture::adopt(scene, &mut t, junction_uid, items, *to_detail)?;
+            }
+            Edit::Upgrade(uid) => {
+                let j = t.rows.get(uid).filter(|r| r.kind == "junction").cloned()
+                    .ok_or_else(|| PyValueError::new_err("Unknown junction"))?;
+                let overrides = j.joint.overrides.as_object().cloned().unwrap_or_default();
+                if overrides.is_empty() {
+                    return Err(PyValueError::new_err("This use has no overrides"));
+                }
+                let mut p = junction::detail(&t, &j)?;
+                if p.uid.is_empty() {
+                    return Err(PyValueError::new_err("A custom junction has no detail"));
+                }
+                if let Some(defs) = p.values.get_mut("params").and_then(|v| v.as_array_mut()) {
+                    for d in defs {
+                        if let Some(v) = d["key"].as_str().and_then(|k| overrides.get(k)) {
+                            d["expr"] = v.clone();
+                        }
+                    }
+                }
+                let mut row = (*j).clone();
+                row.joint.overrides = serde_json::Value::Null;
+                t.insert(row).map_err(PyValueError::new_err)?;
+                presets::update(scene, &mut t, &[p])?;
             }
             Edit::Reevaluate(id) => {
                 if !t.rows.contains_key(id) {
@@ -1799,6 +1853,12 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(junction_set, m)?)?;
     m.add_function(wrap_pyfunction!(junction_frames, m)?)?;
     m.add_function(wrap_pyfunction!(junction_release, m)?)?;
+    m.add_function(wrap_pyfunction!(junction_capture, m)?)?;
+    m.add_function(wrap_pyfunction!(junction_capture_preview, m)?)?;
+    m.add_function(wrap_pyfunction!(junction_capture_offers, m)?)?;
+    m.add_function(wrap_pyfunction!(junction_adopt, m)?)?;
+    m.add_function(wrap_pyfunction!(junction_record, m)?)?;
+    m.add_function(wrap_pyfunction!(junction_upgrade, m)?)?;
     m.add_function(wrap_pyfunction!(live_cut_display, m)?)?;
     m.add_function(wrap_pyfunction!(live_cuts, m)?)?;
     m.add_function(wrap_pyfunction!(cut::live_openings, m)?)?;
@@ -1936,18 +1996,42 @@ fn live_cuts<'p>(scene: &Obj<'p>, owner: &str) -> PyResult<Obj<'p>> {
     to_py(scene.py(), &cuts)
 }
 
-/// Apply a detail to bound members. `definitions` are the detail and the
-/// presets it needs, embedded in the same step when the model lacks them
-/// (a Library or pack detail): one History step, one undo entry.
+/// Apply a detail to bound members: one binding map or a list (one step).
+/// `definitions` are the detail and the presets it needs, embedded in the
+/// same step when the model lacks them (a Library or pack detail). `force`:
+/// outside its rule (the tool's Alt-click). `along`: `{"end": "start"|"end"|
+/// "both"}` applies it to every copy of the Repeat the binding's member
+/// belongs to.
 #[pyfunction]
-#[pyo3(signature=(history, detail, bindings, definitions=None))]
+#[pyo3(signature=(history, detail, bindings, definitions=None, force=false, along=None))]
 fn junction_apply<'p>(
     history: &Obj<'p>,
     detail: String,
     bindings: &Obj<'p>,
     definitions: Option<&Obj<'p>>,
+    force: bool,
+    along: Option<&Obj<'p>>,
 ) -> PyResult<Bound<'p, PyDict>> {
     let roles: serde_json::Value = json(bindings)?;
+    if let Some(along) = along.filter(|a| !a.is_none()) {
+        let mut along: serde_json::Value = json(along)?;
+        if along["repeat"].is_null() {
+            let scene = history.getattr("scene")?;
+            let t = current(scene.py(), root(&scene)?).unwrap_or_default();
+            along["repeat"] = serde_json::json!(junction::along_repeat(&scene, &t, &roles)
+                .ok_or_else(|| PyValueError::new_err("Not a copy of a Repeat"))?);
+        }
+        let uid = eid::new_uid();
+        let row: Row = serde_json::from_value(serde_json::json!({"kind":"junction","uid":uid,"detail":{"uid":detail},"along":along}))
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let definitions: Vec<presets::Preset> = match definitions {
+            Some(d) if !d.is_none() => json(d)?,
+            _ => Vec::new(),
+        };
+        let reply = edit(history, Edit::Set(vec![row], definitions))?;
+        reply.set_item("uid", uid)?;
+        return Ok(reply);
+    }
     // One use, or several applied in one History step (a review's Enter).
     let many = roles.is_array();
     let uses: Vec<serde_json::Value> = match roles {
@@ -1962,8 +2046,11 @@ fn junction_apply<'p>(
         .into_iter()
         .zip(&uids)
         .map(|(roles, uid)| {
-            serde_json::from_value::<Row>(serde_json::json!({"kind":"junction","uid":uid,"detail":{"uid":detail},"roles":roles}))
-                .map_err(|e| PyValueError::new_err(e.to_string()))
+            let mut row = serde_json::json!({"kind":"junction","uid":uid,"detail":{"uid":detail},"roles":roles});
+            if force {
+                row["local"] = serde_json::json!({"forced": true});
+            }
+            serde_json::from_value::<Row>(row).map_err(|e| PyValueError::new_err(e.to_string()))
         })
         .collect::<PyResult<Vec<_>>>()?;
     // The detail and the presets it needs, embedded in the same step when
@@ -2028,6 +2115,74 @@ fn junction_release<'p>(history: &Obj<'p>, uid: String, deep: bool) -> PyResult<
     } else {
         live_release(history, uid)
     }
+}
+/// Capture the items at a meeting as a detail and its first use, one
+/// History step (docs/junctions.md §5). `seed`: a cut row, a part or a
+/// junction uid, or the two member placements.
+#[pyfunction]
+#[pyo3(signature=(history, seed, options=None))]
+fn junction_capture<'p>(history: &Obj<'p>, seed: &Obj<'p>, options: Option<&Obj<'p>>) -> PyResult<Bound<'p, PyDict>> {
+    let seed: serde_json::Value = json(seed)?;
+    let options = match options {
+        Some(o) if !o.is_none() => json(o)?,
+        _ => serde_json::json!({}),
+    };
+    let scene = history.getattr("scene")?;
+    let reply = edit(history, Edit::Capture(seed, options))?;
+    if let Some(v) = scene.getattr_opt("_junction_captured")?.filter(|v| !v.is_none()) {
+        reply.set_item("uid", v.get_item(0)?)?;
+        reply.set_item("detail", v.get_item(1)?)?;
+        scene.setattr("_junction_captured", scene.py().None())?;
+    }
+    Ok(reply)
+}
+/// What capture would gather and save, without writing anything: the
+/// popover's data (members, Includes, parameters, rule, similar count).
+#[pyfunction]
+#[pyo3(signature=(scene, seed, options=None))]
+fn junction_capture_preview<'p>(scene: &Obj<'p>, seed: &Obj<'p>, options: Option<&Obj<'p>>) -> PyResult<Obj<'p>> {
+    let seed: serde_json::Value = json(seed)?;
+    let opts: junction::capture::Options = match options {
+        Some(o) if !o.is_none() => json(o)?,
+        _ => Default::default(),
+    };
+    let t = current(scene.py(), root(scene)?).unwrap_or_default();
+    let d = junction::capture::draft(scene, &t, &seed, &opts)?;
+    to_py(scene.py(), &d)
+}
+/// Meetings where two or more items no junction owns follow the members:
+/// where the capture chip is offered.
+#[pyfunction]
+fn junction_capture_offers<'p>(scene: &Obj<'p>) -> PyResult<Obj<'p>> {
+    let t = current(scene.py(), root(scene)?).unwrap_or_default();
+    let offers: Vec<_> = junction::capture::offers(scene, &t)?
+        .into_iter()
+        .map(|(m, items)| serde_json::json!({"key": m.key, "at": m.at, "label": m.label, "members": m.members, "items": items}))
+        .collect();
+    to_py(scene.py(), &offers)
+}
+/// The junction record for the inspector (`uid`: the row or its assembly).
+#[pyfunction]
+fn junction_record<'p>(scene: &Obj<'p>, uid: &str) -> PyResult<Obj<'p>> {
+    let t = current(scene.py(), root(scene)?).unwrap_or_default();
+    let v = junction::capture::record_of(scene, &t, uid)?;
+    to_py(scene.py(), &v)
+}
+/// Upgrade to detail: this use's overrides become the detail's values (a
+/// revision every use follows); the use then has none (§6.1).
+#[pyfunction]
+fn junction_upgrade<'p>(history: &Obj<'p>, uid: String) -> PyResult<Bound<'p, PyDict>> {
+    edit(history, Edit::Upgrade(uid))
+}
+/// Adopt cut rows or parts into a junction (a cut dragged onto it, or what
+/// was made inside it): this use only (`detail=False`), or its detail.
+#[pyfunction]
+#[pyo3(signature=(history, junction, rows, detail=false))]
+fn junction_adopt<'p>(history: &Obj<'p>, junction: String, rows: Vec<String>, detail: bool) -> PyResult<Bound<'p, PyDict>> {
+    if rows.is_empty() {
+        return Err(PyValueError::new_err("Nothing to adopt"));
+    }
+    edit(history, Edit::Adopt(junction, rows, detail))
 }
 #[pyfunction]
 fn junction_frames<'p>(scene: &Obj<'p>, uid: &str) -> PyResult<Obj<'p>> {

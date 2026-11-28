@@ -10,8 +10,8 @@ pub(super) fn prepare(
     spec: &Value,
     bindings: &mut Vec<Value>,
 ) -> PyResult<Value> {
-    let uid = id(&j.uid, key);
-    let owner = id(&j.uid, &format!("{key}:owner"));
+    // A captured part keeps its own uids (§5); later uses derive them.
+    let (uid, owner) = content_ids(j, key);
     let py = scene.py();
     let mut item = json!({"key":key,"placement":owner,"at":spec.get("at").cloned().unwrap_or_else(||json!({"frame":"@meet"}))});
     for kind in ["fastener", "weld", "glue"] {
@@ -52,17 +52,54 @@ pub(super) fn prepare(
         item["component"] = json!(source);
         return Ok(item);
     }
-    let preset = spec["preset"]
-        .as_str()
-        .and_then(|p| presets::lookup(t, p))
-        .filter(|p| p.primitive == "sweep")
-        .ok_or_else(|| err("Missing sweep part preset"))?;
+    // A part without a preset carries its section and record inline.
+    let preset = match spec["preset"].as_str() {
+        Some(p) => presets::lookup(t, p)
+            .filter(|p| p.primitive == "sweep")
+            .ok_or_else(|| err("Missing sweep part preset"))?,
+        None if spec["sweep"].is_object() => presets::Preset {
+            uid: String::new(),
+            name: key.into(),
+            pack: String::new(),
+            primitive: "sweep".into(),
+            values: spec["sweep"]
+                .as_object()
+                .into_iter()
+                .flatten()
+                .filter(|(k, _)| matches!(k.as_str(), "profile" | "segments" | "attachment"))
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect(),
+            record: spec["record"]
+                .as_object()
+                .into_iter()
+                .flatten()
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect(),
+            naming: String::new(),
+            node: String::new(),
+            locks: BTreeMap::new(),
+        source: None,
+            rev: 0,
+        },
+        None => return Err(err("Missing sweep part preset")),
+    };
     let path = spec
         .get("path")
         .cloned()
         .unwrap_or_else(|| json!({"points":[[0,0,0],[0,0,0.01]]}));
     let mut sweep = json!(preset.apply_values(json!({"path":path}), false)?);
     sweep["path"]["definition_space"] = json!(true);
+    if preset.uid.is_empty() {
+        for k in ["preset", "preset_uid", "preset_rev"] {
+            sweep.as_object_mut().map(|o| o.remove(k));
+        }
+    }
+    // A captured part keeps its section's turn, mirror and attachment.
+    for k in ["rotation", "mirror", "attachment"] {
+        if let Some(v) = spec.get(k) {
+            sweep[k] = v.clone();
+        }
+    }
     for (name, value) in spec["fields"].as_object().into_iter().flatten() {
         let path = if name == "thickness"
             || (name == "profile.params.flange"
@@ -111,7 +148,9 @@ pub(super) fn prepare(
     if new_part {
         crate::structure::file_sweep(scene, &part, &preset.node)?;
     }
-    Arc::make_mut(&mut t.presets).insert(preset.uid.clone(), preset);
+    if !preset.uid.is_empty() {
+        Arc::make_mut(&mut t.presets).insert(preset.uid.clone(), preset);
+    }
     t.insert(row).map_err(err)?;
     t.pending.insert(uid.clone());
     item["row"] = json!(uid);
@@ -156,6 +195,11 @@ pub(super) fn place(
         };
         let mut m =
             DMat4::from_cols_array(frame) * DMat4::from_translation(offset.into()) * turn;
+        // A captured part's own axes in the frame (column-major 3 × 3).
+        if let Some(b) = at.get("basis").and_then(Value::as_array).filter(|b| b.len() == 9) {
+            let v: Vec<f64> = b.iter().map(|x| x.as_f64().unwrap_or(0.)).collect();
+            m *= DMat4::from_mat3(glam::DMat3::from_cols_slice(&v));
+        }
         let g = item["placement"]
             .as_str()
             .and_then(|s| group(scene.py(), t, s))

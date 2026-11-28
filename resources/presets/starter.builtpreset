@@ -1658,6 +1658,138 @@
       "record": {
         "class": "IfcElementAssembly"
       }
+    },
+    {
+      "uid": "b07a16e8a0000001",
+      "name": "Bolt M16 · 8.8",
+      "pack": "Steel",
+      "primitive": "junction",
+      "rev": 1,
+      "values": {
+        "meeting": "parts",
+        "roles": {
+          "ply_1": {
+            "name": "Outer ply"
+          },
+          "ply_2": {
+            "name": "Inner ply"
+          }
+        },
+        "params": [
+          {
+            "key": "d",
+            "name": "Bolt diameter",
+            "group": "Bolt",
+            "expr": "16",
+            "unit": "mm"
+          },
+          {
+            "key": "clearance",
+            "name": "Hole clearance",
+            "group": "Bolt",
+            "expr": "2",
+            "unit": "mm"
+          }
+        ],
+        "contents": [
+          {
+            "key": "bolt",
+            "part": {
+              "fastener": {
+                "d": "d",
+                "clearance": "clearance",
+                "grade": "8.8"
+              },
+              "at": {
+                "frame": "@meet"
+              }
+            }
+          }
+        ]
+      },
+      "record": {
+        "class": "IfcElementAssembly"
+      },
+      "naming": "",
+      "node": "",
+      "locks": {}
+    },
+    {
+      "uid": "b07a16e8a0000002",
+      "name": "Bolt group M16 · 2 × 2",
+      "pack": "Steel",
+      "primitive": "junction",
+      "rev": 1,
+      "values": {
+        "meeting": "parts",
+        "roles": {
+          "ply_1": {
+            "name": "Plate"
+          },
+          "ply_2": {
+            "name": "Member"
+          }
+        },
+        "params": [
+          {
+            "key": "rows",
+            "name": "Bolt rows",
+            "group": "Bolts",
+            "expr": "2",
+            "unit": "count"
+          },
+          {
+            "key": "pitch",
+            "name": "Bolt pitch",
+            "group": "Bolts",
+            "expr": "110",
+            "unit": "mm"
+          },
+          {
+            "key": "columns",
+            "name": "Bolt columns",
+            "group": "Bolts",
+            "expr": "2",
+            "unit": "count"
+          },
+          {
+            "key": "gauge",
+            "name": "Bolt gauge",
+            "group": "Bolts",
+            "expr": "110",
+            "unit": "mm"
+          }
+        ],
+        "contents": [
+          {
+            "key": "bolts",
+            "junction": {
+              "detail": "b07a16e8a0000001",
+              "roles": {
+                "ply_1": "@ply_1",
+                "ply_2": "@ply_2"
+              },
+              "repeat": {
+                "rule": {
+                  "count": "rows",
+                  "step": "pitch"
+                },
+                "run": "@meet.y",
+                "nest": {
+                  "count": "columns",
+                  "step": "gauge"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "record": {
+        "class": "IfcElementAssembly"
+      },
+      "naming": "",
+      "node": "",
+      "locks": {}
     }
   ]
 }

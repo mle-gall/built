@@ -72,7 +72,7 @@ use meth;
 const KEYS: &str =
     "mesh_key known_mesh resolve_mesh kind_of store_of element elements to_json_key from_json_key";
 const QUERIES: &str =
-    "junction_frames junction_bind meetings junction_suggest junction_counts junction_arrangements junction_ghosts meeting_index_stats live_rows sketch_profile mesh_info faces edges vertices selection select feed solid_report triangles face_set_volume resolve";
+    "junction_frames junction_record junction_capture_preview junction_capture_offers junction_bind meetings junction_suggest junction_counts junction_arrangements junction_ghosts meeting_index_stats live_rows sketch_profile mesh_info faces edges vertices selection select feed solid_report triangles face_set_volume resolve";
 #[pyfunction(name = "__getattr__")]
 fn child<'p>(py: Python<'p>, name: &str) -> PyResult<Obj<'p>> {
     if matches!(name, "commands" | "records" | "queries" | "keys" | "feed") {
@@ -217,6 +217,9 @@ const VERBS: &[&str] = &[
     "junction_release",
     "junction_skip",
     "junction_follow",
+    "junction_capture",
+    "junction_adopt",
+    "junction_upgrade",
     "create_sweeps",
     "live_set",
     "live_release",

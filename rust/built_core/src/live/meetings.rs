@@ -1363,6 +1363,75 @@ pub(super) fn junction_ghosts<'p>(scene: &Obj<'p>, detail: &str, keys: Vec<Strin
     to_py(py, &out)
 }
 
+/// One meeting as capture and the Junction tool read it (J2).
+#[derive(Clone, Debug, Serialize)]
+pub(in crate::live) struct Lite {
+    pub key: String,
+    pub kind: &'static str,
+    pub at: [f64; 3],
+    pub angle: f64,
+    pub offset: f64,
+    pub face: &'static str,
+    pub hand: i8,
+    /// Main then the other: placement leaf uids.
+    pub members: [String; 2],
+    /// Their occurrence paths (a Repeat copy's ancestors included).
+    pub paths: [Vec<String>; 2],
+    /// J0 role bindings, main then the other.
+    pub roles: [Value; 2],
+    pub profiles: [String; 2],
+    pub classes: [String; 2],
+    pub dims: [BTreeMap<String, f64>; 2],
+    pub label: String,
+    pub arrangement: String,
+}
+fn dims_map(m: &Member) -> BTreeMap<String, f64> {
+    ["width", "height", "thickness", "web", "flange", "radius", "length"]
+        .iter()
+        .filter_map(|k| Some((k.to_string(), m.dims.get(k)?)))
+        .collect()
+}
+/// Every meeting of the document, from the up-to-date index.
+pub(in crate::live) fn lite(scene: &Obj<'_>) -> PyResult<Vec<Lite>> {
+    with_index(scene, |_, ix| {
+        Ok(ix
+            .index
+            .all()
+            .map(|(main, other, f)| {
+                let mut main_binding = binding(main, end_of(main, if f.tags[0] == "side" { f.main_end } else { f.tags[0] }, f.at));
+                if f.face == "flange_outer" {
+                    main_binding["face"] = json!(f.face);
+                }
+                let name = |m: &Member| ix.names.get(leaf(&m.uid)).cloned().unwrap_or_else(|| label_of(m));
+                Lite {
+                    key: meeting_key(f.kind, [(main, f.tags[0]), (other, f.tags[1])]),
+                    kind: f.kind,
+                    at: f.at.to_array(),
+                    angle: f.angle,
+                    offset: f.offset,
+                    face: f.face,
+                    hand: f.hand,
+                    members: [leaf(&main.uid).to_string(), leaf(&other.uid).to_string()],
+                    paths: [main.path.clone(), other.path.clone()],
+                    roles: [main_binding, binding(other, end_of(other, f.tags[1], f.at))],
+                    profiles: [main.profile.clone(), other.profile.clone()],
+                    classes: [main.class.clone(), other.class.clone()],
+                    dims: [dims_map(main), dims_map(other)],
+                    label: format!("{} × {}", name(main), name(other)),
+                    arrangement: signature(main, other, &f).1,
+                }
+            })
+            .collect())
+    })
+}
+/// A draft detail's suggestions (not saved): fit per meeting key, with the
+/// role bindings `junction_apply` takes.
+pub(in crate::live) fn draft_fits(scene: &Obj<'_>, p: &presets::Preset) -> PyResult<Vec<(String, &'static str, BTreeMap<String, Value>, [f64; 3])>> {
+    with_index(scene, |t, ix| {
+        Ok(suggest(t, ix, p).into_iter().map(|s| (s.key, s.fit, s.roles, s.at)).collect())
+    })
+}
+
 pub(super) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(meetings_query, m)?)?;
     m.add_function(wrap_pyfunction!(junction_suggest, m)?)?;

@@ -256,6 +256,30 @@ pub fn built_in(key: &str) -> bool {
     SIZES.table.sizes.iter().any(|s| s.key == key)
 }
 
+/// Catalogue sizes of `key`'s series (same family, key stem and suffix),
+/// ordered by height: what "± 1 catalogue step" counts in a junction rule.
+pub fn series(key: &str) -> Vec<(String, f64)> {
+    fn split(key: &str) -> (&str, &str) {
+        let at = key.find(|c: char| c.is_ascii_digit()).unwrap_or(key.len());
+        let rest = &key[at..];
+        let end = rest.find(|c: char| !(c.is_ascii_digit() || c == '.')).unwrap_or(rest.len());
+        (&key[..at], &rest[end..])
+    }
+    let Some(me) = SIZES.table.sizes.iter().find(|s| s.key == key) else {
+        return Vec::new();
+    };
+    let (stem, suffix) = split(key);
+    let mut out: Vec<(String, f64)> = SIZES
+        .table
+        .sizes
+        .iter()
+        .filter(|s| s.family == me.family && split(&s.key) == (stem, suffix))
+        .map(|s| (s.key.clone(), s.params.get("height").copied().unwrap_or(0.)))
+        .collect();
+    out.sort_by(|a, b| a.1.total_cmp(&b.1));
+    out
+}
+
 pub fn label(key: &str) -> Option<&'static str> {
     SIZES
         .table
