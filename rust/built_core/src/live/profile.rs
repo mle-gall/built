@@ -248,7 +248,10 @@ impl Profile {
                 let d = tangent(i)?;
                 let prev = (pt(i + n - 1) - p).length();
                 let next = (pt(i + 1) - p).length();
-                if d >= prev || d >= next || d + tangent(i + 1)? > next {
+                // A fillet may use a whole edge (a toe radius equal to the
+                // leg thickness); the coincident points are merged below.
+                const EPS: f64 = 1e-9;
+                if d > prev + EPS || d > next + EPS || d + tangent(i + 1)? > next + EPS {
                     return Err("invalid_profile");
                 }
                 let centre = p + (a + b).normalize() * (radius / (theta / 2.).sin());
@@ -264,6 +267,14 @@ impl Profile {
                         role: format!("round/{i}/{k}"),
                     });
                 }
+            }
+            // Drop a point that coincides with the next one (keep the later:
+            // it starts the arc that follows).
+            let n = ring.len();
+            let keep: Vec<bool> = (0..n).map(|j| ring[j].p.distance(ring[(j + 1) % n].p) > 1e-9).collect();
+            let ring: Vec<Node> = ring.into_iter().zip(keep).filter_map(|(node, k)| k.then_some(node)).collect();
+            if ring.len() < 3 {
+                return Err("invalid_profile");
             }
             Ok(ring)
         };
@@ -493,6 +504,56 @@ mod tests {
         };
         let a = ring_area(&table.rings[0]) - table.rings[1..].iter().map(ring_area).sum::<f64>();
         (p.area, a)
+    }
+
+    fn family(name: &str, params: &[(&str, f64)]) -> Result<Outline, &'static str> {
+        Profile {
+            catalogue: None,
+            sketch: None,
+            drawing: None,
+            library: String::new(),
+            family: name.into(),
+            params: params.iter().map(|&(k, v)| (k.to_owned(), v)).collect(),
+        }
+        .outline(512)
+    }
+
+    #[test]
+    fn section_properties_of_a_rectangle_are_exact() {
+        let p = family("rectangle", &[("width", 100.), ("height", 200.)]).unwrap().properties();
+        assert!((p.area - 20_000.).abs() < 1e-6);
+        assert!((p.i_xx - 100. * 200f64.powi(3) / 12.).abs() < 1e-3);
+        assert!((p.i_yy - 200. * 100f64.powi(3) / 12.).abs() < 1e-3);
+        assert!((p.w_xx - 100. * 200. * 200. / 6.).abs() < 1e-3);
+    }
+
+    #[test]
+    fn sloped_flanges_toes_and_tube_radii_draw_the_published_sections() {
+        // EN 10365 IPN 200: 200 x 90 x 7.5 x 11.3, r1 7.5, r2 4.5, 14 % slope,
+        // tf at b/4 from the tip; listed area 33.4 cm².
+        let ipn = [("height", 200.), ("width", 90.), ("web", 7.5), ("flange", 11.3), ("radius", 7.5)];
+        let plain = family("i", &ipn).unwrap().properties().area;
+        let mut sloped = ipn.to_vec();
+        sloped.extend([("toe", 4.5), ("slope", 14.), ("flange_at", 22.5)]);
+        let area = family("i", &sloped).unwrap().properties().area;
+        assert!((area / 3340. - 1.).abs() < 0.005, "{area}");
+        assert!(plain > area);
+        // Orange Book UPN 200: 200 x 75 x 8.5 x 11.5, r1 11.5, r2 6, 8 %, tf at b/2; 32.2 cm².
+        let upn = family("channel", &[("height", 200.), ("width", 75.), ("web", 8.5), ("flange", 11.5),
+            ("radius", 11.5), ("toe", 6.), ("slope", 8.), ("flange_at", 37.5)]).unwrap();
+        assert!((upn.properties().area / 3220. - 1.).abs() < 0.01, "{}", upn.properties().area);
+        // A toe radius equal to the leg thickness uses the whole leg end: no
+        // repeated points, still one closed ring.
+        let angle = family("angle", &[("height", 100.), ("width", 100.), ("web", 6.), ("radius", 12.), ("toe", 6.)]).unwrap();
+        let ring = &angle.rings[0];
+        assert!((0..ring.len()).all(|i| ring[i].p.distance(ring[(i + 1) % ring.len()].p) > 1e-9));
+        assert!(family("angle", &[("height", 100.), ("width", 100.), ("web", 6.), ("radius", 12.), ("toe", 7.)]).is_err());
+        // EN 10219 SHS 100 x 100 x 5: ro = 2 t, ri = t (Blue Book lists 18.4 cm²).
+        let shs = family("rhs", &[("height", 100.), ("width", 100.), ("web", 5.), ("radius", 10.), ("inner", 5.)]).unwrap();
+        assert!((shs.properties().area / 1840. - 1.).abs() < 0.005, "{}", shs.properties().area);
+        // Without the refinements a family draws as before.
+        let old = family("i", &[("height", 200.), ("width", 100.), ("web", 5.6), ("flange", 8.5), ("radius", 12.)]).unwrap();
+        assert_eq!(old.rings[0].len(), 12 + 4 * 128);
     }
 
     #[test]
