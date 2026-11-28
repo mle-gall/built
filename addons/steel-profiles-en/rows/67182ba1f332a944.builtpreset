@@ -1,10 +1,12 @@
 {
   "uid": "67182ba1f332a944",
   "name": "SHS 50 × 50 × 5 (cold-formed)",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -63,5 +65,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:34db9c02da5c7954126b8df076bdb31921e837e3cdb631c3e8367aa8f5abdb88"
+  "hash": "sha256:8a39932d925540266c1c0cef9e120fae6ae0f93ebf9e063283fee42d5076f417"
 }

@@ -1,10 +1,12 @@
 {
   "uid": "52e16cb2be4cfcdb",
   "name": "ISA 75 × 75 × 10",
-  "rev": 1,
+  "rev": 2,
   "pack": "Steel profiles · IS",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -23,6 +25,9 @@
             "is/isa75x75x10",
             75.0
           ]
+        ],
+        "aliases": [
+          "A 75 x 75 x 10"
         ]
       }
     }
@@ -62,5 +67,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:c1c9c3722d3dfc747db8b78031c7257b8a62abe28c354b727d73eb20a1c34a26"
+  "hash": "sha256:2232327247182e1e8f90a83860c779bef4254cb34e507a5f4b7f77d08ee8e50a"
 }

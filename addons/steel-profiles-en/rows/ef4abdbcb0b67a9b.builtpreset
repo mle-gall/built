@@ -1,10 +1,12 @@
 {
   "uid": "ef4abdbcb0b67a9b",
   "name": "HE 220 B",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -40,6 +42,9 @@
             "en/he260b",
             260.0
           ]
+        ],
+        "aliases": [
+          "HEB 220"
         ]
       }
     }
@@ -79,5 +84,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:baea0cbb06c5129d1f0926c0b40ceab098d8ce8fc58dc80656abc64c67e416e3"
+  "hash": "sha256:dd5f7605da3220d6c35bbb85bbb1b20e7aec8fb8c20ca190c98b59aa39bc4634"
 }

@@ -1,10 +1,12 @@
 {
   "uid": "bb93c660a5727872",
   "name": "C10 × 30",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -29,6 +31,9 @@
             "aisc/c12x30",
             304.8
           ]
+        ],
+        "aliases": [
+          "C10X30"
         ]
       }
     }
@@ -68,5 +73,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:437322df584aa7fe30f773182a84be578b8598b18add5c0f4b39c959ce0e3bcb"
+  "hash": "sha256:756bf6d1265231b2953c00f3f1c5adfab75fe78216dd1a53444c77ff0978c555"
 }

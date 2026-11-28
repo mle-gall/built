@@ -1,10 +1,12 @@
 {
   "uid": "5a0418bab4f894fd",
   "name": "W12 × 87",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -24,6 +26,9 @@
             "aisc/w12x87",
             317.5
           ]
+        ],
+        "aliases": [
+          "W12X87"
         ]
       }
     }
@@ -63,5 +68,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:6725089b8cde7901ab6941e3d0c2956deb5f1f8ba8342578026de2d063e5d289"
+  "hash": "sha256:45a54185c6af3bd349afa0b5e09f2dbd9b5f13661c4f8c5c886e70c300a56332"
 }

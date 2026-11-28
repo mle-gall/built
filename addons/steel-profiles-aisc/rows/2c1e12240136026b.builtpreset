@@ -1,10 +1,12 @@
 {
   "uid": "2c1e12240136026b",
   "name": "L10 × 10 × 1-1/4",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -23,6 +25,9 @@
             "aisc/l10x10x1-1_4",
             254.0
           ]
+        ],
+        "aliases": [
+          "L10X10X1-1/4"
         ]
       }
     }
@@ -62,5 +67,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:856c72e24ee5923b3be89d4f7ad8d8233dfec87d1bac46da2e51d25b7873e7b2"
+  "hash": "sha256:90b0e7bffc4d1e722e4cc29eecb040c1ef4261b04ba830b3f22b86b59eaf1231"
 }

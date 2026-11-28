@@ -1,10 +1,12 @@
 {
   "uid": "e55e3777af202dc9",
   "name": "HE 550 A",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -40,6 +42,9 @@
             "en/he650a",
             640.0
           ]
+        ],
+        "aliases": [
+          "HEA 550"
         ]
       }
     }
@@ -79,5 +84,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:48d44987665ae9b1980fc047fe52761587abd2aef4e20d40e149325c250d2756"
+  "hash": "sha256:ed9c982f0a0c80fa8d917f4845c3d2dbdcf92801a741d8b1a00d0719afdaa261"
 }

@@ -1,10 +1,12 @@
 {
   "uid": "e2e70a635d069b0b",
   "name": "ISA 125 × 95 × 6",
-  "rev": 1,
+  "rev": 2,
   "pack": "Steel profiles · IS",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -24,6 +26,9 @@
             "is/isa125x95x6",
             125.0
           ]
+        ],
+        "aliases": [
+          "A 125 x 95 x 6"
         ]
       }
     }
@@ -63,5 +68,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:cb1a6a2dd0ed81b1ff36aae236949f06260f2e7f14f96ccb05df0d79c8c30648"
+  "hash": "sha256:34fc371fdceed4a05a8a0118544385c400c717c848760c00e951baf4813ac1dd"
 }

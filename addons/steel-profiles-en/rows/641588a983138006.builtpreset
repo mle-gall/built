@@ -1,10 +1,12 @@
 {
   "uid": "641588a983138006",
   "name": "IPE 400",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -79,5 +81,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:b3256a06edaf2240d91b3f0d27a692bd6d57eccfffbc9bd496aaeb55aea940c4"
+  "hash": "sha256:15dec540a12535533be447dbe2fe5641c5b1e40228591d461ff50e786a5f0fb9"
 }

@@ -1,10 +1,12 @@
 {
   "uid": "cff1c8673e7c4bf7",
   "name": "610 UB 125",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AS/NZS",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -63,5 +65,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:6d8690d7c8d675e85cb60b9bf8c672cfc76649b916aea8ec7bcffd6112cca15a"
+  "hash": "sha256:f969480e15a98607f8527cf268376c406cb041b970560150d522c3d38bb29513"
 }

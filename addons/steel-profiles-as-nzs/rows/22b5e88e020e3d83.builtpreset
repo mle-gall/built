@@ -1,10 +1,12 @@
 {
   "uid": "22b5e88e020e3d83",
   "name": "100 TFB",
-  "rev": 1,
+  "rev": 2,
   "pack": "Steel profiles · AS/NZS",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -69,5 +71,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:9d0cdc40e2a6db315ab531e0ed4e68917e3082bf4936ca6986edc7823f1f14c4"
+  "hash": "sha256:7965d09d5d1a770b29f1af6791a8fb9515a81a26915c9a4b924cc381d0977147"
 }

@@ -1,10 +1,12 @@
 {
   "uid": "88c6e0e5f4c545fc",
   "name": "HP12 × 53",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -24,6 +26,9 @@
             "aisc/hp12x53",
             299.72
           ]
+        ],
+        "aliases": [
+          "HP12X53"
         ]
       }
     }
@@ -63,5 +68,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:5fb6a90bca50ffff91250010f3d6445bbeccbdd7dad8051a7669f1bee33c8af7"
+  "hash": "sha256:2b0ff87124e08a39c34f424dc41cc5e7ce1c6d0454fae3df9ea26dbde91a9492"
 }

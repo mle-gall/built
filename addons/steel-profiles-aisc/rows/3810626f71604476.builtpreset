@@ -1,10 +1,12 @@
 {
   "uid": "3810626f71604476",
   "name": "ST3 × 8.6",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -25,6 +27,9 @@
             "aisc/st3x8.6",
             76.2
           ]
+        ],
+        "aliases": [
+          "ST3X8.6"
         ]
       }
     }
@@ -64,5 +69,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:060de594ea34076c8dafdadb67cd198e743dbf6b524a7189ea4390b6164e66a6"
+  "hash": "sha256:b35782452a68422f5059bfe495d4798e5548c93e6550e6be288a86bc1691fdd4"
 }

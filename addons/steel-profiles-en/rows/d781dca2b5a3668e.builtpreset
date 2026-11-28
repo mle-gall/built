@@ -1,10 +1,12 @@
 {
   "uid": "d781dca2b5a3668e",
   "name": "HE 800 A",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -40,6 +42,9 @@
             "en/he1000a",
             990.0
           ]
+        ],
+        "aliases": [
+          "HEA 800"
         ]
       }
     }
@@ -79,5 +84,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:4e2fe1396235f8ce8e59fca920303259248fc26caf097d474fdefa1b8e4ea493"
+  "hash": "sha256:2f6439b59760a9f50a66aa23a1910915b80b1ef7a3d8d28e4b1697f7e7fc549c"
 }

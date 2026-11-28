@@ -1,10 +1,12 @@
 {
   "uid": "e4e1f42a18352192",
   "name": "S3 × 7.5",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -25,6 +27,9 @@
             "aisc/s3x7.5",
             76.2
           ]
+        ],
+        "aliases": [
+          "S3X7.5"
         ]
       }
     }
@@ -64,5 +69,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:93a5f2b8d97da841d9c04ae7eebb994d91d1671ae9fd05ef77ffd0eb7931e9b4"
+  "hash": "sha256:8e2a016d0608f2deba056e2d2c4aab4dc63b2ea92975045fd5f4462e8cf4561e"
 }

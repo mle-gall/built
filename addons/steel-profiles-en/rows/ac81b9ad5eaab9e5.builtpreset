@@ -1,10 +1,12 @@
 {
   "uid": "ac81b9ad5eaab9e5",
   "name": "PFC 100 × 50 × 10",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -63,5 +65,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:8ce7573535a7bb50550107ae07cc5db7e61e94fc5aa80e5169f130f5e5278444"
+  "hash": "sha256:effcf2ac846f8632c28484bd2ef7464608bc64d41efdc6d0a531e04e77abbb58"
 }

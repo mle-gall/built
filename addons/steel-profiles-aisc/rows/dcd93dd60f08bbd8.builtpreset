@@ -1,10 +1,12 @@
 {
   "uid": "dcd93dd60f08bbd8",
   "name": "W10 × 68",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -32,6 +34,9 @@
             "aisc/w21x68",
             535.94
           ]
+        ],
+        "aliases": [
+          "W10X68"
         ]
       }
     }
@@ -71,5 +76,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:6424eff75eb6cadfca43556f45c1954b7847355c06775374df5f27921e74a651"
+  "hash": "sha256:ece4a969b371f1c58726264b8a8c3b7271cfacf5d6b006ceab38d5596d55cad1"
 }

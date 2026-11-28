@@ -1,10 +1,12 @@
 {
   "uid": "4a0b7e162de7108f",
   "name": "HSS7 × 4 × 1/2",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -40,6 +42,9 @@
             "aisc/hss10x4x1_2",
             254.0
           ]
+        ],
+        "aliases": [
+          "HSS7X4X1/2"
         ]
       }
     }
@@ -79,5 +84,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:b2af531050d4841c9fb4c3b339417d50d7f4d29b01db834411a57c586ea49440"
+  "hash": "sha256:25bae0b0a145b44ba2d5cb2f3d185df02130aa6520432f3c46a2ec6dced2be85"
 }

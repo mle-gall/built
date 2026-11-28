@@ -1,10 +1,12 @@
 {
   "uid": "44698571111ab35b",
   "name": "MT2.5 × 9.45",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -24,6 +26,9 @@
             "aisc/mt2.5x9.45",
             63.5
           ]
+        ],
+        "aliases": [
+          "MT2.5X9.45"
         ]
       }
     }
@@ -63,5 +68,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:136c684929af1af4bd8b56726ffcfaa709c266fd2451f8485181c6b46637be55"
+  "hash": "sha256:f5eb955f737f734b26b54de6ed1762b14dd5399473dad91962ee55fea206ee0b"
 }

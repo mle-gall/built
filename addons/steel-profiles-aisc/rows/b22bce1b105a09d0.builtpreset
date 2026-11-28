@@ -1,10 +1,12 @@
 {
   "uid": "b22bce1b105a09d0",
   "name": "ST12 × 45",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -25,6 +27,9 @@
             "aisc/st12x45",
             304.8
           ]
+        ],
+        "aliases": [
+          "ST12X45"
         ]
       }
     }
@@ -64,5 +69,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:2d0489b6d389b68fe82bc2866551cd9507e346400ee1e69af6639426efff033a"
+  "hash": "sha256:1e2246af2b943c5dec5525b762b5a1277e077f9af7b12faa2389d594255cbd53"
 }

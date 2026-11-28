@@ -1,10 +1,12 @@
 {
   "uid": "c98f208f2bd9e5c6",
   "name": "SHS 30 × 30 × 2 (cold-formed)",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -63,5 +65,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:688b43e58d0ea5165e337c8d741c337a8cc8f7e920961b39108b2f7460218cb4"
+  "hash": "sha256:5f2eaf09531817448f7712ffce68174fa54047ec63bc7832c809617c64cf8318"
 }

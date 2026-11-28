@@ -1,10 +1,12 @@
 {
   "uid": "51be728190f58688",
   "name": "ISJC 200",
-  "rev": 1,
+  "rev": 2,
   "pack": "Steel profiles · IS",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -34,6 +36,9 @@
             "is/isjc200",
             200.0
           ]
+        ],
+        "aliases": [
+          "JC 200"
         ]
       }
     }
@@ -73,5 +78,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:9f8d4662155ffd581ccf188bbfaee7a83d173372a2a679a912a36b4c4d8f793f"
+  "hash": "sha256:fc0ede8826d2ccba500385ba3bd6d25beaf207f1c4f473d0688ebb44ae622b0c"
 }

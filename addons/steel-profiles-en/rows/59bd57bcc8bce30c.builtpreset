@@ -1,10 +1,12 @@
 {
   "uid": "59bd57bcc8bce30c",
   "name": "CHS 219.1 × 6.3 (hot-finished)",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -77,5 +79,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:c4323c63b21e3048588372df87b7221c7ffff8412cb5fb7da96f031cd32dddfd"
+  "hash": "sha256:b6f3c2085c753fbd3f5027be4d7a4e0c79ef87318002c3c80f0139323e2aa34a"
 }

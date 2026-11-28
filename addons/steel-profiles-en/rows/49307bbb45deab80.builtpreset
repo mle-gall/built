@@ -1,10 +1,12 @@
 {
   "uid": "49307bbb45deab80",
   "name": "HE 900 M",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -36,6 +38,9 @@
             "en/he1000m",
             1008.0
           ]
+        ],
+        "aliases": [
+          "HEM 900"
         ]
       }
     }
@@ -75,5 +80,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:9bf20d1386a84b5aa611e516587d7eaad06490efce3708220f65e70887d9cc92"
+  "hash": "sha256:2db88e7850d7316a56d2addcbb012a9da0052bf4b768451cf4131bb228376a52"
 }

@@ -1,10 +1,12 @@
 {
   "uid": "c45066280f468793",
   "name": "CHS 168.3 × 5 (hot-finished)",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -77,5 +79,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:99dbf3a53cd697e49dc6d7829bcb2f22b2f3378d9dc48072e296d474f08eb6df"
+  "hash": "sha256:5031e7dfa140fe8d60d0f59cd3578a1100c6b415ccb5be69b76123076de1af0c"
 }

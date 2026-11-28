@@ -1,10 +1,12 @@
 {
   "uid": "ea7a414616685968",
   "name": "UB 1000 × 400 × 296",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -63,5 +65,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:d30ce6166ef7918a72d2118252f55ff83ea53a5661215b0a7901144eac1cb14d"
+  "hash": "sha256:104c15349637d074ed0d2d03faa2df59e53dd07c9f761aba23b5d3a96933a992"
 }

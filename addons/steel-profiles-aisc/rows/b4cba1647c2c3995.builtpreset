@@ -1,10 +1,12 @@
 {
   "uid": "b4cba1647c2c3995",
   "name": "WT12 × 88",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -28,6 +30,9 @@
             "aisc/wt12x88",
             320.04
           ]
+        ],
+        "aliases": [
+          "WT12X88"
         ]
       }
     }
@@ -67,5 +72,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:d6b993404f502be70be8a05e001d7527354184bb8f86b0923856542f8287b3b5"
+  "hash": "sha256:6fac2028782520d0c78991f6e847ef3a4686fc53d49c5cbd6c573842a05cb925"
 }

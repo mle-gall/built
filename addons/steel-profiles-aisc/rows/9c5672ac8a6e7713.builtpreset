@@ -1,10 +1,12 @@
 {
   "uid": "9c5672ac8a6e7713",
   "name": "HSS7 × 3 × 3/8",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -40,6 +42,9 @@
             "aisc/hss9x3x3_8",
             228.6
           ]
+        ],
+        "aliases": [
+          "HSS7X3X3/8"
         ]
       }
     }
@@ -79,5 +84,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:603bb11126ad174ea96aab3ee8665be6fb7a393b2491680e60dd1e58ccd63c32"
+  "hash": "sha256:1ce9eaf5c1953eb9729737a80e84ab6fc56886a0e68a93a30f8fe07d9bebe554"
 }

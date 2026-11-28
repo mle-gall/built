@@ -1,10 +1,12 @@
 {
   "uid": "c631e7bab956a408",
   "name": "HE 300 AA",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -40,6 +42,9 @@
             "en/he340aa",
             320.0
           ]
+        ],
+        "aliases": [
+          "HEAA 300"
         ]
       }
     }
@@ -79,5 +84,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:4dd26a1db3f493aa69ab876070e9ed3a4ba7e45e057c036e2209f4ad2318aaeb"
+  "hash": "sha256:4d3c6b787fd0abdb4d256a5a3b60550e6c13b32b009e0eb5e2bfee7e6f941a03"
 }

@@ -1,10 +1,12 @@
 {
   "uid": "63bdbe9a248748fc",
   "name": "SHS 400 × 400 × 12 (cold-formed)",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -63,5 +65,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:8262ec69702f0fefe9eb912a4e8a9b1d8c70e24e29943dc5fe36cc6e2953fcb1"
+  "hash": "sha256:ffcdb5c622a4bd02e21e29b52f7913c9396e06d4d6967921f27c90d7d168e778"
 }

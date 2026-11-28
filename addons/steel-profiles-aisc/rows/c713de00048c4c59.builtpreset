@@ -1,10 +1,12 @@
 {
   "uid": "c713de00048c4c59",
   "name": "W14 × 283",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -28,6 +30,9 @@
             "aisc/w18x283",
             556.26
           ]
+        ],
+        "aliases": [
+          "W14X283"
         ]
       }
     }
@@ -67,5 +72,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:99f4b6bd2030863487d1b365bf27943336694156507499f3b18fa3407bfefe21"
+  "hash": "sha256:5ba00464e5deab5d50cdb746ef7bc6b8ec67c0611ba73abd8e848bc927865089"
 }

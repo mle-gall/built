@@ -1,10 +1,12 @@
 {
   "uid": "0479745e7d1af5f6",
   "name": "ST4 × 11.5",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -25,6 +27,9 @@
             "aisc/st4x11.5",
             101.6
           ]
+        ],
+        "aliases": [
+          "ST4X11.5"
         ]
       }
     }
@@ -64,5 +69,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:345c4e1352a15fc06071f780467b18c4dacd4408afa8654157af406954c5bad8"
+  "hash": "sha256:54cc830ac0070354186b6382f7042e610bfba5709ec8d763c879244f2b667b2f"
 }

@@ -1,10 +1,12 @@
 {
   "uid": "d30805c65966d8c1",
   "name": "RHS 70 × 40 × 4 (cold-formed)",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -75,5 +77,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:c58d245bfadf59cf8084355b2a378a9cd63079bfe2d34b67c7565676691dc4aa"
+  "hash": "sha256:9f7026cd4da576cb8091d024d8f842aaf67c89f2fb75ea93c332db01d3167e90"
 }

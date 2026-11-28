@@ -1,10 +1,12 @@
 {
   "uid": "3aa5f28fa58d8819",
   "name": "360 UB 56.7",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AS/NZS",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -63,5 +65,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:f2ceab2dca2f5d1ea07fbe34953d642bb249cb434cb96237c6e7979bbd8633ba"
+  "hash": "sha256:ce399661367e948e2f2ce84dd3ca43f6047baa4929b028523d1ca1e8b707eb9c"
 }

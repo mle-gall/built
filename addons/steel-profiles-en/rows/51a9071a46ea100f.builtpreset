@@ -1,10 +1,12 @@
 {
   "uid": "51a9071a46ea100f",
   "name": "HE 650 AA",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -40,6 +42,9 @@
             "en/he800aa",
             770.0
           ]
+        ],
+        "aliases": [
+          "HEAA 650"
         ]
       }
     }
@@ -79,5 +84,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:605c8165a4fd3836f2c9eb1dafb51bb6a7e310a44a661255c3d69041519dd2f4"
+  "hash": "sha256:9bbd183c7d63a53fdd26d22254dd18c57fcbf728cf13f49fca6187e0ef0a48e0"
 }

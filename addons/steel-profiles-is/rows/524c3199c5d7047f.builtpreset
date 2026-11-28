@@ -1,10 +1,12 @@
 {
   "uid": "524c3199c5d7047f",
   "name": "ISMB 400",
-  "rev": 1,
+  "rev": 2,
   "pack": "Steel profiles · IS",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -42,6 +44,9 @@
             "is/ismb500",
             500.0
           ]
+        ],
+        "aliases": [
+          "MB 400"
         ]
       }
     }
@@ -81,5 +86,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:057ea072da637e1395ea127cef3cf4ff856cd52ac3443b0536534ff8b7f39860"
+  "hash": "sha256:3143768b97db471465e5b7c8f4b974510328901cb90e1a906cf947a5bc1b301b"
 }

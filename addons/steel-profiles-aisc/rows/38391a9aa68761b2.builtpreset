@@ -1,10 +1,12 @@
 {
   "uid": "38391a9aa68761b2",
   "name": "S20 × 86",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -25,6 +27,9 @@
             "aisc/s20x86",
             515.62
           ]
+        ],
+        "aliases": [
+          "S20X86"
         ]
       }
     }
@@ -64,5 +69,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:6f11065bb70facbc95d46e3afc22e194c8d1fbc9e3d243311dad3cb431b4103f"
+  "hash": "sha256:831fb1bd105550da8de42a44597fbe0d4c013a94b05a86effadf5f3f391be268"
 }

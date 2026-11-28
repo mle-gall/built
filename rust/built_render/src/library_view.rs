@@ -250,7 +250,8 @@ pub fn sorted<'a>(mut items: Vec<&'a Item>, sort: &str, recent: &[String]) -> Ve
 /// The items the facet and the search keep (``is:colour`` / ``is:image``
 /// tokens browse by base, like the facet).
 pub fn filtered<'a>(items: impl IntoIterator<Item = &'a Item>, st: &Browse) -> Vec<&'a Item> {
-    let lower = st.filter.to_lowercase();
+    // "200 x 100" finds "200 × 100".
+    let lower = st.filter.to_lowercase().replace('×', "x");
     let mut base = None;
     let mut words = vec![];
     for w in lower.split_whitespace() {
@@ -275,12 +276,12 @@ pub fn filtered<'a>(items: impl IntoIterator<Item = &'a Item>, st: &Browse) -> V
             return true;
         }
         let hay = format!("{} {} {} {} {} {}", e.name, e.label.as_deref().unwrap_or(""), e.short.as_deref().unwrap_or(""),
-                          e.category, e.file.as_deref().unwrap_or(""), e.aliases.join(" ")).to_lowercase();
+                          e.category, e.file.as_deref().unwrap_or(""), e.aliases.join(" ")).to_lowercase().replace('×', "x");
         if words.iter().all(|w| hay.contains(w)) {
             return true;
         }
         // Spaces are optional: "ipe240" finds IPE 240, "hea200" HEA 200.
-        let compact = |s: &str| s.chars().filter(|c| !c.is_whitespace()).collect::<String>();
+        let compact = |s: &str| s.chars().filter(|c| !c.is_whitespace()).collect::<String>().replace('×', "x");
         let query = compact(&words.concat());
         std::iter::once(e.name.as_str()).chain(e.label.as_deref()).chain(e.aliases.iter().map(String::as_str))
             .any(|name| compact(&name.to_lowercase()).contains(&query))
@@ -384,6 +385,27 @@ fn categories<'a>(members: &[&'a Item]) -> Vec<&'a str> {
     cats
 }
 
+/// Search results with the closest names first: the name itself, then names
+/// that start with the query, then names that contain it, then the other
+/// matches (whose words only appear somewhere). With thousands of catalogue
+/// sizes, "HE 200 A" must not sit below "HE 200 AA" or "RHS 200 × 100 × 5".
+fn by_match<'a>(mut items: Vec<&'a Item>, query: &str) -> Vec<&'a Item> {
+    // Compared without spaces and with × read as x, by name or alias.
+    let norm = |s: &str| s.to_lowercase().replace('×', "x").split_whitespace().collect::<String>();
+    let q = norm(query);
+    if q.is_empty() {
+        return items;
+    }
+    let rank = |e: &Item| {
+        std::iter::once(e.shown()).chain(e.aliases.iter().map(String::as_str)).map(|name| {
+            let n = norm(name);
+            if n == q { 0 } else if n.starts_with(&q) { 1 } else if n.contains(&q) { 2 } else { 3 }
+        }).min().unwrap_or(3)
+    };
+    items.sort_by_key(|e| rank(e));
+    items
+}
+
 /// The content: (caption, sub, items). Browsing shows the side row's items
 /// (the model's grouped by category); a search shows every match, grouped
 /// by where it comes from.
@@ -399,7 +421,8 @@ pub fn groups_for<'a>(items: &'a [Item], st: &Browse) -> Vec<(String, String, Ve
             }
             let group: Vec<&Item> = found.iter().copied().filter(|e| e.source == sec).collect();
             for cat in categories(&group) {
-                let members = sorted(group.iter().copied().filter(|e| e.category == cat).collect(), &st.sort, &st.recent);
+                let members = by_match(sorted(group.iter().copied().filter(|e| e.category == cat).collect(), &st.sort, &st.recent),
+                                       &st.filter);
                 let cap = if cat.is_empty() { title.to_owned() } else { format!("{title} · {cat}") };
                 out.push((cap, members.len().to_string(), members));
             }
@@ -947,6 +970,18 @@ mod tests {
         assert_eq!(item.menu.iter().map(|m| &m.0).collect::<Vec<_>>(), saved.verbs.iter().collect::<Vec<_>>());
         saved.verbs = vec!["apply".into(), "copyto".into()];
         assert_eq!(detail(&inp, &saved, &mut Vec::new())[1]["right"], "Read-only");
+    }
+
+    #[test]
+    fn a_search_lists_the_named_size_first() {
+        let items = vec![it("a", "HE 200 AA", "mine", "I", 0), it("b", "RHS 200 × 100 × 5", "mine", "I", 0),
+                         it("c", "HE 200 A", "mine", "I", 0), it("d", "IPE 200", "mine", "I", 0)];
+        let st = Browse { filter: "HE 200 A".into(), ..Default::default() };
+        let names: Vec<&str> = groups_for(&items, &st).into_iter().flat_map(|g| g.2).map(|e| e.name.as_str()).collect();
+        assert_eq!(names, ["HE 200 A", "HE 200 AA"]);
+        let st = Browse { filter: "200 x 100".into(), ..Default::default() };
+        let names: Vec<&str> = groups_for(&items, &st).into_iter().flat_map(|g| g.2).map(|e| e.name.as_str()).collect();
+        assert_eq!(names[0], "RHS 200 × 100 × 5");
     }
 
     #[test]

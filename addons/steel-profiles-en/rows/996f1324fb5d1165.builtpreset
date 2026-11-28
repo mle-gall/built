@@ -1,10 +1,12 @@
 {
   "uid": "996f1324fb5d1165",
   "name": "CHS 48.3 × 4 (cold-formed)",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -69,5 +71,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:e8bc4b1dd0fee9119ce72b1f35a837d43ccc0e23df30b46076058e02d37d19c7"
+  "hash": "sha256:b7762566f61e81a6dc86658da34676c1e1d29493ed8f56049f25787cc6218b89"
 }

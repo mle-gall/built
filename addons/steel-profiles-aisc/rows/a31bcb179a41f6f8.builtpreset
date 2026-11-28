@@ -1,10 +1,12 @@
 {
   "uid": "a31bcb179a41f6f8",
   "name": "W8 × 58",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -28,6 +30,9 @@
             "aisc/w12x58",
             309.88
           ]
+        ],
+        "aliases": [
+          "W8X58"
         ]
       }
     }
@@ -67,5 +72,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:d28ffa6a59fa5be12bd11c820e98d903be24e2e9024399325cd4e96f8aa069f0"
+  "hash": "sha256:ca8224da8b10eccaea8ecb8b2295c50ce25abb23779cd98a61e59db1a0ba0a4f"
 }

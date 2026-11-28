@@ -1,10 +1,12 @@
 {
   "uid": "7201c9c96a79156e",
   "name": "ST2 × 3.85",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -25,6 +27,9 @@
             "aisc/st2x3.85",
             50.8
           ]
+        ],
+        "aliases": [
+          "ST2X3.85"
         ]
       }
     }
@@ -64,5 +69,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:989249849ee5a867af63ef15f16717c88ed79a99ee4238223cb99ef9b91c88c6"
+  "hash": "sha256:b8f831a6a759842e970cd18b8e572de49ce64a4b4c6c501144401d4a6ad973f9"
 }

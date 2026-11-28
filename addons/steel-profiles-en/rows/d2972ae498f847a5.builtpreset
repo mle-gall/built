@@ -1,10 +1,12 @@
 {
   "uid": "d2972ae498f847a5",
   "name": "RHS 50 × 30 × 4 (hot-finished)",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -63,5 +65,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:aefe047d1f5145db28c7c010a6ac178478fae0627457b652a3d29870afa53439"
+  "hash": "sha256:0d258687e99b9ce4b31bffe142822e0f76c93a6d12c695b8652169b320993538"
 }

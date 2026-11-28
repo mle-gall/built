@@ -1,10 +1,12 @@
 {
   "uid": "baaa91316126158f",
   "name": "ISSC 160",
-  "rev": 1,
+  "rev": 2,
   "pack": "Steel profiles · IS",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -42,6 +44,9 @@
             "is/issc200",
             200.0
           ]
+        ],
+        "aliases": [
+          "SC 160"
         ]
       }
     }
@@ -81,5 +86,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:6c6038e06e892e99dbdb064dff1385d6f62db38918d5013ab73055190e2010fd"
+  "hash": "sha256:6be6bbba1483c7694bbbaf9e01185ec83621d232a8cf59e0219ba9b77af30aff"
 }

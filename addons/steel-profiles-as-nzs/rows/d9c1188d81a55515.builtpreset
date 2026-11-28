@@ -1,10 +1,12 @@
 {
   "uid": "d9c1188d81a55515",
   "name": "200 UB 29.8",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AS/NZS",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -63,5 +65,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:83ba741e19098c8d425611d39a41968c6ccf7f9047a2d3365b47369063ea9ad3"
+  "hash": "sha256:ec2e47ce61e4fe84988a01017cd36d6cde02df6182b86873db43616a6b4d9258"
 }

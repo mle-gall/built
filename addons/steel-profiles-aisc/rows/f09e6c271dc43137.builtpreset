@@ -1,10 +1,12 @@
 {
   "uid": "f09e6c271dc43137",
   "name": "C4 × 6.25",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -25,6 +27,9 @@
             "aisc/c4x6.25",
             101.6
           ]
+        ],
+        "aliases": [
+          "C4X6.25"
         ]
       }
     }
@@ -64,5 +69,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:bfcdb5f956e3bcb83436c0100b769ab8bc251a51b7d444ad5766abfda4530f05"
+  "hash": "sha256:b80dce7dc19b14b09c6924bb3d44b9fe24b7b435a7c5e634e2496a417beecf35"
 }

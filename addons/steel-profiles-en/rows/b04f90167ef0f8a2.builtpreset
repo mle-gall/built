@@ -1,10 +1,12 @@
 {
   "uid": "b04f90167ef0f8a2",
   "name": "CHS 355.6 × 5 (cold-formed)",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -69,5 +71,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:13ed69954e5542d8776b112dd137f91edc2b02844d65af04021d92ce3e67d967"
+  "hash": "sha256:830e141b615481d1fdc1d8b11b7df026cb0cd55eeec933936e19cade065a23c2"
 }

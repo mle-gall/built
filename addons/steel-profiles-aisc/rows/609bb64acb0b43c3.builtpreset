@@ -1,10 +1,12 @@
 {
   "uid": "609bb64acb0b43c3",
   "name": "C9 × 20",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -29,6 +31,9 @@
             "aisc/c10x20",
             254.0
           ]
+        ],
+        "aliases": [
+          "C9X20"
         ]
       }
     }
@@ -68,5 +73,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:d623bad754c732cc55b1e45afcb9dc2d0cbb8dde22fd56195fc51b5deb0f7ade"
+  "hash": "sha256:01317572cbbf469e7576be724704a92a4979e7de492f041e5ca43a891de4480e"
 }

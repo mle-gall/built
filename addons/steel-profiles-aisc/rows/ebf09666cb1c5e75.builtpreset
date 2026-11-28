@@ -1,10 +1,12 @@
 {
   "uid": "ebf09666cb1c5e75",
   "name": "ST7.5 × 21.45",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -25,6 +27,9 @@
             "aisc/st7.5x21.45",
             190.5
           ]
+        ],
+        "aliases": [
+          "ST7.5X21.45"
         ]
       }
     }
@@ -64,5 +69,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:d9de32708b604628329fac3e1c2fde84a248527b77cf240276e02c6f978c9694"
+  "hash": "sha256:5501921044e3e73123bf8c30f0c23768a01deb577681f38fe7a2ac88c63c3afc"
 }

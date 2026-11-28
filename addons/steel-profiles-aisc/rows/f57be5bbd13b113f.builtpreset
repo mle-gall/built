@@ -1,10 +1,12 @@
 {
   "uid": "f57be5bbd13b113f",
   "name": "S15 × 42.9",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -25,6 +27,9 @@
             "aisc/s15x42.9",
             381.0
           ]
+        ],
+        "aliases": [
+          "S15X42.9"
         ]
       }
     }
@@ -64,5 +69,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:6378b1d70d7bcd625c513e15906ec6da9490c03f7fc06f1c30cdf6718969134b"
+  "hash": "sha256:abb014d8eb157effbb0450236a4c70d51e81cf5886b1d155d628145af906003f"
 }

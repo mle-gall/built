@@ -1,10 +1,12 @@
 {
   "uid": "fb589780ade47467",
   "name": "HE 300 B",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -40,6 +42,9 @@
             "en/he340b",
             340.0
           ]
+        ],
+        "aliases": [
+          "HEB 300"
         ]
       }
     }
@@ -79,5 +84,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:de03081a2f21518967ce2e48ee1bd669ab2b08b4f3ad6147a656dd7f09fb1fd0"
+  "hash": "sha256:baf843e1d0d1da92ddbd5e91d92e8ea1962393e36f7cb590698ed6ed0939aafb"
 }

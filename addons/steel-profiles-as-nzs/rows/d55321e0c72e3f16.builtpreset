@@ -1,10 +1,12 @@
 {
   "uid": "d55321e0c72e3f16",
   "name": "250 UB 37.3",
-  "rev": 3,
+  "rev": 4,
   "pack": "Steel profiles · AS/NZS",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -63,5 +65,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:b3d847414179632489dbd536d2399a8bc6112131a43c646308be639b4848ec14"
+  "hash": "sha256:3504a66d496cef78e60de9c825edc654c2be9af8783c799070c5c71a83cff874"
 }

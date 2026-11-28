@@ -1,10 +1,12 @@
 {
   "uid": "7a016dc380ee5ae8",
   "name": "WT3 × 4.5",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -24,6 +26,9 @@
             "aisc/wt3x4.5",
             74.93
           ]
+        ],
+        "aliases": [
+          "WT3X4.5"
         ]
       }
     }
@@ -63,5 +68,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:da280f2b97d39e5449c8de1998a87ce4ce676f549c5e53f8cd324fa82e33d80c"
+  "hash": "sha256:da64142c9a7dc3ac83fa5506499c8f631f8ec90366046609cc7b4486fd09d099"
 }

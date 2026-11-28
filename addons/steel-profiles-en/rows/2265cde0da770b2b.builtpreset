@@ -1,10 +1,12 @@
 {
   "uid": "2265cde0da770b2b",
   "name": "IPE A 200",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -79,5 +81,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:b3a72675a5b2953dcbce56327ea9c21314d351569b84396cc8197a1d68c70384"
+  "hash": "sha256:ed2267f8d6e0166f717be6373d328c58d77a63d40f9af2b29d24fe19e3c07266"
 }

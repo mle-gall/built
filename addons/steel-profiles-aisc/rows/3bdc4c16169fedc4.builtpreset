@@ -1,10 +1,12 @@
 {
   "uid": "3bdc4c16169fedc4",
   "name": "WT22 × 184",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -28,6 +30,9 @@
             "aisc/wt22x184",
             563.88
           ]
+        ],
+        "aliases": [
+          "WT22X184"
         ]
       }
     }
@@ -67,5 +72,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:2c171c35717d3ca9aa70d6702977ba4a70d3fae5f4c7d992154efa55b1832781"
+  "hash": "sha256:77cf01b7b08d98e377bff63f7874f88ace697fd33dde751a1d30449c7bc94816"
 }

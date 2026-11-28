@@ -1,10 +1,12 @@
 {
   "uid": "f5762361d3d63382",
   "name": "ISA 90 × 60 × 10",
-  "rev": 1,
+  "rev": 2,
   "pack": "Steel profiles · IS",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -23,6 +25,9 @@
             "is/isa90x60x10",
             90.0
           ]
+        ],
+        "aliases": [
+          "A 90 x 60 x 10"
         ]
       }
     }
@@ -62,5 +67,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:eafa58084299f1a997c2dc538be70a6b58231b55fc8b07ae6756ec6feb8c9fcc"
+  "hash": "sha256:36dc402ce9f3525403c80a216b8f129b65f5080cd72d6dc337f9a2bc8105a9d2"
 }

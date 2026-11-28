@@ -1,10 +1,12 @@
 {
   "uid": "10396f4a56c66ad8",
   "name": "RHS 200 × 120 × 4 (cold-formed)",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -63,5 +65,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:f358cdc16553222f1f2d94c27548bfd1841e61588c761e3eb5f69575c6cde745"
+  "hash": "sha256:83f988e7015b20a380e5b778478afa9455ce6fdbd596a673b069be0c9de5c00e"
 }

@@ -1,10 +1,12 @@
 {
   "uid": "b4b9e632925c12ba",
   "name": "ISMCP 200 × 24.3",
-  "rev": 1,
+  "rev": 2,
   "pack": "Steel profiles · IS",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -25,6 +27,9 @@
             "is/ismcp200x24.3",
             200.0
           ]
+        ],
+        "aliases": [
+          "MCP 200 x 24.3"
         ]
       }
     }
@@ -64,5 +69,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:813cd138f8177eb25af5f0c7233122fdb636d294f6e7b8d515b6a7892b9c73f9"
+  "hash": "sha256:8c96768f8e06f12a3a7ea7feae420c8c663a37d1f1f27adaaf49bd3c5a423b99"
 }

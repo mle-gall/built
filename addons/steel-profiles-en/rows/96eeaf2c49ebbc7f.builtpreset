@@ -1,10 +1,12 @@
 {
   "uid": "96eeaf2c49ebbc7f",
   "name": "IPN 160",
-  "rev": 1,
+  "rev": 2,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -82,5 +84,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:b65b39f761efde1f6623bf3ba7496b590f468e8d1e0dd38c30c1979960b2e310"
+  "hash": "sha256:82e249d787fcbba11b3d8925578692897b255312d5e092f3e360411a2f5f38a4"
 }

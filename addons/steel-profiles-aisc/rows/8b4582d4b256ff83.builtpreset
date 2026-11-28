@@ -1,10 +1,12 @@
 {
   "uid": "8b4582d4b256ff83",
   "name": "W8 × 10",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -24,6 +26,9 @@
             "aisc/w8x10",
             200.406
           ]
+        ],
+        "aliases": [
+          "W8X10"
         ]
       }
     }
@@ -63,5 +68,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:3329ec9b7e7ad076c0dac1bd80bffe20d92774da276d7762076f8becb0552413"
+  "hash": "sha256:695928d4208e83b3251c9c33bd0ac46d3823e0de64c8c8ec036407d47196efdf"
 }

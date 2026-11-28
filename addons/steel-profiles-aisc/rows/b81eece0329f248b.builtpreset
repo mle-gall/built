@@ -1,10 +1,12 @@
 {
   "uid": "b81eece0329f248b",
   "name": "C7 × 14.75",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -25,6 +27,9 @@
             "aisc/c7x14.75",
             177.8
           ]
+        ],
+        "aliases": [
+          "C7X14.75"
         ]
       }
     }
@@ -64,5 +69,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:485833fe8f6eb586d4a019fd697a191453867a2656a37bd941299f9b53f9398f"
+  "hash": "sha256:5948bb56dbd1944dfcd587f86d02e3a8672f8a18cb51635299165727de4c984a"
 }

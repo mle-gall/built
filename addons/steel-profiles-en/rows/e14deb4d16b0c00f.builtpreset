@@ -1,10 +1,12 @@
 {
   "uid": "e14deb4d16b0c00f",
   "name": "L 200 × 200 × 12",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -63,5 +65,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:6fa1592ea67e709a9147cce55e9b6a548e50d5e91b84dbffd83082cbe8cd0d4b"
+  "hash": "sha256:3dbe917d6445a8c33a16bef23f77c35f4080e537e9a851de5c91200c858c7525"
 }

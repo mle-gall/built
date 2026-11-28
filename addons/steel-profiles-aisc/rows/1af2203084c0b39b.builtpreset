@@ -1,10 +1,12 @@
 {
   "uid": "1af2203084c0b39b",
   "name": "Pipe1-1/4XS",
-  "rev": 3,
+  "rev": 4,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -61,5 +63,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:3b6145f75c2e71f0af9bdc4f33537423ee1a8b5238bffb2fad2fb13af1712dd5"
+  "hash": "sha256:1c9747f5a30ac14aa03e0adeb78813166444b459ca0a38cc1495999e9b6573e2"
 }

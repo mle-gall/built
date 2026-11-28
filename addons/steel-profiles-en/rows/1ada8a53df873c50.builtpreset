@@ -1,10 +1,12 @@
 {
   "uid": "1ada8a53df873c50",
   "name": "HD 400 × 900",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -63,5 +65,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:fa87e27e5c9963e54d55337b5d3c065b188f82bc864186137695d3f7177c6717"
+  "hash": "sha256:df101b8a4ebaeb33c92f82f4617c2aeadfae9bcbc68e9655ad5dc77861864ec1"
 }

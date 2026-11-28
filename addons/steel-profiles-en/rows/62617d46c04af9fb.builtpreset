@@ -1,10 +1,12 @@
 {
   "uid": "62617d46c04af9fb",
   "name": "HE 240 AA",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -40,6 +42,9 @@
             "en/he280aa",
             264.0
           ]
+        ],
+        "aliases": [
+          "HEAA 240"
         ]
       }
     }
@@ -79,5 +84,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:0b9e55ecae30c4c5720b6ed3357f11357bf2b559850768f53f195e53e038c660"
+  "hash": "sha256:5bea5f779b610e13676e63da506b4fa014c68606ea2291068705b61c337625d9"
 }

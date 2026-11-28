@@ -1,10 +1,12 @@
 {
   "uid": "b032aecc1fae007a",
   "name": "HP14 × 89",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -28,6 +30,9 @@
             "aisc/hp14x89",
             350.52
           ]
+        ],
+        "aliases": [
+          "HP14X89"
         ]
       }
     }
@@ -67,5 +72,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:8dd8b4b5f598089919bd3563121d4aeed81618539864636b20e6e919f03d1064"
+  "hash": "sha256:7bfeda08c2c44e4ad59cd62a1cf69dfeb7d77a3a02191b9de190e26c7b1b0b6f"
 }

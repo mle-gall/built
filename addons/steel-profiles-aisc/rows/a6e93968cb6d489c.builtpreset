@@ -1,10 +1,12 @@
 {
   "uid": "a6e93968cb6d489c",
   "name": "S18 × 54.7",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -25,6 +27,9 @@
             "aisc/s18x54.7",
             457.2
           ]
+        ],
+        "aliases": [
+          "S18X54.7"
         ]
       }
     }
@@ -64,5 +69,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:2df4519ac084c845283a7900933bbb5506e8be29a0fe4e866f66f554fcd100d4"
+  "hash": "sha256:437ea5a1f8743f6b1af8c4fd587bd84012577d6a2aa89883cd193fec485309d2"
 }

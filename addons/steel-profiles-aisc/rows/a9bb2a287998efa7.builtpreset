@@ -1,10 +1,12 @@
 {
   "uid": "a9bb2a287998efa7",
   "name": "W5 × 16",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -32,6 +34,9 @@
             "aisc/w12x16",
             304.8
           ]
+        ],
+        "aliases": [
+          "W5X16"
         ]
       }
     }
@@ -71,5 +76,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:d2d3a17a3646a9c5ba409c0a35186a85a4f2f0822da0dfa1df6cb214ca776f66"
+  "hash": "sha256:1a00fb8218d727db591dd6600ab0814ef55d71b6fddeec8012e29ebfbd8e8d04"
 }

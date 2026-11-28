@@ -1,10 +1,12 @@
 {
   "uid": "cc6a3cd403c856fb",
   "name": "100 PFC",
-  "rev": 1,
+  "rev": 2,
   "pack": "Steel profiles · AS/NZS",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -75,5 +77,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:92d10737885dfd40751864ce1ba676cc745a997c74bbc0036c3ccefddd13db58"
+  "hash": "sha256:fdea5e1fa65469c5af8949fdc6db944102083d3f12b1693e88cb9749d3a5b35c"
 }

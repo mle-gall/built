@@ -1,10 +1,12 @@
 {
   "uid": "f6965d2217c8ecdd",
   "name": "C6 × 13",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -25,6 +27,9 @@
             "aisc/c6x13",
             152.4
           ]
+        ],
+        "aliases": [
+          "C6X13"
         ]
       }
     }
@@ -64,5 +69,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:6d36239874ee17d65da71dd9ba85babb5f322ee03380d261355a72d9e9c348d2"
+  "hash": "sha256:9380a5e4fecd1e059f081e8986e99ffff49f3b8ccbd8dde7e6473fff7e4d10ed"
 }

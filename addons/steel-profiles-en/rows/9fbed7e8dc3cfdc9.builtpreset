@@ -1,10 +1,12 @@
 {
   "uid": "9fbed7e8dc3cfdc9",
   "name": "HE 100 B",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -32,6 +34,9 @@
             "en/he140b",
             140.0
           ]
+        ],
+        "aliases": [
+          "HEB 100"
         ]
       }
     }
@@ -71,5 +76,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:93ff105b5e76a912bc3ac6ae9c6715216ef0b992acbaa06e5c837babdc436714"
+  "hash": "sha256:4df3e66bffdbd066aabdeab087492cbb3f342fe90072049626e71ed5c003c324"
 }

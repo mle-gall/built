@@ -1,10 +1,12 @@
 {
   "uid": "6c1377a5a264f7df",
   "name": "SHS 400 × 400 × 17.5 (hot-finished)",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -63,5 +65,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:4d348312a4e851d5892cabeb8df3bbae8c9cda0e48a25520f6a71b1415e53921"
+  "hash": "sha256:e00724964c611932e33aa531f6531ba111b2c1bcbaecd8aa0d08eeb02dfc9248"
 }

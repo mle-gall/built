@@ -1,10 +1,12 @@
 {
   "uid": "5e28160e96b44c43",
   "name": "ISHB 350 × 72.4",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · IS",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -26,6 +28,9 @@
             "is/ishb350x72.4",
             350.0
           ]
+        ],
+        "aliases": [
+          "HB 350 x 72.4"
         ]
       }
     }
@@ -65,5 +70,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:9cc4af6337069a1b5ed9f21c0c5e5684da73dbd216534152cdc3fbec1b504be7"
+  "hash": "sha256:bebf15ae6df223ca64ce4f06105473070a00172e15023f4bbb520e47c777d727"
 }

@@ -1,10 +1,12 @@
 {
   "uid": "65fbdd44de205612",
   "name": "ISMC 225 × 30.7",
-  "rev": 1,
+  "rev": 2,
   "pack": "Steel profiles · IS",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -26,6 +28,9 @@
             "is/ismc225x30.7",
             225.0
           ]
+        ],
+        "aliases": [
+          "MC 225 x 30.7"
         ]
       }
     }
@@ -65,5 +70,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:a0ac77993ebfc2d2f2085ec39e3a1cf2c311467113fd1e447cb0ead5fb5c4499"
+  "hash": "sha256:336d2d6b7ce731750bd8bbdebe83f10ba1ab275ceacb5f4becebafb82aa8a808"
 }

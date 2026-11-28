@@ -1,10 +1,12 @@
 {
   "uid": "31f84f069b7a1dd7",
   "name": "RHS 90 × 50 × 3 (cold-formed)",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -75,5 +77,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:6068facd74ed12c7385170ceb0b25a7fe41eb5fbda4151f31e9d921ac0b530f0"
+  "hash": "sha256:b79dd3d6104d88a6bf375bfbaef20589b0fd3692098e1d53909fe5160dd07469"
 }

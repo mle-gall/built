@@ -1,10 +1,12 @@
 {
   "uid": "d1b35d4fb17896ca",
   "name": "W6 × 12",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -28,6 +30,9 @@
             "aisc/w10x12",
             250.698
           ]
+        ],
+        "aliases": [
+          "W6X12"
         ]
       }
     }
@@ -67,5 +72,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:e1956463b91f84e271132fea4c2d7ef3927581fec5c6efbe736c257b984915cc"
+  "hash": "sha256:9a988c6ac71526d4787a98a2d90f34a7ebd39547f1abecd486e2c3e7a4fb6d6a"
 }

@@ -1,10 +1,12 @@
 {
   "uid": "322b1163f748e6b6",
   "name": "HE 650 B",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -40,6 +42,9 @@
             "en/he800b",
             800.0
           ]
+        ],
+        "aliases": [
+          "HEB 650"
         ]
       }
     }
@@ -79,5 +84,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:f94bfa25daf09326f4246a11c62121764f4c6f9d8bd20846cd5c8f32320692fd"
+  "hash": "sha256:21073a658b0fa023364af76fd246d1d2b430362a9630e8630bc7839d35472195"
 }

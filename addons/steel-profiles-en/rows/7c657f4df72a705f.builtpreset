@@ -1,10 +1,12 @@
 {
   "uid": "7c657f4df72a705f",
   "name": "SHS 70 × 70 × 4 (cold-formed)",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -63,5 +65,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:60474719147ac8c17d095dace944c8af7956d11b5aa89f0f15130335355de545"
+  "hash": "sha256:28f2f0249c8abd457ca8f05a3ad6ccfc85865aad5f6fc1aaf78766d40d4fc6a3"
 }

@@ -1,10 +1,12 @@
 {
   "uid": "044f56f59d886886",
   "name": "Pipe14STD",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -77,5 +79,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:9480b68950cce958ad835ea39bb254e9fd188045cc15850e41dd5ba794c2bd02"
+  "hash": "sha256:1d402129d33029f896820fc75da7d30ef40053899ce921b0d9d19be293b76337"
 }

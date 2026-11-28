@@ -1,10 +1,12 @@
 {
   "uid": "1283c9e1534c4dff",
   "name": "S8 × 23",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -25,6 +27,9 @@
             "aisc/s8x23",
             203.2
           ]
+        ],
+        "aliases": [
+          "S8X23"
         ]
       }
     }
@@ -64,5 +69,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:f2d19852626486dcfcf079e9d84cfa9197d19408bd864178aee780a1943e9e53"
+  "hash": "sha256:667d1670891c705ab385f80abdb704c75f0040527b26fe03e60c643b42485719"
 }

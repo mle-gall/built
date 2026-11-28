@@ -1,10 +1,12 @@
 {
   "uid": "d43fd1c1d355f2f8",
   "name": "ST10 × 48",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -25,6 +27,9 @@
             "aisc/st10x48",
             259.08
           ]
+        ],
+        "aliases": [
+          "ST10X48"
         ]
       }
     }
@@ -64,5 +69,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:e09e19362ed0f7b691caacf8c8ce57988c0d165933b199433e941830b5ae0973"
+  "hash": "sha256:5597d8c45b3cba6929e4c2ba987f0005edfc29c5fad10b3b4f68a01cb3a98741"
 }

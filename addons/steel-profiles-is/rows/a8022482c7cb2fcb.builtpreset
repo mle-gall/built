@@ -1,10 +1,12 @@
 {
   "uid": "a8022482c7cb2fcb",
   "name": "ISA 80 × 80 × 12",
-  "rev": 1,
+  "rev": 2,
   "pack": "Steel profiles · IS",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -23,6 +25,9 @@
             "is/isa80x80x12",
             80.0
           ]
+        ],
+        "aliases": [
+          "A 80 x 80 x 12"
         ]
       }
     }
@@ -62,5 +67,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:5851f8bc5ee0ca374a03e40b85837ac61c4cb60cc89373a10288ddc99cb977e4"
+  "hash": "sha256:bd7e3e92c8d208d98a0364b532d2a3d5f021ac8fa2a05a8a1141307f6e83d1f2"
 }

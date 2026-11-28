@@ -1,10 +1,12 @@
 {
   "uid": "ec0dbb7bb3898fd6",
   "name": "RHS 80 × 40 × 3.6 (hot-finished)",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -67,5 +69,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:68386cce4016dc41296bab65881192b26b33d2ff7891455005bc97c21f3d5594"
+  "hash": "sha256:967b80556a7754e643f69489642f90bd6fa628f549be0bd3cbced53c386a9e63"
 }

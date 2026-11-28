@@ -1,10 +1,12 @@
 {
   "uid": "bb0f1484020b99e8",
   "name": "HE 240 B",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -40,6 +42,9 @@
             "en/he280b",
             280.0
           ]
+        ],
+        "aliases": [
+          "HEB 240"
         ]
       }
     }
@@ -79,5 +84,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:93c774514cf4869cee1bafa8af96babb3981e71756d75ce536a24c729c26102b"
+  "hash": "sha256:8287ceac8de657ad47834ac12405071d0f4367b8e45753ec71365bd2888fda05"
 }

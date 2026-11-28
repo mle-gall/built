@@ -1,10 +1,12 @@
 {
   "uid": "a01acad5e31c490a",
   "name": "HSS24 × 12 × 3/8",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -32,6 +34,9 @@
             "aisc/hss24x12x3_8",
             609.6
           ]
+        ],
+        "aliases": [
+          "HSS24X12X3/8"
         ]
       }
     }
@@ -71,5 +76,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:88ce73478db25f2162faf94988546a7636702edf407b0ce89daf56bc0ccf25ab"
+  "hash": "sha256:58930da62595e5f8ffe5c97daf1d0507b3321c329e62b24765821a55f98e0d0a"
 }

@@ -1,10 +1,12 @@
 {
   "uid": "0d32f14ec3029eb4",
   "name": "SHS 100 × 100 × 6.3 (hot-finished)",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -63,5 +65,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:dfc5d1931624a80e2e2afa24ea2edfaedec752627c96b3eed1d18532a4616077"
+  "hash": "sha256:61b054e15d377240cbb7c5479887fd26b71e4b386a3045341296e66b02ba5525"
 }

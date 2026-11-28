@@ -1,10 +1,12 @@
 {
   "uid": "f6c8c8e5186c58b9",
   "name": "ISMC 300 × 41.5",
-  "rev": 1,
+  "rev": 2,
   "pack": "Steel profiles · IS",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -26,6 +28,9 @@
             "is/ismc300x41.5",
             300.0
           ]
+        ],
+        "aliases": [
+          "MC 300 x 41.5"
         ]
       }
     }
@@ -65,5 +70,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:b001a6ba39def5f2b2bd31ad241bb9c4902fb9108225e19a3ebe3eef16eea9a3"
+  "hash": "sha256:097e4c5c39a509018d468fa61d2bd716f5e7b51387fab5b046916adad5934927"
 }

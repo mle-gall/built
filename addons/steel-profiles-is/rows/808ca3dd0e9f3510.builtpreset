@@ -1,10 +1,12 @@
 {
   "uid": "808ca3dd0e9f3510",
   "name": "ISLC 400",
-  "rev": 1,
+  "rev": 2,
   "pack": "Steel profiles · IS",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -34,6 +36,9 @@
             "is/islc400",
             400.0
           ]
+        ],
+        "aliases": [
+          "LC 400"
         ]
       }
     }
@@ -73,5 +78,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:6321e33b9c2b87fef2cb1aaa9aa2a719b12e78b6cafe238fd51c417532562c13"
+  "hash": "sha256:473953d049e47dc158775d4cf88759854f54a3cd52d0a3989656f4fe145b7ab5"
 }

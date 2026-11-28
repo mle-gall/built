@@ -1,10 +1,12 @@
 {
   "uid": "55fbe959a80782ce",
   "name": "L5 × 5 × 5/16",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -23,6 +25,9 @@
             "aisc/l5x5x5_16",
             127.0
           ]
+        ],
+        "aliases": [
+          "L5X5X5/16"
         ]
       }
     }
@@ -62,5 +67,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:af325ecd66811d7acdc7c7743a3536282b512403c490ce8b824b3ec957b34287"
+  "hash": "sha256:16b8fb1533aaecbea070f8308e4f6f0e07666a522a72685ef36e1f5d31620463"
 }

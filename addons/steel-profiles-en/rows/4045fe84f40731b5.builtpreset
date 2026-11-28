@@ -1,10 +1,12 @@
 {
   "uid": "4045fe84f40731b5",
   "name": "IPE A 80",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -71,5 +73,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:c43ceb9ba18daf944c54e69cef63f503432982777ec71ad89a720c9a9a85022c"
+  "hash": "sha256:28db988c91853e5cfbb6b874872f013fa1d14fd46b8d2c0e87b760c4f64f3b7f"
 }

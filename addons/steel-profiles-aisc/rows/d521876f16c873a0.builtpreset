@@ -1,10 +1,12 @@
 {
   "uid": "d521876f16c873a0",
   "name": "WT8 × 44.5",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -24,6 +26,9 @@
             "aisc/wt8x44.5",
             212.852
           ]
+        ],
+        "aliases": [
+          "WT8X44.5"
         ]
       }
     }
@@ -63,5 +68,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:6d1beff1c7b8c0503e5d3e8a40cfc7dd02e166af49ff88a3167709530f07c580"
+  "hash": "sha256:04a61941a6b32639ddb20632ac200f3ab0d0a4e4290a242c338fce9a9947c1c1"
 }

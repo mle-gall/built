@@ -1,10 +1,12 @@
 {
   "uid": "bb26bf635b1021a2",
   "name": "L3-1/2 × 3-1/2 × 1/2",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -23,6 +25,9 @@
             "aisc/l3-1_2x3-1_2x1_2",
             88.9
           ]
+        ],
+        "aliases": [
+          "L3-1/2X3-1/2X1/2"
         ]
       }
     }
@@ -62,5 +67,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:10a84faa5fa8a56a00e2d7be6e8e5bee522715b70799ef8f46c055b279391cac"
+  "hash": "sha256:1ea18fe8cc06b4a290f53379660283711deb5cf87ec831d0a48bcd6829cb6988"
 }

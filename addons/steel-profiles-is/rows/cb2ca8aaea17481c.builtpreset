@@ -1,10 +1,12 @@
 {
   "uid": "cb2ca8aaea17481c",
   "name": "ISA 110 × 110 × 12",
-  "rev": 1,
+  "rev": 2,
   "pack": "Steel profiles · IS",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -24,6 +26,9 @@
             "is/isa110x110x12",
             110.0
           ]
+        ],
+        "aliases": [
+          "A 110 x 110 x 12"
         ]
       }
     }
@@ -63,5 +68,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:fff6068fec07e83590c181d33749351f1574ea030ed149e65a57bc1a7e4c1426"
+  "hash": "sha256:f8654f3a798bbf4bfd03792d1e3123c26b4019dbf82eaec33ccce92cd8fd72cc"
 }

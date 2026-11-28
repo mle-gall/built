@@ -1,10 +1,12 @@
 {
   "uid": "94b3b950979ea7ba",
   "name": "ISJB 200",
-  "rev": 1,
+  "rev": 2,
   "pack": "Steel profiles · IS",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -38,6 +40,9 @@
             "is/isjb225",
             225.0
           ]
+        ],
+        "aliases": [
+          "JB 200"
         ]
       }
     }
@@ -77,5 +82,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:65e442ba820eadf0807b11d36f28a346bf70d3b385adfd81a43bbaf4b71f4f68"
+  "hash": "sha256:a3d4883e71fd18b4f72c92eeca3c1e0c2bc0b7c6be87efea5e0cefec934cb954"
 }

@@ -1,10 +1,12 @@
 {
   "uid": "01af7441ebcadce8",
   "name": "HE 280 AA",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -40,6 +42,9 @@
             "en/he320aa",
             301.0
           ]
+        ],
+        "aliases": [
+          "HEAA 280"
         ]
       }
     }
@@ -79,5 +84,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:076ed7ff256b72cde2e9c82c58fb9c89acdc3f26d84a4f717ff925424642e5e9"
+  "hash": "sha256:fd0e5bb54382fef177e054746cf21169332b68176acd61d044a6f29835c2ba8d"
 }

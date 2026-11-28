@@ -1,10 +1,12 @@
 {
   "uid": "b1463b2fc3e0f59b",
   "name": "HSS3-1/2 × 1-1/2 × 3/16",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -28,6 +30,9 @@
             "aisc/hss3-1_2x1-1_2x3_16",
             88.9
           ]
+        ],
+        "aliases": [
+          "HSS3-1/2X1-1/2X3/16"
         ]
       }
     }
@@ -67,5 +72,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:89f9d2069776d9ebee6ddce94606e865abbc3b746f1ecccda025546db7ad3be4"
+  "hash": "sha256:9047b5d0365d50492d3cc2e48298a2a3ae458fc6ccb8d8b8d09650c2d302933a"
 }

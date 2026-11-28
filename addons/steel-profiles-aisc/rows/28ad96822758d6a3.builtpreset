@@ -1,10 +1,12 @@
 {
   "uid": "28ad96822758d6a3",
   "name": "M5 × 18.9",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -24,6 +26,9 @@
             "aisc/m5x18.9",
             127.0
           ]
+        ],
+        "aliases": [
+          "M5X18.9"
         ]
       }
     }
@@ -63,5 +68,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:9482551035067f998a7930a701411a9d76ee57d64e0ed81c9c7a3d2e440a9e87"
+  "hash": "sha256:c5120eeb354697ab173735ddabde19ec4be29a2096b49b7e7d7c654325a0707f"
 }

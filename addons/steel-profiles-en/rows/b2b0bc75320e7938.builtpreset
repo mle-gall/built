@@ -1,10 +1,12 @@
 {
   "uid": "b2b0bc75320e7938",
   "name": "RHS 90 × 50 × 6.3 (hot-finished)",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -67,5 +69,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:38293581d802dfc2aef89ca5132770c3a2ba5c3d14f08d02433d304957a6c839"
+  "hash": "sha256:aac6d1dece2a2629b84274ab100afec39b13b76482272bf771245083ed1c02c7"
 }

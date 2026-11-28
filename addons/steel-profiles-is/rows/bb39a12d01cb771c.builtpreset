@@ -1,10 +1,12 @@
 {
   "uid": "bb39a12d01cb771c",
   "name": "ISMC 175",
-  "rev": 1,
+  "rev": 2,
   "pack": "Steel profiles · IS",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -42,6 +44,9 @@
             "is/ismc225",
             225.0
           ]
+        ],
+        "aliases": [
+          "MC 175"
         ]
       }
     }
@@ -81,5 +86,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:8b1dc80c5dd14defffd013d54c3bffdb79ea48524c3b4fb962220943d2b3abf9"
+  "hash": "sha256:f3155e34a9c14a872ba83e33fc7f43cb9ebeb3a41618137db024ed7221866de9"
 }

@@ -1,10 +1,12 @@
 {
   "uid": "4291a86f2b22efff",
   "name": "ISLB 450",
-  "rev": 1,
+  "rev": 2,
   "pack": "Steel profiles · IS",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -38,6 +40,9 @@
             "is/islb550",
             550.0
           ]
+        ],
+        "aliases": [
+          "LB 450"
         ]
       }
     }
@@ -77,5 +82,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:ce502c36e57036733a3bf62ea85bda81994a5bd565860362d4671928f7307e83"
+  "hash": "sha256:5250cee179d550f6cdc70f48c182c019b551e8d13c4f7d09d854c3030b354c03"
 }

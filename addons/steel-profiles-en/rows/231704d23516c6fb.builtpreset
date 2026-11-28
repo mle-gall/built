@@ -1,10 +1,12 @@
 {
   "uid": "231704d23516c6fb",
   "name": "IPE A 270",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -79,5 +81,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:14b4c08301766ca854e5e22ed31b51195524af077a9141ffea650f13a8a736de"
+  "hash": "sha256:80bec210c9ae2d7efcc7e3a45827d5fdddc27bf852406846db272ab777cab418"
 }

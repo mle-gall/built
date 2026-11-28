@@ -1,10 +1,12 @@
 {
   "uid": "5b5ca8610b6b972b",
   "name": "SHS 140 × 140 × 6 (cold-formed)",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -63,5 +65,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:dd0085ff970d07389d550c7a8dc9dbc54ebaf3f1837cfbe6bf28e7573e70a3b3"
+  "hash": "sha256:4b61b78002cfcc11cfebf0a20de2233fdfc9f1e4286825680b06beb2c5cd7831"
 }

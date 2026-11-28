@@ -1,10 +1,12 @@
 {
   "uid": "ed932e025bfb1d85",
   "name": "HSS20.000 × 1.000",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -38,6 +40,9 @@
             "aisc/hss28.000x1.000",
             711.2
           ]
+        ],
+        "aliases": [
+          "HSS20.000X1.000"
         ]
       }
     }
@@ -77,5 +82,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:07efff02c0296de52914c111d66a21020861b9a77779aafe6eefbb0cc37bd4fd"
+  "hash": "sha256:8f76ad83294a7fdf154d6e7e3760d77e2082446ade66195c2048a1c68fa242a1"
 }

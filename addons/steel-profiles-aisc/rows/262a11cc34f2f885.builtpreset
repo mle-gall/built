@@ -1,10 +1,12 @@
 {
   "uid": "262a11cc34f2f885",
   "name": "WT4 × 20",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -32,6 +34,9 @@
             "aisc/wt8x20",
             203.454
           ]
+        ],
+        "aliases": [
+          "WT4X20"
         ]
       }
     }
@@ -71,5 +76,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:40ffd15147473455a3cf7643e50efda75323dcb5104fdc1d7823d10c73502a10"
+  "hash": "sha256:db6a3ba29c19e2f1c0b77c1171fdfbb36c008890cac7e10c48cb2b88126c5ee1"
 }

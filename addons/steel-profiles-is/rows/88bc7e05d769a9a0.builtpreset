@@ -1,10 +1,12 @@
 {
   "uid": "88bc7e05d769a9a0",
   "name": "ISMB 550",
-  "rev": 1,
+  "rev": 2,
   "pack": "Steel profiles · IS",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -38,6 +40,9 @@
             "is/ismb600",
             600.0
           ]
+        ],
+        "aliases": [
+          "MB 550"
         ]
       }
     }
@@ -77,5 +82,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:138dcaa5b5145c03a0e0ae16f4af4a222256a99b1180b76439b0de66c3be2956"
+  "hash": "sha256:c8bb5e9d93fbcce461c7fdbbc6ba5016168cb3e910e1dede73b402f69d0db12b"
 }

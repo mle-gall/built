@@ -245,15 +245,31 @@ impl Profile {
                     continue;
                 }
                 let (a, b, theta) = corner(i).ok_or("invalid_profile")?;
-                let d = tangent(i)?;
+                let mut d = tangent(i)?;
                 let prev = (pt(i + n - 1) - p).length();
                 let next = (pt(i + 1) - p).length();
+                let after = tangent(i + 1)?;
                 // A fillet may use a whole edge (a toe radius equal to the
-                // leg thickness); the coincident points are merged below.
+                // leg thickness); the coincident points are merged below. A
+                // fillet that stops within SNAP of an edge's end (or of the
+                // next fillet) is taken to it: points that close would weld
+                // into one vertex in the model.
                 const EPS: f64 = 1e-9;
-                if d > prev + EPS || d > next + EPS || d + tangent(i + 1)? > next + EPS {
+                const SNAP: f64 = 0.2;
+                if d > prev + EPS || d > next + EPS || d + after > next + EPS {
                     return Err("invalid_profile");
                 }
+                let before = tangent(i + n - 1)?;
+                if before == 0. && prev - d < SNAP {
+                    d = prev;
+                }
+                if after == 0. && next - d < SNAP {
+                    d = next;
+                } else if after > 0. && next - d - after < SNAP {
+                    // Forward only, so two neighbours never both move.
+                    d = next - after;
+                }
+                let radius = d * (theta / 2.).tan();
                 let centre = p + (a + b).normalize() * (radius / (theta / 2.).sin());
                 let sweep = std::f64::consts::PI - theta;
                 let start = p + a * d - centre;

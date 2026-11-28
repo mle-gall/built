@@ -1,10 +1,12 @@
 {
   "uid": "d1cd97cb176ef6f5",
   "name": "HE 320 AA",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -40,6 +42,9 @@
             "en/he360aa",
             339.0
           ]
+        ],
+        "aliases": [
+          "HEAA 320"
         ]
       }
     }
@@ -79,5 +84,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:358d914c2b748bc7e7a3b9225e3b2a9c75534f940541f22af620be6457d03946"
+  "hash": "sha256:3c70bafce07f6ee0ef135455b8ea2af31c8594d2cc4b43ad0848f69fd521d6fc"
 }

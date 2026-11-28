@@ -1,10 +1,12 @@
 {
   "uid": "1222b5ffd2718e3a",
   "name": "SHS 160 × 160 × 6 (cold-formed)",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -63,5 +65,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:8af1a786a772edaf9c51766039a0469273f1fbf94f408d0ae0c7a4dd16f55404"
+  "hash": "sha256:033c1d81aec1ce586aae6ca569cf5458e377a2d6502020f5214c5e21a1887d0b"
 }

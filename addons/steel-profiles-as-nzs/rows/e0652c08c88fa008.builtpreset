@@ -1,10 +1,12 @@
 {
   "uid": "e0652c08c88fa008",
   "name": "150 UB 14.0",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AS/NZS",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -63,5 +65,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:638f7e3a8513719bfef8ca9420ed48bddfe7ae10fd8769c0d1bb444d57285cb4"
+  "hash": "sha256:ff6a8275db9965c1575b84c68ec991fb5025b55148045d44805f2ab48e68fc73"
 }

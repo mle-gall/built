@@ -1,10 +1,12 @@
 {
   "uid": "78318308107f25ac",
   "name": "HE 360 B",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -40,6 +42,9 @@
             "en/he450b",
             450.0
           ]
+        ],
+        "aliases": [
+          "HEB 360"
         ]
       }
     }
@@ -79,5 +84,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:49100f2f52fc33afb33ed600adfe695e3d19de47db3eec52863284b8370efb6e"
+  "hash": "sha256:df59fc20a1af7514526322f38e75b71cfc139f98e2506d9fd0f341d96842ec83"
 }

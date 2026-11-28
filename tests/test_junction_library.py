@@ -223,7 +223,7 @@ def test_round_family_takes_one_diameter_and_arms_sweep(win):
 
     ctx = L.Ctx(win, win.view)
     profiles = L.ProfilesProvider()
-    bar = next(row for row in profiles.items(ctx) if row["category"] == "round")
+    bar = next(row for row in profiles.items(ctx) if row["category"] == "Round bars")
     profiles.run(ctx, "size", bar)
     form = chrome_forms.current(win)
     form.receive("width", "75")
@@ -241,7 +241,7 @@ def test_empty_state_points_to_import_pack_until_a_pack_is_installed(win, tmp_pa
     assert sheet["footer"]["hint"] == hint
     assert [link["id"] for link in sheet["footer"]["links"]] == ["typeact:new", "typeact:import"]
     families = {row["category"] for row in L.ProfilesProvider().items(L.Ctx(win, win.view))}
-    assert {"round"} <= families
+    assert {"Round bars"} <= families
     win._activate_tool("junction")
     assert win._tools["junction"]._state("prompt") == hint
 

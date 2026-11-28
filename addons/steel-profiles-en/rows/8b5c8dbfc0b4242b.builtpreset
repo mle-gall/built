@@ -1,10 +1,12 @@
 {
   "uid": "8b5c8dbfc0b4242b",
   "name": "HE 180 C",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -40,6 +42,9 @@
             "en/he220c",
             230.0
           ]
+        ],
+        "aliases": [
+          "HEC 180"
         ]
       }
     }
@@ -79,5 +84,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:71510aaec3475e0b5c3165cd700d21df5280138299acf279ee283372dfea6b68"
+  "hash": "sha256:565591a1814086acd2f7e473e6290df874e12469751d9a11c31ca4931bc528d3"
 }

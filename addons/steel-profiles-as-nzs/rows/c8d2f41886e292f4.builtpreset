@@ -1,10 +1,12 @@
 {
   "uid": "c8d2f41886e292f4",
   "name": "530 UB 82.0",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AS/NZS",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -63,5 +65,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:c637210d2a90446d8a64009dbf2042a9c4462e390a72a2f26ad042e821d503a9"
+  "hash": "sha256:da98d722e955ab6b29a4b5f0d9a981dc3f398099a82090a96645b6d591736c38"
 }

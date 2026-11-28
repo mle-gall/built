@@ -1,10 +1,12 @@
 {
   "uid": "9ff55444ec5c3010",
   "name": "C3 × 5",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -25,6 +27,9 @@
             "aisc/c3x5",
             76.2
           ]
+        ],
+        "aliases": [
+          "C3X5"
         ]
       }
     }
@@ -64,5 +69,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:17be108643303e4005134dfbf72e897e5d5d60b30e0053aa3c61d11993dc55b7"
+  "hash": "sha256:2b1aea4267668229bfe640058e9f88e2443d6f52b4fa86cc6245cde836b11308"
 }

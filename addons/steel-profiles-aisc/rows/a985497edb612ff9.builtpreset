@@ -1,10 +1,12 @@
 {
   "uid": "a985497edb612ff9",
   "name": "ST6 × 17.5",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -29,6 +31,9 @@
             "aisc/st6x17.5",
             152.4
           ]
+        ],
+        "aliases": [
+          "ST6X17.5"
         ]
       }
     }
@@ -68,5 +73,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:9f10956261943d84bf188700da2e85c6f17b7f5dc7b7c7018b32fbce7da5919c"
+  "hash": "sha256:c790212fd898ff8c262a062478e5a111be024ea1c9c89fb81e728763210b37cf"
 }

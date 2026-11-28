@@ -1,10 +1,12 @@
 {
   "uid": "5f9ff0aa99e5b525",
   "name": "CHS 273 × 16 (hot-finished)",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -77,5 +79,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:c1c5eecb6d959616aecd79bd17cd749b548797f1f2a3f831562a8dff08f258b9"
+  "hash": "sha256:87c3a35a03a81a72c0a99fefb70e5bf71173b415a04f193b99d2279cdb90b7d3"
 }

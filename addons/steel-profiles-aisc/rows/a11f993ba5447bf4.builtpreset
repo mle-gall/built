@@ -1,10 +1,12 @@
 {
   "uid": "a11f993ba5447bf4",
   "name": "S10 × 25.4",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -25,6 +27,9 @@
             "aisc/s10x25.4",
             254.0
           ]
+        ],
+        "aliases": [
+          "S10X25.4"
         ]
       }
     }
@@ -64,5 +69,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:1f8b39b2f9828e6601804b83e801cb36c779a89a63229cdff434ce3db28c77ce"
+  "hash": "sha256:5116e2e51d3b67492f66889d6f13ef6ff2b8cd0549c5fa25854312c228a11d6e"
 }

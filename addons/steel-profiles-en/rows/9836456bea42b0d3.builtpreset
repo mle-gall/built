@@ -1,10 +1,12 @@
 {
   "uid": "9836456bea42b0d3",
   "name": "HE 450 M",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -40,6 +42,9 @@
             "en/he550m",
             572.0
           ]
+        ],
+        "aliases": [
+          "HEM 450"
         ]
       }
     }
@@ -79,5 +84,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:ae6292d64856e38975bebb316ba5afae0d74f7c80143710d09454b3d66d43fe7"
+  "hash": "sha256:0d1d1b788d7af12da00784b38428c07736355a5de841686bfb300d1ea254a7f0"
 }

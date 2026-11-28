@@ -1,10 +1,12 @@
 {
   "uid": "969344a1ebb5a411",
   "name": "W 310 × 44.5",
-  "rev": 3,
+  "rev": 4,
   "pack": "Steel profiles · BR",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -63,5 +65,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:eb643c78fd6f679195723b0a33f76b70a67c99151ebd2c1a10b566b1a9ad7cbf"
+  "hash": "sha256:96daa82597be1c1d7ec417b2c1ec9091c0fd5e482eb9b9b4dc3d22b1363c8932"
 }

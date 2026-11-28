@@ -1,10 +1,12 @@
 {
   "uid": "d3bae6d44f691d93",
   "name": "SHS 80 × 80 × 3 (cold-formed)",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -63,5 +65,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:4cf99009691fd3ed1f273785340173d957e31113b5ee8e8928601caa06aad48a"
+  "hash": "sha256:8828edbb15199f0c397b8cbd5adc7b0a5c55bb70d5fcf1dd64860725d1850d46"
 }

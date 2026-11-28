@@ -1,10 +1,12 @@
 {
   "uid": "cd6a792f8be658d7",
   "name": "ISLC(P) 300",
-  "rev": 1,
+  "rev": 2,
   "pack": "Steel profiles · IS",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -34,6 +36,9 @@
             "is/islcp300",
             300.0
           ]
+        ],
+        "aliases": [
+          "LC(P) 300"
         ]
       }
     }
@@ -73,5 +78,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:dee70d7351b531da9ba53cf5838e55fe8f49bee6053335c5718f47b84b6d891e"
+  "hash": "sha256:4e675441862692d79effaf6fe0064aa933eac91f365c522f7b704f348a7e831d"
 }

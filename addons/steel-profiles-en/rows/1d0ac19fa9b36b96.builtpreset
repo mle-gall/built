@@ -1,10 +1,12 @@
 {
   "uid": "1d0ac19fa9b36b96",
   "name": "SHS 100 × 100 × 3 (cold-formed)",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -63,5 +65,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:2056ad3cba87aa632ae2f78821a483e38308e5254b6236504330c2b6269ae852"
+  "hash": "sha256:555f16c3d27359ba9df952542a5c593c2db9b4d59f123dd7553cb39a37e9727c"
 }

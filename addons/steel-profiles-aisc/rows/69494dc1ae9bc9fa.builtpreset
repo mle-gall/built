@@ -1,10 +1,12 @@
 {
   "uid": "69494dc1ae9bc9fa",
   "name": "L6 × 6 × 1",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -27,6 +29,9 @@
             "aisc/l8x6x1",
             203.2
           ]
+        ],
+        "aliases": [
+          "L6X6X1"
         ]
       }
     }
@@ -66,5 +71,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:8e697e3b9da7b0f3cb7bb34a8bbc74d89604c37e001514cea73cef49190c6c90"
+  "hash": "sha256:2d219b2c93cad4d2e35182052aad5931d312c0486a9ec4d3c9e57628e6f68354"
 }

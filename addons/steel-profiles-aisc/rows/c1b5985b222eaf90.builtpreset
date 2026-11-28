@@ -1,10 +1,12 @@
 {
   "uid": "c1b5985b222eaf90",
   "name": "HSS4 × 3 × 5/16",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -32,6 +34,9 @@
             "aisc/hss6x3x5_16",
             152.4
           ]
+        ],
+        "aliases": [
+          "HSS4X3X5/16"
         ]
       }
     }
@@ -71,5 +76,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:57eeb66b654068f0989399ecd56d5f6dc5d25818bcac81fdb24e950e2809f243"
+  "hash": "sha256:cb1e219476ae664540e2a53cbfb2d6864b3f90dcd184a5e6e8a7c5c21631b8ac"
 }

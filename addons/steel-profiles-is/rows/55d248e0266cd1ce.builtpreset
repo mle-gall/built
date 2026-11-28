@@ -1,10 +1,12 @@
 {
   "uid": "55d248e0266cd1ce",
   "name": "ISWB 200 × 52",
-  "rev": 1,
+  "rev": 2,
   "pack": "Steel profiles · IS",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -26,6 +28,9 @@
             "is/iswb200x52",
             203.0
           ]
+        ],
+        "aliases": [
+          "WB 200 x 52"
         ]
       }
     }
@@ -65,5 +70,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:74e986303a2052906c90edbe24e946fcd2fbd0472ddd1fb6ca6386df673ac12e"
+  "hash": "sha256:daed3b8f16fd07919f15f66c06452fcc1340e2c5478244f529628ca89803da14"
 }

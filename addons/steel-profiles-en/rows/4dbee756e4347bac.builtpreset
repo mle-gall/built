@@ -1,10 +1,12 @@
 {
   "uid": "4dbee756e4347bac",
   "name": "UPN 100",
-  "rev": 1,
+  "rev": 2,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -82,5 +84,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:cb1689af10227d2509c3c496ee7be702812da9678cf24cc7e3e40a2bf11c0cd9"
+  "hash": "sha256:df9ed685854e40999c773c9a98b9458b16c8f86d569d38eda6d135eb48dd22eb"
 }

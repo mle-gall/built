@@ -1,10 +1,12 @@
 {
   "uid": "cefb159814756573",
   "name": "ISHB 450",
-  "rev": 1,
+  "rev": 2,
   "pack": "Steel profiles · IS",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -34,6 +36,9 @@
             "is/ishb450",
             450.0
           ]
+        ],
+        "aliases": [
+          "HB 450"
         ]
       }
     }
@@ -73,5 +78,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:8376bb1685ee555b7be2d00ab5506704a8758a8165573d636c264bd67b26d548"
+  "hash": "sha256:6cb23ad34de1440b2b14fd071fb9148af49431847bdbb420bf86536b260e3e60"
 }

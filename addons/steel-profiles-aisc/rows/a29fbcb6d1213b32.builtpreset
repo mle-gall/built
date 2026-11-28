@@ -1,10 +1,12 @@
 {
   "uid": "a29fbcb6d1213b32",
   "name": "W14 × 370",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -28,6 +30,9 @@
             "aisc/w24x370",
             711.2
           ]
+        ],
+        "aliases": [
+          "W14X370"
         ]
       }
     }
@@ -67,5 +72,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:d6b52f7fa42ba155a0ff198c0c421fd47576d2fef8792f3f5a3654bf3064c388"
+  "hash": "sha256:3555a78ae3a60defb07fb85931ffb7aa510432f32f3c768a84f532e5e06e40d5"
 }

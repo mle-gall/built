@@ -1,10 +1,12 @@
 {
   "uid": "21eb061b3df598bb",
   "name": "Pipe6XS",
-  "rev": 3,
+  "rev": 4,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -77,5 +79,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:12dcc64106482a8a5861e76745f82a06fa9017e302df3d35d23015f8be0c0a1e"
+  "hash": "sha256:1ea60a1eb5d91c82c15a2b23fd4c8233e2e3cd5ae481fb141bd192cc54eff5a6"
 }

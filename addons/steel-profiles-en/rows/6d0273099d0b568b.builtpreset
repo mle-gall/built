@@ -1,10 +1,12 @@
 {
   "uid": "6d0273099d0b568b",
   "name": "SHS 200 × 200 × 5 (cold-formed)",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -63,5 +65,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:bd7d3596475d78fb1a72a41821ae99dedc72621bbfd88cd01e07da78589dabb4"
+  "hash": "sha256:31548affd8bf289709a19c1bdd549b10566ed3816af6bca8af708c478b81b8bf"
 }

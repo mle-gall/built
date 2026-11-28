@@ -1,10 +1,12 @@
 {
   "uid": "070e1bef0c066168",
   "name": "HE 200 B",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -40,6 +42,9 @@
             "en/he240b",
             240.0
           ]
+        ],
+        "aliases": [
+          "HEB 200"
         ]
       }
     }
@@ -79,5 +84,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:bad1b8e0f890c14d82af693c87165bfb596b15757b70d79345fdf6b77b6ac35a"
+  "hash": "sha256:3a77cb96b2d56965f80d92be5fa6051c7f3a7ab3c1fece3cd2f3b8dac73fc8e2"
 }

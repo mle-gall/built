@@ -1,10 +1,12 @@
 {
   "uid": "73eb2541df63e2bf",
   "name": "IPE O 550",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -75,5 +77,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:ca5bdf0774dee330303ae6c782b45430b57f7f78fcbc6490c723f9d3ac67aea4"
+  "hash": "sha256:1b0aab8ba0ac8247a26daca370ada1edd9131ee089902bef372b2c4d3bd9ddb4"
 }

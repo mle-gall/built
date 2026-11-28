@@ -1,10 +1,12 @@
 {
   "uid": "b9b7cf665efda86c",
   "name": "HE 700 AA",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -40,6 +42,9 @@
             "en/he900aa",
             870.0
           ]
+        ],
+        "aliases": [
+          "HEAA 700"
         ]
       }
     }
@@ -79,5 +84,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:b79ec68bc44917c4c55fddd0889cfa4cfda4c1ee8feea92284472c46e6478cf3"
+  "hash": "sha256:d560596de876f1b58e3a35852328086afc3a74117dd68b50b65e8b4ee5b83a88"
 }

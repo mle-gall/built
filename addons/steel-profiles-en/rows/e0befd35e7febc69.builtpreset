@@ -1,10 +1,12 @@
 {
   "uid": "e0befd35e7febc69",
   "name": "SHS 220 × 220 × 16 (hot-finished)",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -63,5 +65,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:60e00419323aaeebd6c9b6b073d60cd66e40af91d8423e170e8449e9fe851d1d"
+  "hash": "sha256:daa7b6c500569c68089cfc9589147da646f8285e0d7c95c5a9c5fe489ff2a51f"
 }

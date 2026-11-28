@@ -1,10 +1,12 @@
 {
   "uid": "ed5420f32a85dc4e",
   "name": "SHS 250 × 250 × 16 (hot-finished)",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -63,5 +65,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:2d1f7b5a2fa592c9ec50c4f3973ccfa23ee4c0addfe1f754548b635929dbe9ec"
+  "hash": "sha256:73fdeb046448e45383502fcf69c8e769e36fb89e7e33bab8042cf09dcfa8dd58"
 }

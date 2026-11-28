@@ -1,10 +1,12 @@
 {
   "uid": "17f50b7592f11b73",
   "name": "UPE 330",
-  "rev": 1,
+  "rev": 2,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -79,5 +81,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:c699bf2e2aec746587e2d20761960c01e63a66784f433babe1095b166c441764"
+  "hash": "sha256:fb864a137bf450afa6df59b894b120d3b6bc4a415a4ad145010c60db25d289a8"
 }

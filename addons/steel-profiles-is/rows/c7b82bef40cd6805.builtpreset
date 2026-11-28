@@ -1,10 +1,12 @@
 {
   "uid": "c7b82bef40cd6805",
   "name": "ISWB 600 × 145",
-  "rev": 1,
+  "rev": 2,
   "pack": "Steel profiles · IS",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -26,6 +28,9 @@
             "is/iswb600x145",
             600.0
           ]
+        ],
+        "aliases": [
+          "WB 600 x 145"
         ]
       }
     }
@@ -65,5 +70,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:58cbb768034e1008e0259c0e41b48f6cafa7e87b2628d98f8872df7ba943eedb"
+  "hash": "sha256:365ff7e4308ef2b36221de6b3a609db837334d320c90f832d32f740771b14f52"
 }

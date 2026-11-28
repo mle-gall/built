@@ -1,10 +1,12 @@
 {
   "uid": "449bcc03dd0b63f6",
   "name": "HE 260 C",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -40,6 +42,9 @@
             "en/he300c",
             320.0
           ]
+        ],
+        "aliases": [
+          "HEC 260"
         ]
       }
     }
@@ -79,5 +84,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:cb0c85cdad3789019a3a5fba20c350e7da2c2b70be33fab2297705e1beb8c7b4"
+  "hash": "sha256:30c90894a092e3825411633e092a06bf8d9b7ef5b53310aacd81dda47d104c56"
 }

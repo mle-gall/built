@@ -1,10 +1,12 @@
 {
   "uid": "3a38dedd588c20b6",
   "name": "WT9 × 71.5",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -24,6 +26,9 @@
             "aisc/wt9x71.5",
             247.65
           ]
+        ],
+        "aliases": [
+          "WT9X71.5"
         ]
       }
     }
@@ -63,5 +68,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:adabbe2fb29b4a2282827e9ff04b6543b2703bda313b662b9764c5c1fa38a5eb"
+  "hash": "sha256:179b87ce13de6db5a4a1580820cc0dd7539a51e6d1ad709e46fafc1d2f9b695f"
 }

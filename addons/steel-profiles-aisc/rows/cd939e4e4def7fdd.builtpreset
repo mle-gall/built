@@ -1,10 +1,12 @@
 {
   "uid": "cd939e4e4def7fdd",
   "name": "M6 × 3.7",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -24,6 +26,9 @@
             "aisc/m6x3.7",
             150.368
           ]
+        ],
+        "aliases": [
+          "M6X3.7"
         ]
       }
     }
@@ -63,5 +68,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:9c8332bb82b43ec7a63dae7634c92221221397546d78f97e87caa1dc41cfc679"
+  "hash": "sha256:f0d1d14273fb2de18c6ef63b808e22d41f85f515dce0c950be4213e5ffbe098a"
 }

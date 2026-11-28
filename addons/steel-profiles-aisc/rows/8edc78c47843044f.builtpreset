@@ -1,10 +1,12 @@
 {
   "uid": "8edc78c47843044f",
   "name": "C12 × 20.7",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -25,6 +27,9 @@
             "aisc/c12x20.7",
             304.8
           ]
+        ],
+        "aliases": [
+          "C12X20.7"
         ]
       }
     }
@@ -64,5 +69,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:5ded2e4a94dc47d4c70c026c598807ae067f8d9d8f7131f757b9a00190262cdd"
+  "hash": "sha256:d111df4acba44857de1d7fca5684406fb8f8aedd719cd42f6dee7cb8741ede89"
 }

@@ -103,6 +103,20 @@ def design_params(shape, p, s):
     return q
 
 
+def aliases(designation, family, text):
+    """Other names a size is searched by: HE 200 A is also HEA 200, ISMB 300
+    is MB 300, W8 × 18 is W8X18 as AISC writes it."""
+    out = []
+    m = re.fullmatch(r"HE (\d+) (AA|A|B|C|M)", designation)
+    if m:
+        out.append(f"HE{m.group(2)} {m.group(1)}")
+    if designation.startswith("IS") and " " in designation:
+        out.append(designation[2:])
+    if family.get("label_x") and designation != text:
+        out.append(designation)
+    return out
+
+
 def label(designation, family):
     text = designation.replace(" x ", " × ")
     if family.get("label_x"):
@@ -224,10 +238,11 @@ def rows_for(folder, src, kept):
                 "rev": 1,
                 "pack": pack_name,
                 "primitive": "sweep",
-                "record": {},
+                "record": {"class": fam.get("ifc_class", "IfcBeam")},
                 "locks": {},
                 "values": {"profile": {"library": e["key"], "family": fam["shape"], "params": e["params"],
-                                       "catalogue": {"name": e["label"], "series": series}}},
+                                       "catalogue": {"name": e["label"], "series": series,
+                                                     **({"aliases": names} if (names := aliases(s["designation"], fam, e["label"])) else {})}}},
                 "provenance": {"created_with": "Built", "status": s["status"], "source_id": s["source"],
                                "source": source["url"], "standard": fam["standard"],
                                "series": fam["series"],

@@ -1,10 +1,12 @@
 {
   "uid": "a867a171a626046c",
   "name": "HE 500 M",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -40,6 +42,9 @@
             "en/he600m",
             620.0
           ]
+        ],
+        "aliases": [
+          "HEM 500"
         ]
       }
     }
@@ -79,5 +84,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:0ea30fcad9d1131a9c9c4dcddf395bfe968c5383459a6faeffff8c68085f63d1"
+  "hash": "sha256:165c44d9dff9104868fb7d90323f856e48d897e95183d69b69e80cd11c43ed5d"
 }

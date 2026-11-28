@@ -1,10 +1,12 @@
 {
   "uid": "841b18881f09435c",
   "name": "ISWB 175",
-  "rev": 1,
+  "rev": 2,
   "pack": "Steel profiles · IS",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -38,6 +40,9 @@
             "is/iswb225",
             225.0
           ]
+        ],
+        "aliases": [
+          "WB 175"
         ]
       }
     }
@@ -77,5 +82,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:161fa7043066af6a065a18723c112c9e3775f59fe92a24c354b051771ccea9b1"
+  "hash": "sha256:db62db2479117517da1871d74385e0568fdd29e25a9bb609e6910ab43bf95355"
 }

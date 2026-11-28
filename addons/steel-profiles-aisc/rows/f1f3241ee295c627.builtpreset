@@ -1,10 +1,12 @@
 {
   "uid": "f1f3241ee295c627",
   "name": "W40 × 503",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -24,6 +26,9 @@
             "aisc/w40x503",
             1069.34
           ]
+        ],
+        "aliases": [
+          "W40X503"
         ]
       }
     }
@@ -63,5 +68,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:7bd2835cda4a84035beffa90b5a1539f05cc8e7ddea6f2c19743a082d742f931"
+  "hash": "sha256:1970c7db360bbe0db858a8a0fe98d70a0f9f86009dc3e965e3276bf4a4e365a3"
 }

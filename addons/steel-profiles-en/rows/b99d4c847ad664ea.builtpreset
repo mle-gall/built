@@ -1,10 +1,12 @@
 {
   "uid": "b99d4c847ad664ea",
   "name": "SHS 180 × 180 × 12.5 (cold-formed)",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -63,5 +65,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:5826572161195e793c8be4f0fe0f79ce9fe96496de6bdfa523fe0396f5ba0d57"
+  "hash": "sha256:2429623c98f6a7b9d3c42d17fee950b543c417cb60ac6163700d0f8df27739aa"
 }

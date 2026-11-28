@@ -1,10 +1,12 @@
 {
   "uid": "304b43bd9a1b2925",
   "name": "W10 × 49",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -24,6 +26,9 @@
             "aisc/w10x49",
             254.0
           ]
+        ],
+        "aliases": [
+          "W10X49"
         ]
       }
     }
@@ -63,5 +68,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:e2ce145c779897998a7f22d15604b7e859a985ea3e11090de6e121ca34ff2372"
+  "hash": "sha256:334fc5ca7460c52d1983073e2c5bd030f3b3d325e739a03cc0c83027c85fa750"
 }

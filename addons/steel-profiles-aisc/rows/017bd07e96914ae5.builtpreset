@@ -1,10 +1,12 @@
 {
   "uid": "017bd07e96914ae5",
   "name": "L4 × 3 × 5/8",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -23,6 +25,9 @@
             "aisc/l4x3x5_8",
             101.6
           ]
+        ],
+        "aliases": [
+          "L4X3X5/8"
         ]
       }
     }
@@ -62,5 +67,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:d281d313e9124ade71bc9fda593b13e435f4fa038326416fb43b629713843015"
+  "hash": "sha256:48e8c12bc7ac59049befdc5ec6055700f5ae054bc197228d7e4638014bc9efab"
 }

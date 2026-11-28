@@ -1,10 +1,12 @@
 {
   "uid": "70c1dfb74fa82ade",
   "name": "HE 400 A",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -40,6 +42,9 @@
             "en/he500a",
             490.0
           ]
+        ],
+        "aliases": [
+          "HEA 400"
         ]
       }
     }
@@ -79,5 +84,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:8b7d60247290e85fac79ee72b454c644ac7afe414c3c24f6adb4fa6613884af0"
+  "hash": "sha256:3ed0e307ec4e109fc416a94b6efee011c49d705a52196a0a417da5c12075625e"
 }

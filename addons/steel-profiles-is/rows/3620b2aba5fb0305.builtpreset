@@ -1,10 +1,12 @@
 {
   "uid": "3620b2aba5fb0305",
   "name": "ISWB 450",
-  "rev": 1,
+  "rev": 2,
   "pack": "Steel profiles · IS",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -42,6 +44,9 @@
             "is/iswb550",
             550.0
           ]
+        ],
+        "aliases": [
+          "WB 450"
         ]
       }
     }
@@ -81,5 +86,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:586ba33c8b2e24fc864795ebe97196daeb122e979448445b6f1c7ee0fec11253"
+  "hash": "sha256:579a27600f2f9bf6e7d8e30cf2ab317b3defee7f5306ad892e74ae5d94716dc6"
 }

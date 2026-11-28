@@ -1,10 +1,12 @@
 {
   "uid": "71bba4254b94e01b",
   "name": "W27 × 102",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -24,6 +26,9 @@
             "aisc/w27x102",
             688.34
           ]
+        ],
+        "aliases": [
+          "W27X102"
         ]
       }
     }
@@ -63,5 +68,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:5a095ba75be84db41f2e7e6ecfe20b148c34e276ba44b9d104697f170347eab1"
+  "hash": "sha256:1b4cbbbe4458091cd6d758610aa4ebed48f22e5857595d0b9934c60389367cfc"
 }

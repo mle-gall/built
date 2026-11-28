@@ -115,7 +115,8 @@ def launch_window(folder, steps, size="1600x1000"):
 def library_placement(profile, start, finish, start_view, end_view, size):
     tab, search, row = ("515 166", "1200 166", "540 287") if size.startswith("1600") else ("414 128", "1056 128", "416 250")
     return ["click-command library", "wait 200", "click "+tab, "wait 150", "click "+search,
-            "type " + profile, "wait 180", "click "+row, "wait 180",
+            # The search lists dozens of pack sizes now: Enter uses the best match.
+            "type " + profile, "wait 600", "key enter", "wait 180",
             start_view, "wait 200", "move " + start, "click " + start, end_view, "wait 220", "move " + finish, "click " + finish,
             "key escape", "tool select", "wait 260"]
 

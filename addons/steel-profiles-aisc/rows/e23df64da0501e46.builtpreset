@@ -1,10 +1,12 @@
 {
   "uid": "e23df64da0501e46",
   "name": "C8 × 18.75",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -25,6 +27,9 @@
             "aisc/c8x18.75",
             203.2
           ]
+        ],
+        "aliases": [
+          "C8X18.75"
         ]
       }
     }
@@ -64,5 +69,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:810b40eee534efc8bc89349892094d2d9cb8bcc0cf96ff011ecc44e2b3b354da"
+  "hash": "sha256:b449ce9261d80ef60761a4800369971d9f636e04f001ea53be890de52762a2d9"
 }

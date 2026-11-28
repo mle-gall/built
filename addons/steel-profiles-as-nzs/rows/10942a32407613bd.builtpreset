@@ -1,10 +1,12 @@
 {
   "uid": "10942a32407613bd",
   "name": "310 UB 46.2",
-  "rev": 3,
+  "rev": 4,
   "pack": "Steel profiles · AS/NZS",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -63,5 +65,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:81b501bc5e9db0e1ff9286d42db6853fee8cb26e443e46c7eae633be56e0ce6d"
+  "hash": "sha256:03544884558bdeacff91e339db4c6b7a1d726c05dc9c8274753d4247dd4dc4cd"
 }

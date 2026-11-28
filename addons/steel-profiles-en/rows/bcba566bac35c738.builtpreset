@@ -1,10 +1,12 @@
 {
   "uid": "bcba566bac35c738",
   "name": "HE 1000 M",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -32,6 +34,9 @@
             "en/he1000m",
             1008.0
           ]
+        ],
+        "aliases": [
+          "HEM 1000"
         ]
       }
     }
@@ -71,5 +76,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:0175cb49c896e1dde5bd9e36fe23fdc5dc7ef3f2558025d0c1d0b7b0ebfd1a85"
+  "hash": "sha256:3c6ef96486cfe956ea7c7769424203af68208101e85e92668c5e1128b1ac1c36"
 }

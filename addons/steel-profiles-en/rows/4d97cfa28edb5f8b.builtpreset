@@ -1,10 +1,12 @@
 {
   "uid": "4d97cfa28edb5f8b",
   "name": "RHS 350 × 250 × 14.2 (hot-finished)",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -67,5 +69,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:7af987bc7b2f3584060c37d248f64b46f5a19a09cbf1933ececef3efe897cd85"
+  "hash": "sha256:29c5876a6e00b55ee723fe3cf48bbb49558086a93ec300f70d1c42520c8e0738"
 }

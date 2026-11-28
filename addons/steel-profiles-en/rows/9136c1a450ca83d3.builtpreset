@@ -1,10 +1,12 @@
 {
   "uid": "9136c1a450ca83d3",
   "name": "SHS 180 × 180 × 10 (hot-finished)",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -63,5 +65,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:0ad73fc9ee2cf5f6bb1d07cc3a7cdff6b38e4f9e188b78fd870cab3cd5fb4589"
+  "hash": "sha256:900f4afe00c06915e4f87c89c5a6c4c86d8d867fa135899ae92fab44f7fa927a"
 }

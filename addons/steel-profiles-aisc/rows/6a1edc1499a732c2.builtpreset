@@ -1,10 +1,12 @@
 {
   "uid": "6a1edc1499a732c2",
   "name": "ST9 × 27.35",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -25,6 +27,9 @@
             "aisc/st9x27.35",
             228.6
           ]
+        ],
+        "aliases": [
+          "ST9X27.35"
         ]
       }
     }
@@ -64,5 +69,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:7b9afe8c20c174ad8536eb40c4f58f7fee8a514dd14ba9684eb485f6749b86d2"
+  "hash": "sha256:59062e7a3e0dfa1c9656b7e23dd3827ecd9d357a8b459ec773f2b86e32da0b30"
 }

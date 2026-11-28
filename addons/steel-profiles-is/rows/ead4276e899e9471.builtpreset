@@ -1,10 +1,12 @@
 {
   "uid": "ead4276e899e9471",
   "name": "ISMC 350",
-  "rev": 1,
+  "rev": 2,
   "pack": "Steel profiles · IS",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -38,6 +40,9 @@
             "is/ismc400",
             400.0
           ]
+        ],
+        "aliases": [
+          "MC 350"
         ]
       }
     }
@@ -77,5 +82,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:9d5f3dee5d1f072f134c6863bf705aa8eddedda76b95ee9659998c50890385eb"
+  "hash": "sha256:3ecdbc4a00ce98669a05b255d4522396a2fd909f11be4dbe7af11304fe5ca9db"
 }

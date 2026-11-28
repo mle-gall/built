@@ -1,10 +1,12 @@
 {
   "uid": "c6cca2daf7e24661",
   "name": "W40 × 264",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -24,6 +26,9 @@
             "aisc/w40x264",
             1016.0
           ]
+        ],
+        "aliases": [
+          "W40X264"
         ]
       }
     }
@@ -63,5 +68,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:ae700e81df883a75c055eeb032c1182553067f217e6e87f6fbf0cdf7d88e2156"
+  "hash": "sha256:31e24606bdc617815a239f2e026f91a0982c45809da3f7db94d96a5c1087b769"
 }

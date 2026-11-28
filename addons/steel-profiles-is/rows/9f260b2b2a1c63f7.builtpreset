@@ -1,10 +1,12 @@
 {
   "uid": "9f260b2b2a1c63f7",
   "name": "ISJC 125",
-  "rev": 1,
+  "rev": 2,
   "pack": "Steel profiles · IS",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -38,6 +40,9 @@
             "is/isjc175",
             175.0
           ]
+        ],
+        "aliases": [
+          "JC 125"
         ]
       }
     }
@@ -77,5 +82,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:ed16b548f5300528084ef6ae067bed1daf90786ec47b1cda81b00afcd43acb6b"
+  "hash": "sha256:ab5165dcde8f424a023a6bad8476cc25729220520dd5c092456587197d8f1eb7"
 }

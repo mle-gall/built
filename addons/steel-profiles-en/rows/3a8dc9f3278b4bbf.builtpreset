@@ -1,10 +1,12 @@
 {
   "uid": "3a8dc9f3278b4bbf",
   "name": "SHS 140 × 140 × 5 (hot-finished)",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -63,5 +65,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:cff923ac5a8496f4301b747b31fd792e3853868d51ce663d94e7b8ffc808f12e"
+  "hash": "sha256:f8313ddcb3f71eda21cb7b04327e2ea57d10047008fc6b18fa6b811d241ec3d4"
 }

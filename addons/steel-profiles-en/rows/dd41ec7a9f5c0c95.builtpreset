@@ -1,10 +1,12 @@
 {
   "uid": "dd41ec7a9f5c0c95",
   "name": "HE 120 C",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -36,6 +38,9 @@
             "en/he160c",
             170.0
           ]
+        ],
+        "aliases": [
+          "HEC 120"
         ]
       }
     }
@@ -75,5 +80,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:dc223978d257ac3558608fbd4194846c5567356708b734e40bfc39f9da6b94a8"
+  "hash": "sha256:1057ef42f6bd2f361f11d64cb66fe3b4216fd255e0193aabded6fe7151aa5756"
 }

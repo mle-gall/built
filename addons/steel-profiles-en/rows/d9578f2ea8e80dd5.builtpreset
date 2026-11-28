@@ -1,10 +1,12 @@
 {
   "uid": "d9578f2ea8e80dd5",
   "name": "HE 700 B",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -40,6 +42,9 @@
             "en/he900b",
             900.0
           ]
+        ],
+        "aliases": [
+          "HEB 700"
         ]
       }
     }
@@ -79,5 +84,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:9318010116c60ebf8f4497d18056b26f633edae3b6aef724bd0a4bcebb417e97"
+  "hash": "sha256:b1bf1ec8e42f68a8bc2540dcceb4eb35042a65f6e0cb4f6542b278eaec8146d4"
 }

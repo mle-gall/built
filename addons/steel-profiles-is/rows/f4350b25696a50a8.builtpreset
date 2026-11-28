@@ -1,10 +1,12 @@
 {
   "uid": "f4350b25696a50a8",
   "name": "ISJB 150",
-  "rev": 1,
+  "rev": 2,
   "pack": "Steel profiles · IS",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -34,6 +36,9 @@
             "is/isjb200",
             200.0
           ]
+        ],
+        "aliases": [
+          "JB 150"
         ]
       }
     }
@@ -73,5 +78,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:b690de99a0492d8c4e44f8923a8d6953a36579b70a0bff62072e361b54b57483"
+  "hash": "sha256:1a63ed02ef823f7567b2751ae33f733ef0ed02aa043a4b95905a27076b1540d5"
 }

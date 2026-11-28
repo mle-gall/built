@@ -1,10 +1,12 @@
 {
   "uid": "e1b4a753b5d8ecd3",
   "name": "CHS 457 × 10 (hot-finished)",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -73,5 +75,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:56bbb705ae667052fce31b680f3dffe77df453f146b0b0c15739686cc6e93d16"
+  "hash": "sha256:9523f54b8aa908c9e3421d8a36702e17c097938f549c24334bd250a5d7d94aa0"
 }

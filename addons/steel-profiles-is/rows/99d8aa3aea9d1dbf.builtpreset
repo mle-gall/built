@@ -1,10 +1,12 @@
 {
   "uid": "99d8aa3aea9d1dbf",
   "name": "ISMB 250",
-  "rev": 1,
+  "rev": 2,
   "pack": "Steel profiles · IS",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -42,6 +44,9 @@
             "is/ismb350",
             350.0
           ]
+        ],
+        "aliases": [
+          "MB 250"
         ]
       }
     }
@@ -81,5 +86,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:a873a33d869e1d175d9319eabaaf23323509e78af79e0f24c0a816fa9beb3575"
+  "hash": "sha256:eacc9be8919eb914c9b5ddd1a6e97453b5c3da436f2b071cb7a2615f3fbe7d2a"
 }

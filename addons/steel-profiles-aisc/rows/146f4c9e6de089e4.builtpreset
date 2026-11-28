@@ -1,10 +1,12 @@
 {
   "uid": "146f4c9e6de089e4",
   "name": "S4 × 7.7",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -25,6 +27,9 @@
             "aisc/s4x7.7",
             101.6
           ]
+        ],
+        "aliases": [
+          "S4X7.7"
         ]
       }
     }
@@ -64,5 +69,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:b1b6d7c365e4f86b9be5bc2c477b0e5f8005bf29b763375f379f657ac5ed4e28"
+  "hash": "sha256:ece79e04b1e4045a6927004ba74ff8fb239eb183833ccce0b17de513c2fea8f0"
 }

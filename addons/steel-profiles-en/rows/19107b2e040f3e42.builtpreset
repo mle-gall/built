@@ -1,10 +1,12 @@
 {
   "uid": "19107b2e040f3e42",
   "name": "HE 500 AA",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -40,6 +42,9 @@
             "en/he600aa",
             571.0
           ]
+        ],
+        "aliases": [
+          "HEAA 500"
         ]
       }
     }
@@ -79,5 +84,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:194c4928448e5ecf4769c60462a36c333eae369d571966732db31324bc7ef3c0"
+  "hash": "sha256:9d423cf84a2c2c3128755956229f1d1f28e03e831e79c67f7418f2f3d51c6787"
 }

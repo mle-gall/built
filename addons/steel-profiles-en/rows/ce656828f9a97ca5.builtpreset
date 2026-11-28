@@ -1,10 +1,12 @@
 {
   "uid": "ce656828f9a97ca5",
   "name": "CHS 508 × 12.5 (hot-finished)",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -69,5 +71,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:7faab67e88b5bf392eb617b10f0fa0d8b098a648b6cf50dc87097feea695a856"
+  "hash": "sha256:74445e5ec8e0715849958a3cee78ba8f62b6aa295561b5c2361c093228b9b1ba"
 }

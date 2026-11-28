@@ -1,10 +1,12 @@
 {
   "uid": "09fc826ce5129019",
   "name": "ISLB(P) 100",
-  "rev": 1,
+  "rev": 2,
   "pack": "Steel profiles · IS",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -34,6 +36,9 @@
             "is/islbp200",
             200.0
           ]
+        ],
+        "aliases": [
+          "LB(P) 100"
         ]
       }
     }
@@ -73,5 +78,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:40af73da3354c87f528bad4beb9b0bcc2b9a1510ea2ab8fae6f6fb52c0c6f0e5"
+  "hash": "sha256:507dea1b2fd1c3fff892b12bd1fd1574283ac9d2e515e42f227ce93134246f66"
 }

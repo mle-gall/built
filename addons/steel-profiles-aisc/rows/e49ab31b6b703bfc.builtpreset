@@ -1,10 +1,12 @@
 {
   "uid": "e49ab31b6b703bfc",
   "name": "C6 × 10.5",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -25,6 +27,9 @@
             "aisc/c6x10.5",
             152.4
           ]
+        ],
+        "aliases": [
+          "C6X10.5"
         ]
       }
     }
@@ -64,5 +69,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:8cfa57145a2c9c66d828a83195a507344a84f65f1c77f29607edd04ff98930d2"
+  "hash": "sha256:44c65cc27fac745a5df8183bcd7816a5129a6c5f4b5087e00d540ba419a8b794"
 }

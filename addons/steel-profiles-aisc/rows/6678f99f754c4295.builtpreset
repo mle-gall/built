@@ -1,10 +1,12 @@
 {
   "uid": "6678f99f754c4295",
   "name": "W6 × 25",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -24,6 +26,9 @@
             "aisc/w6x25",
             162.052
           ]
+        ],
+        "aliases": [
+          "W6X25"
         ]
       }
     }
@@ -63,5 +68,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:3507608a374689b4da51b5df974778b92375805ed0e950a7e7be0244a577590e"
+  "hash": "sha256:4bd9bbde03f385d489f248accdcf1ed33f5334b12cb2b279f834587594823b03"
 }

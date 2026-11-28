@@ -1,10 +1,12 @@
 {
   "uid": "3d2220605e802c17",
   "name": "ISWB 550",
-  "rev": 1,
+  "rev": 2,
   "pack": "Steel profiles · IS",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -38,6 +40,9 @@
             "is/iswb600",
             600.0
           ]
+        ],
+        "aliases": [
+          "WB 550"
         ]
       }
     }
@@ -77,5 +82,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:b71f835f499b08fc87c9d47d9f62a038be8eae05a2637a0b3a5cdbe8cf6bea4d"
+  "hash": "sha256:e46c41cafaf4370b91748a70c8574add17cd662e1082c58eb40188f5a1b55f6d"
 }

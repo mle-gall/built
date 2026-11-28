@@ -1,10 +1,12 @@
 {
   "uid": "a374580ed759899b",
   "name": "C5 × 9",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -25,6 +27,9 @@
             "aisc/c5x9",
             127.0
           ]
+        ],
+        "aliases": [
+          "C5X9"
         ]
       }
     }
@@ -64,5 +69,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:3c0f47b5d1463298742332b36076d4d093590938ea71899c9bd5eed8e4d5d557"
+  "hash": "sha256:0a15166c0e4fe3440d14c4a12477fe24d4958961f19006405d8456954cdbf860"
 }

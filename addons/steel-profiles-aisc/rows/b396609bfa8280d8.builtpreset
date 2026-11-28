@@ -1,10 +1,12 @@
 {
   "uid": "b396609bfa8280d8",
   "name": "S4 × 9.5",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -25,6 +27,9 @@
             "aisc/s4x9.5",
             101.6
           ]
+        ],
+        "aliases": [
+          "S4X9.5"
         ]
       }
     }
@@ -64,5 +69,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:541908565b5c6f749068e035c395fc24528e9801087477c55109feb11a088a3a"
+  "hash": "sha256:e7f85836fc9b30c6e5f35e81ef25186639edfca3cd8f94457631acc64ff0b03c"
 }

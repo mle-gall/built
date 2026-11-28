@@ -1,10 +1,12 @@
 {
   "uid": "6bb7f960726e069c",
   "name": "W18 × 211",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -36,6 +38,9 @@
             "aisc/w40x211",
             1000.76
           ]
+        ],
+        "aliases": [
+          "W18X211"
         ]
       }
     }
@@ -75,5 +80,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:24074811d069bb206f430b5261a29140af71bdeb68055319bedb5d27316624eb"
+  "hash": "sha256:15072d9efe1b7bb5a3cba3ce79cdd551c2fa75ba43972a46f9a65bb90518fdd9"
 }

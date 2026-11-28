@@ -1,10 +1,12 @@
 {
   "uid": "35c2b52b402292d1",
   "name": "ISMC 150 × 17.7",
-  "rev": 1,
+  "rev": 2,
   "pack": "Steel profiles · IS",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -26,6 +28,9 @@
             "is/ismc150x17.7",
             150.0
           ]
+        ],
+        "aliases": [
+          "MC 150 x 17.7"
         ]
       }
     }
@@ -65,5 +70,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:3b712b90d47433d8f4aad3e4be02fdee071db7c0b5da7082fb59f191ab9bd982"
+  "hash": "sha256:c476c3eb6a9638f886affae1606fc4d6693bf5b6d9ee4b76508bc6e16d3382b9"
 }

@@ -1,10 +1,12 @@
 {
   "uid": "200a2a9afde9d8b3",
   "name": "HE 160 M",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -40,6 +42,9 @@
             "en/he200m",
             220.0
           ]
+        ],
+        "aliases": [
+          "HEM 160"
         ]
       }
     }
@@ -79,5 +84,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:6a5f54cff889e8b5318c70712450baac1a0204834ae9a92a5745f8b8f0c85902"
+  "hash": "sha256:657685921c74a62412384e8e9b27752aa3360602819e07e3a2f1d59293812a03"
 }

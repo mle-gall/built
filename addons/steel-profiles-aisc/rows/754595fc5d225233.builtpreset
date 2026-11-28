@@ -1,10 +1,12 @@
 {
   "uid": "754595fc5d225233",
   "name": "HSS22 × 20 × 5/8",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -28,6 +30,9 @@
             "aisc/hss24x20x5_8",
             609.6
           ]
+        ],
+        "aliases": [
+          "HSS22X20X5/8"
         ]
       }
     }
@@ -67,5 +72,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:c8f7292b0dfa6deff65d4f9afbbb3f024996fc4c8ea10a12a1a9e485ca2ab54c"
+  "hash": "sha256:668418591afc6f7bd8d35ae4cb1c8fab5e5c8b670bdd1f2810be81e30fee6169"
 }

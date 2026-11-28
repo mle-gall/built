@@ -1,10 +1,12 @@
 {
   "uid": "73713719ce215e84",
   "name": "L2-1/2 × 2 × 5/16",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -23,6 +25,9 @@
             "aisc/l2-1_2x2x5_16",
             63.5
           ]
+        ],
+        "aliases": [
+          "L2-1/2X2X5/16"
         ]
       }
     }
@@ -62,5 +67,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:91599f71e6f60bb011bf4ae8c78e2351631631704e2f34e5b8e58e279507feed"
+  "hash": "sha256:e06a142f9ac00ed96a6f1a09691a8dfe161f8b992987ea18f8a5feae129b473f"
 }

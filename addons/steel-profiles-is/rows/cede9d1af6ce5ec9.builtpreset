@@ -1,10 +1,12 @@
 {
   "uid": "cede9d1af6ce5ec9",
   "name": "ISMCP 300 × 46.2",
-  "rev": 1,
+  "rev": 2,
   "pack": "Steel profiles · IS",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -25,6 +27,9 @@
             "is/ismcp300x46.2",
             300.0
           ]
+        ],
+        "aliases": [
+          "MCP 300 x 46.2"
         ]
       }
     }
@@ -64,5 +69,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:eb01aa94239f03d85c630c641205c34b0f9f2ad14a0f95fbc37fdec72d907d70"
+  "hash": "sha256:febee964be24e838372ebf78045fc0caed7f107913699ecef3ac027e88cc735c"
 }

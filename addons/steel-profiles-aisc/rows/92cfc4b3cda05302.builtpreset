@@ -1,10 +1,12 @@
 {
   "uid": "92cfc4b3cda05302",
   "name": "W12 × 210",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -28,6 +30,9 @@
             "aisc/w36x210",
             932.18
           ]
+        ],
+        "aliases": [
+          "W12X210"
         ]
       }
     }
@@ -67,5 +72,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:1064180b6cd011881a4fd32a6b19bafe80e0db04df625f6f7315c96fedfc5757"
+  "hash": "sha256:0a5d955fdf021934abfe7b3dd464994783f67798bd6dd9b6c799f1f1154a355c"
 }

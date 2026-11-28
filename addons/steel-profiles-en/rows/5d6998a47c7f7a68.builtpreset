@@ -1,10 +1,12 @@
 {
   "uid": "5d6998a47c7f7a68",
   "name": "IPE 180",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -79,5 +81,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:a21ecdc956940e1768694dddff496de8539e867c330ba46f249b8c1e3215ed33"
+  "hash": "sha256:0a004cd7310372b841936f97fcb714a8dbe34db30f7c448ac96b58381534bf8d"
 }

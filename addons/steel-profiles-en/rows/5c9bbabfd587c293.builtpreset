@@ -1,10 +1,12 @@
 {
   "uid": "5c9bbabfd587c293",
   "name": "HE 900 A",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -36,6 +38,9 @@
             "en/he1000a",
             990.0
           ]
+        ],
+        "aliases": [
+          "HEA 900"
         ]
       }
     }
@@ -75,5 +80,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:cf37e25a2787cf14bac2d1d0b384c9d085a680cced651aeef1a51c27bf776471"
+  "hash": "sha256:24e59d0ef6e505fe88c87226821e79a669a604bbeb8c4dab9cb725fa3eeb0239"
 }

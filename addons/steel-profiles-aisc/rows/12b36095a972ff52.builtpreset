@@ -1,10 +1,12 @@
 {
   "uid": "12b36095a972ff52",
   "name": "C15 × 40",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -25,6 +27,9 @@
             "aisc/c15x40",
             381.0
           ]
+        ],
+        "aliases": [
+          "C15X40"
         ]
       }
     }
@@ -64,5 +69,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:e3471c828de445e62e307838c4f09b46773ae9194760a0164aea19aac40f0595"
+  "hash": "sha256:245a2f8e2abd7bc0043ca212e81c0d147c3f8de2d09b09dc32cedf15066ef729"
 }

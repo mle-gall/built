@@ -1,10 +1,12 @@
 {
   "uid": "69318ddebae40563",
   "name": "180 UB 18.1",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AS/NZS",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -63,5 +65,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:f917981f2347992b87ea01e6de411441021372519730193c990777127c1bd550"
+  "hash": "sha256:3e503d67021d41fcb0d6efabf53df0a5a2b85939ae47349ba92a7560b6dd9e87"
 }

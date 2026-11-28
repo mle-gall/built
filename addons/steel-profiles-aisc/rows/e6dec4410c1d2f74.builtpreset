@@ -1,10 +1,12 @@
 {
   "uid": "e6dec4410c1d2f74",
   "name": "W36 × 441",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -24,6 +26,9 @@
             "aisc/w36x441",
             988.06
           ]
+        ],
+        "aliases": [
+          "W36X441"
         ]
       }
     }
@@ -63,5 +68,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:c7900f8fef0e4efd53ce63d6e7931bbaf1e56078698c9242ddeaed1760024131"
+  "hash": "sha256:8e1a9065ae2fbc060687cdf3dad8a4dcf76e358022ffa0ae8aa1943cb3f3bba9"
 }

@@ -1,10 +1,12 @@
 {
   "uid": "5489d179835ae38f",
   "name": "HE 260 AA",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -40,6 +42,9 @@
             "en/he300aa",
             283.0
           ]
+        ],
+        "aliases": [
+          "HEAA 260"
         ]
       }
     }
@@ -79,5 +84,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:5e58311a71ee3f5850d0c56992a38eae95f1d9b1fe4175e13c6fecaed18523e2"
+  "hash": "sha256:f71756abbbe3d323fe67bdd4198395b03083936c23a4008b7fd06d471e02c188"
 }

@@ -1,10 +1,12 @@
 {
   "uid": "4be3c615455a5803",
   "name": "HSS22 × 10 × 1/2",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -36,6 +38,9 @@
             "aisc/hss30x10x1_2",
             762.0
           ]
+        ],
+        "aliases": [
+          "HSS22X10X1/2"
         ]
       }
     }
@@ -75,5 +80,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:836f679b1501a5a6894e810a25d4e3643d96f193f1aab84cea5357f52b7df13d"
+  "hash": "sha256:ea75ec9e46adce123b7114b071a195728f8a359420d12f9acfc4527ab2d51808"
 }

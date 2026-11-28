@@ -1,10 +1,12 @@
 {
   "uid": "b82d4318e6a3a9d9",
   "name": "W21 × 62",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -28,6 +30,9 @@
             "aisc/w24x62",
             601.98
           ]
+        ],
+        "aliases": [
+          "W21X62"
         ]
       }
     }
@@ -67,5 +72,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:e905a066cbb71c2f87b2517efa74aa1d014673119741375ea5a7c0514e83d1d9"
+  "hash": "sha256:2735ce7cc93ea59ca1aec05c5f5376b7ffc4d63b1d500a0daaf17fa025fa63c1"
 }

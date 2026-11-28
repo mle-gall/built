@@ -1,10 +1,12 @@
 {
   "uid": "7fa07e3844354d84",
   "name": "SHS 50 × 50 × 8 (hot-finished)",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -63,5 +65,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:552d92d676c95a7d2f7075690f72da7aabaa18c3da0e338280774b913dc7f68c"
+  "hash": "sha256:b34cdc03bffa1cd39b49ee3af74b5c9a3389148fd0e7809f6629df459c7cb70e"
 }

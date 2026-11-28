@@ -1,10 +1,12 @@
 {
   "uid": "45993ec4413927ac",
   "name": "W16 × 77",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -28,6 +30,9 @@
             "aisc/w16x77",
             419.1
           ]
+        ],
+        "aliases": [
+          "W16X77"
         ]
       }
     }
@@ -67,5 +72,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:f91e20bda5abb923cdfc00125157377eee7e9387a4cc0c6d4ec98177584d94ea"
+  "hash": "sha256:1ac9e8c3c8c655b32aa5c15e6d4694d9b067cfeab62940d6cf399f78ce72cac0"
 }

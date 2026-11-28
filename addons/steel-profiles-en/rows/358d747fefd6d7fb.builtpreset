@@ -1,10 +1,12 @@
 {
   "uid": "358d747fefd6d7fb",
   "name": "RHS 140 × 80 × 8 (cold-formed)",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -75,5 +77,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:6e0cb305921a4ef4aaa6619125cd9edf4a47f4f4973cfcdbff534c14053f754e"
+  "hash": "sha256:8b14e25798b190de8bf3fa437a6e054147f787bda9982c1ab287a8490d5577ca"
 }

@@ -1,10 +1,12 @@
 {
   "uid": "fecb57a38f4f96ab",
   "name": "55 × 55 × 5 EA",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AS/NZS",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -63,5 +65,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:49cc36a0e5c2527c11f11ae5e74e699081b61d0a97efb622a265a2b2f7b44f04"
+  "hash": "sha256:2ae49afed1d8e2a84b0f6fbf33bebbb6e5d65632d960ce85e4772fedf3244128"
 }

@@ -1,10 +1,12 @@
 {
   "uid": "4d0490f791e2f3a5",
   "name": "HL 1000 A",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -63,5 +65,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:a8e5257fb17f11df7fc6db6345be007b265ddcaa49f241db058b1f4f8c586ffe"
+  "hash": "sha256:3ac56850394ee2741f843d43fb11b2be9d68afe3af0d851be93b92404f1a3c9c"
 }

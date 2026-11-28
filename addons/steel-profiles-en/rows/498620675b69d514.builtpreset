@@ -1,10 +1,12 @@
 {
   "uid": "498620675b69d514",
   "name": "RHS 180 × 80 × 3 (cold-formed)",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -71,5 +73,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:9b6497b5b7dbf77e88e7635dc4ccb784b47695bc10982064d549b749beeb23ca"
+  "hash": "sha256:5655b9f0b24b2c147241cd613d7d79fb966846570bfde5d455883e01352ee0d8"
 }

@@ -1,10 +1,12 @@
 {
   "uid": "6e314b4a870d3efd",
   "name": "WT4 × 7.5",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -32,6 +34,9 @@
             "aisc/wt5x7.5",
             127.0
           ]
+        ],
+        "aliases": [
+          "WT4X7.5"
         ]
       }
     }
@@ -71,5 +76,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:6bc9654881bc87dfe67ce97d417942a53673a1fa67d6f6194089d6ef7b360993"
+  "hash": "sha256:02404c7b40f601b1bc686815ab15a2231f8149f2d209866c6e5dbd73d23b8f8d"
 }

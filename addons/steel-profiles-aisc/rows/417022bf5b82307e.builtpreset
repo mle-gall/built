@@ -1,10 +1,12 @@
 {
   "uid": "417022bf5b82307e",
   "name": "HP14 × 73",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -24,6 +26,9 @@
             "aisc/hp14x73",
             345.44
           ]
+        ],
+        "aliases": [
+          "HP14X73"
         ]
       }
     }
@@ -63,5 +68,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:c7a28b8b6e139224f0bed2356e4ee27881565c6950a844054fff379a43e3d5c7"
+  "hash": "sha256:501c28c203b5b704d542939e2a730667bfc33e725fe05f41085f31fa0b310a6d"
 }

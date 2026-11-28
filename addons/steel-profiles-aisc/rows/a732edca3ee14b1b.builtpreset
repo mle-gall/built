@@ -1,10 +1,12 @@
 {
   "uid": "a732edca3ee14b1b",
   "name": "W10 × 17",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -24,6 +26,9 @@
             "aisc/w10x17",
             256.54
           ]
+        ],
+        "aliases": [
+          "W10X17"
         ]
       }
     }
@@ -63,5 +68,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:eaa913f0874b5cc32ded5bc85563db03a049dabdf31d483f172bd51458116313"
+  "hash": "sha256:60947aaac63f8cd0147a22a021bde2540d9ee518b8ffc8d3bcbef874b43d28b8"
 }

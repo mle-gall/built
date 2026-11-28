@@ -1,10 +1,12 @@
 {
   "uid": "262f9702f25bf122",
   "name": "RHS 100 × 50 × 6 (cold-formed)",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -63,5 +65,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:00a3a7dfa77699d5423010ccad1591d6bf4d514b91b56d327a233393cab04118"
+  "hash": "sha256:9ef1ababa0023926d88b17e21629b57d494adcd1ef23f98f4de435442cd95836"
 }

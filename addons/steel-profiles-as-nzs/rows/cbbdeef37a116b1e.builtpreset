@@ -1,10 +1,12 @@
 {
   "uid": "cbbdeef37a116b1e",
   "name": "310 UC 96.8",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AS/NZS",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -63,5 +65,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:4ce70953e483b955c9b628a39ec4120a657ec9ce10446d69d264f536c594e853"
+  "hash": "sha256:589d2ebc7bb30f8be282835a3afe806c099e34f08341ef77bf3c39a5ccf1a5b8"
 }

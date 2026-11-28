@@ -1,10 +1,12 @@
 {
   "uid": "08299dab4fe975ed",
   "name": "SHS 350 × 350 × 8 (cold-formed)",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -63,5 +65,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:07137c5423fd4d73e621f07ae3e2003f6e5ad96554617f6566ba6868742c594b"
+  "hash": "sha256:c0bae1a64a87905a73e0470485351ae9e103c9332ce3d530ed022ba429a7cd64"
 }

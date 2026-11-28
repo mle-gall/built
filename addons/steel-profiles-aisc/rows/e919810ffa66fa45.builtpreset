@@ -1,10 +1,12 @@
 {
   "uid": "e919810ffa66fa45",
   "name": "WT10.5 × 50.5",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -24,6 +26,9 @@
             "aisc/wt10.5x50.5",
             271.78
           ]
+        ],
+        "aliases": [
+          "WT10.5X50.5"
         ]
       }
     }
@@ -63,5 +68,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:89a090d01b343757693ce37d4841d5b06f1e39b78d486065757b8ecb87f70ee8"
+  "hash": "sha256:1e53e554fbc1becaefe5c6e86d3b8c343347a7cd005455caf7dab73c3eff58ba"
 }

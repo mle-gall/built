@@ -1,10 +1,12 @@
 {
   "uid": "8aba8d225cdedff8",
   "name": "HE 120 AA",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -36,6 +38,9 @@
             "en/he160aa",
             148.0
           ]
+        ],
+        "aliases": [
+          "HEAA 120"
         ]
       }
     }
@@ -75,5 +80,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:5fe7c7dd0883d895318c3c6e9299cb546f5a1a6e556af8531005389a0eefb6b9"
+  "hash": "sha256:3ba7ed4dadf4a6e64390035d20aa0c951417fd1246e0064439816c0c66cef0f7"
 }

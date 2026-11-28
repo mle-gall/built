@@ -1579,7 +1579,7 @@ impl ProfilesProvider {
             for (key,title) in [("standard","Standard"),("source","Source")]{
                 if let Some(v)=size[key].as_str().filter(|s|!s.is_empty()){details.push((title.into(),v.into(),""));}
             }
-            serde_json::json!({"key":size["key"],"name":size["label"],"category":title(size["family"].as_str().unwrap_or("")),
+            serde_json::json!({"key":size["key"],"name":size["label"],"category":title(size["family"].as_str().unwrap_or("")),"family":size["family"],
                 "thumb":format!("profile:{}",size["key"].as_str().unwrap()),"defaults":details,
                 "aliases":size.get("aliases").cloned().unwrap_or_else(||serde_json::json!([])),
                 "source":"bundled","dimensions":size["params"],"verbs":["apply","size"]})
@@ -1615,7 +1615,7 @@ impl ProfilesProvider {
             if preset["source"]["profile_size"] == true {
                 let profile = &preset["values"]["profile"];
                 items.push(serde_json::json!({"key":format!("size:{source}:{}",preset["uid"]),
-                    "name":preset["name"],"category":title(profile["family"].as_str().unwrap_or("")),"source":source,
+                    "name":preset["name"],"category":title(profile["family"].as_str().unwrap_or("")),"family":profile["family"],"source":source,
                     "aliases":profile["catalogue"].get("aliases").cloned().unwrap_or_else(||serde_json::json!([])),
                     "defaults":size_details(py,&preset)?,
                     "profile_preset":preset,"thumb":presets::profile_thumb(profile),"verbs":["apply"]}));
@@ -1722,7 +1722,8 @@ fn profile_dimensions(ctx: &Bound<'_, PyAny>, item: &Bound<'_, PyAny>) -> PyResu
     let forms = py.import("built_render.chrome_forms")?;
     let fields = PyList::empty(py);
     let params = item.get_item("dimensions")?;
-    let circular = matches!(item.get_item("category")?.extract::<String>()?.as_str(), "round" | "chs");
+    // The family key, not the collection's (translated) name.
+    let circular = matches!(item.get_item("family")?.extract::<String>()?.as_str(), "round" | "chs");
     let mut keys = Vec::new();
     for key in ["width", "height", "web", "flange", "radius"] {
         if !params.contains(key)? || (circular && key == "height") { continue; }

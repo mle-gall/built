@@ -1,10 +1,12 @@
 {
   "uid": "cb0c8694c15272ac",
   "name": "S24 × 90",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -25,6 +27,9 @@
             "aisc/s24x90",
             609.6
           ]
+        ],
+        "aliases": [
+          "S24X90"
         ]
       }
     }
@@ -64,5 +69,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:d3ce6342461d0423e87cb82ba57d1227b9096cf32c1d135c55a520be317f1e78"
+  "hash": "sha256:e2b4dfeff369ef6e98e163b648aadf9e31175df6231644226d91d89ae1cafce7"
 }

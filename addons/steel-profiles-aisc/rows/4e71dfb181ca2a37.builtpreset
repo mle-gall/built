@@ -1,10 +1,12 @@
 {
   "uid": "4e71dfb181ca2a37",
   "name": "L12 × 12 × 1-3/8",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -23,6 +25,9 @@
             "aisc/l12x12x1-3_8",
             304.8
           ]
+        ],
+        "aliases": [
+          "L12X12X1-3/8"
         ]
       }
     }
@@ -62,5 +67,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:85e99cb53afc6d60a31fe3ca7ae20ac03461a835fd6a1f2976651c8484f81d2b"
+  "hash": "sha256:cde8a0778c6a5cf52a2c97e7e61df747b9b2c2dac3740c0933a0141bf2ff0fe5"
 }

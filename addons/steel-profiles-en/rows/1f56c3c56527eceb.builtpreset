@@ -1,10 +1,12 @@
 {
   "uid": "1f56c3c56527eceb",
   "name": "CHS 406.4 × 16 (hot-finished)",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -77,5 +79,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:6e4c30b9373ca879c4329e81ef40a0e0e3db11eb1ce702a90eec00977198cdf4"
+  "hash": "sha256:4a81d0ad3bca04c2fb0d9a312a5dffb85f02d1110fc2955aac1e5bb4fd9aa9aa"
 }

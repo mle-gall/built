@@ -1,10 +1,12 @@
 {
   "uid": "958ea85fb23b92af",
   "name": "WT5 × 22.5",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -32,6 +34,9 @@
             "aisc/wt8x22.5",
             204.978
           ]
+        ],
+        "aliases": [
+          "WT5X22.5"
         ]
       }
     }
@@ -71,5 +76,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:26f3d90b58088c7735c69c40764a4ed78673f22bd8e070fe4ade9d059e5955ff"
+  "hash": "sha256:fdd9c718bceeb551502011cab01eb463a16025dee5fd5e3317703ed64bf4ae4d"
 }

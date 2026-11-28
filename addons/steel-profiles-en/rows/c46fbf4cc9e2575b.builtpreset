@@ -1,10 +1,12 @@
 {
   "uid": "c46fbf4cc9e2575b",
   "name": "UPN 320",
-  "rev": 1,
+  "rev": 2,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -82,5 +84,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:9b423f80377c2c810ad739c0d3850de79b9d5ccbdb9316fb842fd7dcdd7f4c66"
+  "hash": "sha256:be39f9b16568d3c4b4ea5a1070f1211141ce60b84df0ee223d207651fe31c9c6"
 }

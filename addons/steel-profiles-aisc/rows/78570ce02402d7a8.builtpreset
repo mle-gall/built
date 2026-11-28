@@ -1,10 +1,12 @@
 {
   "uid": "78570ce02402d7a8",
   "name": "W40 × 297",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -24,6 +26,9 @@
             "aisc/w40x297",
             1010.92
           ]
+        ],
+        "aliases": [
+          "W40X297"
         ]
       }
     }
@@ -63,5 +68,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:94a71f4f46e04fe7782f0e20989bf265ba94f458b98ef89a19263eaea95d8e71"
+  "hash": "sha256:0534096bb8a1572a18a3cf59909c1f3226ada6d6aa72e56cdc7a76f9b5647b65"
 }

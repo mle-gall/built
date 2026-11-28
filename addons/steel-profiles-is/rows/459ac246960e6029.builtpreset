@@ -1,10 +1,12 @@
 {
   "uid": "459ac246960e6029",
   "name": "ISHB 200 × 40",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · IS",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -26,6 +28,9 @@
             "is/ishb200x40",
             200.0
           ]
+        ],
+        "aliases": [
+          "HB 200 x 40"
         ]
       }
     }
@@ -65,5 +70,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:79ed81808199c9a758fda7275c874a9b35d107564f0398deabec570303a2d262"
+  "hash": "sha256:ad5df3db99118dc9c49802d5382b141c2dbcf0123745358361279ea10310f53d"
 }

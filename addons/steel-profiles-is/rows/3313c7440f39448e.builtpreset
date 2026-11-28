@@ -1,10 +1,12 @@
 {
   "uid": "3313c7440f39448e",
   "name": "ISSC 120",
-  "rev": 1,
+  "rev": 2,
   "pack": "Steel profiles · IS",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -38,6 +40,9 @@
             "is/issc150",
             152.0
           ]
+        ],
+        "aliases": [
+          "SC 120"
         ]
       }
     }
@@ -77,5 +82,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:97dcd0c6627efaae210acf756966d081da321a14ff6dc543d471ee3d1be3273a"
+  "hash": "sha256:d9905a765382330da9ca904de4123070f544808822e3ce92c4310ee1527d42b6"
 }

@@ -1,10 +1,12 @@
 {
   "uid": "dfa93b775b277503",
   "name": "ISA 50 × 50 × 5",
-  "rev": 1,
+  "rev": 2,
   "pack": "Steel profiles · IS",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -23,6 +25,9 @@
             "is/isa50x50x5",
             50.0
           ]
+        ],
+        "aliases": [
+          "A 50 x 50 x 5"
         ]
       }
     }
@@ -62,5 +67,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:c64c05f13dc900ce08773929ed4e0cc0027bbe197af67a3457a440a0b2b11f01"
+  "hash": "sha256:5e963d4c713e2cf115eabf6f97f4e2c1ea92ca8daf0a96e51945b3b677907dbb"
 }

@@ -1,10 +1,12 @@
 {
   "uid": "e708b007b45e84be",
   "name": "UPE 220",
-  "rev": 1,
+  "rev": 2,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -79,5 +81,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:6728e5c9e9bf973275ba5e5202a0964f33254f4a30dbd945cf49eff06be604eb"
+  "hash": "sha256:631ddac942217470598ad965fbaa3107196685cb81100879288f561ffc170af2"
 }

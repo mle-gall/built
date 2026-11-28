@@ -1,10 +1,12 @@
 {
   "uid": "64f0f1f6787c2028",
   "name": "WT12 × 52",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -24,6 +26,9 @@
             "aisc/wt12x52",
             304.8
           ]
+        ],
+        "aliases": [
+          "WT12X52"
         ]
       }
     }
@@ -63,5 +68,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:ac11fc92852bab14f5adbb9f193d4c3619167af2f85fd91978d81e82a792bea5"
+  "hash": "sha256:78b0b7db60533fabc731e0821c44fdd5baaa539a3bac35fb1160fffb4b178a66"
 }

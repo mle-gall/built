@@ -1,10 +1,12 @@
 {
   "uid": "11cd1f68b6259ff7",
   "name": "RHS 300 × 100 × 10 (hot-finished)",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -71,5 +73,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:bb1a6995ab1b7b56896a278b8a0459242bc6bd78a5dc4575d679a3d3825c97f7"
+  "hash": "sha256:96365ec3f9c9af6fab75cd0d8179df3e7b24ba1874d88a6a1036d6c0e35f1bd0"
 }

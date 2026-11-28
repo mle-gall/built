@@ -1,10 +1,12 @@
 {
   "uid": "ed04c0b12ea7de77",
   "name": "UPE 160",
-  "rev": 1,
+  "rev": 2,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -79,5 +81,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:113b263093a10b698f43394196d23fafccf6db502675b6e929bd1ff63c373690"
+  "hash": "sha256:eb970904befe50b6fa82f0ce2a857daead7530f7d63b9504c6c651eaa0ea47ea"
 }

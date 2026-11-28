@@ -1,10 +1,12 @@
 {
   "uid": "68235e74aa84f2de",
   "name": "ISMCP 400",
-  "rev": 1,
+  "rev": 2,
   "pack": "Steel profiles · IS",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -33,6 +35,9 @@
             "is/ismcp400",
             400.0
           ]
+        ],
+        "aliases": [
+          "MCP 400"
         ]
       }
     }
@@ -72,5 +77,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:4426c183eb213df28e7b2ffd9351cfddef8f87eaa8d0c7b14dd7ccd93c9c4c3a"
+  "hash": "sha256:3d623070e1d927d0d68b785da270cd2c80532db2b11980f2b4dcb794f252eb07"
 }

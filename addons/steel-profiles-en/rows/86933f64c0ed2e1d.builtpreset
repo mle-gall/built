@@ -1,10 +1,12 @@
 {
   "uid": "86933f64c0ed2e1d",
   "name": "SHS 40 × 40 × 5 (hot-finished)",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -63,5 +65,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:d5f2f071fdc6803afdc8fa7c538c4194a1891bde3db05bf064f7848d929eb975"
+  "hash": "sha256:7fa474cd45a54f51ce59f87cf70bd58b272cadeaa9c7ca88765ac6592df6ee8c"
 }

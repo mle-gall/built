@@ -1,10 +1,12 @@
 {
   "uid": "30710e2fab2507d0",
   "name": "250 UC 89.5",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AS/NZS",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -63,5 +65,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:976321c768cb07fecf84d147ee935a4394f06f32b5dc563fc16c2ebd87ea1745"
+  "hash": "sha256:d724dea8b74cc3a94b9034f74dd28043d35de3777c934e527c33593dd6eee545"
 }

@@ -1,10 +1,12 @@
 {
   "uid": "c3c7a33245632982",
   "name": "ISMCP 250",
-  "rev": 1,
+  "rev": 2,
   "pack": "Steel profiles · IS",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -41,6 +43,9 @@
             "is/ismcp350",
             350.0
           ]
+        ],
+        "aliases": [
+          "MCP 250"
         ]
       }
     }
@@ -80,5 +85,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:6566ff3ae599e971bb13b3af3bc6837a753325fb5c829a94126f83039a3c7b2b"
+  "hash": "sha256:1bc956fbf31071becb4367e74465bb43f96e94d5b0996ece5a46ea3073750a34"
 }

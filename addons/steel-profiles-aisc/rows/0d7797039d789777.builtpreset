@@ -1,10 +1,12 @@
 {
   "uid": "0d7797039d789777",
   "name": "MC12 × 40",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -24,6 +26,9 @@
             "aisc/mc12x40",
             304.8
           ]
+        ],
+        "aliases": [
+          "MC12X40"
         ]
       }
     }
@@ -63,5 +68,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:fc34a87fdc893b9d1161e26e894f976dad4804ea788c3c1c191f87aaf217c120"
+  "hash": "sha256:040d284224b99dfd31b47454cce5c9b5eabd1b427a770efcfa7e3988d1877a3b"
 }

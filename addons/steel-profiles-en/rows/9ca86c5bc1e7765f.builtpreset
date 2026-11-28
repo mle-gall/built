@@ -1,10 +1,12 @@
 {
   "uid": "9ca86c5bc1e7765f",
   "name": "CHS 508 × 10 (cold-formed)",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -69,5 +71,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:c49fa955ee278d40c76b0b73e9083835610f11b82cafdb1f5b430a8c3b6a0ddb"
+  "hash": "sha256:49b228b08d13fdea53fca43cd6b4460ed14f68907e75044a8da484033afdf88d"
 }

@@ -1,10 +1,12 @@
 {
   "uid": "9863fc71b795198e",
   "name": "SHS 300 × 300 × 8 (hot-finished)",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -63,5 +65,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:84eca68c52d8bc42b239243a991b2107eb1c219337b8e173d01ba79b78f2ec1a"
+  "hash": "sha256:1bc639b2d01d2af24edaa60232164b81426e72aa59afb3c5af986ce9e33f10c2"
 }

@@ -1,10 +1,12 @@
 {
   "uid": "ec6e6937b50a79ad",
   "name": "W10 × 60",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -28,6 +30,9 @@
             "aisc/w18x60",
             462.28
           ]
+        ],
+        "aliases": [
+          "W10X60"
         ]
       }
     }
@@ -67,5 +72,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:47bba493f7d52f05bf70dfb7298438ebb03ed40e620a4ec0600f8c2820a6764c"
+  "hash": "sha256:a8060cf8ee31653baac0c23dd11b5c8bc4134cea2cd85129e065a060edf7d77d"
 }

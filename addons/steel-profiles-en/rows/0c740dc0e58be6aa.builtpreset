@@ -1,10 +1,12 @@
 {
   "uid": "0c740dc0e58be6aa",
   "name": "HE 1000 AA",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -32,6 +34,9 @@
             "en/he1000aa",
             970.0
           ]
+        ],
+        "aliases": [
+          "HEAA 1000"
         ]
       }
     }
@@ -71,5 +76,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:490632b707072618675757aaa6d582ce64bb88073960ddefb9bc382f88a96d3a"
+  "hash": "sha256:de069a2a029da6ee6675381cfafe6b641a95a84c2ff9b50d97d63cbbc41ee924"
 }

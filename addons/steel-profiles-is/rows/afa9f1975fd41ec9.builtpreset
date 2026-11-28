@@ -1,10 +1,12 @@
 {
   "uid": "afa9f1975fd41ec9",
   "name": "ISMCP 100",
-  "rev": 1,
+  "rev": 2,
   "pack": "Steel profiles · IS",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -37,6 +39,9 @@
             "is/ismcp150",
             150.0
           ]
+        ],
+        "aliases": [
+          "MCP 100"
         ]
       }
     }
@@ -76,5 +81,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:776cd190d8695c166d09b304d618486a6c99e4809661ab96d1b96c6378c89943"
+  "hash": "sha256:f2bf490b80a1936e1c0efe110d56d2c881bf1bd90d9754e8944502fe604f97f5"
 }

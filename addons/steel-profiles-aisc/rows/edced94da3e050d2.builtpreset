@@ -1,10 +1,12 @@
 {
   "uid": "edced94da3e050d2",
   "name": "WT20 × 148.5",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -24,6 +26,9 @@
             "aisc/wt20x148.5",
             505.46
           ]
+        ],
+        "aliases": [
+          "WT20X148.5"
         ]
       }
     }
@@ -63,5 +68,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:ad60170a247974390823509021def348f8e67ec8483ac7289ba101a0ac212c85"
+  "hash": "sha256:eb8896f4cf1e981cb054216e4dfeec855963cd2e0819817ddfd95b127212b487"
 }

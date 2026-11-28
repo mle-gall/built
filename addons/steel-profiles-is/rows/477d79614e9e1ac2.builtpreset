@@ -1,10 +1,12 @@
 {
   "uid": "477d79614e9e1ac2",
   "name": "ISLC 175",
-  "rev": 1,
+  "rev": 2,
   "pack": "Steel profiles · IS",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -42,6 +44,9 @@
             "is/islc225",
             225.0
           ]
+        ],
+        "aliases": [
+          "LC 175"
         ]
       }
     }
@@ -81,5 +86,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:330b2c32926a8438720f663ad2689ed6a071bbd16b1da28b638f6c93be8590dd"
+  "hash": "sha256:b35b20ae31733b5088d3abb35a80c825e70802d83b7bb5b081ed3678cf816896"
 }

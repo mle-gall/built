@@ -1,10 +1,12 @@
 {
   "uid": "499d582eead9b7c6",
   "name": "S12 × 50",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -29,6 +31,9 @@
             "aisc/s15x50",
             381.0
           ]
+        ],
+        "aliases": [
+          "S12X50"
         ]
       }
     }
@@ -68,5 +73,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:f644402bb665ab8c6c72d49ac7a2fa24b1b756fb40ed4e2f48ad541e44140ac2"
+  "hash": "sha256:911cb3fc83ef9b091fee10daa710b26e3a61b4be87266c749edcd53273a4c010"
 }

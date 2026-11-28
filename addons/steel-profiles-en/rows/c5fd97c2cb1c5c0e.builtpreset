@@ -1,10 +1,12 @@
 {
   "uid": "c5fd97c2cb1c5c0e",
   "name": "SHS 120 × 120 × 8 (cold-formed)",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -63,5 +65,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:178c8f9724f0ab7e64f87d45e549c6ec08f08a4ac00505ba0aebac95470dfd82"
+  "hash": "sha256:19ff25429885c16693200c415c14b4b7fab77093a4401aa5ab9cb660e37b7031"
 }

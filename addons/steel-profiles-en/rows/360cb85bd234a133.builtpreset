@@ -1,10 +1,12 @@
 {
   "uid": "360cb85bd234a133",
   "name": "IPE AA 160",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -79,5 +81,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:77be26bc592d64697314670920232a1f64329e9e483d86696fa4d9bbbaf96b08"
+  "hash": "sha256:6d1ba17949326e3af81f549e42cea5ddc959e7402bd73f2e5cb6adf0d038a93a"
 }

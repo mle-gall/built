@@ -1,10 +1,12 @@
 {
   "uid": "4a41eb5be2f4b904",
   "name": "HSS8 × 4 × 5/8",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -32,6 +34,9 @@
             "aisc/hss12x4x5_8",
             304.8
           ]
+        ],
+        "aliases": [
+          "HSS8X4X5/8"
         ]
       }
     }
@@ -71,5 +76,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:0cfc35dfff3c8558d81268e759b50af2db1a99afe9000b991553cf60cca5520e"
+  "hash": "sha256:285f67a40ea713e9893a33302837ab200fe04b41788225a9c324a9d831bad9bd"
 }

@@ -1,10 +1,12 @@
 {
   "uid": "9fa9f24d41a4ebfd",
   "name": "HE 220 AA",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -40,6 +42,9 @@
             "en/he260aa",
             244.0
           ]
+        ],
+        "aliases": [
+          "HEAA 220"
         ]
       }
     }
@@ -79,5 +84,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:6dd527c787b80e4a3671ce29019e8aa7fb95348f92685879a9a0850f509964a6"
+  "hash": "sha256:45a6c80d0bd64357aa3e5a5eff0996e049c5b33d63ce714449cc0daae9d52597"
 }

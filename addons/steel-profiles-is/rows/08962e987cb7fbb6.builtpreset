@@ -1,10 +1,12 @@
 {
   "uid": "08962e987cb7fbb6",
   "name": "ISMC 100",
-  "rev": 1,
+  "rev": 2,
   "pack": "Steel profiles · IS",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -38,6 +40,9 @@
             "is/ismc150",
             150.0
           ]
+        ],
+        "aliases": [
+          "MC 100"
         ]
       }
     }
@@ -77,5 +82,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:24919f46d8eaf89e705bea4ba9b5134a228b6dfae0e790368197200b8f7bd178"
+  "hash": "sha256:8718330144f12aee7bf6bb0aeb4c7e3cb5be104b8a88b04a6e22328493f5ddbc"
 }

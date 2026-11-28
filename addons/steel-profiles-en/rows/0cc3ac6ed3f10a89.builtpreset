@@ -1,10 +1,12 @@
 {
   "uid": "0cc3ac6ed3f10a89",
   "name": "HL 920 × 491",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -63,5 +65,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:118ef8f34735f5055bc55e57304e1a9d53acff2ec29644f0c9a8bced883530e5"
+  "hash": "sha256:cd521e5bebf00cfdb504704b89eb57f98f38a51bde4d24613803876a03416042"
 }

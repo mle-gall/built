@@ -1,10 +1,12 @@
 {
   "uid": "78877d4b9412db9c",
   "name": "HE 280 M",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -40,6 +42,9 @@
             "en/he320m",
             359.0
           ]
+        ],
+        "aliases": [
+          "HEM 280"
         ]
       }
     }
@@ -79,5 +84,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:c6c1a24ba5395f5c4dbf97a9a39f6f7ac0e46dc56861ee702c09ab0d679551de"
+  "hash": "sha256:5dd7a14859c0f7f7870691c8d63cc150c18d4f231ae0ad77afcbba3541f1f9ba"
 }

@@ -1,10 +1,12 @@
 {
   "uid": "efa1d954e8e596cf",
   "name": "C9 × 15",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -25,6 +27,9 @@
             "aisc/c9x15",
             228.6
           ]
+        ],
+        "aliases": [
+          "C9X15"
         ]
       }
     }
@@ -64,5 +69,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:5da6e4fbb25fb76547efe1c57a2f12195aa988389abfcbd5e2fe3c04d9923233"
+  "hash": "sha256:cf3f89f879e1afa450264a960d0de92674f4c706ceeb16b5884f09a4d60308f2"
 }

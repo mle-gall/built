@@ -1,10 +1,12 @@
 {
   "uid": "60f2d29f59c8b027",
   "name": "WT15 × 54",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -24,6 +26,9 @@
             "aisc/wt15x54",
             378.46
           ]
+        ],
+        "aliases": [
+          "WT15X54"
         ]
       }
     }
@@ -63,5 +68,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:7edaea942ed889447d70668974b52fc737d78da85c7c66656a905adfaa48249d"
+  "hash": "sha256:b5a94d5d09b4c541a74502b9618593664c5bea74940f1794e52bb6f53a8ee5b0"
 }

@@ -1,10 +1,12 @@
 {
   "uid": "ca65e3d3bb2768b4",
   "name": "ISA 130 × 130 × 12",
-  "rev": 1,
+  "rev": 2,
   "pack": "Steel profiles · IS",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -24,6 +26,9 @@
             "is/isa130x130x12",
             130.0
           ]
+        ],
+        "aliases": [
+          "A 130 x 130 x 12"
         ]
       }
     }
@@ -63,5 +68,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:98c9f8314639f8ac67508828af79577ca31a83f26b3ec7ce035899d32d9ed2c4"
+  "hash": "sha256:6004d3c228441f231db37aa7d7b4fd53f7f05587a001aea9b12d8f3a63609cf4"
 }

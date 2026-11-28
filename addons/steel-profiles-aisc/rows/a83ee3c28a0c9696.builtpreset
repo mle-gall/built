@@ -1,10 +1,12 @@
 {
   "uid": "a83ee3c28a0c9696",
   "name": "HSS34 × 10 × 7/8",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -32,6 +34,9 @@
             "aisc/hss34x10x7_8",
             863.6
           ]
+        ],
+        "aliases": [
+          "HSS34X10X7/8"
         ]
       }
     }
@@ -71,5 +76,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:5548ffd5cf081c69f972ae8319e8626ce5e42f8cdf5ef044be33ae559b2f8dff"
+  "hash": "sha256:16733c9d8b2bd29aa9939d05252fdf120fc02c4dfac4447e68979414457799f5"
 }

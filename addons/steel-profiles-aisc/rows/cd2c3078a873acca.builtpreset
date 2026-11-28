@@ -1,10 +1,12 @@
 {
   "uid": "cd2c3078a873acca",
   "name": "HP18 × 181",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -24,6 +26,9 @@
             "aisc/hp18x181",
             457.2
           ]
+        ],
+        "aliases": [
+          "HP18X181"
         ]
       }
     }
@@ -63,5 +68,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:88f275259720c08ebbd9614fb0bd1ab0e431ad247447c0916dd5c45a74db777c"
+  "hash": "sha256:8a0c9fdfb471caf1aa0d189d2a2289c647c062567ca366b072cd5a2aa0c271e4"
 }

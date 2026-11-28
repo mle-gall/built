@@ -1,10 +1,12 @@
 {
   "uid": "2371f66d3884e36b",
   "name": "HE 300 M",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -40,6 +42,9 @@
             "en/he340m",
             377.0
           ]
+        ],
+        "aliases": [
+          "HEM 300"
         ]
       }
     }
@@ -79,5 +84,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:aee4e9cea98587ecf1ce65b2c7a0b769d0020e64478ef2772bc64258dd2c4be4"
+  "hash": "sha256:028178aa9c1950026d877c39d20de6e0c5333554402b537c59667c7103254c4c"
 }

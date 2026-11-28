@@ -1,10 +1,12 @@
 {
   "uid": "0c4cf88e4ee53ae8",
   "name": "HL 1100 M",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -67,5 +69,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:2c176ba8452f151373cdb5f9d61eff104c0bb24f0c507d310d5be1c11bae5cbb"
+  "hash": "sha256:b8670f6b727f337b6989999f262e1a9cb49799ccfe60c47de51aa3ca295f926e"
 }

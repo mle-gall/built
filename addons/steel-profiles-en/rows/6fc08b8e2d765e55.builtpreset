@@ -1,10 +1,12 @@
 {
   "uid": "6fc08b8e2d765e55",
   "name": "IPE O 200",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -75,5 +77,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:25251b322bc5252b03e83652293f495403e5157fafc9d8d8e804f34a0aa8a10a"
+  "hash": "sha256:c4f003bf7efc5a52d262f314dce52d34030015969e0a5a93b8f4517211addee4"
 }

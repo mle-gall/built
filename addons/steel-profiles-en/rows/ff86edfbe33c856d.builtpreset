@@ -1,10 +1,12 @@
 {
   "uid": "ff86edfbe33c856d",
   "name": "HE 140 M",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -40,6 +42,9 @@
             "en/he180m",
             200.0
           ]
+        ],
+        "aliases": [
+          "HEM 140"
         ]
       }
     }
@@ -79,5 +84,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:66bd917ae866a55498a1f207f096d7e4e9ac229c19efdd1b6c89b6ac73c0205f"
+  "hash": "sha256:007b32ef9536a03202b377f70d7ae1256acc9d01d21bf030b01a14bd901b318a"
 }

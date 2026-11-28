@@ -1,10 +1,12 @@
 {
   "uid": "aa3b23422e5100bb",
   "name": "150 UC 37.2",
-  "rev": 3,
+  "rev": 4,
   "pack": "Steel profiles · AS/NZS",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -63,5 +65,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:5bfb0713812215f0ba855ab5d6d2e8a26e2d86b8b938c89e7ac2371d4b7cfcbd"
+  "hash": "sha256:d10272f140e5835fb5171ed7c0e0a57e6256aface060d025d8383587c7e92f75"
 }

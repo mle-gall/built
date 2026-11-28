@@ -1,10 +1,12 @@
 {
   "uid": "aa16d0323af32e46",
   "name": "HP 360 × 180",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -67,5 +69,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:dcc73cf18586d462a4b9c30d761ad758f12916cfea8d606ab349578f31e2f0ac"
+  "hash": "sha256:13a91ef6993669600f9de1e51f448658720bcc16d9002b247a4c3c93267312cc"
 }

@@ -1,10 +1,12 @@
 {
   "uid": "fbcc59c60f4b0b00",
   "name": "MC18 × 58",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -24,6 +26,9 @@
             "aisc/mc18x58",
             457.2
           ]
+        ],
+        "aliases": [
+          "MC18X58"
         ]
       }
     }
@@ -63,5 +68,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:e5cecbee0443ec768f2e21f335d48ff0930841d77742c11d853dadc250b73819"
+  "hash": "sha256:901298ce9b72ed48510479baf9056ec188f16727f1e3fb166372f2930923ff4d"
 }

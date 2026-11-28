@@ -1,10 +1,12 @@
 {
   "uid": "dcbf93ad10b83c40",
   "name": "HSS20 × 4 × 5/16",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -32,6 +34,9 @@
             "aisc/hss20x4x5_16",
             508.0
           ]
+        ],
+        "aliases": [
+          "HSS20X4X5/16"
         ]
       }
     }
@@ -71,5 +76,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:0a98e114f7d94e36a2352527d874c8294d5c6c6e48aa31be2f47c2104edc424d"
+  "hash": "sha256:4cc03a3926c4e135d4a3ca784d4518b36dfc30ddddaf2a6c964c3fcfc4761a47"
 }

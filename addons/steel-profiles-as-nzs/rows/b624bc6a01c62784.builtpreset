@@ -1,10 +1,12 @@
 {
   "uid": "b624bc6a01c62784",
   "name": "380 PFC",
-  "rev": 1,
+  "rev": 2,
   "pack": "Steel profiles · AS/NZS",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -71,5 +73,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:00549c26728f9f59d6c4e7dd25073903d7e44afb0d305d79a809ce9449a1d0d8"
+  "hash": "sha256:54a6634a8f04b2966de95e35182750e82fa76162789e4a70e9370fdb25737a39"
 }

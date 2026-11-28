@@ -1,10 +1,12 @@
 {
   "uid": "a6f6e2cd6fa11bb2",
   "name": "WT7 × 250",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -24,6 +26,9 @@
             "aisc/wt7x250",
             248.92
           ]
+        ],
+        "aliases": [
+          "WT7X250"
         ]
       }
     }
@@ -63,5 +68,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:bffb6812a23922834679cb566a84a40b9c15ccbcd2b5a284ce48df6b7d2daea5"
+  "hash": "sha256:cb67c2849e8aa2abd79a3aa4cd2897ed75480e61803464fb93abdeaa652c149d"
 }

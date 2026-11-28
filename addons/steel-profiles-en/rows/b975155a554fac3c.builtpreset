@@ -1,10 +1,12 @@
 {
   "uid": "b975155a554fac3c",
   "name": "HLZ 1100 C",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -63,5 +65,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:7c8452c15958bb32417d528b027cfaa040723d106b34244dd08a75f8368e7bab"
+  "hash": "sha256:00df2b5e067b80e5cb1e1f1a905e08ea02f6edcc7b998b55c22ea37a8606ba8c"
 }

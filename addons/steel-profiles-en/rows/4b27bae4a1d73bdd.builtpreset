@@ -1,10 +1,12 @@
 {
   "uid": "4b27bae4a1d73bdd",
   "name": "UPE 360",
-  "rev": 1,
+  "rev": 2,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -75,5 +77,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:65b4aee53f4b8f7a7f7f274c4c25618d467b109b499296595093554aea9c2187"
+  "hash": "sha256:a9af39db9f6066013912016336b73839f805cd625129dcb51f55a61a819d143f"
 }

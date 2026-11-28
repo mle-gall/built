@@ -1,10 +1,12 @@
 {
   "uid": "3ef7fc97d374d51a",
   "name": "WT9 × 27.5",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -32,6 +34,9 @@
             "aisc/wt12x27.5",
             299.72
           ]
+        ],
+        "aliases": [
+          "WT9X27.5"
         ]
       }
     }
@@ -71,5 +76,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:f9dbb687e77a7e4bee5713ecb1194f14f41e5a378f173ff52c39b8f9f1f5ff9f"
+  "hash": "sha256:9e9b0e6314ffdad7c10f5184a655e472f1fd1011539c10f201779b935dfb91f1"
 }

@@ -1,10 +1,12 @@
 {
   "uid": "e4ed9546e12f0646",
   "name": "HE 340 M",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -40,6 +42,9 @@
             "en/he400m",
             432.0
           ]
+        ],
+        "aliases": [
+          "HEM 340"
         ]
       }
     }
@@ -79,5 +84,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:99fed8e025059e258867d183297e284469b02a859dcb5b0b9f38187e920392b3"
+  "hash": "sha256:63b10f71e489846ba42735602633a018a7cd12bb756a54bd054c4d46c803f289"
 }

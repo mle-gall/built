@@ -1,10 +1,12 @@
 {
   "uid": "e1f3f66d84d4df59",
   "name": "ISA 150 × 75 × 12",
-  "rev": 1,
+  "rev": 2,
   "pack": "Steel profiles · IS",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -28,6 +30,9 @@
             "is/isa150x75x12",
             150.0
           ]
+        ],
+        "aliases": [
+          "A 150 x 75 x 12"
         ]
       }
     }
@@ -67,5 +72,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:04f94975202d5d670cab4e5bbafc14299a6369afbb29af919529c26bb743e16d"
+  "hash": "sha256:a7c985c381d0585efb78a94220ca0b8172749b27e46bf3b1e3e52796ce896c43"
 }

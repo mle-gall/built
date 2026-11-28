@@ -1,10 +1,12 @@
 {
   "uid": "51b57ec5cda05fd9",
   "name": "RHS 500 × 300 × 6.3 (cold-formed)",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -63,5 +65,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:20dcad5d474df63157fc2e45d933ec46e7b62d0cd4c41e58c41cd27678fa9f65"
+  "hash": "sha256:77cdee834ee8dd2fe98ba0e5f0bd07159ff6a2ddcbccbce03a5c10873c276cb3"
 }

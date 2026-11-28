@@ -1,10 +1,12 @@
 {
   "uid": "b993f87b95f30711",
   "name": "WT5 × 56",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -24,6 +26,9 @@
             "aisc/wt5x56",
             144.272
           ]
+        ],
+        "aliases": [
+          "WT5X56"
         ]
       }
     }
@@ -63,5 +68,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:75995e6a68ae0710cf19189a39e702ecc6c273491d5b60818f9a6c1b00d70e87"
+  "hash": "sha256:c3fae770c7d42411839c584d8a98a6e988153e6be637167a47b4e110b075f2d9"
 }

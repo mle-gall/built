@@ -1,10 +1,12 @@
 {
   "uid": "390a29529ab876e0",
   "name": "HP16 × 88",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -24,6 +26,9 @@
             "aisc/hp16x88",
             388.62
           ]
+        ],
+        "aliases": [
+          "HP16X88"
         ]
       }
     }
@@ -63,5 +68,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:60e5704429d9d170a97b36960741383d9854e2a46beb44dee1f64ccb2c6cd807"
+  "hash": "sha256:29154a2d891b850906983d2b53b9e497ac9e3d4742f00c1c42b51414b9b1f159"
 }

@@ -1,10 +1,12 @@
 {
   "uid": "8a3483781e5be625",
   "name": "HE 320 B",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -40,6 +42,9 @@
             "en/he360b",
             360.0
           ]
+        ],
+        "aliases": [
+          "HEB 320"
         ]
       }
     }
@@ -79,5 +84,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:a75259900e13e00be8f416f3b0ff415f3c10ccabfe95358f654561fe2d32d66b"
+  "hash": "sha256:c0488071084140e65ccbad74d8b2e787a84d2f5bd493823601af17cf5abb4abc"
 }

@@ -1,10 +1,12 @@
 {
   "uid": "44970223a530b1d2",
   "name": "S10 × 35",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -29,6 +31,9 @@
             "aisc/s12x35",
             304.8
           ]
+        ],
+        "aliases": [
+          "S10X35"
         ]
       }
     }
@@ -68,5 +73,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:36d7f741a0ec9ab3e8111b9203f5c96ac47973007d6408af9fb9278f71857a82"
+  "hash": "sha256:628a19a9e9a6f53ec1b6fe97fbfc9d63778e42d886097fc49d3df923139cf2df"
 }

@@ -1,10 +1,12 @@
 {
   "uid": "862b41695e853420",
   "name": "W8 × 31",
-  "rev": 2,
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
-  "record": {},
+  "record": {
+    "class": "IfcBeam"
+  },
   "locks": {},
   "values": {
     "profile": {
@@ -28,6 +30,9 @@
             "aisc/w16x31",
             403.86
           ]
+        ],
+        "aliases": [
+          "W8X31"
         ]
       }
     }
@@ -67,5 +72,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:0c53a1da0506b6af437c5e9fdf0f45b397f0c984306b1d1b1ed9fce0140471e1"
+  "hash": "sha256:b1bf7ff32f563653f179824825af14a7c5ce5f344e644a1205533413c6eb1e41"
 }
