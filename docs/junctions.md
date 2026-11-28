@@ -518,7 +518,7 @@ knees, 24 purlins × 2 cleats), and a synthetic steel hall (2,000 members,
 | Detail edit of the purlin cleat along the Repeat (48 meetings) | < 100 ms |
 | Detail edit across 1,000 junctions (the hall) | < 500 ms, with a progress toast past 200 ms |
 | A step that touches no junction input, ride open | < 0.1 ms over today |
-| Open a file with 5,000 junction rows | stamps checked, nothing evaluated, < 30 ms over today |
+| Open a file with 5,000 junction rows | stamps checked, nothing evaluated, < 30 ms over today (synthetic hall, 900 junction rows: 11–19 ms over the same file without them, 122 ms before stamps moved after the open; `tests/test_junction_open_perf.py`, `BUILT_PERF=1`) |
 
 Hole fast path, fastener definition sharing and early cut-off are what keep
 these; lane J0 and J1 measure them first.
@@ -1241,6 +1241,20 @@ are this use's (`local.added`); leaving with new cuts or parts asks "Apply to
 all N · This one only". A cut row dragged onto a junction's tree row is
 adopted with its anchor rewritten to the junction's frame. Release is one
 level; Release all bakes everything (Q5).
+
+Entering a junction: a click on its marker (shown for the selection's
+junctions) selects it, a double-click on the marker or on its row in the
+Junctions view opens it, as Edit inside does. A cut made inside belongs to
+the junction only when it is on one of its members or parts; a cut on
+anything else stays an ordinary cut, with a note. Leaving with new items
+shows "Apply to all N · This one only · Later". A cut row under a member
+drags onto that member's junction row to join it. A part of a junction
+(its plate, a bolt) reads "Part of <detail>" in the inspector, and the
+junction's assembly "Junction · N uses of its detail"; neither offers copy
+verbs. Saving a detail arms the Junction tool with it, and the tool's
+detail list shows This project's details before packs. A saved junction
+row keeps `meet`, its contents' frames and the frames other rows
+reference; evaluation recomputes the rest.
 
 **The Junction tool** (rail, Draw › Junction): the chip names the detail,
 the meeting and its fit; hovering shows the detail's ghost; a click applies a
