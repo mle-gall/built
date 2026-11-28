@@ -1,0 +1,231 @@
+{
+ "format": "built.presets",
+ "v": 2,
+ "pack": {
+  "id": "2839aecf120f6ad7a52c8f8fdf8ed3c6",
+  "name": "Generic",
+  "version": "1.0.0",
+  "author": {
+   "name": "Built"
+  },
+  "licence": "GPL-3.0-or-later",
+  "description": "Cuts and fixings for any two members: a mitred corner and a screwed butt joint.",
+  "units": {
+   "length": "mm",
+   "angle": "deg"
+  },
+  "requires": {
+   "built": ">= 1.0",
+   "features": [
+    "junction.v1",
+    "hole.v1",
+    "block.v1",
+    "fastener.v1",
+    "weld.v1"
+   ]
+  }
+ },
+ "rows": [
+  {
+   "uid": "ba65a12717ab0bb5",
+   "name": "Corner mitre",
+   "pack": "Generic",
+   "primitive": "junction",
+   "rev": 1,
+   "values": {
+    "meeting": "corner",
+    "roles": {
+     "main": {},
+     "joining": {}
+    },
+    "params": [
+     {
+      "key": "gap",
+      "expr": "0",
+      "name": "Gap",
+      "unit": "mm",
+      "group": "Mitre"
+     }
+    ],
+    "contents": [
+     {
+      "key": "main_trim",
+      "on": "main",
+      "row": {
+       "kind": "cut",
+       "operation": "trim",
+       "end": "@main.end",
+       "cutter": {
+        "plane": {}
+       },
+       "anchor": {
+        "ref": "@meet",
+        "offset": "gap"
+       }
+      }
+     },
+     {
+      "key": "joining_trim",
+      "on": "joining",
+      "row": {
+       "kind": "cut",
+       "operation": "trim",
+       "end": "@joining.end",
+       "cutter": {
+        "plane": {}
+       },
+       "anchor": {
+        "ref": "@meet",
+        "offset": "gap"
+       }
+      }
+     }
+    ],
+    "rule": {
+     "meeting": "corner",
+     "roles": {
+      "main": {},
+      "joining": {}
+     },
+     "mirror": "allow"
+    }
+   },
+   "locks": {},
+   "record": {
+    "class": "IfcElementAssembly"
+   },
+   "naming": "",
+   "node": "",
+   "provenance": {
+    "created": "2026-11-28",
+    "created_with": "Built",
+    "derived_from": null
+   },
+   "depends": [],
+   "hash": "sha256:28c71ba44c6c8ec2c7a563be1a580240607f6eda2e2a446de2b3989ac4139975"
+  },
+  {
+   "uid": "d34a2294ee92ac1b",
+   "name": "Butt with screws",
+   "pack": "Generic",
+   "primitive": "junction",
+   "rev": 1,
+   "values": {
+    "meeting": "end_face",
+    "roles": {
+     "main": {},
+     "joining": {}
+    },
+    "params": [
+     {
+      "key": "screw_d",
+      "expr": "6",
+      "name": "Screw Ø",
+      "unit": "mm",
+      "group": "Screws",
+      "limits": {
+       "list": [
+        4,
+        5,
+        6,
+        8
+       ]
+      }
+     },
+     {
+      "key": "screw_l",
+      "expr": "main.width + 50",
+      "name": "Screw length",
+      "unit": "mm",
+      "group": "Screws"
+     }
+    ],
+    "contents": [
+     {
+      "key": "end_cut",
+      "on": "joining",
+      "row": {
+       "kind": "cut",
+       "operation": "trim",
+       "end": "@joining.end",
+       "cutter": {
+        "plane": {}
+       },
+       "anchor": {
+        "ref": "@meet",
+        "offset": 0
+       }
+      }
+     },
+     {
+      "key": "screw_1",
+      "part": {
+       "fastener": {
+        "kind": "screw",
+        "d": "screw_d",
+        "length": "screw_l"
+       },
+       "at": {
+        "frame": "@meet",
+        "axis": "-z",
+        "offset": [
+         "joining.height / 4",
+         0,
+         "-main.width"
+        ]
+       }
+      }
+     },
+     {
+      "key": "screw_2",
+      "part": {
+       "fastener": {
+        "kind": "screw",
+        "d": "screw_d",
+        "length": "screw_l"
+       },
+       "at": {
+        "frame": "@meet",
+        "axis": "-z",
+        "offset": [
+         "-joining.height / 4",
+         0,
+         "-main.width"
+        ]
+       }
+      }
+     }
+    ],
+    "rule": {
+     "meeting": "end_face",
+     "roles": {
+      "main": {},
+      "joining": {
+       "end": "any"
+      }
+     },
+     "mirror": "allow"
+    }
+   },
+   "locks": {},
+   "record": {
+    "class": "IfcElementAssembly"
+   },
+   "naming": "",
+   "node": "",
+   "provenance": {
+    "created": "2026-11-28",
+    "created_with": "Built",
+    "derived_from": null
+   },
+   "depends": [
+    {
+     "kind": "fastener",
+     "key": "metric",
+     "bundled": null
+    }
+   ],
+   "hash": "sha256:6e1832afee913ec5f32c21a6be7fc20855445c9a4908cc21d39f82119cef6dc1"
+  }
+ ]
+}

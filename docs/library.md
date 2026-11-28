@@ -32,6 +32,13 @@ preferences, the model's entries, the drawer, the browser rows and verbs).
 
 A drawn sketch is saved as a profile or a section, by its use.
 
+Junction details are presets too. Import pack… (Presets) reads a pack
+folder, a `pack.json` or a `.builtpack`. It checks every file's hash and
+stores the pack's rows at the destination you pick, every row or none.
+Share pack… writes a pack of a detail, or of its whole pack, with the
+presets and components it needs. See docs/junctions.md, Library and packs
+(J6).
+
 Two kinds keep "This model" in the model's own tables instead of the
 `library` entries: a component's This model is its definition kept when
 unused (Keep when unused), and a preset's is the model's preset table, so

@@ -149,7 +149,8 @@ fn outline(
                 library: String::new(),
                 drawing: Some(json!(section)),
                 sketch: None,
-                params: Default::default(),
+                family: String::new(),
+            params: Default::default(),
             };
             let Ok(section) = profile.outline(48) else {
                 return Ok(None);
@@ -189,6 +190,33 @@ fn outline(
                 let station = station?;
                 let frame = inverse * reference::frame(station.getattr("_doc_key")?.extract()?);
                 mesh_outline(&station, frame, &mut lines)?;
+            }
+        }
+        Cutter::Block(b) => {
+            let Some(Reference::Frame { junction, frame }) = row.anchor.as_ref().map(|a| &a.reference)
+            else {
+                return Ok(None);
+            };
+            let Some(base) = super::junction::local_frame(t, &row.owner, junction, frame) else {
+                return Ok(None);
+            };
+            let frame = base
+                * DMat4::from_translation(DVec3::from(b.at) / 1000.)
+                * DMat4::from_scale(DVec3::from(b.size) / 1000.);
+            centre = frame.transform_point3(DVec3::splat(0.5));
+            normal = base.z_axis.truncate().normalize_or_zero();
+            for corner in 0..8usize {
+                let point = |index: usize| {
+                    frame.transform_point3(DVec3::from_array(std::array::from_fn(|axis| {
+                        f64::from(u8::from(index & (1 << axis) != 0))
+                    })))
+                };
+                for axis in 0..3 {
+                    let bit = 1 << axis;
+                    if corner & bit == 0 {
+                        lines.push([point(corner), point(corner | bit)]);
+                    }
+                }
             }
         }
         Cutter::Body(uid) | Cutter::Opening(cut::Opening { fill: uid, .. }) => {

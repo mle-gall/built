@@ -3,6 +3,9 @@ use super::*;
 use pyo3::exceptions::PyValueError;
 use serde_json::{json, Value};
 
+pub(super) fn listed(ctx: &Bound<'_, PyAny>) -> PyResult<Vec<(Value, String)>> {
+    rows(ctx)
+}
 fn rows(ctx: &Bound<'_, PyAny>) -> PyResult<Vec<(Value, String)>> {
     let py = ctx.py();
     let scene = ctx
@@ -204,13 +207,10 @@ fn details(p: &Value) -> Vec<(String, String, String)> {
     }
     details
 }
-fn transfer(ctx: &Bound<'_, PyAny>, pack: Option<String>) -> PyResult<()> {
+/// Export pack… for sweep, cut and Repeat presets: every preset of the
+/// pack, as a format 1 file (junction details use Share pack…).
+fn export_v1(ctx: &Bound<'_, PyAny>, pack: String) -> PyResult<()> {
     let py = ctx.py();
-    let title = if pack.is_some() {
-        "Export preset pack"
-    } else {
-        "Import preset pack"
-    };
     let c = ctx.clone().unbind();
     let done = func(py, move |py, args| {
         let path = args.get_item(0)?;
@@ -222,37 +222,28 @@ fn transfer(ctx: &Bound<'_, PyAny>, pack: Option<String>) -> PyResult<()> {
             path.push("pack.json");
         }
         let ctx = c.bind(py);
-        if let Some(pack) = &pack {
-            let rows: Vec<_> = rows(ctx)?
-                .into_iter()
-                .filter(|(p, _)| p["pack"] == pack.as_str())
-                .map(|(p, _)| p)
-                .collect();
-            let encoded =
-                serde_json::to_vec_pretty(&json!({"format":"built.presets","v":1,"rows":rows}))
-                    .map_err(|e| PyValueError::new_err(e.to_string()))?;
-            use std::io::Write;
-            std::fs::File::create_new(path)?.write_all(&encoded)?;
-        } else {
-            let data: Value = serde_json::from_slice(&std::fs::read(path)?)
-                .map_err(|e| PyValueError::new_err(e.to_string()))?;
-            if data["v"] == 1 && data["format"] == "built.presets" {
-                update(ctx, data["rows"].clone())?;
-            } else if data["uid"].is_string() {
-                update(ctx, json!([data]))?;
-            } else {
-                return Err(PyValueError::new_err("Unknown preset pack format"));
-            }
-        }
+        let rows: Vec<_> = rows(ctx)?
+            .into_iter()
+            .filter(|(p, _)| p["pack"] == pack.as_str())
+            .map(|(p, _)| p)
+            .collect();
+        let encoded = serde_json::to_vec_pretty(&json!({"format":"built.presets","v":1,"rows":rows}))
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        use std::io::Write;
+        std::fs::File::create_new(path)?.write_all(&encoded)?;
         Ok(none(py))
     })?;
     py.import("built_render.chrome_forms")?
         .getattr("ask_text")?
         .call(
-            (ctx.getattr("win")?, title, "Pack file or folder"),
+            (ctx.getattr("win")?, "Export preset pack", "Pack file or folder"),
             Some(&[("done", done)].into_py_dict(py)?),
         )?;
     Ok(())
+}
+/// A format 1 pack goes into this model in one step, as before.
+pub(super) fn import_v1(ctx: &Bound<'_, PyAny>, rows: Value) -> PyResult<()> {
+    update(ctx, rows)
 }
 #[pyclass(module="built_render.wgpu_library",extends=LibraryProvider,dict)]
 pub(super) struct PresetsProvider;
@@ -273,28 +264,44 @@ impl PresetsProvider {
     fn items<'p>(&self, py: Python<'p>, ctx: &Bound<'p, PyAny>) -> PyResult<Bound<'p, PyAny>> {
         let mut items = Vec::new();
         // Junction details: their open matches, and Follow (docs/junctions.md §4.4).
-        let counts: Value = match ctx.getattr_opt("scene")?.filter(|s| s.hasattr("_root").unwrap_or(false)) {
+        let scene = ctx.getattr_opt("scene")?.filter(|s| s.hasattr("_root").unwrap_or(false));
+        let counts: Value = match &scene {
             Some(scene) => serde_json::from_str(&dumps(py, &py.import("built_core.command_protocol")?
                 .call_method1("junction_counts", (scene,))?)?).unwrap_or_default(),
             None => Value::Null,
         };
+        let uses = super::packs::uses(py, scene.as_ref())?;
+        let model = super::packs::model_presets(py, scene.as_ref())?;
         for (p, source) in rows(ctx)? {
+            let junction = p["primitive"] == "junction";
             let mut verbs = vec!["edit", "duplicate", "export"];
-            if matches!(p["primitive"].as_str(), Some("sweep" | "cut" | "repeat")) {
+            if matches!(p["primitive"].as_str(), Some("sweep" | "cut" | "repeat" | "junction")) {
                 verbs.insert(0, "apply");
+            }
+            if junction {
+                verbs.retain(|v| *v != "export");
+                verbs.push("share");
             }
             if source == "model" || source == "mine" {
                 verbs.push("delete");
             }
-            let mut details = details(&p);
-            let junction = &counts["details"][p["uid"].as_str().unwrap_or_default()];
-            if junction.is_object() {
-                let open = junction["counts"]["match"].as_u64().unwrap_or(0);
+            let mut details = if junction {
+                let used = uses.get(p["uid"].as_str().unwrap_or("")).copied().unwrap_or(0);
+                let (rows, _) = super::packs::describe(py, &p, used, None)?;
+                rows.into_iter()
+                    .filter_map(|r| serde_json::from_value::<(String, String, String)>(r).ok())
+                    .collect()
+            } else {
+                details(&p)
+            };
+            let open_matches = &counts["details"][p["uid"].as_str().unwrap_or_default()];
+            if open_matches.is_object() {
+                let open = open_matches["counts"]["match"].as_u64().unwrap_or(0);
                 if open > 0 {
                     verbs.insert(0, "review");
                 }
-                verbs.push(if junction["follow"] == true { "unfollow" } else { "follow" });
-                let state = if junction["follow"] == true {
+                verbs.push(if open_matches["follow"] == true { "unfollow" } else { "follow" });
+                let state = if open_matches["follow"] == true {
                     crate::settings_rows::tr(py, "On · {n} new")?.replace("{n}", &open.to_string())
                 } else {
                     crate::settings_rows::tr(py, "Off")?
@@ -302,12 +309,39 @@ impl PresetsProvider {
                 details.insert(0, (crate::settings_rows::tr(py, "Follow")?, state, "free".into()));
                 details.insert(0, (crate::settings_rows::tr(py, "Similar meetings")?, open.to_string(), "free".into()));
             }
-            items.push(json!({"key":p["uid"],"name":p["name"],"category":p["pack"],"source":source,"preset":p,"verbs":verbs,"defaults":details,
-                "thumb":p["values"]["profile"]["library"].as_str().map(|k|format!("profile:{k}"))}));
+            let mut row = json!({"key":p["uid"],"name":p["name"],"category":p["pack"],"source":source,"verbs":verbs,"defaults":details,
+                "base":p["primitive"],"thumb":p["values"]["profile"]["library"].as_str().map(|k|format!("profile:{k}"))});
+            if junction {
+                row["thumb"] = json!(super::packs::junction_thumb(py, &p)?);
+                row["uses"] = json!(uses.get(p["uid"].as_str().unwrap_or("")).copied().unwrap_or(0));
+            }
+            row["preset"] = p;
+            items.push(row);
         }
         // Presets saved to a project, My library or a shared library.
-        let scene = ctx.getattr_opt("scene")?.filter(|s| s.hasattr("_root").unwrap_or(false));
         for mut row in super::destinations::items(py, scene.as_ref(), &["presets"])? {
+            row["base"] = row["preset"]["primitive"].clone();
+            if row["preset"]["primitive"] == "junction" {
+                let p = row["preset"].clone();
+                let used = uses.get(p["uid"].as_str().unwrap_or("")).copied().unwrap_or(0);
+                let offer = super::packs::update_offer(&p, &model);
+                let (mut defaults, thumb) = super::packs::describe(py, &p, used, offer)?;
+                defaults.extend(row["defaults"].as_array().cloned().unwrap_or_default());
+                row["defaults"] = json!(defaults);
+                if row["thumb"].is_null() {
+                    row["thumb"] = json!(thumb);
+                }
+                row["uses"] = json!(used);
+                if let Some(verbs) = row["verbs"].as_array_mut() {
+                    let at = verbs.iter().position(|v| v == "-").unwrap_or(verbs.len());
+                    verbs.insert(at, json!("share"));
+                    if offer.is_some() {
+                        verbs.insert(at, json!("modelupdate"));
+                    }
+                }
+                items.push(row);
+                continue;
+            }
             let mut rows: Vec<Value> = details(&row["preset"]).into_iter().map(|d| json!(d)).collect();
             rows.extend(row["defaults"].as_array().cloned().unwrap_or_default());
             row["defaults"] = json!(rows);
@@ -318,7 +352,7 @@ impl PresetsProvider {
     }
     fn type_action(&self, ctx: &Bound<'_, PyAny>, action: &str) -> PyResult<()> {
         if action == "import" {
-            transfer(ctx, None)
+            super::packs::ask_import(ctx)
         } else {
             Ok(())
         }
@@ -338,6 +372,9 @@ impl PresetsProvider {
         let lib: Option<String> = if item.contains("lib")? { Some(item.get_item("key")?.extract()?) } else { None };
         let personal = item.get_item("source")?.eq("mine")? || lib.is_some();
         match verb {
+            "apply" if p["primitive"] == "junction" => super::packs::apply(ctx, &p)?,
+            "share" => super::packs::share(ctx, &p)?,
+            "modelupdate" => super::packs::update_model(ctx, &p)?,
             "apply" if p["primitive"] == "repeat" => {
                 let scene = ctx.getattr("scene")?;
                 let selection = scene.getattr("selection")?;
@@ -404,7 +441,8 @@ impl PresetsProvider {
                 p["name"] = json!(format!("{} copy", shown(&p["name"])));
                 update(ctx, json!([p]))?;
             }
-            "export" => transfer(ctx, Some(shown(&p["pack"])))?,
+            "export" if p["primitive"] == "junction" => super::packs::share(ctx, &p)?,
+            "export" => export_v1(ctx, shown(&p["pack"]))?,
             "delete" => ask(
                 &ctx.getattr("view")?,
                 (

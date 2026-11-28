@@ -18,6 +18,10 @@ pub struct Preset {
     pub node: String,
     pub locks: BTreeMap<String, String>,
     pub rev: u64,
+    /// Where an imported detail came from: `{"pack", "name", "rev", "hash"}`,
+    /// kept with the document so the Library can offer its updates.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<Value>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RepeatPreset {
@@ -93,16 +97,77 @@ pub(super) fn bind_repeat(scene: &Obj<'_>, t: &mut LiveTable, row: &mut Row) -> 
 struct Pack {
     rows: Vec<Preset>,
 }
+/// Built's bundled presets: the starter set and the starter detail packs
+/// (each a format 2 pack with its rows inline).
+pub const PACK_FILES: &[&str] = &[
+    include_str!("../../../../resources/presets/starter.builtpreset"),
+    include_str!("../../../../resources/presets/packs/steel-connections-en.builtpreset"),
+    include_str!("../../../../resources/presets/packs/timber-joints.builtpreset"),
+    include_str!("../../../../resources/presets/packs/generic.builtpreset"),
+];
+#[derive(Deserialize)]
+struct PackFile {
+    rows: Vec<Value>,
+    #[serde(default)]
+    pack: Value,
+}
 static BUILTINS: LazyLock<Pack> = LazyLock::new(|| {
-    serde_json::from_str(include_str!(
-        "../../../../resources/presets/starter.builtpreset"
-    ))
-    .expect("bundled presets")
+    let mut rows = Vec::new();
+    for text in PACK_FILES {
+        let file: PackFile = serde_json::from_str(text).expect("bundled presets");
+        for row in file.rows {
+            let mut p: Preset = serde_json::from_value(row.clone()).expect("bundled preset");
+            // A format 2 pack names where its rows come from, with whom.
+            if let Some(id) = file.pack["id"].as_str() {
+                p.source = Some(json!({"pack": id, "name": file.pack["name"], "version": file.pack["version"],
+                    "rev": p.rev, "hash": row["hash"], "author": file.pack["author"], "licence": file.pack["licence"]}));
+            }
+            rows.push(p);
+        }
+    }
+    Pack { rows }
 });
+/// A bundled preset or detail by uid.
+pub fn builtin(uid: &str) -> Option<Preset> {
+    BUILTINS.rows.iter().find(|p| p.uid == uid).cloned()
+}
+
 fn error(msg: impl ToString) -> PyErr {
     PyValueError::new_err(msg.to_string())
 }
 impl Preset {
+    /// The checks that need no geometry: identity, kind, locks, parameters.
+    pub fn check(&self) -> Result<(), String> {
+        if self.uid.len() != 16
+            || !self.uid.bytes().all(|c| c.is_ascii_hexdigit())
+            || self.name.trim().is_empty()
+            || !matches!(
+                self.primitive.as_str(),
+                "sweep" | "cut" | "repeat" | "junction"
+            )
+            || self.locks.values().any(|v| v != "free" && v != "fixed")
+        {
+            return Err("Invalid preset".into());
+        }
+        if self.primitive == "junction" {
+            let params = self
+                .values
+                .get("params")
+                .and_then(Value::as_array)
+                .map(Vec::as_slice)
+                .unwrap_or(&[]);
+            expr::validate(params)?;
+        }
+        if self.primitive == "repeat"
+            && self
+                .values
+                .keys()
+                .any(|k| !REPEAT_FIELDS.contains(&k.as_str()))
+        {
+            return Err("Unknown Repeat preset field".into());
+        }
+        Ok(())
+    }
     pub(super) fn validate(&self) -> PyResult<()> {
         if self.uid.len() != 16
             || !self.uid.bytes().all(|c| c.is_ascii_hexdigit())
@@ -226,6 +291,24 @@ pub fn detach(old: &sweep::Sweep, new: &mut sweep::Sweep, p: &Preset) -> Option<
     new.preset = None;
     new.preset_rev = 0;
     Some(format!("Detached from {}: {}", p.name, field))
+}
+/// Embed presets a step needs that the model does not hold yet. A preset the
+/// model already has keeps the model's revision: updating it is its own,
+/// explicit step (the Library's Update).
+pub fn embed(t: &mut LiveTable, presets: &[Preset]) -> PyResult<()> {
+    let mut seen = HashSet::new();
+    for p in presets {
+        p.validate()?;
+        if !seen.insert(&p.uid) {
+            return Err(error("Duplicate preset ID"));
+        }
+    }
+    for p in presets {
+        if !t.presets.contains_key(&p.uid) {
+            Arc::make_mut(&mut t.presets).insert(p.uid.clone(), p.clone());
+        }
+    }
+    Ok(())
 }
 pub fn update(scene: &Obj<'_>, t: &mut LiveTable, presets: &[Preset]) -> PyResult<()> {
     let mut seen = HashSet::new();

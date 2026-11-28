@@ -131,6 +131,7 @@ impl Default for SweepTool {
                 drawing: None,
                 library: "en/ipe240".into(),
                 params: Default::default(),
+                family: String::new(),
             },
             attachment: 0,
             inset: false,
@@ -302,6 +303,7 @@ impl Tool for SweepTool {
                     sketch: value["uid"].as_str().map(str::to_owned),
                     drawing: Some(value.clone()),
                     params: Default::default(),
+                    family: String::new(),
                 };
                 if profile.outline(24).is_err() {
                     return false;
@@ -335,6 +337,7 @@ impl Tool for SweepTool {
                     sketch: None,
                     drawing: None,
                     params: Default::default(),
+                    family: String::new(),
                 };
                 self.attachment = if k == "basic/wall" { 2 } else { 0 };
             }

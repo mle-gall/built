@@ -130,6 +130,141 @@ fn prism(
     Ok(())
 }
 
+/// What a fastener part is. Bolts come from the metric table with nut and
+/// washers; the others are a shank of the given diameter and length with
+/// their own head, generated and shared by (kind, d, length).
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum FastenerKind {
+    Bolt,
+    Screw,
+    Nail,
+    Dowel,
+    Anchor,
+}
+impl FastenerKind {
+    pub(super) fn of(spec: &Value) -> PyResult<Self> {
+        Ok(match spec["kind"].as_str().unwrap_or("bolt") {
+            "bolt" => Self::Bolt,
+            "screw" => Self::Screw,
+            "nail" => Self::Nail,
+            "dowel" => Self::Dowel,
+            "anchor" => Self::Anchor,
+            other => return Err(err(format!("Unknown fastener kind {other}"))),
+        })
+    }
+    fn name(self) -> &'static str {
+        match self {
+            Self::Bolt => "bolt",
+            Self::Screw => "screw",
+            Self::Nail => "nail",
+            Self::Dowel => "dowel",
+            Self::Anchor => "anchor",
+        }
+    }
+    fn predefined(self) -> &'static str {
+        match self {
+            Self::Bolt => "BOLT",
+            Self::Screw => "SCREW",
+            Self::Nail => "NAIL",
+            Self::Dowel => "DOWEL",
+            Self::Anchor => "ANCHORBOLT",
+        }
+    }
+    /// Screws and nails make their own way: no bore unless the detail asks.
+    pub(super) fn bores(self, spec: &Value) -> bool {
+        spec["holes"]
+            .as_bool()
+            .unwrap_or(!matches!(self, Self::Screw | Self::Nail))
+    }
+}
+
+fn update_plain(
+    scene: &Obj<'_>,
+    g: &Obj<'_>,
+    spec: &Value,
+    kind: FastenerKind,
+    d: f64,
+    grip: f64,
+    number: &dyn Fn(&str, f64) -> PyResult<f64>,
+) -> PyResult<()> {
+    let length = number("length", if kind == FastenerKind::Dowel { grip } else { 0. })?;
+    if !(d > 0. && d <= 64. && length > 0. && length <= 2000.) {
+        return Err(err(format!("Give the {} a diameter and length", kind.name())));
+    }
+    let (d, length) = ((d * 100.).round() / 100., (length * 100.).round() / 100.);
+    let key = eid::derived_uid(&format!("built:fastener:v1:{}:{d}:{length}", kind.name()));
+    let py = scene.py();
+    let definition = if let Some(g) = cut::source(scene, &key)? {
+        g
+    } else {
+        let def = py.import("built_core.group")?.getattr("Group")?.call0()?;
+        let mesh = def.getattr("mesh")?;
+        let handle = mesh.getattr("_store")?.cast_into::<PyMeshStore>()?;
+        let mut b = handle.try_borrow_mut()?;
+        let st = &mut b.inner;
+        match kind {
+            FastenerKind::Screw => {
+                prism(st, 24, 2. * d, 0., 0., 0.6 * d).map_err(err)?;
+                prism(st, 24, d, 0., -length, length).map_err(err)?;
+            }
+            FastenerKind::Nail => {
+                prism(st, 24, 2.2 * d, 0., 0., 0.3 * d).map_err(err)?;
+                prism(st, 24, d, 0., -length, length).map_err(err)?;
+            }
+            FastenerKind::Anchor => {
+                // Rising out of the base: the nut and washer sit on the plate.
+                let size = METRIC.sizes.iter().find(|s| s.d == d);
+                let (nut, washer) = size.map_or((0.8 * d, 0.2 * d), |s| (s.nut, s.washer_t));
+                let flats = size.map_or(1.5 * d, |s| s.flats);
+                let hex = flats / (std::f64::consts::PI / 6.).cos();
+                prism(st, 24, d, 0., -length, length + washer + nut + d).map_err(err)?;
+                prism(st, 24, 2. * d, d * 1.05, 0., washer).map_err(err)?;
+                prism(st, 6, hex, d, washer, nut).map_err(err)?;
+            }
+            FastenerKind::Dowel | FastenerKind::Bolt => {
+                prism(st, 24, d, 0., -length, length).map_err(err)?;
+            }
+        }
+        let roles = Kind::ALL
+            .into_iter()
+            .flat_map(|kind| {
+                st.live_slots(kind)
+                    .into_iter()
+                    .enumerate()
+                    .map(move |(i, slot)| (format!("fastener/{kind:?}/{i}"), kind, slot))
+            })
+            .collect();
+        geometry::assign_roles(st, roles).map_err(err)?;
+        drop(b);
+        eid::set_definition_uid(&mesh, &key)?;
+        def.setattr("uid", &key)?;
+        let label = match kind {
+            FastenerKind::Screw => "Screw",
+            FastenerKind::Nail => "Nail",
+            FastenerKind::Dowel => "Dowel",
+            _ => "Anchor",
+        };
+        def.setattr("name", format!("{label} Ø{d} × {length}"))?;
+        def.setattr("component", true)?;
+        scene
+            .getattr("kept_components")?
+            .call_method1("append", (&def,))?;
+        def
+    };
+    let mesh = definition.getattr("mesh")?;
+    if !g.getattr("mesh")?.is(&mesh) {
+        g.setattr("mesh", mesh)?;
+    }
+    g.setattr("name", definition.getattr("name")?)?;
+    let mut record = json!({"class":"IfcMechanicalFastener","predefined_type":kind.predefined(),"d":d,"length":length,"grip":grip});
+    for key in ["standard", "grade", "material"] {
+        if let Some(v) = spec.get(key) {
+            record[key] = v.clone();
+        }
+    }
+    g.setattr("ifc", to_py(py, &record)?)
+}
+
 pub(super) fn update(
     scene: &Obj<'_>,
     g: &Obj<'_>,
@@ -142,13 +277,7 @@ pub(super) fn update(
         None => Ok(params.get(key).copied().unwrap_or(default)),
     };
     let d = number("d", 16.)?;
-    let standard = spec["standard"].as_str().unwrap_or("ISO 4017");
-    let size = METRIC
-        .sizes
-        .iter()
-        .find(|s| s.d == d)
-        .filter(|_| METRIC.bolts.iter().any(|s| s == standard))
-        .ok_or_else(|| err("Unknown bolt size or standard"))?;
+    let kind = FastenerKind::of(spec)?;
     let grip = number(
         "grip",
         dims.iter()
@@ -156,6 +285,16 @@ pub(super) fn update(
             .map(|(_, v)| v)
             .sum(),
     )?;
+    if kind != FastenerKind::Bolt {
+        return update_plain(scene, g, spec, kind, d, grip, &number);
+    }
+    let standard = spec["standard"].as_str().unwrap_or("ISO 4017");
+    let size = METRIC
+        .sizes
+        .iter()
+        .find(|s| s.d == d)
+        .filter(|_| METRIC.bolts.iter().any(|s| s == standard))
+        .ok_or_else(|| err("Unknown bolt size or standard"))?;
     let minimum = grip + 2. * size.washer_t + size.nut + 2. * size.pitch;
     let length = number(
         "length",
@@ -232,6 +371,9 @@ pub(super) fn contents(j: &Row, p: &presets::Preset) -> PyResult<Vec<Value>> {
         return Ok(items);
     };
     let spec = &part["fastener"];
+    if !FastenerKind::of(spec)?.bores(spec) {
+        return Ok(items);
+    }
     let parameter = |key: &str, default: f64| {
         spec.get(key).cloned().unwrap_or_else(|| {
             if p.values

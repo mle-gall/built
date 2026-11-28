@@ -13,6 +13,16 @@ pub enum Cutter {
     Repeat(String),
     Section(String),
     Opening(Opening),
+    Block(Block),
+}
+
+/// A box cutter posed in its anchor's frame: laps, tenons, mortises, seats.
+/// Sizes and the near corner are millimetres along the frame's axes.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Block {
+    pub size: [f64; 3],
+    #[serde(default)]
+    pub at: [f64; 3],
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -210,6 +220,7 @@ pub(super) fn attach(scene: &Obj<'_>, t: &mut LiveTable, row: &mut Row) -> PyRes
             }
         }
         Some(Cutter::Plane(_)) if matches!(op, "trim" | "subtract") => (),
+        Some(Cutter::Block(_)) if matches!(op, "union" | "subtract" | "intersect") => (),
         _ => return Err(PyValueError::new_err("Invalid cutter or operation")),
     }
     if !matches!(row.end.as_deref(), None | Some("start" | "end")) {
@@ -292,6 +303,7 @@ pub(super) fn end_planes(
                         | Cutter::Section(_)
                         | Cutter::Opening(_)
                         | Cutter::Repeat(_)
+                        | Cutter::Block(_)
                 )
             )
         {
@@ -640,12 +652,47 @@ fn operand<'p>(
             }
             (mesh, pose)
         }
+        Some(Cutter::Block(b)) => {
+            if b
+                .size
+                .iter()
+                .chain(&b.at)
+                .any(|x| !x.is_finite())
+                || b.size.iter().any(|x| *x <= 0.)
+            {
+                return Ok(Err("invalid_size"));
+            }
+            let base = match cut.anchor.as_ref().map(|a| &a.reference) {
+                Some(Reference::Frame { junction, frame }) => {
+                    match super::junction::local_frame(t, &cut.owner, junction, frame) {
+                        Some(m) => m,
+                        None => return Ok(Err("ref_lost")),
+                    }
+                }
+                Some(reference) => match reference::origin(scene, t, reference, cut)? {
+                    Some(p) => DMat4::from_translation(p),
+                    None => return Ok(Err("ref_lost")),
+                },
+                None => DMat4::IDENTITY,
+            };
+            let mut unit = cut.clone();
+            unit.size = [1.; 3];
+            unit.open_top = false;
+            let m = py.import("built_core.mesh")?.call_method0("Mesh")?;
+            let handle = m.getattr("_store")?.cast_into::<PyMeshStore>()?;
+            geometry::generate(&mut handle.try_borrow_mut()?.inner, &unit, [0.; 3])
+                .map_err(PyValueError::new_err)?;
+            let pose = base
+                * DMat4::from_translation(DVec3::from(b.at) / 1000.)
+                * DMat4::from_scale(DVec3::from(b.size) / 1000.);
+            (m, pose)
+        }
         _ => return Ok(Err("unsupported")),
     };
     if let Some(anchor) = cut.anchor.as_ref().filter(|_| {
         !matches!(
             cut.cutter,
-            Some(Cutter::Hole(_) | Cutter::Plane(_) | Cutter::Bisector(_) | Cutter::Section(_))
+            Some(Cutter::Hole(_) | Cutter::Plane(_) | Cutter::Bisector(_) | Cutter::Section(_) | Cutter::Block(_))
         )
     }) {
         let Some(point) = reference::origin(scene, t, &anchor.reference, cut)? else {
@@ -701,6 +748,7 @@ pub(super) fn live_openings<'p>(
                         | Cutter::Section(_)
                         | Cutter::Opening(_)
                         | Cutter::Repeat(_)
+                        | Cutter::Block(_)
                 )
             ) || all_operations
                 && target.kind == "cut_stack"
@@ -902,6 +950,7 @@ pub(super) fn bodies<'p>(
                         | Cutter::Section(_)
                         | Cutter::Opening(_)
                         | Cutter::Repeat(_)
+                        | Cutter::Block(_)
                 )
             )
         {

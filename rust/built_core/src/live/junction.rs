@@ -671,6 +671,7 @@ pub(super) fn detail(t: &LiveTable, j: &Row) -> PyResult<presets::Preset> {
             node: String::new(),
             locks: BTreeMap::new(),
             rev: 1,
+            source: None,
         });
     }
     j.joint.detail["uid"]
@@ -975,6 +976,12 @@ fn expand_field(
                 | "/anchor/offset"
                 | "/clearance"
                 | "/cutter/plane/angle"
+                | "/cutter/block/size/0"
+                | "/cutter/block/size/1"
+                | "/cutter/block/size/2"
+                | "/cutter/block/at/0"
+                | "/cutter/block/at/1"
+                | "/cutter/block/at/2"
         ) {
             bindings.push(json!({"row":id,"field":path,"param":s}));
             *v = if path == "/cutter/hole/d" {
