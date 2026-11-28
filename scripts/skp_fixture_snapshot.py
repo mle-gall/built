@@ -28,6 +28,7 @@ def main():
     with tempfile.TemporaryDirectory() as cache:
         os.environ["BUILT_TEXTURE_CACHE"] = cache
         os.environ["BUILT_SETTINGS_DIR"] = cache
+        os.environ["BUILT_LOG_DIR"] = str(Path(cache) / "logs")
         from built_core.settings import use_native
         use_native(cache)
         from built_core import group, layers

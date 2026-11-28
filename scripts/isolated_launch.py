@@ -13,7 +13,11 @@ def preferences_mtime():
 
 
 def log_mtimes():
-    return _mtimes("Library/Logs/Built", ("built-errors.log", "built-crash.log"))
+    if sys.platform != "darwin":
+        return None
+    import pwd
+    folder = Path(pwd.getpwuid(os.getuid()).pw_dir) / "Library/Logs/Built"
+    return {p.relative_to(folder): p.lstat().st_mtime_ns for p in folder.rglob("*")}
 
 
 def _mtimes(folder, names):

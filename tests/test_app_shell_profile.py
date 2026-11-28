@@ -188,11 +188,26 @@ assert home == Path(os.environ['CFFIXED_USER_HOME'])
 assert home.parent.name.startswith('built-pytest-')
 profile = Path(os.environ['BUILT_SETTINGS_DIR'])
 assert profile.is_relative_to(home.parent)
+assert Path(os.environ['BUILT_LOG_DIR']).is_relative_to(home.parent)
 assert Path(os.environ['XDG_DATA_HOME']).is_relative_to(home.parent)
 NativeSettings().setValue('isolation/child_process', str(home))
 assert NativeSettings(profile).value('isolation/child_process') == str(home)
 """
     subprocess.run([sys.executable, "-c", probe], check=True, timeout=20)
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="macOS log location")
+def test_log_guard_covers_new_log_names(tmp_path, monkeypatch):
+    import pwd
+    from types import SimpleNamespace
+    from scripts.isolated_launch import log_mtimes
+
+    monkeypatch.setattr(pwd, "getpwuid", lambda uid: SimpleNamespace(pw_dir=str(tmp_path)))
+    before = log_mtimes()
+    logs = tmp_path / "Library/Logs/Built"
+    logs.mkdir(parents=True)
+    (logs / "new-diagnostic.log").write_text("synthetic")
+    assert log_mtimes() != before
 
 
 @pytest.mark.parametrize(("getter", "saved", "message"), [

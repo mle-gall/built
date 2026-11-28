@@ -419,6 +419,12 @@ mod tests {
     /// open, a tool switch by key (ShortcutOverride, then the shortcut).
     #[test]
     fn embedded_python_opens_a_document_headless() {
+        let profile = tempfile::tempdir().expect("private embedded test profile");
+        let settings = profile.path().join("settings");
+        let logs = profile.path().join("logs");
+        std::env::set_var("BUILT_LOG_DIR", &logs);
+        std::env::set_var("BUILT_SETTINGS_DIR", &settings);
+        std::env::set_var("BUILT_BACKGROUND", "1");
         let layout = Layout::find(None, None);
         start(&layout).expect("python starts");
         let builtin = Python::attach(|py| -> PyResult<bool> {
@@ -426,7 +432,7 @@ mod tests {
             names.contains("built_render")
         });
         assert!(builtin.unwrap(), "built_render is registered as a built-in module");
-        let settings = std::env::temp_dir().join("built-shell-cargo-test");
+        assert!(logs.join("built-crash.log").is_file());
         let host = Host::new((0, 0, ""), 1280.0, 800.0, 2.0, Some(&settings.to_string_lossy()), true).expect("host");
         let fixture = layout.root.join("tests/fixtures/shell/slab-and-cube.igz");
         let opened = host.call("open", (fixture.to_string_lossy().to_string(),)).unwrap();
