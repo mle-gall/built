@@ -89,6 +89,31 @@ pub(super) fn source<'p>(scene: &Obj<'p>, uid: &str) -> PyResult<Option<Obj<'p>>
     Ok(None)
 }
 
+/// A classic group moves by rewriting vertices. Once it participates in a
+/// relation its uncut definition and its placement must move independently.
+pub(super) fn bind_placements(scene: &Obj<'_>, t: &LiveTable, row: &Row) -> PyResult<()> {
+    let cutter = match &row.cutter {
+        Some(Cutter::Body(id) | Cutter::Bisector(id)) => Some(id),
+        _ => None,
+    };
+    let face_owner = row.anchor.as_ref().and_then(|a| match &a.reference {
+        Reference::Element { path, .. } => path.last(),
+        _ => None,
+    });
+    for id in std::iter::once(&row.owner).chain(cutter).chain(face_owner) {
+        if let Some(g) = group(scene.py(), t, id) {
+            if g.getattr("xform")?.is_none() {
+                g.setattr("component", false)?;
+                g.setattr(
+                    "xform",
+                    scene.py().import("built_core")?.call_method0("Matrix4")?,
+                )?;
+            }
+        }
+    }
+    Ok(())
+}
+
 pub(super) fn attach(scene: &Obj<'_>, t: &mut LiveTable, row: &mut Row) -> PyResult<()> {
     let mut target = if let Some(id) = t.owners.get(&row.owner) {
         (*t.rows[id]).clone()
@@ -109,9 +134,6 @@ pub(super) fn attach(scene: &Obj<'_>, t: &mut LiveTable, row: &mut Row) -> PyRes
     };
     if !matches!(target.kind.as_str(), "sweep" | "cut_stack") {
         return Err(PyValueError::new_err("Select a sweep or solid target"));
-    }
-    if target.kind == "cut_stack" && matches!(row.cutter, Some(Cutter::Bisector(_))) {
-        return Err(PyValueError::new_err("End fittings require a sweep target"));
     }
     if !row.cuts.is_empty() {
         return Err(PyValueError::new_err("A cut cannot own cuts"));
@@ -200,7 +222,35 @@ pub(super) fn attach(scene: &Obj<'_>, t: &mut LiveTable, row: &mut Row) -> PyRes
         target.cuts.push(row.uid.clone());
         t.insert(target).map_err(PyValueError::new_err)?;
     }
-    Ok(())
+    bind_placements(scene, t, row)
+}
+
+/// End centres along the longest definition axis, as used for box junction roles.
+pub(crate) fn solid_axis(mesh: &Obj<'_>) -> PyResult<Vec<[f64; 3]>> {
+    let store = mesh.getattr("_store")?.cast_into::<PyMeshStore>()?;
+    let store = store.try_borrow()?;
+    let s = &store.inner;
+    let mut lo = DVec3::splat(f64::INFINITY);
+    let mut hi = -lo;
+    for v in s.live_slots(Kind::Vertex) {
+        let p = DVec3::from(
+            s.state
+                .frame
+                .definition_point(*s.state.vpos.get(v as usize)),
+        );
+        lo = lo.min(p);
+        hi = hi.max(p);
+    }
+    if !lo.is_finite() {
+        return Ok(Vec::new());
+    }
+    let size = hi - lo;
+    let axis = (0..3).max_by(|&a, &b| size[a].total_cmp(&size[b])).unwrap();
+    let mut start = (lo + hi) * 0.5;
+    let mut end = start;
+    start[axis] = lo[axis];
+    end[axis] = hi[axis];
+    Ok(vec![start.to_array(), end.to_array()])
 }
 
 pub(super) fn end_planes(
@@ -253,14 +303,23 @@ pub(super) fn end_planes(
                 let Some(host) = group(scene.py(), t, uid) else {
                     return Ok(Err("ref_lost"));
                 };
-                let Some(points) = metadata(&host)?
+                let points = match metadata(&host)?
                     .get_item(EXT)?
                     .and_then(|m| m.get_item("path").ok())
                     .and_then(|p| p.extract::<Vec<[f64; 3]>>().ok())
                     .filter(|p| p.len() >= 2)
-                else {
-                    return Ok(Err("end_unresolved"));
+                {
+                    Some(path) => path,
+                    None => {
+                        let Some(mesh) = junction::uncut_mesh(scene, t, uid)? else {
+                            return Ok(Err("ref_lost"));
+                        };
+                        solid_axis(&mesh)?
+                    }
                 };
+                if points.len() < 2 {
+                    return Ok(Err("end_unresolved"));
+                }
                 let m = reference::frame(t.groups[&target.owner]).inverse()
                     * reference::frame(t.groups[uid]);
                 let (_, pair) = points
@@ -283,7 +342,27 @@ pub(super) fn end_planes(
                     (b, a)
                 };
                 let outward = if end { along } else { -along };
-                (near, outward + (far - near).normalize_or_zero())
+                let partner = (far - near).normalize_or_zero();
+                // A post can meet the beam anywhere along its length. Intersect
+                // their axes, limiting the cut to the extent of ordinary stock.
+                let cross = outward.cross(partner);
+                if cross.length_squared() < 1e-12 {
+                    return Ok(Err("end_unresolved"));
+                }
+                let station = (near - tip).cross(outward).dot(cross) / cross.length_squared();
+                let meeting = near + partner * station.clamp(0., near.distance(far));
+                let origin = if target.kind == "cut_stack" {
+                    let start = DVec3::from(path[span]);
+                    let finish = DVec3::from(path[(span + 1) % path.len()]);
+                    start
+                        + along
+                            * (meeting - start)
+                                .dot(along)
+                                .clamp(0., start.distance(finish))
+                } else {
+                    meeting
+                };
+                (origin, outward + partner)
             }
             _ => return Ok(Err("unsupported")),
         };
@@ -401,44 +480,31 @@ fn operand<'p>(
 ) -> PyResult<Result<Obj<'p>, &'static str>> {
     let py = scene.py();
     let (tool_mesh, mut pose) = match &cut.cutter {
-        Some(Cutter::Plane(plane)) => {
-            let mut origin = DVec3::from(plane.origin);
-            let mut normal = plane.normal.map(DVec3::from).unwrap_or(DVec3::Z);
-            if let Some(anchor) = &cut.anchor {
-                let Some(point) = reference::origin(scene, t, &anchor.reference, cut)? else {
+        Some(Cutter::Plane(_) | Cutter::Bisector(_)) => {
+            let mut single = target.clone();
+            single.cuts = vec![cut.uid.clone()];
+            let bisector = matches!(cut.cutter, Some(Cutter::Bisector(_)));
+            let path = if bisector {
+                let Some(stock) = source(scene, target.source.as_deref().unwrap_or(""))? else {
                     return Ok(Err("ref_lost"));
                 };
-                origin = point;
-                if let Reference::Frame { junction, frame } = &anchor.reference {
-                    let Some(m) = super::junction::local_frame(t, &cut.owner, junction, frame)
-                    else {
-                        return Ok(Err("ref_lost"));
-                    };
-                    normal = m.z_axis.truncate();
-                }
-                if let Some(points) =
-                    reference::element_points(scene, t, cut, &anchor.reference, Kind::Face)?
-                {
-                    let Some((_, n)) = crate::snap_planes::face_plane(
-                        points.iter().map(|p| p.to_array()).collect(),
-                    ) else {
-                        return Ok(Err("end_unresolved"));
-                    };
-                    normal = n.into();
-                }
-            }
-            let Some(mut n) = normal.try_normalize() else {
+                solid_axis(&stock.getattr("mesh")?)?
+            } else {
+                vec![[0.; 3], [0., 0., 1.]]
+            };
+            let mut planes = match end_planes(scene, t, &single, &path, &mut None)? {
+                Ok(planes) => planes,
+                Err(state) => return Ok(Err(state)),
+            };
+            let Some(plane) = planes.pop() else {
                 return Ok(Err("end_unresolved"));
             };
-            n = tilted(n, plane.angle);
-            origin += n * cut
-                .anchor
-                .as_ref()
-                .map_or(cut.offset.unwrap_or(0.), |a| a.offset)
-                / 1000.;
-            if cut.end.as_deref() == Some("start") {
-                n = -n;
-            }
+            let origin = plane.origin;
+            let n = if !bisector && cut.end.as_deref() == Some("start") {
+                -plane.normal
+            } else {
+                plane.normal
+            };
             let store = mesh.getattr("_store")?.cast_into::<PyMeshStore>()?;
             let store = store.try_borrow()?;
             let s = &store.inner;
@@ -557,7 +623,7 @@ fn operand<'p>(
     if let Some(anchor) = cut.anchor.as_ref().filter(|_| {
         !matches!(
             cut.cutter,
-            Some(Cutter::Hole(_) | Cutter::Plane(_) | Cutter::Section(_))
+            Some(Cutter::Hole(_) | Cutter::Plane(_) | Cutter::Bisector(_) | Cutter::Section(_))
         )
     }) {
         let Some(point) = reference::origin(scene, t, &anchor.reference, cut)? else {
@@ -616,7 +682,7 @@ pub(super) fn live_openings<'p>(
                 )
             ) || all_operations
                 && target.kind == "cut_stack"
-                && matches!(cut.cutter, Some(Cutter::Plane(_))))
+                && matches!(cut.cutter, Some(Cutter::Plane(_) | Cutter::Bisector(_))))
         {
             continue;
         }
@@ -769,7 +835,8 @@ pub(super) fn bodies<'p>(
         .count();
     if body_count > 1
         && rows.iter().all(|r| {
-            matches!(r.cutter, Some(Cutter::Body(_) | Cutter::Bisector(_)))
+            (matches!(r.cutter, Some(Cutter::Body(_)))
+                || target.kind == "sweep" && matches!(r.cutter, Some(Cutter::Bisector(_))))
                 || (target.kind == "sweep" && matches!(r.cutter, Some(Cutter::Plane(_))))
         })
     {
@@ -803,7 +870,8 @@ pub(super) fn bodies<'p>(
         if cut.on == Some(false) {
             continue;
         }
-        if !(target.kind == "cut_stack" && matches!(cut.cutter, Some(Cutter::Plane(_))))
+        if !(target.kind == "cut_stack"
+            && matches!(cut.cutter, Some(Cutter::Plane(_) | Cutter::Bisector(_))))
             && !matches!(
                 cut.cutter,
                 Some(

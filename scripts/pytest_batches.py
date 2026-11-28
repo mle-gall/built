@@ -48,6 +48,7 @@ def main() -> int:
         # has no character for and left stdout None (ronda Windows 0.5.9).
         with tempfile.TemporaryDirectory() as home, tempfile.TemporaryDirectory() as settings:
             profile = dict(os.environ, HOME=home, CFFIXED_USER_HOME=home,
+                           BUILT_LOG_DIR=str(Path(settings) / "logs"),
                            BUILT_SETTINGS_DIR=settings, BUILT_BACKGROUND="1")
             proc = subprocess.run(cmd + chunk, env=profile, capture_output=True,
                                   text=True, encoding="utf-8", errors="replace")

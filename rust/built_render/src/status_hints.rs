@@ -252,6 +252,13 @@ pub(crate) fn hint_for(
     if truth(tool,"_wall_family",false)? {return tr(py,"Hover a wall · Tab flips side · enter sill;offset · click to place");}
     let kind = tool.getattr_opt("kind")?.and_then(|v| v.extract::<String>().ok());
     let key = key.or(kind.as_deref()).unwrap_or_default();
+    if key == "cut" && tool.hasattr("_state")? {
+        if let Some(prompt) = tool.call_method1("_state", ("prompt",))?.extract::<Option<String>>()? {
+            let mode: String = tool.call_method1("_state", ("chip",))?.extract()?;
+            return Ok(format!("{} · {mode} · {}", tr(py, &prompt)?,
+                tr(py, "Shift-click targets · L presets · Tab operation · A anchor · D section")?));
+        }
+    }
     if key == "paint" && truth(tool, "sample_armed", false)? {
         return tr(py, "Click a face to sample its material");
     }

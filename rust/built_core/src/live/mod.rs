@@ -3,7 +3,7 @@
 //! Definition replacements and placement markers are ordinary document ops.
 mod cut;
 mod cut_display;
-pub(crate) use cut::{assign_cut_roles, hosted, migrate_wall, pushed_row};
+pub(crate) use cut::{assign_cut_roles, hosted, migrate_wall, pushed_row, solid_axis};
 pub(crate) use cut_display::live_cut_display;
 mod drawn_profile;
 mod expr;
@@ -205,7 +205,7 @@ fn evaluate(
     let body_cut = row.cuts.iter().any(|id| {
         t.rows.get(id).is_some_and(|r| {
             r.on != Some(false)
-                && ((row.kind == "cut_stack" && matches!(r.cutter, Some(cut::Cutter::Plane(_))))
+                && ((row.kind == "cut_stack" && matches!(r.cutter, Some(cut::Cutter::Plane(_) | cut::Cutter::Bisector(_))))
                     || matches!(
                         r.cutter,
                         Some(
@@ -1705,6 +1705,17 @@ fn live_release<'p>(history: &Obj<'p>, uid: String) -> PyResult<Bound<'p, PyDict
 fn live_reevaluate<'p>(history: &Obj<'p>, uid: String) -> PyResult<Bound<'p, PyDict>> {
     edit(history, Edit::Reevaluate(uid))
 }
+pub(crate) fn cut_feedback(scene: &Obj<'_>, ids: &[String]) -> PyResult<Option<&'static str>> {
+    let Some(table) = current(scene.py(), root(scene)?) else { return Ok(None); };
+    Ok(ids.iter().filter_map(|id| table.rows.get(id)).find_map(|row| match row.state.as_str() {
+        "ok" => None,
+        "cut_misses" => Some("Live cut saved · the solids do not overlap"),
+        "empty_cut" => Some("Live cut saved · the cutter removes the entire solid"),
+        "end_unresolved" => Some("Cannot resolve the member ends for this cut"),
+        _ => Some("Live cut needs attention · check the cut in the project tree"),
+    }))
+}
+
 #[pyfunction]
 fn live_rows<'p>(scene: &Obj<'p>) -> PyResult<Obj<'p>> {
     let t = current(scene.py(), root(scene)?).unwrap_or_default();

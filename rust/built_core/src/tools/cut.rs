@@ -22,6 +22,8 @@ pub struct CutTool {
     existing_sections: Option<Vec<String>>,
     section: Option<String>,
     ring: Vec<P3>,
+    outline: Vec<[P3; 2]>,
+    refusal: Option<String>,
     anchor: Json,
     picking_anchor: bool,
     operation: usize,
@@ -91,12 +93,34 @@ impl Grip {
         self.current() + delta
     }
 }
+impl CutTool {
+    fn prompt(&self) -> &str {
+        if let Some(reason) = &self.refusal {
+            return reason;
+        }
+        if self.grip.is_some() {
+            return "Drag or enter a value";
+        }
+        if self.targets.is_empty() {
+            return "Pick the solid to cut";
+        }
+        if self.picking_anchor {
+            return "Pick an anchor face";
+        }
+        match self.preset["values"]["cutter_kind"].as_str() {
+            Some("plane") => "Pick the cutting face",
+            Some("bisector") => "Pick the mitre partner",
+            Some("section") => "Pick the cutting section",
+            _ => "Pick the cutting solid",
+        }
+    }
+}
 impl Tool for CutTool {
     fn info(&self) -> &'static ToolInfo {
         &INFO
     }
     fn state(&self) -> Json {
-        json!({"angle_grip": self.grip.as_ref().is_some_and(|g| g.kind=="angle"),"grip_value":self.grip.as_ref().map(|g| self.point.map_or_else(||g.current(),|p| g.dragged(p))),"editing_grip": self.grip.is_some(),"target":self.targets.first().map(|t| &t.0),"targets":self.targets.iter().map(|t| &t.0).collect::<Vec<_>>(), "cutter":self.hover,"hover_point":self.point,"chip":format!("{} · {}",self.preset["name"].as_str().unwrap_or("Cut"),OPS[self.operation]), "preset":self.preset["name"], "operation":OPS[self.operation], "offset":self.offset})
+        json!({"prompt":self.prompt(),"angle_grip": self.grip.as_ref().is_some_and(|g| g.kind=="angle"),"grip_value":self.grip.as_ref().map(|g| self.point.map_or_else(||g.current(),|p| g.dragged(p))),"editing_grip": self.grip.is_some(),"target":self.targets.first().map(|t| &t.0),"targets":self.targets.iter().map(|t| &t.0).collect::<Vec<_>>(), "cutter":self.hover,"hover_point":self.point,"chip":format!("{} · {}",self.preset["name"].as_str().unwrap_or("Cut"),OPS[self.operation]), "preset":self.preset["name"], "operation":OPS[self.operation], "offset":self.offset})
     }
     fn busy(&self) -> bool {
         self.grip.is_some() || !self.targets.is_empty()
@@ -136,6 +160,9 @@ impl Tool for CutTool {
             }
         }
         preview
+            .lines
+            .extend(self.outline.iter().map(|[a, b]| Preview::rubber(*a, *b)));
+        preview
     }
     fn event(&mut self, e: &ToolEvent, host: &mut dyn ToolHost) -> Reply {
         match e {
@@ -148,6 +175,8 @@ impl Tool for CutTool {
                     .collect();
             }
             ToolEvent::Cancel | ToolEvent::Deactivate => {
+                self.outline.clear();
+                self.refusal = None;
                 self.targets.clear();
                 self.grip = None;
                 self.hover = Json::Null;
@@ -184,6 +213,8 @@ impl Tool for CutTool {
                         self.preset = json!({"name":"Opening","values":{"cutter_kind":"section"}});
                     }
                 }
+                self.refusal = None;
+                self.outline.clear();
                 self.point = p.world;
                 if let Some(grip) = &mut self.grip {
                     self.point = grip.project(host, p);
@@ -213,10 +244,44 @@ impl Tool for CutTool {
                     host.call("cut_pick", json!(p.px))
                 };
                 self.face = pick["face"].clone();
-                self.ring = serde_json::from_value(pick["ring"].clone()).unwrap_or_default();
+                let picking_target =
+                    self.targets.is_empty() || (p.mods.shift && !self.picking_anchor);
+                let picking_face = !picking_target
+                    && (self.picking_anchor || self.preset["values"]["cutter_kind"] == "plane");
+                self.ring.clear();
+                if picking_face {
+                    self.ring = serde_json::from_value(pick["ring"].clone()).unwrap_or_default();
+                } else {
+                    self.outline =
+                        serde_json::from_value(pick["outline"].clone()).unwrap_or_default();
+                }
                 let placed = &pick["placement"];
                 let click = matches!(e, ToolEvent::Click(_));
-                if self.targets.is_empty() || (p.mods.shift && !self.picking_anchor) {
+                self.refusal = pick["reason"].as_str().map(str::to_owned);
+                if self.refusal.is_none()
+                    && !picking_face
+                    && pick["open_edges"].as_u64().unwrap_or(0) > 0
+                {
+                    self.refusal =
+                        Some(format!("{} open edges · Health › Fix", pick["open_edges"]));
+                }
+                if self.refusal.is_none()
+                    && click
+                    && !picking_face
+                    && placed.is_string()
+                    && pick["face"]["path"].is_array()
+                    && host.call("cut_solid", pick["face"]["path"].clone()) == false
+                {
+                    self.refusal = Some("Select a closed solid · Health › Fix".into());
+                }
+                if self.refusal.is_some() {
+                    self.hover = Json::Null;
+                    if click {
+                        host.call("cut_error", json!(self.prompt()));
+                    }
+                    return Reply::redraw();
+                }
+                if picking_target {
                     if click {
                         if let Some(uid) = placed.as_str() {
                             if let Some(i) = self.targets.iter().position(|t| t.0 == uid) {
@@ -280,6 +345,17 @@ impl Tool for CutTool {
                     }
                     _ => Json::Null,
                 };
+                if click && self.hover.is_null() {
+                    self.refusal = Some(
+                        if placed.is_string() {
+                            "Pick a different cutting object"
+                        } else {
+                            self.prompt()
+                        }
+                        .to_owned(),
+                    );
+                    host.call("cut_error", json!(self.prompt()));
+                }
                 if click && !self.hover.is_null() {
                     let rows: Vec<_> = self.targets.iter().map(|(target,end,span)| json!({"kind":"cut","owner":target,"uid":crate::element_ids::new_uid(),"cutter":self.hover,"name":self.preset["name"],
                         "operation":OPS[self.operation],"anchor":anchor,"clearance":if matches!(kind,"body"|"bisector"){self.offset}else{0.},"on":true,"end":end,"span":span})).collect();
@@ -288,8 +364,16 @@ impl Tool for CutTool {
                         args: json!({"row":rows}),
                     });
                     if answer.ok {
+                        let ids: Vec<_> = rows.iter().map(|row| &row["uid"]).collect();
+                        if let Some(note) = host.call("cut_feedback", json!(ids)).as_str() {
+                            self.refusal = Some(note.to_owned());
+                            host.call("cut_error", json!(note));
+                        } else {
+                            host.call("cut_error", json!("Live cut saved · pick another cutter"));
+                        }
                         return Reply::committed();
                     }
+                    self.refusal = answer.error.clone();
                     host.call("cut_error", json!(answer.error));
                 }
             }

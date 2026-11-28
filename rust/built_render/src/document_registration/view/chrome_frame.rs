@@ -807,7 +807,8 @@ fn cursor_value<'py>(a: &Args<'py>) -> Reply<'py> {
         let value=if caption=="Angle"{unit.call_method1("fmt_angle_deg",(value,))?}else{unit.call_method1("fmt_len",(value/1000.,))?};
         (tr.call1((&caption,))?,value.extract()?)
     } else if cut && !typing {
-        let chip=tool.call_method1("_state",("chip",))?;
+        let prompt=tool.call_method1("_state",("prompt",))?;
+        let chip=tr.call1((prompt,))?;
         let offset:f64=tool.call_method1("_state",("offset",))?.extract()?;
         (chip,py.import("built_core.units")?.call_method1("fmt_len",(offset/1000.,))?.extract::<String>()?)
     } else {(tr.call1((&caption,))?,value)};

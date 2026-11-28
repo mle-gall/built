@@ -165,6 +165,9 @@ fn load_rows(scene: &Obj<'_>, ext: &Bound<'_, PyDict>, rows: Vec<Row>) -> PyResu
         }
     }
     for uid in t.rows.keys().cloned().collect::<Vec<_>>() {
+        if t.rows[&uid].kind == "cut" {
+            cut::bind_placements(scene, &t, &t.rows[&uid])?;
+        }
         super::reference::bind_frames(&mut t, &uid);
     }
     if let Some(pack) = ext.get_item("built.presets")? {

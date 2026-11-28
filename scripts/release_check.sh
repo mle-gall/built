@@ -22,7 +22,7 @@ VER="$("$PY" -c 'from built_core.version import __version__; print(__version__)'
 WORK="$(mktemp -d)"
 trap 'git -C "$HERE" worktree remove --force "$WORK/prev" 2>/dev/null || true; rm -rf "$WORK"' EXIT
 git worktree add --detach -q "$WORK/prev" "$PREV"
-export HOME="$WORK/home" CFFIXED_USER_HOME="$WORK/home" BUILT_BACKGROUND=1 BUILT_SETTINGS_DIR="$WORK/settings"
+export HOME="$WORK/home" CFFIXED_USER_HOME="$WORK/home" BUILT_BACKGROUND=1 BUILT_LOG_DIR="$WORK/logs" BUILT_SETTINGS_DIR="$WORK/settings"
 mkdir -p "$HOME" "$BUILT_SETTINGS_DIR"
 cat > "$WORK/session" <<'SCRIPT'
 wait-open

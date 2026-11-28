@@ -15,7 +15,7 @@ trap cleanup EXIT
 out="${DS_OUT:-build/design-system}"
 mkdir -p "$run/home" "$run/settings" "$out"
 export HOME="$run/home" CFFIXED_USER_HOME="$run/home" XDG_CONFIG_HOME="$run/settings"
-export BUILT_SETTINGS_DIR="$run/settings" BUILT_PASTEBOARD="gallery-$$" PYTHONDONTWRITEBYTECODE=1
+export BUILT_LOG_DIR="$run/logs" BUILT_SETTINGS_DIR="$run/settings" BUILT_PASTEBOARD="gallery-$$" PYTHONDONTWRITEBYTECODE=1
 export BUILT_BACKGROUND=1
 .venv/bin/python scripts/design_system_capture.py gallery --dest "$out"
 if [ -n "${DS_PREFIX:-}" ]; then
