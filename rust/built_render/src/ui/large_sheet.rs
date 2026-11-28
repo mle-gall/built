@@ -247,6 +247,8 @@ pub struct LargeSheet {
 }
 
 fn search_id() -> egui::Id { egui::Id::new("lsheet_search") }
+/// The narrowest the header's search field gets.
+const SEARCH_LEAST: f32 = 80.0;
 
 impl LargeSheet {
     pub(super) fn choice_open(&self) -> bool {
@@ -1393,16 +1395,69 @@ impl Ui {
 
     fn lsheet_header(ui: &mut egui::Ui, spec: &Spec, st: &mut LargeSheet, head: Rect, out: &mut Vec<String>) {
         let inner = head.shrink(SPACE_M);
-        ui.scope_builder(egui::UiBuilder::new().max_rect(inner).layout(egui::Layout::left_to_right(egui::Align::Center)), |ui| {
+        let tabs: Vec<_> = spec.tabs.iter().map(|t| (t.label.clone(), t.count.clone(), t.enabled)).collect();
+        let current = spec.tabs.iter().position(|t| t.on).unwrap_or(tabs.len());
+        let menu_width = |ui: &egui::Ui, left: bool| -> f32 {
+            spec.menus.iter().filter(|m| m.left == left).map(|m| ui.painter().layout_no_wrap(m.label.clone(), body(), INK).size().x + 36.0 + SPACE_S).sum()
+        };
+        // What the left group needs at the least: its tabs drawn close
+        // together, its verbs and menus whole. The title is the first to go.
+        let title = if spec.title.is_empty() { 0.0 } else { ui.painter().layout_no_wrap(spec.title.clone(), heading(), INK).size().x + SPACE_S + SPACE_M };
+        let verbs: f32 = spec.verbs.iter().filter(|_| spec.id != "start").map(|v| kit::panel_button_width(ui, &v.label, &v.key) + SPACE_S).sum();
+        let least_tabs = if tabs.is_empty() { 0.0 } else { kit::underline_tabs_least(ui, &tabs, current) + 2.0 * SPACE_S };
+        let left_least = least_tabs + verbs + menu_width(ui, true);
+        // The right group first: the left one takes what it leaves, so a
+        // narrow sheet with many tabs never prints one over the other.
+        let mut right_edge = inner.max.x;
+        ui.scope_builder(egui::UiBuilder::new().max_rect(inner).layout(egui::Layout::right_to_left(egui::Align::Center)), |ui| {
             ui.spacing_mut().item_spacing = vec2(SPACE_S, 0.0);
-            if !spec.title.is_empty() {
+            if spec.closable {
+                let (xr, resp) = ui.allocate_exact_size(Vec2::splat(CONTROL_H), Sense::click());
+                paint_state(ui, xr, state_of(&resp, false, true), R_CONTROL);
+                let c = xr.center();
+                let k = 4.5;
+                let pen = Stroke::new(1.4_f32, if resp.hovered() { INK } else { DIM });
+                ui.painter().line_segment([c + vec2(-k, -k), c + vec2(k, k)], pen);
+                ui.painter().line_segment([c + vec2(k, -k), c + vec2(-k, k)], pen);
+                if resp.on_hover_text("Close (esc)").clicked() { out.push("close".into()); }
+            }
+            if spec.id == "start" {
+                for v in spec.verbs.iter().rev() {
+                    if button(ui, v, None) { out.push(format!("verb{SEP}{}", v.id)); }
+                }
+            }
+            if let Some(s) = spec.search.as_ref().filter(|_| spec.id != "start") {
+                let sw = (inner.width() * 0.30).clamp(200.0, 320.0);
+                // The search yields to the tabs, verbs and menus beside it.
+                let width = sw.min((ui.available_width() - menu_width(ui, false) - SPACE_M - left_least - title).max(SEARCH_LEAST));
+                Self::lsheet_search(ui, st, s, width);
+            }
+            if spec.search.is_some() { ui.add_space(SPACE_XS); }
+            for m in spec.menus.iter().rev().filter(|m| !m.left) {
+                let open = st.head_menu.as_ref().is_some_and(|h| h.0 == m.id);
+                if let Some(r) = menu_button(ui, &m.label, open) {
+                    st.head_menu = if open { None } else { Some((m.id.clone(), r)) };
+                }
+            }
+            right_edge = ui.min_rect().min.x;
+        });
+        let left = Rect::from_min_max(inner.min, pos2((right_edge - SPACE_S).max(inner.min.x), inner.max.y));
+        ui.scope_builder(egui::UiBuilder::new().max_rect(left).layout(egui::Layout::left_to_right(egui::Align::Center)), |ui| {
+            ui.spacing_mut().item_spacing = vec2(SPACE_S, 0.0);
+            ui.set_clip_rect(ui.clip_rect().intersect(left));
+            let mut room = left.width();
+            if !spec.title.is_empty() && left_least + title <= room {
                 ui.label(egui::RichText::new(&spec.title).font(heading()).color(INK));
                 ui.add_space(SPACE_M);
+                room -= title;
             }
-            if !spec.tabs.is_empty() {
-                let tabs: Vec<_> = spec.tabs.iter().map(|t| (t.label.clone(), t.count.clone(), t.enabled)).collect();
-                let current = spec.tabs.iter().position(|t| t.on).unwrap_or(tabs.len());
-                if let Some(i) = inline_underline_tabs(ui, &tabs, current) {
+            if !tabs.is_empty() {
+                let width = (room - verbs - menu_width(ui, true) - 2.0 * SPACE_S).max(0.0);
+                let hit = ui.allocate_ui_with_layout(vec2(width, CONTROL_H), egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                    ui.set_max_width(width);
+                    inline_underline_tabs(ui, &tabs, current)
+                }).inner;
+                if let Some(i) = hit {
                     if i != current { out.push(format!("tab{SEP}{}", spec.tabs[i].id)); }
                 }
                 ui.add_space(SPACE_S);
@@ -1416,41 +1471,6 @@ impl Ui {
                     st.head_menu = if open { None } else { Some((m.id.clone(), r)) };
                 }
             }
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.spacing_mut().item_spacing = vec2(SPACE_S, 0.0);
-                if spec.closable {
-                    let (xr, resp) = ui.allocate_exact_size(Vec2::splat(CONTROL_H), Sense::click());
-                    paint_state(ui, xr, state_of(&resp, false, true), R_CONTROL);
-                    let c = xr.center();
-                    let k = 4.5;
-                    let pen = Stroke::new(1.4_f32, if resp.hovered() { INK } else { DIM });
-                    ui.painter().line_segment([c + vec2(-k, -k), c + vec2(k, k)], pen);
-                    ui.painter().line_segment([c + vec2(-k, k), c + vec2(k, -k)], pen);
-                    if resp.on_hover_text("Close (esc)").clicked() { out.push("close".into()); }
-                }
-                if spec.id == "start" {
-                    for v in spec.verbs.iter().rev() {
-                        if button(ui, v, None) { out.push(format!("verb{SEP}{}", v.id)); }
-                    }
-                }
-                if let Some(s) = spec.search.as_ref().filter(|_| spec.id != "start") {
-                    let sw = (inner.width() * 0.30).clamp(200.0, 320.0);
-                    // The search yields to the menus beside it, so a narrow sheet
-                    // with many tabs never overprints them.
-                    let menus: f32 = spec.menus.iter().filter(|m| !m.left).map(|m| {
-                        ui.painter().layout_no_wrap(m.label.clone(), body(), INK).size().x + 36.0 + SPACE_S
-                    }).sum();
-                    let width = sw.min((ui.available_width() - menus - SPACE_M).max(80.0));
-                    Self::lsheet_search(ui, st, s, width);
-                }
-                if spec.search.is_some() { ui.add_space(SPACE_XS); }
-                for m in spec.menus.iter().rev().filter(|m| !m.left) {
-                    let open = st.head_menu.as_ref().is_some_and(|h| h.0 == m.id);
-                    if let Some(r) = menu_button(ui, &m.label, open) {
-                        st.head_menu = if open { None } else { Some((m.id.clone(), r)) };
-                    }
-                }
-            });
         });
     }
 
@@ -1473,7 +1493,10 @@ impl Ui {
             resp.request_focus();
             st.focus_search = false;
         }
-        if !s.key.is_empty() && st.search.is_empty() && !focused {
+        // The shortcut only where it does not print over the placeholder.
+        let hint = ui.painter().layout_no_wrap(s.placeholder.clone(), body(), FAINT).size().x;
+        let key = ui.painter().layout_no_wrap(s.key.clone(), meta(), FAINT).size().x;
+        if !s.key.is_empty() && st.search.is_empty() && !focused && 28.0 + hint + 12.0 + key + 8.0 <= sw {
             ui.painter().text(pos2(fr.max.x - 8.0, fr.center().y), egui::Align2::RIGHT_CENTER, &s.key, meta(), FAINT);
         }
     }
