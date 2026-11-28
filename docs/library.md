@@ -158,7 +158,8 @@ Build the portable archives with `python3 scripts/build_addons.py`. Each
 source folder under `addons/` produces one format-2 archive in
 `dist/addons/`. Import pack… in Profiles or Presets verifies the content
 hashes and installs the rows together in the chosen destination. Pack
-content is CC0-1.0. The website will host these packs later.
+content is CC0-1.0. The website will host these packs later. The folder
+layout, row rules and `--rehash` for authors are in addons/README.md.
 
 New members store their section dimensions in the model. For older models
 that saved only a catalogue key, import the matching profile pack into My

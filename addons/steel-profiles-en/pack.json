@@ -9,11 +9,13 @@
       "name": "Built"
     },
     "licence": "CC0-1.0",
+    "description": "Standard EN steel sections (IPE, HE, UPE, angles, hollow sections) with their catalogue dimensions and steel member presets.",
     "units": {
       "length": "mm",
       "angle": "deg"
     },
     "requires": {
+      "built": ">= 1.0",
       "features": []
     },
     "files": {

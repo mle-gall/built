@@ -9,11 +9,13 @@
       "name": "Built"
     },
     "licence": "CC0-1.0",
+    "description": "Standard AISC steel shapes with their catalogue dimensions and a wide flange member preset.",
     "units": {
       "length": "mm",
       "angle": "deg"
     },
     "requires": {
+      "built": ">= 1.0",
       "features": []
     },
     "files": {

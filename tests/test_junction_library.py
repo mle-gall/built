@@ -229,3 +229,26 @@ def test_round_family_takes_one_diameter_and_arms_sweep(win):
     form.receive("width", "75")
     form.press("ok")
     assert win._tools["sweep"]._state("profile") == bar["key"]
+
+
+def test_empty_state_points_to_import_pack_until_a_pack_is_installed(win, tmp_path):
+    from built_core.i18n import tr
+
+    hint = tr("More profiles and details come as packs: Import pack…")
+    L.open_library(win, "profiles")
+    sheet = frame(win)
+    assert [v["id"] for v in sheet["verbs"]] == ["typeact:pack"]
+    assert sheet["footer"]["hint"] == hint
+    assert [link["id"] for link in sheet["footer"]["links"]] == ["typeact:new", "typeact:import"]
+    families = {row["category"] for row in L.ProfilesProvider().items(L.Ctx(win, win.view))}
+    assert {"round"} <= families
+    win._activate_tool("junction")
+    assert win._tools["junction"]._state("prompt") == hint
+
+    addon_cases.install(win, "steel-profiles-en", tmp_path)
+    addon_cases.install(win, "steel-connections-en", tmp_path)
+    L.open_library(win, "profiles")
+    assert frame(win)["footer"]["hint"] != hint
+    win._activate_tool("select")
+    win._activate_tool("junction")
+    assert win._tools["junction"]._state("prompt") != hint
