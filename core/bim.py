@@ -720,11 +720,17 @@ def object_quantities(obj):
     return class_quantities(obj["class"], obj["faces"])
 
 
-def quantities_csv(scene) -> str:
+def quantities_csv(scene, schedule=None) -> str:
     """The takeoff table (metrado) as CSV — the pre-IFC bridge to
     IngePresupuestos: model → budget quantities in one export. ``metrado``
     is the per-class budget measure (wall face m², column m³, pile m,
     door und); area/volume stay as the raw shell numbers."""
+    if schedule:
+        import csv
+        import io
+        stream = io.StringIO()
+        csv.writer(stream, lineterminator="\n").writerows(junction_schedules(scene)[schedule])
+        return stream.getvalue()
     lines = ["class,name,metrado,unit,area_m2,volume_m3"]
     for obj in collect_objects(scene):
         _, _, (metrado, unit) = object_quantities(obj)
@@ -734,3 +740,198 @@ def quantities_csv(scene) -> str:
         lines.append(f"{obj['class']},\"{name}\",{met},{unit},"
                      f"{obj['area']:.4f},{vol}")
     return "\n".join(lines) + "\n"
+
+
+class JunctionInventory:
+    """Resolve the evaluated junction tree and Repeat stations to placed parts."""
+
+    def __init__(self, scene, rows):
+        self.rows = {r["uid"]: r for r in rows if r["kind"] == "junction"}
+        groups = scene.groups_by_uid()
+        for g in groups.values():
+            record = g.ifc or {}
+            row = record.get("junction_export")
+            if row:
+                self.rows.setdefault(row["uid"], row)
+            elif isinstance(record.get("connects"), dict):
+                # J0 release records predate the detail snapshot.
+                connection = record["connects"]
+                roles = {"main": {"placement": connection.get("relating")}}
+                roles.update({str(i): {"placement": other} for i, other in enumerate(connection.get("related", []))})
+                self.rows[g.uid] = dict(uid=g.uid, owner=g.uid, roles=roles, state="ok",
+                                        contents=[dict(placement=p) for p in connection.get("realizing", [])],
+                                        detail={"name": connection.get("type") or g.name})
+        self.parts = {}
+        self.assemblies = {}
+        self.hidden = set()
+        self.top = {}
+        self.members = {}
+        repeat_sources = {r["uid"]: r.get("source") for r in rows if r["kind"] == "repeat"}
+        owners = {r["owner"]: uid for uid, r in self.rows.items()}
+        for uid, row in self.rows.items():
+            self.assemblies[row["owner"]] = uid
+            if row.get("parent") in self.rows:
+                self.top[uid] = row["parent"]
+                self.hidden.add(row["owner"])
+            roles = row.get("roles", {})
+            first = next((k for k in ("main", "host", "ply_1", "a") if k in roles),
+                         min(roles, default=None))
+            def member(role):
+                placement = role.get("placement")
+                return placement[-1] if isinstance(placement, list) else placement
+            self.members[uid] = ([member(roles[first])] +
+                                 [member(v) for k, v in roles.items() if k != first]) if first else []
+            for c in row.get("contents", []):
+                placed = c.get("placement")
+                child_uid = c.get("junction") or owners.get(placed)
+                if child_uid and child_uid != uid:
+                    self.top[child_uid] = uid
+                    self.hidden.add(placed)
+                elif c.get("repeat") and placed in groups:
+                    parent = groups[placed]
+                    source = repeat_sources.get(c["repeat"]) or (parent.ifc or {}).get("junction_source")
+                    child = owners.get(source)
+                    if child:
+                        self.hidden.add(placed)
+                        for copy in parent.children:
+                            self.hidden.add(copy.uid)
+                            for part, _ in _placed_groups(copy.children):
+                                if part.ifc:
+                                    self.parts[part.uid] = child
+                elif placed:
+                    self.parts[placed] = uid
+        self.roots = {}
+        for uid in self.rows:
+            top = uid
+            seen = set()
+            while top in self.top and top not in self.roots:
+                if top in seen:
+                    raise ValueError("Cyclic junction ownership")
+                seen.add(top)
+                top = self.top[top]
+            self.roots[uid] = self.roots.get(top, top)
+        self.realizers = {uid: [] for uid in self.rows}
+        for placed, uid in self.parts.items():
+            while uid in self.rows:
+                self.realizers[uid].append(placed)
+                uid = self.top.get(uid)
+        for uid, row in self.rows.items():
+            if row.get("meeting") == "hosted" and not self.realizers[uid]:
+                self.hidden.add(row["owner"])
+
+
+def _section_area(rings):
+    """Stock area in mm² from the profile's directed lines and circular arcs."""
+    area = 0.
+    for index, ring in enumerate(rings):
+        twice_area = 0.
+        for ((x, y), centre), ((u, v), _) in zip(ring, ring[1:] + ring[:1]):
+            twice_area += x*v - y*u
+            if centre is not None:
+                a, b = x-centre[0], y-centre[1]
+                c, d = u-centre[0], v-centre[1]
+                angle = math.atan2(a*d - b*c, a*c + b*d)
+                twice_area += (a*a + b*b) * (angle - math.sin(angle))
+        area += abs(twice_area) / 2 * (1 if index == 0 else -1)
+    return area
+
+
+def junction_schedules(scene):
+    """Header and data cells for delivery CSVs and placed schedule tables."""
+    from collections import defaultdict
+    from built_core.command_protocol import live_holes, live_rows, sweep_profile
+    source = getattr(scene, "_delivery_source", scene)
+    rows = live_rows(source)
+    inventory = JunctionInventory(scene, rows)
+    groups = scene.groups_by_uid()
+    sweeps = {r["owner"]: r for r in rows if r["kind"] == "sweep"}
+    sections = {}
+    bolts, plates, welds, holes, uses = (defaultdict(list) for _ in range(5))
+
+    def detail(uid):
+        return (inventory.rows[uid].get("detail") or {}).get("name") or "Custom junction"
+
+    def section(uid):
+        if uid not in sections:
+            try:
+                sections[uid] = sweep_profile(sweeps[uid])
+            except (KeyError, ValueError):
+                sections[uid] = {}
+        return sections[uid]
+
+    def stock_length(uid):
+        points = sweeps.get(uid, {}).get("path", {}).get("points", [])
+        return round(1000 * sum(math.dist(a, b) for a, b in zip(points, points[1:])), 8) if len(points) > 1 else None
+
+    for uid, j in inventory.rows.items():
+        if j["owner"] in groups:
+            uses[(detail(uid), (j.get("detail") or {}).get("rev", ""), j["state"])].append(bool(j.get("overrides")))
+    for uid, child in inventory.parts.items():
+        if uid not in groups:
+            continue
+        r = groups[uid].ifc or {}
+        root = inventory.roots[child]
+        if r.get("class") == "IfcMechanicalFastener":
+            bolts[(r.get("standard", ""), r.get("grade", ""), r.get("d", ""), r.get("length", ""))].append(root)
+        elif r.get("class") == "IfcFastener" and r.get("predefined_type") == "WELD":
+            welds[(r.get("weld_type", r.get("type", "")), r.get("throat", ""))].append((root, r.get("length", 0)))
+        elif r.get("class") == "IfcPlate":
+            profile = section(uid)
+            length = stock_length(uid)
+            if profile and profile["family"] != "rectangle":
+                dims = (profile.get("web") or "", profile["width"], length, profile["name"])
+                area = _section_area(profile["rings"])
+                volume = area * length if length is not None else None
+            else:
+                dims = (length if length is not None else r.get("thickness", ""),
+                        profile.get("width", r.get("width", "")), profile.get("height", r.get("length", "")), "")
+                volume = math.prod(dims[:3]) if all(isinstance(d, (float, int)) for d in dims[:3]) else None
+            plates[(r.get("material", ""), *dims, volume)].append(root)
+    for cut in rows:
+        hole = cut.get("cutter", {}).get("hole")
+        if not hole or cut["owner"] not in groups:
+            continue
+        owner = cut["owner"]
+        ply = groups[owner].ifc or {}
+        thickness = ply.get("thickness")
+        if ply.get("class") == "IfcPlate" and section(owner).get("family") == "rectangle":
+            thickness = stock_length(owner)
+        joint = inventory.rows.get(cut.get("junction"), {})
+        for role in joint.get("roles", {}).values():
+            if role.get("placement") == owner:
+                face = str(role.get("face", ""))
+                if face.startswith(("flange", "web")):
+                    thickness = section(owner).get(face.split("_")[0]) or thickness
+        for _, a, b, _ in live_holes(source, cut["uid"]):
+            depth = thickness if thickness is not None else (
+                round(math.dist(a, b)*1000, 4) if hole.get("depth") == "through" else "")
+            holes[(ply.get("material", ""), depth, hole["d"])].append(cut["uid"])
+
+    def names(owners):
+        return ", ".join(sorted({detail(j) for j in owners}))
+
+    tables = {}
+    if bolts:
+        tables["fasteners"] = [["Diameter (mm)", "Count", "Length (mm)", "Standard", "Grade", "Details", "Junction count"]]
+        for k, v in sorted(bolts.items(), key=str):
+            standard, grade, diameter, length = k
+            tables["fasteners"].append([diameter, len(v), length, standard, grade, names(v), len(set(v))])
+    if plates:
+        tables["plates"] = [["Material", "Thickness (mm)", "Width (mm)", "Length (mm)", "Count", "Unit mass (kg)", "Total mass (kg)", "Profile", "Details"]]
+        for k, v in sorted(plates.items(), key=str):
+            material, thickness, width, length, profile, volume = k
+            steel = material in ("S235", "S275", "S355", "Steel", "A992")
+            mass = volume * STEEL_DENSITY / 1e9 if steel and volume is not None else None
+            tables["plates"].append([material, thickness, width, length, len(v), mass,
+                                     mass * len(v) if mass is not None else None, profile, names(v)])
+    if welds:
+        tables["welds"] = [["Type", "Throat (mm)", "Length (m)", "Count", "Details"]]
+        for k, v in sorted(welds.items(), key=str):
+            tables["welds"].append([*k, sum(length for _, length in v)/1000, len(v), names(root for root, _ in v)])
+    if holes:
+        tables["holes"] = [["Material", "Ply thickness (mm)", "Diameter (mm)", "Count"],
+                           *[[*k, len(v)] for k, v in sorted(holes.items(), key=str)]]
+    if uses:
+        tables["junctions"] = [["Detail", "Revision", "Status", "Uses", "Overridden"],
+                               *[[*k, len(v), sum(v)] for k, v in sorted(uses.items(), key=str)]]
+    return tables

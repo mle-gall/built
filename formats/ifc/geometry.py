@@ -321,3 +321,21 @@ def live_cut_body(w, group, base, target, tools, cuts, source, ctx):
     w.last_shape_item = result
     rep = w.add('IFCSHAPEREPRESENTATION', f'#{ctx}', "'Body'", "'CSG'", f'(#{result})')
     return (rep, line), None
+
+
+def bore_body(w, body, start, end, radius):
+    import math
+    length = math.dist(start, end)
+    direction = w.add('IFCDIRECTION', '(' + ','.join(_f((b-a)/length) for a, b in zip(start, end)) + ')')
+    point = w.add('IFCCARTESIANPOINT', '(' + ','.join(map(_f, start)) + ')')
+    # IFC requires an explicit perpendicular reference when Axis is supplied.
+    seed = (1., 0., 0.) if abs(end[0]-start[0]) < .9*length else (0., 1., 0.)
+    from numpy import cross
+    x = cross(seed, [b-a for a, b in zip(start, end)])
+    reference = w.add('IFCDIRECTION', '(' + ','.join(map(_f, x / math.hypot(*x))) + ')')
+    axis = w.add('IFCAXIS2PLACEMENT3D', f'#{point}', f'#{direction}', f'#{reference}')
+    circle = w.entity('IfcCircleProfileDef', ProfileType='.AREA.', Radius=_f(radius))
+    z = w.add('IFCDIRECTION', '(0.,0.,1.)')
+    solid = w.add('IFCEXTRUDEDAREASOLID', f'#{circle}', f'#{axis}', f'#{z}', _f(length))
+    rep = w.add('IFCSHAPEREPRESENTATION', f'#{body}', "'Body'", "'SweptSolid'", f'(#{solid})')
+    return w.entity('IfcProductDefinitionShape', Representations=f'(#{rep})')

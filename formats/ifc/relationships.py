@@ -77,3 +77,36 @@ class Appearance:
     def finish(self):
         for (name, uid), representations in self.layers.items():
             self.w.entity('IfcPresentationLayerAssignment', Name=_s(name), Identifier=_s(uid), AssignedItems=refs(sorted(representations)))
+
+
+def junction_connections(inventory, products, root):
+    """Write each child's connection even though the assembly is flat."""
+    for uid, row in inventory.rows.items():
+        members = inventory.members[uid]
+        if not members or members[0] not in products:
+            continue
+        main = members[0]
+        parts = [p for p in inventory.realizers[uid] if p in products]
+        detail = row.get('detail') or {}
+        name = detail.get('name') or 'Custom junction'
+        if row.get('meeting') == 'hosted' and not any(
+                products[p][3] in ('IfcMechanicalFastener', 'IfcFastener') for p in parts):
+            continue
+        for other in dict.fromkeys(members[1:]):
+            if other == main or other not in products:
+                continue
+            attrs = dict(RelatingElement=ref(products[main][0]), RelatedElement=ref(products[other][0]))
+            if {'main', 'joining'} <= row['roles'].keys() and all(products[p][3] == 'IfcWall' for p in (main, other)):
+                roles = row['roles']
+                ends = {'start': '.ATSTART.', 'end': '.ATEND.'}
+                tee = roles['main'].get('connection') == 'path' or detail.get('uid') == 'a2ff384d2a3b97b3'
+                attrs.update(RelatingPriorities='()', RelatedPriorities='()',
+                             RelatingConnectionType='.ATPATH.' if tee else ends.get(roles['main'].get('end'), '.ATPATH.'),
+                             RelatedConnectionType=ends.get(roles['joining'].get('end'), '.ATPATH.'))
+                cls = 'IfcRelConnectsPathElements'
+            elif parts:
+                attrs.update(RealizingElements=refs([products[p][0] for p in parts]), ConnectionType=_s(name))
+                cls = 'IfcRelConnectsWithRealizingElements'
+            else:
+                cls = 'IfcRelConnectsElements'
+            root(cls, ('junction', uid, main, other), **attrs)

@@ -188,3 +188,152 @@ def test_generic_manual_area_replaces_the_measured_value(tmp_path):
     assert 'Area' not in values
     assert values['NetSideArea'].AreaValue == 12
     assert values['NetSideArea'].Description == 'manual'
+
+
+def test_junction_products_and_realizers_survive_release(tmp_path):
+    ifc = pytest.importorskip('ifcopenshell')
+    import ifcopenshell.validate
+    from ifcopenshell.util.element import get_psets
+    from tests.test_live_junction import knee_fixture, apply
+    from core.bim import junction_schedules
+
+    scene, history, uid = knee_fixture()
+    path = tmp_path / 'knee.ifc'
+    def export():
+        report = save_ifc(scene, path)
+        assert not report.problems
+        return ifc.open(str(path))
+
+    model = export()
+    ids = sorted(e.GlobalId for e in model.by_type('IfcRoot'))
+    assert len(ids) == len(set(ids))
+    assert ids == sorted(e.GlobalId for e in export().by_type('IfcRoot'))
+    assembly, = model.by_type('IfcElementAssembly')
+    assert assembly.PredefinedType == 'ACCESSORY_ASSEMBLY'
+    assert assembly.IsTypedBy[0].RelatingType.Name == 'End plate'
+    parts = assembly.IsDecomposedBy[0].RelatedObjects
+    assert len(parts) == 6
+    assert {e.is_a() for e in parts} == {'IfcPlate', 'IfcFastener', 'IfcMechanicalFastener'}
+    fastener, = model.by_type('IfcMechanicalFastenerType')
+    assert fastener.NominalDiameter == .016 and len(fastener.RepresentationMaps) == 1
+    seam, = model.by_type('IfcFastener')
+    assert get_psets(seam)['Built_Junction']['DetailName'] == 'Fillet weld'
+    assert seam.Representation.Representations[0].RepresentationIdentifier == 'Axis'
+    connections = model.by_type('IfcRelConnectsWithRealizingElements')
+    assert sorted(len(c.RealizingElements) for c in connections) == [1, 4, 6]
+    def realizing_links(file):
+        return {c.GlobalId: (c.RelatingElement.GlobalId, c.RelatedElement.GlobalId,
+                             frozenset(p.GlobalId for p in c.RealizingElements))
+                for c in file.by_type('IfcRelConnectsWithRealizingElements')}
+    holes = model.by_type('IfcVoidingFeature')
+    assert len(holes) == 8 and all(h.PredefinedType == 'HOLE' for h in holes)
+    assert all(h.Representation.Representations[0].Items[0].SweptArea.is_a('IfcCircleProfileDef') for h in holes)
+    plate, = model.by_type('IfcPlate')
+    assert any(rep.RepresentationType == 'SweptSolid' for rep in plate.Representation.Representations)
+    logger = ifcopenshell.validate.json_logger()
+    ifcopenshell.validate.validate(str(path), logger, express_rules=True)
+    assert not logger.statements
+    schedules = junction_schedules(scene)
+    assert schedules['fasteners'][1] == [16, 4, 50, 'ISO 4017', '8.8', 'End plate', 1]
+    assert schedules['welds'][1][2] == pytest.approx(.38)
+    assert schedules['plates'][1][4] == 1
+    assert schedules['plates'][1][5] == pytest.approx(195 * 190 * 12 * 7850 / 1e9)
+    assert sum(r[-1] for r in schedules['holes'][1:]) == 8
+    scene.plugin_data['bim_registry'].setdefault('export_profiles', {})['ref'] = {'view': 'ReferenceView'}
+    reference = tmp_path / 'reference.ifc'
+    assert not save_ifc(scene, reference, profile='ref').problems
+    ref_model = ifc.open(str(reference))
+    assert not ref_model.by_type('IfcVoidingFeature')
+    assert ref_model.by_guid(plate.GlobalId).Representation.Representations[0].RepresentationType == 'Tessellation'
+    apply(history, 'junction_release', uid=uid)
+    released = export()
+    assert ids == sorted(e.GlobalId for e in released.by_type('IfcRoot'))
+    assert realizing_links(released) == realizing_links(model)
+    assert schedules == junction_schedules(scene)
+    from formats import igz
+    igz.save_scene(scene, tmp_path / 'released.built')
+    scene = Scene()
+    igz.load_into(scene, tmp_path / 'released.built')
+    assert realizing_links(export()) == realizing_links(model)
+    assert schedules == junction_schedules(scene)
+
+
+def garage_junctions():
+    """Frame-8 connection quantities on 56 explicitly bound synthetic meetings."""
+    from copy import deepcopy
+    from tests.test_live_junction import knee_fixture, live, apply
+    from tests.test_sketch_rows import member
+    from built_core.history import History
+
+    template, _, _ = knee_fixture()
+    details = {p['name']: p for p, _ in live.preset_catalog(template)}
+    knee = deepcopy(details['End plate'])
+    knee['values']['contents'][1]['part']['fields']['profile.params.height'] = 550
+    cleat = deepcopy(knee)
+    cleat.update(uid='c081000000000030', name='Purlin cleat')
+    cleat['values']['contents'] = cleat['values']['contents'][1:3]
+    cleat['values']['contents'][0]['part']['fields'].update(thickness=8)
+    bolts = cleat['values']['contents'][1]['junction']
+    small = deepcopy(details['Bolt M16'])
+    small.update(uid='c081000000000031', name='Bolt M12')
+    small['values']['contents'][0]['part']['fastener']['d'] = 12
+    bolts['detail'] = small['uid']
+    bolts['repeat']['nest']['count'] = 1
+
+    scene = Scene()
+    history = History(scene)
+    apply(history, 'preset_update', rows=[details['Bolt M16'], details['Fillet weld'], knee, small, cleat])
+    for i in range(56):
+        x = 3*i
+        sweeps = [member({'library': 'en/he200a'}, [[x, 0, 0], [x+2, 0, 0]]),
+                  member({'library': 'basic/timber', 'params': {'width': 45, 'height': 486.25}},
+                         [[x+1, 0, 0], [x+1, 0, 1]])]
+        apply(history, 'create_sweeps', sweeps=sweeps)
+        main, joining = list(scene.groups)[-2:]
+        apply(history, 'junction_apply', detail=(knee if i < 8 else cleat)['uid'], bindings={
+            'main': dict(placement=main.uid, face='flange_outer'),
+            'joining': dict(placement=joining.uid, end='start')})
+    assert all(r['state'] == 'ok' for r in live.live_rows(scene))
+    return scene
+
+
+def test_garage_junction_schedules():
+    from core.bim import junction_schedules
+    tables = junction_schedules(garage_junctions())
+    assert {r[0]: r[1] for r in tables['fasteners'][1:]} == {16: 32, 12: 96}
+    assert {r[-1]: r[4] for r in tables['plates'][1:]} == {'End plate': 8, 'Purlin cleat': 48}
+    assert tables['welds'][1][2] == pytest.approx(8.5)
+    assert sum(r[-1] for r in tables['holes'][1:]) == 256
+
+
+def test_garage_ifc_ids(tmp_path):
+    ifc = pytest.importorskip('ifcopenshell')
+    pytest.importorskip('ifctester')
+    scene = garage_junctions()
+    path = tmp_path / 'garage.ifc'
+    report = save_ifc(scene, path, ids_files=[Path(__file__).parent / 'fixtures' / 'junction-status.ids'])
+    assert not report.problems
+    check, = report.ids[0]['specifications']
+    assert check['status'] and check['passed'] == 56
+    model = ifc.open(str(path))
+    assert len(model.by_type('IfcMechanicalFastener')) == 128
+    assert len(model.by_type('IfcPlate')) == 56
+    assert len(model.by_type('IfcVoidingFeature')) == 256
+
+
+@pytest.mark.parametrize(('x', 'relating'), [(1, 'ATPATH'), (2, 'ATEND')])
+def test_wall_path_connection_ends(tmp_path, x, relating):
+    ifc = pytest.importorskip('ifcopenshell')
+    from built_core.history import History
+    from tests.test_live_recipes import apply
+
+    scene = Scene()
+    history = History(scene)
+    for points, tool in [([[0, 0, 0], [2, 0, 0]], False), ([[x, 0, 0], [x, 1, 0]], True)]:
+        apply(history, 'create_sweeps', sweeps=[dict(profile=dict(library='basic/wall'),
+              path=dict(points=points))], wall_junctions=tool)
+    path = tmp_path / 'walls.ifc'
+    save_ifc(scene, path)
+    relation, = ifc.open(str(path)).by_type('IfcRelConnectsPathElements')
+    assert relation.RelatingConnectionType == relating
+    assert relation.RelatedConnectionType == 'ATSTART'

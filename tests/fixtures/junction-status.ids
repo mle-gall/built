@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ids xmlns="http://standards.buildingsmart.org/IDS">
+  <info><title>Junction handover</title></info>
+  <specifications>
+    <specification name="Every connection assembly reports its status" ifcVersion="IFC4 IFC4X3_ADD2">
+      <applicability minOccurs="1" maxOccurs="unbounded">
+        <entity><name><simpleValue>IFCELEMENTASSEMBLY</simpleValue></name></entity>
+      </applicability>
+      <requirements>
+        <property cardinality="required" dataType="IFCTEXT">
+          <propertySet><simpleValue>Built_Junction</simpleValue></propertySet>
+          <baseName><simpleValue>Status</simpleValue></baseName>
+        </property>
+      </requirements>
+    </specification>
+  </specifications>
+</ids>
