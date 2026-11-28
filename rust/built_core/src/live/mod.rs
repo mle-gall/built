@@ -1823,7 +1823,17 @@ pub(crate) fn cut_shortcut(scene: &Obj<'_>, key: &str) -> PyResult<serde_json::V
         "p" => "95f3d998bf6c7707", "b" => "f21af74966307f91", _ => return Ok(serde_json::Value::Null),
     };
     let t = current(scene.py(), root(scene)?).unwrap_or_default();
-    Ok(serde_json::json!(presets::lookup(&t,uid)))
+    if let Some(preset) = presets::lookup(&t, uid) {
+        return Ok(serde_json::json!(preset));
+    }
+    let library = scene.py().import("built_render.wgpu_library")?;
+    for item in library.call_method1("library_items", ("presets", scene))?.try_iter()? {
+        let preset = item?.get_item("preset")?;
+        if preset.get_item("uid")?.eq(uid)? && !preset.contains("needs")? {
+            return json(&preset);
+        }
+    }
+    Ok(serde_json::Value::Null)
 }
 pub(crate) fn cut_feedback(scene: &Obj<'_>, ids: &[String]) -> PyResult<Option<&'static str>> {
     let Some(table) = current(scene.py(), root(scene)?) else { return Ok(None); };

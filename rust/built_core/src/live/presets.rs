@@ -400,5 +400,3 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(preset_update, m)?)?;
     m.add_function(wrap_pyfunction!(preset_delete, m)?)
 }
-
-

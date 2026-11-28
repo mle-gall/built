@@ -165,9 +165,8 @@ pub(crate) fn offer(scene: &Obj<'_>, args: &Value) -> PyResult<Value> {
         && t.owners
             .get(body)
             .is_some_and(|id| t.rows[id].sweep.is_some()))
-    .then(|| presets::lookup(&t, "78d69d1a1cd30f54"))
+    .then(|| args["flush_clearance"].as_f64())
     .flatten()
-    .and_then(|p| p.values.get("clearance")?.as_f64())
     .filter(|mm| *mm > 0.);
     let offset = allowance.or_else(|| args["offset"].as_f64()).unwrap_or(0.);
     at += normal * offset / 1000.;
