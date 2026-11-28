@@ -826,6 +826,16 @@ pub(crate) fn filing_rows<'py>(
             c.items(&mut rows, loose, "", 1)?;
         }
     }
+    // The project Junctions view (docs/junctions.md §11).
+    if !filtering {
+        for (key, name, label, kind, depth, count, expandable) in crate::live::junction::view_rows(&c.scene, &c.expanded)? {
+            let mut r = row(key.clone(), name, kind, "", depth, 0, count, 0);
+            r.0[2] = label;
+            r.1[7] = i64::from(expandable);
+            r.1[8] = i64::from(c.expanded.contains(&key));
+            rows.push(r);
+        }
+    }
     Ok(rows)
 }
 

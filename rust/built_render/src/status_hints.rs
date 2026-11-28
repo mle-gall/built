@@ -50,6 +50,7 @@ const TOOLS: &[(&str, Phases)] = &[
     ("paint", &[
         ("idle", "Click a face to paint it. Alt = sample the material under the cursor."),
     ]),
+    ("junction", &[("idle","Hover a meeting: the detail's ghost shows how it fits. Click applies · Alt-click custom · ↓ next detail · L details.")]),
     ("cut", &[("idle","Pick targets (Shift-click for more), then a cutter. Tab cycles operations, L presets, A anchor, D draw section.")]),
     ("sweep", &[
         ("idle","Pick a start, or press Enter to sweep selected edges."),
@@ -258,6 +259,11 @@ pub(crate) fn hint_for(
             return Ok(format!("{} · {mode} · {}", tr(py, &prompt)?,
                 tr(py, "C cope · M mitre · P plane · B body · L presets")?));
         }
+    }
+    if key == "junction" && tool.hasattr("_state")? {
+        let prompt: String = tool.call_method1("_state", ("prompt",))?.extract().unwrap_or_default();
+        let chip: String = tool.call_method1("_state", ("chip",))?.extract().unwrap_or_default();
+        return Ok(format!("{} · {}", tr(py, &chip)?, tr(py, &prompt)?));
     }
     if key == "paint" && truth(tool, "sample_armed", false)? {
         return tr(py, "Click a face to sample its material");

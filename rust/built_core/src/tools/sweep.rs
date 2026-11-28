@@ -403,13 +403,17 @@ impl Tool for SweepTool {
                         return Reply::redraw();
                     }
                 }
-                if let Some(end) = p.world {
+                if let Some(mut end) = p.world {
+                    let plate = self.chosen.as_ref().is_some_and(|c| c["record"]["class"] == "IfcPlate");
                     let anchor = if p.mods.alt {
                         None
                     } else {
-                        let hit = host.call("sweep_face_ref", json!({"px":p.px,"at":end}));
+                        let hit = host.call("sweep_face_ref", json!({"px":p.px,"at":end,"plate":plate && self.start.is_none()}));
                         (!hit.is_null()).then_some(hit)
                     };
+                    if let Some(snap) = anchor.as_ref().and_then(|h| json_p3(&h["snap"])) {
+                        end = snap;
+                    }
                     if let Some(a) = self.start {
                         if a != end
                             && self.commit(
@@ -429,6 +433,18 @@ impl Tool for SweepTool {
                 }
             }
             ToolEvent::Value(Value::Length(n)) => {
+                // A plate started on a face: its thickness goes along the
+                // face's normal, wherever the pointer is.
+                let plate = self.chosen.as_ref().is_some_and(|p| p["record"]["class"] == "IfcPlate");
+                let normal = self.start_anchor.as_ref().and_then(|h| json_p3(&h["normal"])).map(DVec3::from).and_then(|n| n.try_normalize());
+                if let (Some(a), Some(n_dir), true) = (self.start, normal, plate) {
+                    let end = (DVec3::from(a) + n_dir * *n).to_array();
+                    if *n != 0. && self.commit(vec![vec![a, end]], Some([self.start_anchor.clone(), None]), host) {
+                        self.start = None;
+                        self.start_anchor = None;
+                        return Reply::committed();
+                    }
+                }
                 if let (Some(a), Some(b)) = (self.start, self.hover) {
                     if let Some(dir) = (DVec3::from(b) - DVec3::from(a)).try_normalize() {
                         let end = (DVec3::from(a) + dir * *n).to_array();

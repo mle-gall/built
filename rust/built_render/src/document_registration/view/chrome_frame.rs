@@ -577,6 +577,7 @@ fn before_frame<'py>(a: &Args<'py>) -> Reply<'py> {
         render(py)?.call_method1("inspector_sync", (&view, &win))?;
     }
     crate::junction_review::before_frame(&view, &win)?;
+    crate::junction_capture::before_frame(&view, &win)?;
     module.call_method1("_tabs", (&view, &win))?;
     document_tabs(&view, &win)?.call_method1("sync_host_context", (&view, &win))?;
     let options = PyList::empty(py);
@@ -763,7 +764,8 @@ fn cursor_value<'py>(a: &Args<'py>) -> Reply<'py> {
     let display = tools.getattr_opt("view")?.unwrap_or_else(|| view.clone());
     let sweep=attr(&tool,"kind")?.eq("sweep")?;
     let cut=attr(&tool,"kind")?.eq("cut")?;
-    let at = if (sweep || cut) && !attr(&tool,"hover_point")?.is_none(){
+    let junction=attr(&tool,"kind")?.eq("junction")?;
+    let at = if (sweep || cut || junction) && !attr(&tool,"hover_point")?.is_none(){
         display.call_method1("_world_to_pixel",(tool.getattr("hover_point")?,))?
     }else if label.is_none() { none(py) } else { display.call_method1("_world_to_pixel", (label.get_item(1)?,))? };
     let history = attr(&attr(&win, "viewport")?, "history")?;
@@ -807,6 +809,11 @@ fn cursor_value<'py>(a: &Args<'py>) -> Reply<'py> {
         let unit=py.import("built_core.units")?;
         let value=if caption=="Angle"{unit.call_method1("fmt_angle_deg",(value,))?}else{unit.call_method1("fmt_len",(value/1000.,))?};
         (tr.call1((&caption,))?,value.extract()?)
+    } else if junction && !typing {
+        // The chip: detail · roles · fit, beside the cursor.
+        let chip=tool.call_method1("_state",("chip",))?.extract::<String>()?;
+        let (name, rest)=chip.split_once(" · ").unwrap_or((chip.as_str(), ""));
+        (tr.call1((name,))?, rest.to_string())
     } else if cut && !typing {
         let prompt=tool.call_method1("_state",("prompt",))?;
         let chip=tr.call1((prompt,))?;

@@ -7,6 +7,7 @@ use captured_frame::CapturedFrame;
 mod window_timers;
 mod window_job;
 mod change_callbacks;
+pub(crate) mod junction_capture;
 pub(crate) mod junction_review;
 mod window_document;
 mod close_documents;
@@ -3041,6 +3042,12 @@ impl Renderer {
     fn ui_set_junction_review(&mut self, panel: Option<(String, String, Vec<junction_review::Row>, usize)>) {
         if let Some(ui) = self.ui.as_mut() { ui.set_junction_review(panel); }
     }
+    /// The capture chip, painted roles and popover, as JSON (`null`: none).
+    fn ui_set_junction_capture(&mut self, layer: String) {
+        if let Some(ui) = self.ui.as_mut() {
+            ui.set_junction_capture(serde_json::from_str(&layer).unwrap_or(serde_json::Value::Null));
+        }
+    }
     fn ui_set_options(&mut self, options: Vec<(String, String, String, u8)>) {
         if let Some(ui) = self.ui.as_mut() { ui.set_options(options); }
     }
@@ -3835,6 +3842,8 @@ pub fn built_render(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(junction_review::junction_review, m)?)?;
     m.add_function(wrap_pyfunction!(junction_review::junction_review_state, m)?)?;
     m.add_function(wrap_pyfunction!(junction_review::junction_review_action, m)?)?;
+    m.add_function(wrap_pyfunction!(junction_capture::junction_capture_action, m)?)?;
+    m.add_function(wrap_pyfunction!(junction_capture::junction_capture_state, m)?)?;
     m.add_function(wrap_pyfunction!(component_rows::select_component_instances, m)?)?;
     component_replacement::register(m)?;
     inspection_edits::register(m)?;

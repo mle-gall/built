@@ -684,6 +684,34 @@ impl<'a, 'py> Row<'a, 'py> {
                 py.import("built_core.project")?.call_method1("create", (&scene, path, win.getattr("_current_path")?))?;
                 win.call_method1("_relink_done", ("Project registry updated",))?;
             }
+        } else if matches!(self.verb.as_str(), "jvdetail" | "jvarrangement" | "jvproblems") {
+            scene.setattr("_junction_view", &self.verb[2..])?;
+            self.rebuild()?;
+        } else if self.verb == "adopt" {
+            // A cut row dropped on a junction's row (or its assembly's).
+            let target = direct(py, super::chrome_tree::group_by_uid, (win, partition(&extra, ':').1))?;
+            if !target.is_none() {
+                let api = py.import("built_core.command_protocol")?;
+                match api.call_method1("junction_record", (&scene, target.getattr("uid")?)) {
+                    Ok(record) => {
+                        let kw = fields!(py; "junction" => record.get_item("uid")?, "rows" => vec![rk.clone()]);
+                        let reply = py.import("built_core.protocol.commands")?.call_method("run", (viewport.getattr("history")?, "junction_adopt"), Some(&kw))?;
+                        if !reply.get_item("ok")?.is_truthy()? {
+                            win.call_method1("notify", ("warning", reply.get_item("error")?.str()?))?;
+                        }
+                    }
+                    Err(_) => {
+                        win.call_method1("notify", ("info", "Drop a cut on a junction's row to add it to the junction"))?;
+                    }
+                }
+                self.changed()?;
+                self.rebuild()?;
+            }
+        } else if self.verb == "capturecut" && rk.starts_with("cut:") {
+            crate::junction_capture::action(win, &format!("open:{}", &rk[4..]))?;
+        } else if matches!(self.verb.as_str(), "jdselect" | "jdreview") && rk.starts_with("jd:") {
+            crate::junction_capture::record_action(win, if self.verb == "jdselect" { "select_all" } else { "review" }, pyo3::types::PyString::new(py, &rk[3..]).as_any())?;
+            self.rebuild()?;
         } else if self.verb == "releasecut" && rk.starts_with("cut:") {
             self.core("live_release", fields!(py; "uid" => &rk[4..]))?;
             self.changed()?;

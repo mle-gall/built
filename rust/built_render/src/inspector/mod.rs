@@ -222,6 +222,10 @@ impl Panels {
     pub fn export(&mut self, ui: &mut Ui, out: &mut Vec<String>, measured: &[(String,String)]) {
         self.records.draw(ui, out, &mut self.popup_layers, measured);
     }
+    /// A selected junction's record, first in the inspector (§11).
+    pub fn junction(&mut self, ui: &mut Ui, out: &mut Vec<String>) {
+        self.records.junction_record(ui, out);
+    }
     pub fn has_records(&self) -> bool {
         !self.records.rows.is_empty()
     }

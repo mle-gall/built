@@ -432,6 +432,7 @@ impl Tool for CutTool {
                     host.call("cut_error", json!(self.prompt()));
                 }
                 if click && !self.hover.is_null() {
+                    let inside = host.call("cut_context", Json::Null);
                     let fitted = self.fitting["face"].is_object();
                     let mut rows: Vec<_> = self.targets.iter().map(|(target,end,span)| {
                         json!({"kind":"cut","owner":target,"uid":crate::element_ids::new_uid(),
@@ -453,6 +454,14 @@ impl Tool for CutTool {
                         partner["inputs"] =
                             json!([{"sweep":self.fitting["target_row"],"at":self.fitting["end"]}]);
                         rows.push(partner);
+                    }
+                    // Inside a junction (edit context), its cuts are this use's.
+                    if let Some(junction) = inside["junction"].as_str() {
+                        for (i, row) in rows.iter_mut().enumerate() {
+                            row["junction"] = json!(junction);
+                            row["key"] = json!(format!("{}_{i}", inside["key"].as_str().unwrap_or("cut")));
+                            row["uid"] = json!("");
+                        }
                     }
                     let answer = host.run(&Command {
                         name: "live_set",

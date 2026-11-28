@@ -232,6 +232,19 @@ fn sweep_on_key<'p>(a:&Args<'p>)->Reply<'p>{
     }
     false.into_bound_py_any(a.py())
 }
+fn junction_key(code:i32)->Option<&'static str>{
+    match code {76=>Some("L"),0x1000015=>Some("Down"),_=>None}
+}
+fn junction_claims<'p>(a:&Args<'p>)->Reply<'p>{
+    (a.get_item(2)?.extract::<i32>()?==0 && junction_key(a.get_item(1)?.extract()?).is_some()).into_bound_py_any(a.py())
+}
+fn junction_on_key<'p>(a:&Args<'p>)->Reply<'p>{
+    if let Some(key)=junction_key(a.get_item(2)?.extract()?){
+        let ev=fields!(a.py();"type"=>"key","key"=>key);
+        return a.get_item(0)?.call_method1("_send",(a.get_item(1)?,ev))?.get_item("consumed")
+    }
+    false.into_bound_py_any(a.py())
+}
 fn cut_key(code:i32)->Option<&'static str>{
     match code {0x1000001=>Some("Tab"),65=>Some("A"),76=>Some("L"),68=>Some("D"),67=>Some("C"),77=>Some("M"),80=>Some("P"),66=>Some("B"),_=>None}
 }
@@ -284,6 +297,13 @@ pub(super) fn install(module: &Bound<PyModule>) -> PyResult<()> {
             ("vcb_caption",Mode::Method,cut_caption,&["self"],"str",""),
             ("claims_key",Mode::Method,cut_claims,&["self","key","modifiers"],"bool",""),
             ("on_key",Mode::Method,cut_on_key,&["self","viewport","key","modifiers"],"bool",""),
+        ])?;
+        let attrs=PyDict::new(py);
+        attrs.set_item("kind","junction")?;
+        let junction=define(module,"JunctionTool",&[cls.clone()],&attrs)?;
+        install_methods(module,&junction,&[
+            ("claims_key",Mode::Method,junction_claims,&["self","key","modifiers"],"bool",""),
+            ("on_key",Mode::Method,junction_on_key,&["self","viewport","key","modifiers"],"bool",""),
         ])?;
         let surface = PyDict::new(py);
         surface.set_item("__module__", module.name()?)?;

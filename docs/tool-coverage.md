@@ -13,6 +13,7 @@ registry. Regenerate it from that function after adding a tool.
 | --- | --- | --- | --- |
 | select | SelectTool | native | Rust state machine |
 | cut | CutTool | native | shared viewport / tool base |
+| junction | JunctionTool | native | shared viewport / tool base |
 | sweep | SweepTool | native | shared viewport / tool base |
 | line | LineTool | native | Rust state machine |
 | line_on_surface | LineOnSurfaceTool | native | Rust state machine |

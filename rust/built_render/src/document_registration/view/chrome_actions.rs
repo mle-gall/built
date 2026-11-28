@@ -86,6 +86,7 @@ fn run_one<'py>(win: &Obj<'py>, action: &Obj<'py>, source_view: &Obj<'py>) -> Py
     match kind {
         "extension" => return win.call_method1("run_command", (action,)).map(drop),
         "jreview" => return crate::junction_review::action(win, arg),
+        "jcapture" => return crate::junction_capture::action(win, arg),
         "scenephoto" => {
             let view = dialogs.call_method1("view_of", (win,))?;
             if !view.is_none() {
@@ -745,7 +746,18 @@ fn command_action<'py>(a: &Args<'py>) -> Reply<'py> {
             if 0 <= index && (index as usize) < hits.len()? {
                 let action = hits.get_item(index)?;
                 let cut=attr(&view, "_ui_command_scope")?.eq("Cut presets")?;
-                if cut || attr(&view, "_ui_command_scope")?.eq("Sweep presets")? {
+                if attr(&view, "_ui_command_scope")?.eq("Junction details")? {
+                    if verb == "cmdrun" {
+                        if let Ok(preset)=action.get_item("preset"){
+                            win.call_method1("_activate_tool",("junction",))?;
+                            let machine=win.getattr("_tools")?.get_item("junction")?.getattr("_machine")?;
+                            machine.call_method1("set",("preset",&preset))?;
+                            view.setattr("_junction_detail", preset.get_item("uid")?)?;
+                            win.getattr("viewport")?.setattr("_junction_detail", preset.get_item("uid")?)?;
+                        }
+                        view.call_method0("update")?;
+                    }
+                } else if cut || attr(&view, "_ui_command_scope")?.eq("Sweep presets")? {
                     if verb == "cmdrun" {
                         let tool=win.getattr("_tools")?.get_item(if cut {"cut"} else {"sweep"})?;
                         let machine=tool.getattr("_machine")?;
@@ -785,7 +797,8 @@ pub(super) fn command_query<'py>(a: &Args<'py>) -> Reply<'py> {
     let py = a.py();
     let (view, win, query) = (a.get_item(0)?, a.get_item(1)?, a.get_item(2)?);
     let cut=attr(&view,"_ui_command_scope")?.eq("Cut presets")?;
-    if cut || attr(&view,"_ui_command_scope")?.eq("Sweep presets")? {
+    let junction=attr(&view,"_ui_command_scope")?.eq("Junction details")?;
+    if cut || junction || attr(&view,"_ui_command_scope")?.eq("Sweep presets")? {
         let provider=py.import("built_render.wgpu_library")?.getattr("ProfilesProvider")?.call0()?;
         let ctx=py.import("types")?.getattr("SimpleNamespace")?.call((),Some(&fields!(py;"scene"=>win.getattr("viewport")?.getattr("scene")?)))?;
         let needle=query.extract::<String>()?.to_lowercase();
@@ -796,11 +809,11 @@ pub(super) fn command_query<'py>(a: &Args<'py>) -> Reply<'py> {
         for entry in presets.call_method1("items",(&ctx,))?.try_iter()?{
             let entry=entry?;
             let p=entry.get_item("preset")?;
-            if !p.get_item("primitive")?.eq(if cut {"cut"}else{"sweep"})?{continue;}
+            if !p.get_item("primitive")?.eq(if junction {"junction"} else if cut {"cut"}else{"sweep"})?{continue;}
             let name=entry.get_item("name")?.str()?.to_string();
             let pack=entry.get_item("category")?.str()?.to_string();
             let record=p.get_item("record")?;
-            let profile=if cut {p.get_item("values")?.get_item("cutter_kind")?.str()?.to_string()} else {p.get_item("values")?.get_item("profile")?.call_method1("get",("library","Drawn profile"))?.str()?.to_string()};
+            let profile=if junction {p.get_item("values")?.call_method1("get",("meeting","junction"))?.str()?.to_string().replace('_'," ")} else if cut {p.get_item("values")?.get_item("cutter_kind")?.str()?.to_string()} else {p.get_item("values")?.get_item("profile")?.call_method1("get",("library","Drawn profile"))?.str()?.to_string()};
             let class=record.call_method1("get",("class",""))?.str()?.to_string();
             let subtype=record.call_method1("get",("predefined_type",""))?.str()?.to_string();
             let detail=format!("{} · {} · {} {}",profile,record.call_method1("get",("material",""))?.str()?,class,subtype);
@@ -817,7 +830,7 @@ pub(super) fn command_query<'py>(a: &Args<'py>) -> Reply<'py> {
             results.append((name,group,detail,true))?;
             actions.append(entry)?;
         }
-        if !cut { for profile in provider.call_method1("items",(ctx,))?.try_iter()?{
+        if !cut && !junction { for profile in provider.call_method1("items",(ctx,))?.try_iter()?{
             let profile=profile?;
             let name:String=profile.get_item("name")?.extract()?;
             let family:String=profile.get_item("category")?.extract()?;

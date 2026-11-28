@@ -3857,5 +3857,6 @@
  "Standard views, Look at Face, Zoom Extents, Zoom Selection and scene changes glide into place in a quarter second; off, they jump.": "Стандартные виды, Смотреть на грань, Показать всё, Показать выделенное и смена сцен плавно переходят за четверть секунды; если выключено, переключаются сразу.",
  "Click the new origin or type X;Y;Z.": "Щёлкните в точке нового начала координат или введите X;Y;Z.",
  "Click along red or type its angle in the drawing plane.": "Щёлкните в направлении красной оси или введите её угол в плоскости рисования.",
- "Click toward green or type its tilt about red.": "Щёлкните в направлении зелёной оси или введите угол её наклона вокруг красной оси."
+ "Click toward green or type its tilt about red.": "Щёлкните в направлении зелёной оси или введите угол её наклона вокруг красной оси.",
+ "Hover a meeting: the detail's ghost shows how it fits. Click applies · Alt-click custom · ↓ next detail · L details.": "Наведите на узел: призрак детали показывает, как он подходит. Щелчок применяет · Alt-щелчок свой вариант · ↓ следующая деталь · L детали."
 }

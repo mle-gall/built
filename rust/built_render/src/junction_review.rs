@@ -153,6 +153,14 @@ fn run(history: &Obj<'_>, verb: &str, kwargs: &Bound<'_, PyDict>) -> PyResult<Va
     let reply = py
         .import("built_core.protocol.commands")?
         .call_method("run", (history, verb), Some(kwargs))?;
+    // The reply's `step` is a live object, not data.
+    if let Ok(d) = reply.cast::<PyDict>() {
+        let d = d.copy()?;
+        if d.contains("step")? {
+            d.del_item("step")?;
+        }
+        return to_json(d.as_any());
+    }
     to_json(&reply)
 }
 

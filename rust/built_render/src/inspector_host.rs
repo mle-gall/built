@@ -153,6 +153,12 @@ fn selection(view: &Bound<'_, PyAny>, win: &Bound<'_, PyAny>) -> PyResult<()> {
             }
             record.set_item("uid", record_address(&scene, g)?)?;
             let ext = g.getattr("ext")?;
+            if groups.len() == 1 && ext.is_truthy()? && ext.contains("built.live")? {
+                let api = py.import("built_core.command_protocol")?;
+                if let Ok(j) = api.call_method1("junction_record", (&scene, g.getattr("uid")?)) {
+                    record.set_item("junction", j)?;
+                }
+            }
             if groups.len() == 1 && ext.is_truthy()? && (ext.contains("built.live")? || ext.contains("built.repeat")?) {
                 let cuts=py.import("built_core.command_protocol")?.call_method1("live_cuts",(&scene,g.getattr("uid")?))?;
                 record.set_item("cut_rows",cuts)?;
@@ -751,6 +757,7 @@ fn inspector_action(win: &Bound<'_, PyAny>, view: &Bound<'_, PyAny>, payload: &s
                 }
             } Ok(())
         }
+        "junction" => crate::junction_capture::record_action(win, verb, &v),
         "record" => record_edit(view, &vp, verb, &v),
         "rule" => rule_edit(view, &vp, verb, &v),
         "parts" => parts_edit(win, view, &vp, verb, &v),

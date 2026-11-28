@@ -3860,5 +3860,6 @@
  "Standard views, Look at Face, Zoom Extents, Zoom Selection and scene changes glide into place in a quarter second; off, they jump.": "Tampilan standar, Lihat Bidang, Zoom Semua, Zoom Pilihan, dan perpindahan adegan meluncur ke tempatnya dalam seperempat detik; jika mati, langsung melompat.",
  "Click the new origin or type X;Y;Z.": "Klik titik asal baru atau masukkan X;Y;Z.",
  "Click along red or type its angle in the drawing plane.": "Klik searah sumbu merah atau masukkan sudutnya pada bidang gambar.",
- "Click toward green or type its tilt about red.": "Klik searah sumbu hijau atau masukkan sudut kemiringannya terhadap sumbu putar merah."
+ "Click toward green or type its tilt about red.": "Klik searah sumbu hijau atau masukkan sudut kemiringannya terhadap sumbu putar merah.",
+ "Hover a meeting: the detail's ghost shows how it fits. Click applies · Alt-click custom · ↓ next detail · L details.": "Arahkan ke pertemuan: bayangan detail menunjukkan kecocokannya. Klik menerapkan · Alt-klik khusus · ↓ detail berikutnya · L detail."
 }

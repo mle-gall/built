@@ -153,6 +153,7 @@ pub const TOOL_DISPATCH: &[(&str, &str)] = &[
     ("SectionPlaneTool", "mesh"),
     ("SweepTool", "mesh"),
     ("CutTool", "mesh"),
+    ("JunctionTool", "mesh"),
     ("LineTool", "mesh"),
     ("LineOnSurfaceTool", "mesh"),
     ("RectangleTool", "mesh"),

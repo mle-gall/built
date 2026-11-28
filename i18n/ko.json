@@ -3857,5 +3857,6 @@
  "Standard views, Look at Face, Zoom Extents, Zoom Selection and scene changes glide into place in a quarter second; off, they jump.": "표준 뷰, 면 바라보기, 전체 보기, 선택 항목 보기, 장면 전환이 4분의 1초 동안 부드럽게 이동합니다. 끄면 바로 바뀝니다.",
  "Click the new origin or type X;Y;Z.": "새 원점을 클릭하거나 X;Y;Z를 입력하세요.",
  "Click along red or type its angle in the drawing plane.": "빨간색 축의 방향을 클릭하거나 제도 평면에서의 각도를 입력하세요.",
- "Click toward green or type its tilt about red.": "녹색 축의 방향을 클릭하거나 빨간색 축을 중심으로 한 기울기 각도를 입력하세요."
+ "Click toward green or type its tilt about red.": "녹색 축의 방향을 클릭하거나 빨간색 축을 중심으로 한 기울기 각도를 입력하세요.",
+ "Hover a meeting: the detail's ghost shows how it fits. Click applies · Alt-click custom · ↓ next detail · L details.": "접합부 위에 올리면 디테일이 맞는 모습이 고스트로 표시됩니다. 클릭 적용 · Alt-클릭 사용자 지정 · ↓ 다음 디테일 · L 디테일."
 }
