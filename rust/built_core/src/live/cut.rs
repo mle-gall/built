@@ -138,7 +138,7 @@ pub(super) fn attach(scene: &Obj<'_>, t: &mut LiveTable, row: &mut Row) -> PyRes
     if !row.cuts.is_empty() {
         return Err(PyValueError::new_err("A cut cannot own cuts"));
     }
-    row.inputs.clear();
+    let supplied = std::mem::take(&mut row.inputs);
     let op = row.operation.as_deref().unwrap_or("subtract");
     match &row.cutter {
         Some(Cutter::Body(uid)) if matches!(op, "union" | "subtract" | "trim" | "intersect") => {
@@ -187,9 +187,27 @@ pub(super) fn attach(scene: &Obj<'_>, t: &mut LiveTable, row: &mut Row) -> PyRes
             }
         }
         Some(Cutter::Bisector(uid)) if matches!(op, "trim" | "subtract") => {
-            row.inputs.push(Reference::Placement {
-                placement: uid.clone(),
+            let axis = supplied.into_iter().find(|r| {
+                matches!(r, Reference::Axis {sweep,at:table::Station::End(end),point:None}
+                if t.owners.get(uid)==Some(sweep) && matches!(end.as_str(),"start"|"end"))
             });
+            if let Some(axis) = axis {
+                // A click on the partner face can have anchored this sweep to
+                // its finished skin. The new mitre meets the partner stock axis.
+                if let Some(ends) = target.sweep.as_mut().and_then(|s| s.path.ends.as_mut()) {
+                    let end = &mut ends[usize::from(row.end.as_deref() != Some("start"))];
+                    if let sweep::End::Anchored { to, .. } = end {
+                        if matches!(to,Reference::Element{path,..} if path.last()==Some(uid)) {
+                            *to = axis.clone();
+                        }
+                    }
+                }
+                row.inputs.push(axis);
+            } else {
+                row.inputs.push(Reference::Placement {
+                    placement: uid.clone(),
+                });
+            }
         }
         Some(Cutter::Plane(_)) if matches!(op, "trim" | "subtract") => (),
         _ => return Err(PyValueError::new_err("Invalid cutter or operation")),
@@ -303,18 +321,22 @@ pub(super) fn end_planes(
                 let Some(host) = group(scene.py(), t, uid) else {
                     return Ok(Err("ref_lost"));
                 };
-                let points = match metadata(&host)?
-                    .get_item(EXT)?
-                    .and_then(|m| m.get_item("path").ok())
-                    .and_then(|p| p.extract::<Vec<[f64; 3]>>().ok())
-                    .filter(|p| p.len() >= 2)
-                {
-                    Some(path) => path,
-                    None => {
-                        let Some(mesh) = junction::uncut_mesh(scene, t, uid)? else {
-                            return Ok(Err("ref_lost"));
-                        };
-                        solid_axis(&mesh)?
+                let points = if let Some(stock) = t.owners.get(uid).and_then(|id| t.stock.get(id)) {
+                    stock.path.clone()
+                } else {
+                    match metadata(&host)?
+                        .get_item(EXT)?
+                        .and_then(|m| m.get_item("path").ok())
+                        .and_then(|p| p.extract::<Vec<[f64; 3]>>().ok())
+                        .filter(|p| p.len() >= 2)
+                    {
+                        Some(path) => path,
+                        None => {
+                            let Some(mesh) = junction::uncut_mesh(scene, t, uid)? else {
+                                return Ok(Err("ref_lost"));
+                            };
+                            solid_axis(&mesh)?
+                        }
                     }
                 };
                 if points.len() < 2 {

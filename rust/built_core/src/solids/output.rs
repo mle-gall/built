@@ -131,9 +131,16 @@ pub(super) fn group<'p>(
     } else {
         vec![true; surf.triangles.len()]
     };
+    // The editable mesh welds near-coincident vertices. Clearance around a
+    // rolled flange can create sliver triangles whose corners become one
+    // vertex in that mesh. Such triangles cannot bound a solid.
+    let weld = crate::store::Weld::default();
+    let positions: Vec<_> = surf.points.iter().map(|p| p.to_array()).collect();
+    let (_, welded, _) = crate::weld::weld(&positions, weld.scale, weld.tol2);
     let tagged = PyList::empty(py);
     for ((tri, &owner), show) in surf.triangles.iter().zip(&surf.owners).zip(mask) {
-        if !show {
+        let [a, b, c] = tri.map(|i| welded[i as usize]);
+        if !show || a == b || b == c || c == a {
             continue;
         }
         let attrs = match sources.attrs.get(owner as usize) {

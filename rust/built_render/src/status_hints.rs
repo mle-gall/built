@@ -256,7 +256,7 @@ pub(crate) fn hint_for(
         if let Some(prompt) = tool.call_method1("_state", ("prompt",))?.extract::<Option<String>>()? {
             let mode: String = tool.call_method1("_state", ("chip",))?.extract()?;
             return Ok(format!("{} · {mode} · {}", tr(py, &prompt)?,
-                tr(py, "Shift-click targets · L presets · Tab operation · A anchor · D section")?));
+                tr(py, "C cope · M mitre · P plane · B body · L presets · Shift-click targets · Tab operation · A anchor · D section")?));
         }
     }
     if key == "paint" && truth(tool, "sample_armed", false)? {

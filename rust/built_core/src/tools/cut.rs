@@ -24,6 +24,9 @@ pub struct CutTool {
     ring: Vec<P3>,
     outline: Vec<[P3; 2]>,
     refusal: Option<String>,
+    fitting: Json,
+    pointer: Option<Pointer>,
+    typed_offset: bool,
     anchor: Json,
     picking_anchor: bool,
     operation: usize,
@@ -98,6 +101,9 @@ impl CutTool {
         if let Some(reason) = &self.refusal {
             return reason;
         }
+        if let Some(prompt) = self.fitting["prompt"].as_str() {
+            return prompt;
+        }
         if self.grip.is_some() {
             return "Drag or enter a value";
         }
@@ -120,7 +126,7 @@ impl Tool for CutTool {
         &INFO
     }
     fn state(&self) -> Json {
-        json!({"prompt":self.prompt(),"angle_grip": self.grip.as_ref().is_some_and(|g| g.kind=="angle"),"grip_value":self.grip.as_ref().map(|g| self.point.map_or_else(||g.current(),|p| g.dragged(p))),"editing_grip": self.grip.is_some(),"target":self.targets.first().map(|t| &t.0),"targets":self.targets.iter().map(|t| &t.0).collect::<Vec<_>>(), "cutter":self.hover,"hover_point":self.point,"chip":format!("{} · {}",self.preset["name"].as_str().unwrap_or("Cut"),OPS[self.operation]), "preset":self.preset["name"], "operation":OPS[self.operation], "offset":self.offset})
+        json!({"prompt":self.prompt(),"angle_grip": self.grip.as_ref().is_some_and(|g| g.kind=="angle"),"grip_value":self.grip.as_ref().map(|g| self.point.map_or_else(||g.current(),|p| g.dragged(p))),"editing_grip": self.grip.is_some(),"target":self.targets.first().map(|t| &t.0),"targets":self.targets.iter().map(|t| &t.0).collect::<Vec<_>>(), "cutter":self.hover,"hover_point":self.point,"chip":format!("{} · {}",self.preset["name"].as_str().unwrap_or("Cut"),OPS[self.operation]), "preset":self.preset["name"], "operation":OPS[self.operation], "offset":self.fitting["offset"].as_f64().unwrap_or(self.offset)})
     }
     fn busy(&self) -> bool {
         self.grip.is_some() || !self.targets.is_empty()
@@ -129,6 +135,8 @@ impl Tool for CutTool {
         if key != "preset" {
             return false;
         }
+        self.fitting = Json::Null;
+        self.typed_offset = false;
         self.preset = value.clone();
         self.operation = OPS
             .iter()
@@ -175,6 +183,12 @@ impl Tool for CutTool {
                     .collect();
             }
             ToolEvent::Cancel | ToolEvent::Deactivate => {
+                self.pointer = None;
+                self.typed_offset = false;
+                if self.preset.is_null() {
+                    self.offset = 0.;
+                }
+                self.fitting = Json::Null;
                 self.outline.clear();
                 self.refusal = None;
                 self.targets.clear();
@@ -188,7 +202,24 @@ impl Tool for CutTool {
                 let grip = self.grip.take().unwrap();
                 return grip.commit(host, if grip.kind == "angle" { *v } else { v * 1000. });
             }
-            ToolEvent::Value(Value::Length(v)) => self.offset = v * 1000.,
+            ToolEvent::Value(Value::Length(v)) => {
+                self.typed_offset = true;
+                self.offset = v * 1000.;
+                if let Some(p) = self.pointer.clone() {
+                    return self.event(&ToolEvent::Hover(p), host);
+                }
+            }
+            ToolEvent::Key { key, .. }
+                if matches!(key.to_ascii_lowercase().as_str(), "c" | "m" | "p" | "b") =>
+            {
+                let preset = host.call("cut_shortcut", json!(key.to_ascii_lowercase()));
+                if !preset.is_null() {
+                    self.set("preset", &preset);
+                    if let Some(p) = self.pointer.clone() {
+                        return self.event(&ToolEvent::Hover(p), host);
+                    }
+                }
+            }
             ToolEvent::Key { key, .. } if key.eq_ignore_ascii_case("tab") => {
                 self.operation = (self.operation + 1) % OPS.len()
             }
@@ -204,6 +235,7 @@ impl Tool for CutTool {
                 host.call("cut_draw_section", json!({"face":self.face}));
             }
             ToolEvent::Hover(p) | ToolEvent::Click(p) => {
+                self.pointer = Some(p.clone());
                 if let Some(previous) = self.existing_sections.take() {
                     let sections: Vec<String> =
                         serde_json::from_value(host.call("cut_sections", Json::Null))
@@ -214,6 +246,7 @@ impl Tool for CutTool {
                     }
                 }
                 self.refusal = None;
+                self.fitting = Json::Null;
                 self.outline.clear();
                 self.point = p.world;
                 if let Some(grip) = &mut self.grip {
@@ -310,7 +343,7 @@ impl Tool for CutTool {
                     }
                     return Reply::redraw();
                 }
-                let kind = self.preset["values"]["cutter_kind"]
+                let mut kind = self.preset["values"]["cutter_kind"]
                     .as_str()
                     .unwrap_or("body");
                 let mut anchor = if self.anchor.is_null() {
@@ -318,12 +351,54 @@ impl Tool for CutTool {
                 } else {
                     json!({"ref":self.anchor,"offset":self.offset})
                 };
+                let automatic = self.preset.is_null() && self.operation == 0;
+                if self.targets.len() == 1
+                    && self.anchor.is_null()
+                    && !self.face.is_null()
+                    && (automatic || kind == "plane")
+                    && placed.as_str() != Some(&self.targets[0].0)
+                {
+                    let (target, _, span) = &self.targets[0];
+                    self.fitting = host.call(
+                        "cut_end_fit",
+                        json!({"target":target, "span":span,
+                        "body":placed,"face":self.face,"explicit":!automatic,"offset":self.offset,"typed":self.typed_offset}),
+                    );
+                    if let Some(reason) = self.fitting["reason"].as_str() {
+                        self.refusal = Some(reason.to_owned());
+                        self.hover = Json::Null;
+                        if click {
+                            host.call("cut_error", json!(reason));
+                        }
+                        return Reply::redraw();
+                    }
+                    if let Some(face) = self.fitting.get("face") {
+                        kind = "plane";
+                        anchor = json!({"ref":face,"offset":self.fitting["offset"]});
+                        if let Ok(lines) =
+                            serde_json::from_value::<Vec<[P3; 2]>>(self.fitting["lines"].clone())
+                        {
+                            self.outline.extend(lines);
+                        }
+                    }
+                }
+                if kind == "bisector"
+                    && self.targets.len() == 1
+                    && self.anchor.is_null()
+                    && placed.is_string()
+                    && placed.as_str() != Some(&self.targets[0].0)
+                {
+                    self.fitting = host.call(
+                        "cut_corner",
+                        json!({"target":self.targets[0].0,"body":placed}),
+                    );
+                }
                 self.hover = match kind {
                     "plane" => {
                         if self.face.is_null() && self.anchor.is_null() {
                             Json::Null
                         } else {
-                            if self.anchor.is_null() {
+                            if anchor.is_null() {
                                 anchor = json!({"ref":self.face,"offset":self.offset});
                             }
                             json!({"plane":{}})
@@ -357,8 +432,28 @@ impl Tool for CutTool {
                     host.call("cut_error", json!(self.prompt()));
                 }
                 if click && !self.hover.is_null() {
-                    let rows: Vec<_> = self.targets.iter().map(|(target,end,span)| json!({"kind":"cut","owner":target,"uid":crate::element_ids::new_uid(),"cutter":self.hover,"name":self.preset["name"],
-                        "operation":OPS[self.operation],"anchor":anchor,"clearance":if matches!(kind,"body"|"bisector"){self.offset}else{0.},"on":true,"end":end,"span":span})).collect();
+                    let fitted = self.fitting["face"].is_object();
+                    let mut rows: Vec<_> = self.targets.iter().map(|(target,end,span)| {
+                        json!({"kind":"cut","owner":target,"uid":crate::element_ids::new_uid(),
+                            "cutter":self.hover,"name":if fitted && automatic {json!("Fit end")} else {self.preset["name"].clone()},
+                            "operation":if fitted {"trim"} else {OPS[self.operation]}, "anchor":anchor,
+                            "clearance":if matches!(kind,"body"|"bisector"){self.offset}else{0.},"on":true,
+                            "end":if fitted {self.fitting["end"].clone()} else {json!(end)},
+                            "span":if fitted {self.fitting["span"].clone()} else {json!(span)}})
+                    }).collect();
+                    if self.fitting["partner_row"].is_string() {
+                        let cut = &mut rows[0];
+                        cut["end"] = self.fitting["end"].clone();
+                        cut["inputs"] = json!([{"sweep":self.fitting["partner_row"],"at":self.fitting["partner_end"]}]);
+                        let mut partner = cut.clone();
+                        partner["uid"] = json!(crate::element_ids::new_uid());
+                        partner["owner"] = placed.clone();
+                        partner["cutter"] = json!({"bisector":self.targets[0].0});
+                        partner["end"] = self.fitting["partner_end"].clone();
+                        partner["inputs"] =
+                            json!([{"sweep":self.fitting["target_row"],"at":self.fitting["end"]}]);
+                        rows.push(partner);
+                    }
                     let answer = host.run(&Command {
                         name: "live_set",
                         args: json!({"row":rows}),
@@ -368,7 +463,16 @@ impl Tool for CutTool {
                         if let Some(note) = host.call("cut_feedback", json!(ids)).as_str() {
                             self.refusal = Some(note.to_owned());
                             host.call("cut_error", json!(note));
+                        } else if fitted && automatic {
+                            let message = if self.fitting["flush"] == true {
+                                "End already flush · live fit saved"
+                            } else {
+                                "Live end fit saved"
+                            };
+                            self.fitting = Json::Null;
+                            host.call("cut_error", json!(message));
                         } else {
+                            self.fitting = Json::Null;
                             host.call("cut_error", json!("Live cut saved · pick another cutter"));
                         }
                         return Reply::committed();

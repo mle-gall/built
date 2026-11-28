@@ -233,7 +233,7 @@ fn sweep_on_key<'p>(a:&Args<'p>)->Reply<'p>{
     false.into_bound_py_any(a.py())
 }
 fn cut_key(code:i32)->Option<&'static str>{
-    match code {0x1000001=>Some("Tab"),65=>Some("A"),76=>Some("L"),68=>Some("D"),_=>None}
+    match code {0x1000001=>Some("Tab"),65=>Some("A"),76=>Some("L"),68=>Some("D"),67=>Some("C"),77=>Some("M"),80=>Some("P"),66=>Some("B"),_=>None}
 }
 fn cut_unitless<'p>(a:&Args<'p>)->Reply<'p>{a.get_item(0)?.call_method1("_state",("angle_grip",))}
 fn cut_caption<'p>(a:&Args<'p>)->Reply<'p>{(if cut_unitless(a)?.is_truthy()? {"Angle"}else{"Offset"}).into_bound_py_any(a.py())}

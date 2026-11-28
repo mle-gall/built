@@ -267,6 +267,9 @@ impl ViewportToolHost {
                 }
                 hit
             }
+            "cut_shortcut" => crate::live::cut_shortcut(&view.getattr("scene")?, arg.as_str().unwrap_or(""))?,
+            "cut_corner" => crate::live::cut_fit::corner(&view.getattr("scene")?, arg)?,
+            "cut_end_fit" => crate::live::cut_fit::offer(&view.getattr("scene")?, arg)?,
             "cut_feedback" => json!(crate::live::cut_feedback(&view.getattr("scene")?, &args::<Vec<String>>(arg)?)?),
             "cut_solid" => {
                 let scene = view.getattr("scene")?;

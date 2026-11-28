@@ -3,6 +3,7 @@
 //! Definition replacements and placement markers are ordinary document ops.
 mod cut;
 mod cut_display;
+pub(crate) mod cut_fit;
 pub(crate) use cut::{assign_cut_roles, hosted, migrate_wall, pushed_row, solid_axis};
 pub(crate) use cut_display::live_cut_display;
 mod drawn_profile;
@@ -1749,6 +1750,14 @@ fn live_release<'p>(history: &Obj<'p>, uid: String) -> PyResult<Bound<'p, PyDict
 #[pyfunction]
 fn live_reevaluate<'p>(history: &Obj<'p>, uid: String) -> PyResult<Bound<'p, PyDict>> {
     edit(history, Edit::Reevaluate(uid))
+}
+pub(crate) fn cut_shortcut(scene: &Obj<'_>, key: &str) -> PyResult<serde_json::Value> {
+    let uid = match key {
+        "c" => "78d69d1a1cd30f54", "m" => "81f3c1507efa12f3",
+        "p" => "95f3d998bf6c7707", "b" => "f21af74966307f91", _ => return Ok(serde_json::Value::Null),
+    };
+    let t = current(scene.py(), root(scene)?).unwrap_or_default();
+    Ok(serde_json::json!(presets::lookup(&t,uid)))
 }
 pub(crate) fn cut_feedback(scene: &Obj<'_>, ids: &[String]) -> PyResult<Option<&'static str>> {
     let Some(table) = current(scene.py(), root(scene)?) else { return Ok(None); };
