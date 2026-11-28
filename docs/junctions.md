@@ -1124,6 +1124,18 @@ Skips and Follow are journalled on the live table and saved as
 junction of another detail) or `applied`, with `why` atoms and the role
 bindings `junction_apply` takes.
 
+Measured on the synthetic fixtures (release build, M5 Max;
+`tests/test_junction_meetings.py`, `BUILT_PERF=1` asserts these targets):
+
+| §4 budget | Target | Measured |
+|---|---|---|
+| Build, garage beside 400 unclassified ride parts | < 5 ms | 0.22 ms |
+| Build, steel hall (2,005 members, 3,713 meetings) | < 20 ms | 8–12 ms, on the main thread |
+| Update after a step that moved one member | < 0.5 ms | 0.02 ms |
+| Memory, steel hall | < 2 MB | 1.93 MB (estimated from the index's own sizes) |
+| Search one detail, hall | < 10 ms | 1.3–1.6 ms |
+| Search all project details (5), hall | < 50 ms | 5.9–8.3 ms |
+
 **The review** (`built_render/src/junction_review.rs`). Saving a junction
 detail that has matches shows "Knee end plate saved · 7 similar meetings ·
 Review". The review draws a badge at each meeting (ticked, unticked, near,

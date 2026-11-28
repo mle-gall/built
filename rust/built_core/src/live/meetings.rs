@@ -1070,7 +1070,13 @@ fn suggestion(
             .flatten()
             .filter_map(|p| p["library"].as_str())
             .collect();
-        if wanted.len() == 1 && wanted[0] != m.profile && !m.profile.is_empty() && failed.is_empty() {
+        // Only a rule naming one catalogue size says another size differs.
+        if wanted.len() == 1
+            && profile::label(wanted[0]).is_some()
+            && wanted[0] != m.profile
+            && !m.profile.is_empty()
+            && failed.is_empty()
+        {
             why.push(format!("sized differently: {}", label_of(m)));
         }
     }

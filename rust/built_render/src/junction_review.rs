@@ -363,13 +363,12 @@ pub fn primitives<'p>(view: &Obj<'p>, scene: &Obj<'p>, out: &Bound<'p, PyList>) 
     let py = view.py();
     let Some(review) = current(scene)? else { return Ok(()) };
     let primitive = py.import("views.wgpu_overlay")?.getattr("Primitive")?;
-    let vec3 = py.import("built_core")?.getattr("Vec3")?;
     let r = review.borrow();
     for item in r.items.iter().filter(|i| i.ticked || i.fit == "near") {
         let colour = hex(if item.ticked { ACCENT } else { WARN });
         for [a, b] in r.ghosts.get(&item.key).into_iter().flatten() {
-            let seg = view.call_method1("_segment_to_pixels", (vec3.call1((a[0], a[1], a[2]))?, vec3.call1((b[0], b[1], b[2]))?))?;
-            if let Ok([p, q]) = seg.extract::<[(f64, f64); 2]>() {
+            let (p, q) = (badge_at(view, *a)?, badge_at(view, *b)?);
+            if let (Some(p), Some(q)) = (p, q) {
                 let kw = PyDict::new(py);
                 kw.set_item("dash", (4., 3.))?;
                 out.append(primitive.call(("polyline", [p, q], &colour, 1.5), Some(&kw))?)?;
@@ -409,7 +408,7 @@ pub type Row = (usize, String, String, String, String, bool, bool, Vec<(String, 
 pub fn panel(py: Python<'_>, scene: &Obj<'_>) -> PyResult<Option<(String, String, Vec<Row>, usize)>> {
     let Some(review) = current(scene)? else { return Ok(None) };
     let r = review.borrow();
-    let shown = r.items.iter().filter(|i| i.fit != "applied").count();
+    let shown = r.items.iter().filter(|i| i.fit == "match").count();
     let mut rows = Vec::new();
     for (i, item) in r.items.iter().enumerate() {
         let (status, tone, tickable, actions) = match item.fit.as_str() {
@@ -429,10 +428,10 @@ pub fn panel(py: Python<'_>, scene: &Obj<'_>) -> PyResult<Option<(String, String
         if item.fit == "near" {
             let n = &item.near;
             let what = match n["criterion"].as_str().unwrap_or("") {
-                "angle" => format!("{} ± {}°", tr(py, "Widen the angle to")?, n["widen_to"]["tol"]),
+                "angle" => format!("{} ± {}°", tr(py, "Widen the angle to")?, n["widen_to"]["tol"].as_f64().unwrap_or(0.)),
                 "size" => tr(py, "Widen the size range to include it")?,
                 "profile" => tr(py, "Add this profile to the detail")?,
-                "offset" => format!("{} {} mm", tr(py, "Widen the offset to")?, n["widen_to"]["tol_mm"]),
+                "offset" => format!("{} {} mm", tr(py, "Widen the offset to")?, n["widen_to"]["tol_mm"].as_f64().unwrap_or(0.)),
                 _ => tr(py, "Widen the detail to include it")?,
             };
             meta = what;
@@ -468,15 +467,12 @@ pub fn before_frame(view: &Obj<'_>, win: &Obj<'_>) -> PyResult<()> {
         if view.getattr_opt("_ui_review_sent")?.and_then(|v| v.extract::<String>().ok()).as_deref() != Some(key.as_str()) {
             renderer.call_method1("ui_set_junction_review", (panel,))?;
             view.setattr("_ui_review_sent", key)?;
-            let hint = if current(&scene)?.is_some() {
-                tr(py, "Review · Click a badge to tick, Alt-click to skip · Enter applies the ticked · Esc leaves, nothing applied")?
-            } else {
-                String::new()
-            };
-            if !hint.is_empty() {
-                vp.call_method1("flash_status", (hint,))?;
-            }
         }
+    }
+    // The status bar names the review while it is open (the mode, not a toast).
+    if current(&scene)?.is_some() {
+        let hint = tr(py, "Click a badge to tick, Alt-click to skip · Enter applies the ticked · Esc leaves, nothing applied")?;
+        py.import("built_render")?.call_method1("sync_status_readout", (view, tr(py, "Review")?, hint))?;
     }
     Ok(())
 }

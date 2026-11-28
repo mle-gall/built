@@ -99,7 +99,7 @@ def test_review_badges_list_enter_and_escape_in_a_native_window(tmp_path):
     menu = lambda i: f"menu extension:review_probe:{i}"
     steps = [f"open {model}", "wait 800", menu(0), "wait 600",
              menu(1), "wait 1200", "capture saved-toast",
-             menu(2), "wait 900", menu(3), "wait 300", menu(4), "capture review",
+             menu(2), "wait 900", menu(3), "wait 300", menu(4), "wait 300", "capture review-open",
              "key escape", "wait 400", menu(4), "capture left",
              menu(2), "wait 900", menu(3), "wait 200", "key enter", "wait 1500", menu(4), "capture applied",
              "quit", ""]
@@ -109,6 +109,7 @@ def test_review_badges_list_enter_and_escape_in_a_native_window(tmp_path):
                   "--size", "1280x800", "--script", script, "--shots", tmp_path, ride_path],
                  settings=profile, capture_output=True, text=True, timeout=120)
     assert result.returncode == 0, result.stderr
+    assert "error in frame" not in result.stdout + result.stderr, result.stdout + result.stderr
     log = json.loads(plugin.with_suffix(".json").read_text())
     opened, left, applied = log
     fits = [item["fit"] for item in opened["review"]["items"]]
@@ -117,5 +118,5 @@ def test_review_badges_list_enter_and_escape_in_a_native_window(tmp_path):
     assert all(item["ghost"] for item in opened["review"]["items"] if item["fit"] == "match")
     assert left["review"] is None and left["junctions"] == ["ok"]
     assert applied["review"] is None and applied["junctions"] == ["ok"] * 7
-    for frame in ("saved-toast", "review", "left", "applied"):
+    for frame in ("saved-toast", "review-open", "left", "applied"):
         assert (tmp_path / f"{frame}.png").stat().st_size > 1000
