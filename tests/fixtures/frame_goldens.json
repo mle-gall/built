@@ -48,20 +48,20 @@
   },
   "slab-and-cube": {
    "frames": {
-    "plain": "8ce5d1c54ec1f71c55073ab9",
-    "rest": "1e38c833298ea83431d23cf1",
-    "zoom0a": "a5b8f57ba3133489bb4e6f94",
-    "zoom0b": "d771fe63214aabfe71f52911",
-    "zoom0c": "1e38c833298ea83431d23cf1",
-    "zoom0d": "24dcade823ec4d700a6052f6",
-    "zoom1a": "fa27af9f8fb0638d12560b32",
-    "zoom1b": "f84a7aeda888d7813a7230dc",
-    "zoom1c": "24dcade823ec4d700a6052f6",
-    "zoom1d": "68ad009d33b7d64d36054df4",
-    "zoom2a": "b8eb641a5a0f49e6081a2af6",
-    "zoom2b": "a04db80edc204138fac6404c",
-    "zoom2c": "68ad009d33b7d64d36054df4",
-    "zoom2d": "d9f3fefdbeb10c3ddac48916"
+    "plain": "fe91c98cc8242d6b11abbe3e",
+    "rest": "4edf928c3ec2093211378352",
+    "zoom0a": "018913c9149a54ca99de7184",
+    "zoom0b": "c9ac14e46e147762176d763e",
+    "zoom0c": "4edf928c3ec2093211378352",
+    "zoom0d": "d61ae17ea82d4e5633b625c5",
+    "zoom1a": "6fab990f5ecaa08015e8fb53",
+    "zoom1b": "3febf358568039a2bccf2415",
+    "zoom1c": "d61ae17ea82d4e5633b625c5",
+    "zoom1d": "6ef24ca60f85d96a99a7ef95",
+    "zoom2a": "730759316ce25048485c742d",
+    "zoom2b": "d6aa2084a9783db5cf2cf1d0",
+    "zoom2c": "6ef24ca60f85d96a99a7ef95",
+    "zoom2d": "02056e56ce426cad3b6462f1"
    },
    "model": "f195e098cff673d80749aded"
   }

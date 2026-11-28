@@ -3865,5 +3865,6 @@
  "Standard views, Look at Face, Zoom Extents, Zoom Selection and scene changes glide into place in a quarter second; off, they jump.": "Widoki standardowe, Spójrz na ścianę, Pokaż wszystko, Pokaż zaznaczenie i zmiany sceny płynnie przechodzą w ćwierć sekundy; wyłączone przeskakują.",
  "Click the new origin or type X;Y;Z.": "Kliknij nowy początek układu lub wpisz X;Y;Z.",
  "Click along red or type its angle in the drawing plane.": "Kliknij w kierunku czerwonej osi lub wpisz jej kąt w płaszczyźnie rysowania.",
- "Click toward green or type its tilt about red.": "Kliknij w kierunku zielonej osi lub wpisz jej kąt nachylenia wokół czerwonej osi."
+ "Click toward green or type its tilt about red.": "Kliknij w kierunku zielonej osi lub wpisz jej kąt nachylenia wokół czerwonej osi.",
+ "Hover a meeting: the detail's ghost shows how it fits. Click applies · Alt-click custom · ↓ next detail · L details.": "Najedź na połączenie: podgląd detalu pokazuje, jak pasuje. Kliknięcie stosuje · Alt-kliknięcie własne · ↓ następny detal · L detale."
 }

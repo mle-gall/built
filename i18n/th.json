@@ -3860,5 +3860,6 @@
  "Standard views, Look at Face, Zoom Extents, Zoom Selection and scene changes glide into place in a quarter second; off, they jump.": "มุมมองมาตรฐาน มองตรงไปที่หน้า ซูมทั้งหมด ซูมส่วนที่เลือก และการเปลี่ยนฉาก จะเลื่อนเข้าที่ภายในหนึ่งในสี่วินาที ถ้าปิด จะกระโดดไปทันที",
  "Click the new origin or type X;Y;Z.": "คลิกจุดกำเนิดใหม่หรือพิมพ์ X;Y;Z",
  "Click along red or type its angle in the drawing plane.": "คลิกตามทิศแกนสีแดงหรือพิมพ์มุมของแกนในระนาบวาด",
- "Click toward green or type its tilt about red.": "คลิกในทิศของแกนสีเขียวหรือพิมพ์มุมเอียงรอบแกนสีแดง"
+ "Click toward green or type its tilt about red.": "คลิกในทิศของแกนสีเขียวหรือพิมพ์มุมเอียงรอบแกนสีแดง",
+ "Hover a meeting: the detail's ghost shows how it fits. Click applies · Alt-click custom · ↓ next detail · L details.": "ชี้ที่จุดต่อ: เงาของรายละเอียดแสดงว่าพอดีอย่างไร คลิกเพื่อใช้ · Alt-คลิก กำหนดเอง · ↓ รายละเอียดถัดไป · L รายละเอียด"
 }

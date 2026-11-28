@@ -3858,5 +3858,6 @@
  "Standard views, Look at Face, Zoom Extents, Zoom Selection and scene changes glide into place in a quarter second; off, they jump.": "標準視圖、正視面、充滿視窗、縮放選取範圍和場景切換在四分之一秒內平滑到位；關閉時直接跳轉。",
  "Click the new origin or type X;Y;Z.": "按一下新原點，或輸入 X;Y;Z。",
  "Click along red or type its angle in the drawing plane.": "沿紅軸方向按一下，或輸入紅軸在繪圖平面內的角度。",
- "Click toward green or type its tilt about red.": "朝綠軸方向按一下，或輸入綠軸繞紅軸的傾角。"
+ "Click toward green or type its tilt about red.": "朝綠軸方向按一下，或輸入綠軸繞紅軸的傾角。",
+ "Hover a meeting: the detail's ghost shows how it fits. Click applies · Alt-click custom · ↓ next detail · L details.": "懸停在節點上：細節的虛影顯示其貼合方式。按一下套用 · Alt+按一下自訂 · ↓ 下一個細節 · L 細節。"
 }

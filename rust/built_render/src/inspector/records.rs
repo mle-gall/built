@@ -458,12 +458,20 @@ impl Records {
                 let overridden = !p["override"].is_null();
                 let label = format!("{}{}", if overridden { "● " } else { "" }, p["name"].as_str().unwrap_or(key));
                 kit::property_control(ui, &label, |ui| {
-                    let mut v = p["value"].as_f64().unwrap_or(0.);
-                    let before = v;
+                    let before = p["value"].as_f64().unwrap_or(0.);
+                    // The draft lives in memory while the field is edited.
+                    let draft = ui.make_persistent_id(("junction value", uid.as_str(), key));
+                    let mut v = ui.data(|d| d.get_temp(draft)).unwrap_or(before);
                     ui.add_enabled_ui(editable && p["derived"] != true, |ui| {
                         let r = ui.add(kit::number(&mut v, p["unit"].as_str().unwrap_or("mm")));
-                        if (r.lost_focus() || r.drag_stopped()) && (v - before).abs() > 1e-9 {
-                            send(out, "junction.param", json!({"uid": uid, "key": key, "value": v, "scope": scope}));
+                        if r.changed() {
+                            ui.data_mut(|d| d.insert_temp(draft, v));
+                        }
+                        if r.lost_focus() || r.drag_stopped() {
+                            ui.data_mut(|d| d.remove::<f64>(draft));
+                            if (v - before).abs() > 1e-9 {
+                                send(out, "junction.param", json!({"uid": uid, "key": key, "value": v, "scope": scope}));
+                            }
                         }
                     });
                     if let Some(rel) = p["relation"].as_str().filter(|r| !r.is_empty() && !overridden) {
