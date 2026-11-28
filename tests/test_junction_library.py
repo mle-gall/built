@@ -94,6 +94,7 @@ def test_import_into_my_library_needs_and_tampering(win, tmp_path):
     rows = detail_rows(sheet)
     assert rows["Pack"] == "Garage knees 1.0.0" and rows["Author"] == "Workshop" and rows["Licence"] == "CC-BY-4.0"
     assert "Needs" not in rows and "Apply…" in buttons(sheet)
+    assert {i["category"] for i in L.library_items("presets", win.viewport.scene) if i["source"] == "mine"} == {"Garage knees"}
     # A tampered pack is refused whole: nothing changes in My library.
     import os
     from pathlib import Path

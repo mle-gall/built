@@ -376,7 +376,8 @@ pub(crate) fn items(py: Python<'_>, scene: Option<&Bound<'_, PyAny>>, kinds: &[&
                 p["uid"] = json!(e.id);
                 p["name"] = json!(e.name);
                 row["preset"] = p;
-                row["category"] = json!(e.data["pack"].as_str().unwrap_or(""));
+                // An imported pack's rows group under the pack's name.
+                row["category"] = json!(e.data["source"]["name"].as_str().or(e.data["pack"].as_str()).unwrap_or(""));
                 let mut v = verbs.clone();
                 let needs = e.data["needs"].as_array().is_some_and(|n| !n.is_empty());
                 if !matches!(e.data["primitive"].as_str(), Some("sweep" | "cut" | "repeat" | "junction")) || needs {
