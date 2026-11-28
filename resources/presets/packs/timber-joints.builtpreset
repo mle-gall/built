@@ -227,13 +227,13 @@
        "cutter": {
         "block": {
          "size": [
-          "joining_w + 2",
           "main_w + 2",
+          "joining_w",
           "main_h / 2 + 1"
          ],
          "at": [
-          "-joining_w / 2 - 1",
           "-main_w / 2 - 1",
+          "-joining_w / 2",
           0
          ]
         }
@@ -252,13 +252,13 @@
        "cutter": {
         "block": {
          "size": [
+          "main_w",
           "joining_w + 2",
-          "main_w + 2",
           "joining_h / 2 + 1"
          ],
          "at": [
+          "-main_w / 2",
           "-joining_w / 2 - 1",
-          "-main_w / 2 - 1",
           "-joining_h / 2 - 1"
          ]
         }
@@ -331,7 +331,7 @@
      "bundled": null
     }
    ],
-   "hash": "sha256:34ee4795a41104b98d58c48daf61768cda250afe79448e59c29d224440bf6de3"
+   "hash": "sha256:d41278e71772850f9d8bc8d93957dc3adadefeeae292c3a548e9eda8ab23025c"
   },
   {
    "uid": "c1f7c7eaf2692e34",

@@ -108,7 +108,7 @@ pub(super) fn describe(py: Python<'_>, p: &Value, used: usize, offer: Option<(u6
     }
     rows.push(json!(["Revision", pack_rev(p).to_string(), ""]));
     for (key, label) in [("author", "Author"), ("licence", "Licence")] {
-        let v = &p[key];
+        let v = if p[key].is_null() { &p["source"][key] } else { &p[key] };
         let shown = v["name"].as_str().map(str::to_owned).unwrap_or_else(|| text(v));
         if !shown.is_empty() {
             rows.push(json!([label, shown, ""]));
@@ -396,6 +396,11 @@ pub(super) fn ask_import(ctx: &Bound<'_, PyAny>) -> PyResult<()> {
                 return Ok(none(py));
             }
         };
+        if plan.get_item("v")?.extract::<u64>()? == 1 {
+            let rows = val(py, &plan.get_item("rows")?)?;
+            super::presets::import_v1(ctx, rows)?;
+            return Ok(none(py));
+        }
         let scene = ctx.getattr_opt("scene")?.filter(|s| s.hasattr("_root").unwrap_or(false));
         let dests: Vec<(String, String)> = super::destinations::all(py, scene.as_ref())?
             .into_iter()

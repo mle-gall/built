@@ -672,6 +672,34 @@ fn segment_distance(p: DVec3, a: DVec3, b: DVec3) -> f64 {
     p.distance(a + ab * t)
 }
 
+fn met_face(
+    t: &LiveTable,
+    main: &str,
+    joining: Option<&String>,
+    joining_axis: Option<(DVec3, DVec3)>,
+    main_axis: Option<(DVec3, DVec3)>,
+) -> Option<&'static str> {
+    let spec = t.owners.get(main).and_then(|id| t.rows.get(id))?.sweep.as_deref()?;
+    let family = spec.profile.outline(spec.segments).ok()?.family;
+    if !matches!(family.as_str(), "i" | "channel" | "tee" | "zed") {
+        return None;
+    }
+    let (a, z) = main_axis?;
+    let (s, e) = joining_axis?;
+    let _ = joining?;
+    let dir = (z - a).try_normalize()?;
+    // The joining member's run, from the end nearest the main axis.
+    let run = if segment_distance(s, a, z) <= segment_distance(e, a, z) { e - s } else { s - e };
+    let across = DVec3::Z.cross(dir).try_normalize().unwrap_or(DVec3::X);
+    let up = dir.cross(across);
+    let (mut u, mut v) = (run.dot(up).abs(), run.dot(across).abs());
+    let turned = (spec.rotation.rem_euclid(180.) - 90.).abs() < 45.;
+    if turned {
+        std::mem::swap(&mut u, &mut v);
+    }
+    Some(if u >= v { "flange_outer" } else { "web_left" })
+}
+
 /// Bind a detail's roles to picked members, in role order (the first pick
 /// is the main or host role). Ends are the ones nearest the other member.
 pub(super) fn bind(scene: &Obj<'_>, t: &LiveTable, p: &presets::Preset, picks: &[String]) -> PyResult<Value> {
@@ -742,6 +770,13 @@ pub(super) fn bind(scene: &Obj<'_>, t: &LiveTable, p: &presets::Preset, picks: &
             .and_then(Value::as_str)
         {
             if i == 0 && meeting == "end_face" {
+                b["face"] = json!(face);
+            }
+        }
+        // An I or channel main member is met on a flange or on its web: the
+        // side the joining member runs off to (bolt grips read that face).
+        if i == 0 && meeting == "end_face" && b.get("face").is_none() {
+            if let Some(face) = met_face(t, uid, picks.get(1), axes.get(1).copied().flatten(), axes[0]) {
                 b["face"] = json!(face);
             }
         }

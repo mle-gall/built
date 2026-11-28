@@ -207,6 +207,44 @@ fn details(p: &Value) -> Vec<(String, String, String)> {
     }
     details
 }
+/// Export pack… for sweep, cut and Repeat presets: every preset of the
+/// pack, as a format 1 file (junction details use Share pack…).
+fn export_v1(ctx: &Bound<'_, PyAny>, pack: String) -> PyResult<()> {
+    let py = ctx.py();
+    let c = ctx.clone().unbind();
+    let done = func(py, move |py, args| {
+        let path = args.get_item(0)?;
+        if path.is_none() {
+            return Ok(none(py));
+        }
+        let mut path: PathBuf = path.extract()?;
+        if path.is_dir() {
+            path.push("pack.json");
+        }
+        let ctx = c.bind(py);
+        let rows: Vec<_> = rows(ctx)?
+            .into_iter()
+            .filter(|(p, _)| p["pack"] == pack.as_str())
+            .map(|(p, _)| p)
+            .collect();
+        let encoded = serde_json::to_vec_pretty(&json!({"format":"built.presets","v":1,"rows":rows}))
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        use std::io::Write;
+        std::fs::File::create_new(path)?.write_all(&encoded)?;
+        Ok(none(py))
+    })?;
+    py.import("built_render.chrome_forms")?
+        .getattr("ask_text")?
+        .call(
+            (ctx.getattr("win")?, "Export preset pack", "Pack file or folder"),
+            Some(&[("done", done)].into_py_dict(py)?),
+        )?;
+    Ok(())
+}
+/// A format 1 pack goes into this model in one step, as before.
+pub(super) fn import_v1(ctx: &Bound<'_, PyAny>, rows: Value) -> PyResult<()> {
+    update(ctx, rows)
+}
 #[pyclass(module="built_render.wgpu_library",extends=LibraryProvider,dict)]
 pub(super) struct PresetsProvider;
 #[pymethods]
@@ -403,7 +441,8 @@ impl PresetsProvider {
                 p["name"] = json!(format!("{} copy", shown(&p["name"])));
                 update(ctx, json!([p]))?;
             }
-            "export" => super::packs::share(ctx, &p)?,
+            "export" if p["primitive"] == "junction" => super::packs::share(ctx, &p)?,
+            "export" => export_v1(ctx, shown(&p["pack"]))?,
             "delete" => ask(
                 &ctx.getattr("view")?,
                 (

@@ -105,11 +105,25 @@ pub const PACK_FILES: &[&str] = &[
     include_str!("../../../../resources/presets/packs/timber-joints.builtpreset"),
     include_str!("../../../../resources/presets/packs/generic.builtpreset"),
 ];
+#[derive(Deserialize)]
+struct PackFile {
+    rows: Vec<Value>,
+    #[serde(default)]
+    pack: Value,
+}
 static BUILTINS: LazyLock<Pack> = LazyLock::new(|| {
     let mut rows = Vec::new();
     for text in PACK_FILES {
-        let pack: Pack = serde_json::from_str(text).expect("bundled presets");
-        rows.extend(pack.rows);
+        let file: PackFile = serde_json::from_str(text).expect("bundled presets");
+        for row in file.rows {
+            let mut p: Preset = serde_json::from_value(row.clone()).expect("bundled preset");
+            // A format 2 pack names where its rows come from, with whom.
+            if let Some(id) = file.pack["id"].as_str() {
+                p.source = Some(json!({"pack": id, "name": file.pack["name"], "version": file.pack["version"],
+                    "rev": p.rev, "hash": row["hash"], "author": file.pack["author"], "licence": file.pack["licence"]}));
+            }
+            rows.push(p);
+        }
     }
     Pack { rows }
 });

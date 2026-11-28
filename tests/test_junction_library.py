@@ -68,17 +68,8 @@ def test_junction_filter_rule_in_words_and_apply_on_the_selection(win):
 
 def test_import_into_my_library_needs_and_tampering(win, tmp_path):
     _, root, pack, _ = export_knee(tmp_path, name="folder")
-    report = L.import_pack(win, str(pack), "mine")
-    assert report == {"ok": 3, "needs": 0, "skipped": 0, "destination": "My library"}
-    sheet = presets_sheet(win, scope="s:mine")
-    shown = {i["label"]: i for i in tiles(sheet)}
-    assert root["name"] in shown
-    act(win, "focus", shown[root["name"]]["id"])
-    sheet = frame(win)
-    rows = detail_rows(sheet)
-    assert rows["Pack"] == "Garage knees 1.0.0" and rows["Author"] == "Workshop" and rows["Licence"] == "CC-BY-4.0"
-    assert "Apply…" in buttons(sheet)
-    # A pack missing the weld detail: the knee is listed with what it needs and cannot be applied.
+    # A pack missing the weld detail: the knee needs it. This model takes only
+    # what is complete; My library lists the knee with what it needs.
     partial = tmp_path / "partial"
     shutil.copytree(pack, partial)
     manifest = json.loads((partial / "pack.json").read_text())
@@ -87,20 +78,34 @@ def test_import_into_my_library_needs_and_tampering(win, tmp_path):
     del manifest["pack"]["files"][weld]
     (partial / weld).unlink()
     (partial / "pack.json").write_text(json.dumps(manifest))
-    report = L.import_pack(win, str(partial), "model")
-    assert report["skipped"] == 1 and report["ok"] == 1
-    # A tampered pack is refused whole: nothing new appears in My library.
+    assert L.import_pack(win, str(partial), "model") == {"ok": 1, "needs": 0, "skipped": 1, "destination": "This model"}
+    assert L.import_pack(win, str(partial), "mine")["needs"] == 1
+    sheet = presets_sheet(win, scope="s:mine")
+    knee = next(i for i in tiles(sheet) if i["label"] == root["name"])
+    act(win, "focus", knee["id"])
+    sheet = frame(win)
+    assert detail_rows(sheet)["Needs"].startswith("detail ") and "Apply…" not in buttons(sheet)
+    # The whole pack completes it.
+    report = L.import_pack(win, str(pack), "mine")
+    assert report == {"ok": 3, "needs": 0, "skipped": 0, "destination": "My library"}
+    sheet = presets_sheet(win, scope="s:mine")
+    act(win, "focus", knee["id"])
+    sheet = frame(win)
+    rows = detail_rows(sheet)
+    assert rows["Pack"] == "Garage knees 1.0.0" and rows["Author"] == "Workshop" and rows["Licence"] == "CC-BY-4.0"
+    assert "Needs" not in rows and "Apply…" in buttons(sheet)
+    # A tampered pack is refused whole: nothing changes in My library.
     import os
     from pathlib import Path
     mine = Path(os.environ["BUILT_SETTINGS_DIR"]) / "data/Built/Library/presets"
-    before = sorted(p.name for p in mine.glob("*.json"))
+    before = {p.name: p.read_text() for p in mine.glob("*.json")}
     tampered = tmp_path / "tampered"
     shutil.copytree(pack, tampered)
-    detail = next((tampered / "parts").glob("*.builtpreset"), None) or next((tampered / "details").glob("*.builtpreset"))
-    detail.write_text(detail.read_text() + " ")
+    detail = next((tampered / "details").glob("*.builtpreset"))
+    detail.write_text(detail.read_text().replace('"rev": 1', '"rev": 9', 1))
     with pytest.raises(ValueError, match="hash"):
         L.import_pack(win, str(tampered), "mine")
-    assert sorted(p.name for p in mine.glob("*.json")) == before
+    assert {p.name: p.read_text() for p in mine.glob("*.json")} == before
 
 
 def test_newer_pack_revision_is_offered_never_applied(win, tmp_path):
@@ -123,7 +128,7 @@ def test_newer_pack_revision_is_offered_never_applied(win, tmp_path):
     live.pack_export([root2], {"name": "Garage knees", "id": "ab" * 16}, str(second), rows, source)
     L.import_pack(win, str(second), "mine")
     row = next(i for i in L.library_items("presets", sc) if i["source"] == "mine" and i["name"] == root["name"])
-    assert row["base"] == "junction"
+    assert row["preset"]["primitive"] == "junction"
     sheet = presets_sheet(win, scope="s:mine")
     item = next(i for i in tiles(sheet) if i["label"] == root["name"])
     act(win, "focus", item["id"])
