@@ -163,3 +163,10 @@ Provisional: read from the public copy of IS 808:1989 until checked against the 
 | `is808-1989` | [IS 808:1989 Dimensions for hot rolled steel beam, column, channel and angle sections (Third Revision), with Amendment No. 1 (1992); public copy by Public.Resource.Org](https://law.resource.org/pub/in/bis/S03/is.808.1989.pdf) | 1989 (reaffirmed; superseded by IS 808:2021) | 2026-11-28 | designation, M, a, D, B (heavier HB sections: B + the web thickness difference, per the Table 3.1 footnote), t, T (measured at (B - t)/4 from the toe for beams, (B - t)/2 for channels), flange slope alpha (98 = 8 degrees, 96 = 6, 94 = 4, 91.5 = 1.5), R1, R2 (angles marked 'reasonably square' drawn with R2 = 0); Tables 2.1, 2.2, 3.1, 4.1, 4.2, 5.1, 6.1 read from the page images (the text layer is unreliable OCR) |  the standard itself (public-safety disclosure copy) |
 
 Not covered yet: IS 808 supplementary angle lists (Tables 5.2, 6.2): not transcribed yet; IS 4923 and IS 1161 hollow sections: public copies found (law.resource.org) but not transcribed yet; a second, independent source for cross-checking (no free Indian mill table with radii found).
+
+## Not built yet
+
+| Region | Families wanted | Why not yet | Where to start |
+|---|---|---|---|
+| Japan and Korea (JIS G 3192 / G 3466 / G 3444, KS D 3502) | H, I, channels, angles, square, rectangular and round tubes | the JSA preview of JIS G 3192:2024 stops before the tables; the mill catalogue found (Nippon Steel K004en) lists only the large export H sizes | the purchased JIS G 3192, or a domestic mill catalogue with r1/r2 (JFE, Tokyo Steel, Hyundai Steel) |
+| China (GB/T 11263, GB/T 706, GB/T 6728) | HW/HM/HN, I, channels, angles, hollow sections | no free table with radii found | the purchased standards, or a mill catalogue (Masteel, Laiwu) |

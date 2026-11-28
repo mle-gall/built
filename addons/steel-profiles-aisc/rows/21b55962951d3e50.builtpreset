@@ -1,7 +1,7 @@
 {
   "uid": "21b55962951d3e50",
-  "name": "Pipe3/4 × S",
-  "rev": 2,
+  "name": "Pipe3/4XS",
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
   "record": {},
@@ -16,7 +16,7 @@
         "web": 3.912
       },
       "catalogue": {
-        "name": "Pipe3/4 × S",
+        "name": "Pipe3/4XS",
         "series": [
           [
             "aisc/pipe3_4xs",
@@ -61,5 +61,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:92b90dadde1f8e011030b17f38925aa9e2c48a1d94a66de264841bd3b876ca4b"
+  "hash": "sha256:874062f2068527dd6931ae81da5aa430e1ca873028e57f384f3dded0d1efb5e7"
 }

@@ -1,7 +1,7 @@
 {
   "uid": "c173b71d7fea7566",
-  "name": "Pipe2-1/2 × S",
-  "rev": 2,
+  "name": "Pipe2-1/2XS",
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
   "record": {},
@@ -16,7 +16,7 @@
         "web": 7.01
       },
       "catalogue": {
-        "name": "Pipe2-1/2 × S",
+        "name": "Pipe2-1/2XS",
         "series": [
           [
             "aisc/pipe1-1_2xs",
@@ -69,5 +69,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:fb11918c11f1e87786a9d44cb43f47b55dcb5e6054e6f7b63e897e149b07cd62"
+  "hash": "sha256:341f2939a1af2833f4e468af0d068cc66ee46e83c9c3759d7c755422fef3bede"
 }

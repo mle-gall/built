@@ -1,7 +1,7 @@
 {
   "uid": "077ed8cf02b8aa51",
-  "name": "Pipe5 × S",
-  "rev": 2,
+  "name": "Pipe5XS",
+  "rev": 3,
   "pack": "Steel profiles · AISC",
   "primitive": "sweep",
   "record": {},
@@ -16,7 +16,7 @@
         "web": 9.525
       },
       "catalogue": {
-        "name": "Pipe5 × S",
+        "name": "Pipe5XS",
         "series": [
           [
             "aisc/pipe3xs",
@@ -77,5 +77,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:7a0dfb829d2867892a8f63e4585efb608abd596fa5c70f1f06a3a154d15629dc"
+  "hash": "sha256:eba9c4767999286d156596cc805397991c62b0a252329807dbacdba26ad9eccc"
 }

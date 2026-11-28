@@ -1617,6 +1617,7 @@ impl ProfilesProvider {
                 items.push(serde_json::json!({"key":format!("size:{source}:{}",preset["uid"]),
                     "name":preset["name"],"category":title(profile["family"].as_str().unwrap_or("")),"source":source,
                     "aliases":profile["catalogue"].get("aliases").cloned().unwrap_or_else(||serde_json::json!([])),
+                    "defaults":size_details(py,&preset)?,
                     "profile_preset":preset,"thumb":presets::profile_thumb(profile),"verbs":["apply"]}));
             }
         }
@@ -1666,6 +1667,36 @@ impl ProfilesProvider {
     }
 }
 
+/// A pack size's details: its status (provisional until checked against the
+/// standard), standard and source, dimensions, and the section values the
+/// pack's generator computed.
+fn size_details(py: Python<'_>, preset: &serde_json::Value) -> PyResult<Vec<(String, String, String)>> {
+    use crate::settings_rows::tr;
+    let prov = &preset["provenance"];
+    let mut out = Vec::new();
+    if prov["status"] == "provisional" {
+        out.push((tr(py, "Status")?, tr(py, "Provisional")?, String::new()));
+    }
+    let profile = &preset["values"]["profile"];
+    out.push((tr(py, "Family")?, family_title(py, profile["family"].as_str().unwrap_or("")), String::new()));
+    for (key, v) in profile["params"].as_object().into_iter().flatten() {
+        if let Some(n) = v.as_f64().filter(|n| *n != 0.) {
+            out.push((key.clone(), if key == "slope" { format!("{n} %") } else { format!("{n} mm") }, String::new()));
+        }
+    }
+    let sec = &preset["section"];
+    if let (Some(m), Some(a)) = (sec["mass_kg_m"].as_f64(), sec["area_cm2"].as_f64()) {
+        out.push((tr(py, "Mass")?, format!("{m} kg/m"), String::new()));
+        out.push((tr(py, "Area")?, format!("{a} cm²"), String::new()));
+    }
+    for (key, title) in [("standard", "Standard"), ("source", "Source")] {
+        if let Some(v) = prov[key].as_str().filter(|v| !v.is_empty()) {
+            out.push((tr(py, title)?, v.to_owned(), String::new()));
+        }
+    }
+    Ok(out)
+}
+
 /// The Library's collection name for a parametric profile family (the
 /// sidebar groups Profiles by it); an unknown family keeps its key.
 pub(crate) fn family_title(py: Python<'_>, family: &str) -> String {
@@ -1678,6 +1709,7 @@ pub(crate) fn family_title(py: Python<'_>, family: &str) -> String {
         "zed" => tr(py, "Z sections"),
         "rhs" => tr(py, "Rectangular and square tubes"),
         "chs" => tr(py, "Round tubes"),
+        "round" => tr(py, "Round bars"),
         "rectangle" => tr(py, "Rectangles"),
         other => Ok(other.to_owned()),
     }

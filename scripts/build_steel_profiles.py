@@ -21,6 +21,7 @@ import csv
 import hashlib
 import json
 import math
+import re
 from pathlib import Path
 import sys
 
@@ -105,7 +106,8 @@ def design_params(shape, p, s):
 def label(designation, family):
     text = designation.replace(" x ", " × ")
     if family.get("label_x"):
-        text = text.replace("X", " × ")
+        # W8X18 → W8 × 18; Pipe8XXS keeps its schedule letters.
+        text = re.sub(r"(?<=[\d/])X(?=[\d.])", " × ", text)
     return f"{text} ({family['label_suffix']})" if family.get("label_suffix") else text
 
 
@@ -342,6 +344,13 @@ def provenance(summaries):
         if src.get("missing"):
             out += ["", "Not covered yet: " + "; ".join(src["missing"]) + "."]
         out.append("")
+    out += ["## Not built yet", "",
+            "| Region | Families wanted | Why not yet | Where to start |", "|---|---|---|---|",
+            "| Japan and Korea (JIS G 3192 / G 3466 / G 3444, KS D 3502) | H, I, channels, angles, square, rectangular and round tubes | "
+            "the JSA preview of JIS G 3192:2024 stops before the tables; the mill catalogue found (Nippon Steel K004en) lists only "
+            "the large export H sizes | the purchased JIS G 3192, or a domestic mill catalogue with r1/r2 (JFE, Tokyo Steel, Hyundai Steel) |",
+            "| China (GB/T 11263, GB/T 706, GB/T 6728) | HW/HM/HN, I, channels, angles, hollow sections | no free table with radii found | "
+            "the purchased standards, or a mill catalogue (Masteel, Laiwu) |", ""]
     return "\n".join(out)
 
 
