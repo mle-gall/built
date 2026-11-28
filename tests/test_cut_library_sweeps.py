@@ -3,12 +3,10 @@
 import inspect
 import json
 import os
-from scripts.isolated_launch import run
 from pathlib import Path
 
 import pytest
-
-
+from scripts.isolated_launch import run
 
 
 def profile_probe(app):
@@ -107,13 +105,14 @@ def launch_window(folder, steps, size="1600x1000"):
                   "--script", script, "--shots", folder], settings=folder/"profile",
                  text=True, capture_output=True, timeout=100)
     (folder/"window.log").write_text(result.stdout+result.stderr)
-    assert result.returncode == 0 and "Traceback" not in result.stderr, result.stderr
+    assert result.returncode == 0, result.stderr
+    assert "Traceback" not in result.stderr and "unknown key" not in result.stderr, result.stderr
 
 
 def library_placement(profile, start, finish, start_view, end_view, size):
     tab, search, row = ("515 166", "1200 166", "540 287") if size.startswith("1600") else ("414 128", "1056 128", "416 250")
     return ["click-command library", "wait 200", "click "+tab, "wait 150", "click "+search,
-            "key cmd+a", "type " + profile, "wait 180", "click "+row, "key enter", "wait 180",
+            "type " + profile, "wait 180", "click "+row, "key enter", "wait 180",
             start_view, "wait 200", "move " + start, "click " + start, end_view, "wait 220", "move " + finish, "click " + finish,
             "key escape", "tool select", "wait 260"]
 
@@ -152,7 +151,7 @@ def exercise_connection(folder, layout, preset, *, screenshots=False, autosave=F
     steps += [action+"1", "wait 260"]
     if screenshots:
         steps += ["capture stock"]
-        if preset == "Cope" and layout == "touch":
+        if layout == "touch" and preset in (None, "Cope"):
             steps += [action+"7", "wait 220", "capture gap-before", action+"1", "wait 220"]
     if preselected:
         steps += ["move "+pixels[4], "click "+pixels[4], "wait 450"]
@@ -172,7 +171,7 @@ def exercise_connection(folder, layout, preset, *, screenshots=False, autosave=F
     steps += ["click "+pixels[5], "wait 180", action+"3", "state"]
     if screenshots:
         steps += ["capture result"]
-        if preset == "Cope" and layout == "touch":
+        if layout == "touch" and preset in (None, "Cope"):
             steps += ["tool select", action+"7", "wait 220", "capture gap-after", action+"1", "wait 220"]
     if autosave:
         steps += ["tool select", action+"4", "wait 1400", action+"6", "state", "capture recovery",
