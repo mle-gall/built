@@ -1407,6 +1407,13 @@ pub(super) fn release(scene: &Obj<'_>, t: &mut LiveTable, j: &Row) -> PyResult<(
                 r.anchor = None;
             }
         }
+        if r.kind == "repeat" && r.repeat.run["junction"] == j.uid {
+            if let Some(name) = r.repeat.run["frame"].as_str() {
+                let frame = local_frame(t, &r.owner, &j.uid, name)
+                    .ok_or_else(|| err("Missing last good grid frame"))?;
+                r.repeat.run = json!({"basis":frame.to_cols_array(),"axis":r.repeat.run["axis"]});
+            }
+        }
         r.junction = None;
         r.key = None;
         r.joint.parent = None;
@@ -1441,6 +1448,13 @@ pub(super) fn release(scene: &Obj<'_>, t: &mut LiveTable, j: &Row) -> PyResult<(
             .flatten()
             .filter_map(|c| c["placement"].as_str())
             .collect();
+        let export = json!({
+            "uid": j.uid, "owner": j.owner, "parent": j.joint.parent,
+            "roles": j.joint.roles, "meeting": j.joint.meeting,
+            "detail": j.joint.detail, "contents": j.joint.contents,
+            "params": j.joint.params, "overrides": j.joint.overrides, "state": j.state,
+        });
+        record.set_item("junction_export", to_py(scene.py(), &export)?)?;
         record.set_item("connects",to_py(scene.py(),&json!({"relating":main,"related":related,"realizing":realizing,"type":j.joint.detail["name"]}))?)?;
         g.setattr("ifc", record)?;
     }

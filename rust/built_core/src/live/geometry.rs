@@ -7,7 +7,7 @@ use crate::{
 use sha2::{Digest, Sha256};
 use std::collections::HashSet;
 
-fn h64(bytes: &[u8]) -> u64 {
+pub(super) fn h64(bytes: &[u8]) -> u64 {
     u64::from_be_bytes(Sha256::digest(bytes)[..8].try_into().unwrap())
 }
 

@@ -103,6 +103,7 @@ pub(in crate::live) fn apply_ends(scene: &Obj<'_>, t: &mut LiveTable, uid: &str)
                 t.insert(stock).map_err(err)?;
             }
             let mut main = json!({"placement":old.owner,"end":terminal.unwrap_or("end")});
+            if terminal.is_none() { main["connection"] = json!("path"); }
             let mut joining = json!({"placement":new.owner,"end":end});
             let detail = if terminal.is_some() {
                 if priority(scene, t, &new) > priority(scene, t, &old) {

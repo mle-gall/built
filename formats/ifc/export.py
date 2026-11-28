@@ -133,7 +133,8 @@ def _save_ifc(scene, path, project_name, profile, stream, placements):
     organization = project_data.get('organization', '')
     stamp = datetime.datetime.now().isoformat(timespec='seconds')
     from built_core.protocol.queries import live_rows
-    rows = live_rows(scene)
+    recipe_scene = getattr(scene, '_delivery_source', scene)
+    rows = live_rows(recipe_scene)
     sketches = {r['uid']: r for r in rows if r['kind'] == 'sketch'}
     cuts = {r['uid']: r for r in rows if r['kind'] == 'cut'}
     cut_targets = {r['owner'] for r in cuts.values()}
@@ -225,6 +226,10 @@ def _save_ifc(scene, path, project_name, profile, stream, placements):
         for name, props in data.items():
             values = []
             for prop, value in props.items():
+                if name == 'Built_Junction' and prop == 'Overridden' and isinstance(value, list):
+                    listed = '(' + ','.join('IFCLABEL(' + _s(k) + ')' for k in value) + ')' if value else '$'
+                    values.append(w.entity('IfcPropertyListValue', Name=_s(prop), ListValues=listed))
+                    continue
                 kind, val = value['kind'], value['value']
                 measure = {'text': 'Text', 'label': 'Label', 'enum': 'Label', 'boolean': 'Boolean',
                            'integer': 'Integer', 'real': 'Real', 'length': 'LengthMeasure',
@@ -236,11 +241,50 @@ def _save_ifc(scene, path, project_name, profile, stream, placements):
                 result.append((name, root('IfcPropertySet', ('pset', key, name), Name=_s(name), HasProperties=refs(values))))
         return result
 
+    from core.bim import JunctionInventory
+    junctions = JunctionInventory(scene, rows)
+    products = {}
+    generated_types = {}
+    hole_targets = defaultdict(list)
+    for r in cuts.values():
+        if 'hole' in r.get('cutter', {}):
+            hole_targets[r['owner']].append(r['uid'])
+    presets = {}
+    if junctions.rows:
+        from built_core.command_protocol import preset_catalog
+        presets = {p['uid']: p for p, _ in preset_catalog(recipe_scene)}
+        included = {obj['group'].uid for obj in objects if obj.get('group') is not None}
+        for uid, j in junctions.rows.items():
+            if j.get('state', 'ok') != 'ok' and (
+                j['owner'] in included or included.intersection(junctions.realizers[uid])
+            ):
+                problems.append(dict(uid=uid, name=(j.get('detail') or {}).get('name', ''),
+                                     messages=[f"{j['state']}: exported last good parts"]))
     maps = {}
     axis_context = None
     for obj in objects:
         group = obj.get('group')
         raw = record.normalize(group.ifc) if group is not None else {'class': obj['class'], 'name': obj['name']}
+        uid = group.uid if group is not None else None
+        if uid in junctions.hidden:
+            continue
+        assembly = junctions.assemblies.get(uid)
+        junction = junctions.rows.get(assembly or junctions.parts.get(uid))
+        detail = (junction or {}).get('detail') or {}
+        preset = presets.get(detail.get('uid'), {})
+        if junction:
+            props = dict(junction.get('params') or {})
+            props.update(DetailName=detail.get('name', 'Custom junction'), DetailId=detail.get('uid', ''),
+                         DetailRevision=detail.get('rev', 0), Pack=preset.get('pack', ''),
+                         Status=junction.get('state', 'ok'))
+            raw.setdefault('psets', {})['Built_Junction'] = {k: record.typed(v) for k,v in props.items()}
+        if raw.get('class') == 'IfcFastener' and raw.get('predefined_type') == 'WELD':
+            weld = {k.title(): raw[k] for k in ('length', 'throat', 'sides', 'process') if k in raw}
+            if 'weld_type' in raw:
+                weld['Type'] = raw['weld_type']
+            elif 'type' in raw and 'throat' in raw and raw['type'] not in registry.get('types', {}):
+                weld['Type'] = raw.pop('type')
+            raw.setdefault('psets', {})['Built_Weld'] = {k: record.typed(v) for k,v in weld.items()}
         messages = record.validate(raw, registry, schema) if group is not None else []
         # These specializations require topology or material usage that a bare
         # class tag cannot supply. Reject rather than invent engineering facts.
@@ -304,9 +348,16 @@ def _save_ifc(scene, path, project_name, profile, stream, placements):
             if target and not reference_view:
                 reason = 'Sweep exported from its evaluated faces'
                 marker = group.ext.get('built.live', {})
-                if marker.get('body_cut') and schema == 'IFC4':
+                # In Design Transfer the voiding feature cuts the analytic stock.
+                # Preserve sweep end clips when all remaining cuts are planes.
+                if sweep and uid in hole_targets and all(
+                    'plane' in cuts[k].get('cutter', {}) or k in hole_targets[uid]
+                    for k in sweep.get('cuts', ()) if k in cuts
+                ):
+                    shape = sweep_body(w, group, bases[id(group)], sweep, body, uncut=True) if marker else None
+                elif marker.get('body_cut') and schema == 'IFC4':
                     from built_core.command_protocol import live_openings
-                    tools = live_openings(scene, group.uid, True)
+                    tools = live_openings(recipe_scene, group.uid, True, skip_holes=True)
                     shape, reason = live_cut_body(w, group, bases[id(group)], target, tools, cuts,
                                                   sources.get(target.get('source')), body)
                 else:
@@ -320,9 +371,9 @@ def _save_ifc(scene, path, project_name, profile, stream, placements):
                         axis_rep = w.add('IFCSHAPEREPRESENTATION', ref(axis_context), "'Axis'", "'Curve3D'", f'({line})')
                 elif sweep or marker.get('body_cut'):
                     problems.append({'uid': group.uid, 'name': group.name, 'messages': [reason]})
-            if target and reference_view:
+            if target and (reference_view or (uid in hole_targets and rep is None)):
                 rep = array_body(w, arrays, body, 'polygonal')
-            elif rep is None and group is not None and (config.get('instancing', False) or
+            elif rep is None and group is not None and (cls == 'IfcMechanicalFastener' or config.get('instancing', False) or
                     (group.ext or {}).get('built.repeat')):
                 rep = mapped_body(w, group, bases[id(group)], excluded,
                                   body, geometry, maps, axis)
@@ -330,6 +381,20 @@ def _save_ifc(scene, path, project_name, profile, stream, placements):
                 rep = array_body(w, arrays, body, geometry)
             item = w.last_shape_item
             attrs['Representation'] = ref(w.add('IFCPRODUCTDEFINITIONSHAPE', '$', '$', refs([axis_rep, rep] if axis_rep else [rep])))
+        elif cls == 'IfcFastener' and group is not None and group.mesh.edges:
+            matrix = _compose(bases[id(group)], group.xform)
+            lines = []
+            for edge in group.mesh.edges:
+                points = []
+                for vertex in (edge.a, edge.b):
+                    v = matrix.map(vertex) if matrix is not None else vertex
+                    points.append(w.add('IFCCARTESIANPOINT', '(' + ','.join(map(_f, (v.x(), v.y(), v.z()))) + ')'))
+                lines.append(w.add('IFCPOLYLINE', refs(points)))
+            if axis_context is None:
+                axis_context = w.add('IFCGEOMETRICREPRESENTATIONSUBCONTEXT', "'Axis'", "'Model'",
+                                     '*', '*', '*', '*', ref(context), '$', '.GRAPH_VIEW.', '$')
+            line_rep = w.add('IFCSHAPEREPRESENTATION', ref(axis_context), "'Axis'", "'Curve3D'", refs(lines))
+            attrs['Representation'] = ref(w.entity('IfcProductDefinitionShape', Representations=refs([line_rep])))
         available = w.attributes(cls)
         if 'Tag' in available:
             attrs['Tag'] = _s(r.get('tag', ''))
@@ -359,7 +424,25 @@ def _save_ifc(scene, path, project_name, profile, stream, placements):
             if dims.get('Length', 0) > 0:
                 attrs['BarLength'] = _f(dims['Length'])
         attrs = {k: v for k, v in attrs.items() if k in available}
+        generated = None
+        if assembly:
+            attrs.update(PredefinedType='.ACCESSORY_ASSEMBLY.',
+                         AssemblyPlace='.FACTORY.' if str(raw.get('assembly_place', '')).upper() == 'FACTORY' else '.SITE.')
+            if detail.get('uid'):
+                generated = ('detail', detail['uid'], str(detail.get('rev', 0)))
+                type_attrs = dict(Name=_s(detail['name']), PredefinedType='.ACCESSORY_ASSEMBLY.')
+                type_class = 'IfcElementAssemblyType'
+        elif cls == 'IfcMechanicalFastener' and junction and 'd' in raw and 'length' in raw:
+            from built_core.element_ids import definition_uid
+            generated = ('fastener', definition_uid(group.mesh))
+            type_class = 'IfcMechanicalFastenerType'
+            type_attrs = dict(Name=_s(group.name), PredefinedType=attrs['PredefinedType'],
+                              NominalDiameter=_f(raw['d']/1000), NominalLength=_f(raw['length']/1000))
+            if id(group.mesh) in maps:
+                type_attrs['RepresentationMaps'] = refs([maps[id(group.mesh)]])
         node = w.entity(cls, **attrs)
+        if generated:
+            generated_types.setdefault(generated, (type_class, type_attrs, []))[2].append(node)
         if "arrays" in obj:
             data = measurements(arrays)
             appearance.apply(r, group, faces, node, eg, rep, item,
@@ -368,7 +451,17 @@ def _save_ifc(scene, path, project_name, profile, stream, placements):
             appearance.apply(r, group, faces, node, eg, rep, item)
         if group is not None and group.uid in cut_targets:
             from built_core.command_protocol import live_openings
-            for cut_uid, tool, opening_guid in live_openings(scene, group.uid):
+            if uid in hole_targets and not view.startswith('ReferenceView'):
+                from built_core.command_protocol import live_holes
+                from .geometry import bore_body
+                for cut_uid in hole_targets[uid]:
+                    for station, start, end, radius in live_holes(recipe_scene, cut_uid):
+                        feature = root('IfcVoidingFeature', ('hole', eg, station), Name=_s('Hole'),
+                                       ObjectPlacement=ref(placement), PredefinedType='.HOLE.',
+                                       Representation=ref(bore_body(w, body, start, end, radius)))
+                        relation('IfcRelVoidsElement', (eg, station), RelatingBuildingElement=ref(node),
+                                 RelatedOpeningElement=ref(feature))
+            for cut_uid, tool, opening_guid in live_openings(recipe_scene, group.uid, skip_holes=True):
                 og = opening_guid or guid('cut', group.uid, cut_uid)
                 placement_frame = _compose(bases[id(group)], group.xform)
                 opening_arrays = merged(world_arrays(tool, placement_frame))
@@ -414,7 +507,9 @@ def _save_ifc(scene, path, project_name, profile, stream, placements):
             pending_fills.append((eg, node, r['fills']))
         exported.append((obj, node, eg, spatial, cls))
         if group is not None:
-            group_nodes[id(group)] = (node, eg, spatial, cls)
+            products[uid] = group_nodes[id(group)] = (node, eg, spatial, cls)
+        if junction:
+            raw['psets']['Built_Junction']['Overridden'] = sorted(junction.get('overrides') or {})
         for ps_name, ps in psets(raw.get('psets', {}), eg):
             relation('IfcRelDefinesByProperties', (eg, ps_name), RelatedObjects=refs([node]), RelatingPropertyDefinition=ref(ps))
         manual = dict(r.get('quantities', {}))
@@ -450,11 +545,17 @@ def _save_ifc(scene, path, project_name, profile, stream, placements):
         for item in raw.get('classifications', []):
             classifications[(item['system'], item['code'])].append(node)
             classification_names.setdefault((item['system'], item['code']), item.get('name', ''))
-        if raw.get('type') and TABLES.get(cls, {}).get('domain') != 'group':
+        if not generated and raw.get('type') and TABLES.get(cls, {}).get('domain') != 'group':
             type_members[raw['type']].append(node)
         for key in r.get('systems', []):
             system_members[key].append(node)
 
+    from .relationships import junction_connections
+    junction_connections(junctions, products, root)
+    for key, (cls, attrs, members) in generated_types.items():
+        type_node = root(cls, ('junction-type', *key), **attrs)
+        relation('IfcRelDefinesByType', ('junction-type', *key), RelatedObjects=refs(members),
+                 RelatingType=ref(type_node))
     appearance.finish()
     for eg, node, opening in pending_fills:
         if opening in opening_nodes:
@@ -475,6 +576,11 @@ def _save_ifc(scene, path, project_name, profile, stream, placements):
                 found = candidate
                 break
             ancestor = parents.get(id(ancestor))
+        if group is not None and group.uid in junctions.parts:
+            owning = junctions.parts[group.uid]
+            top = junctions.rows[junctions.roots[owning]]['owner']
+            if top in products:
+                found = products[top]
         if spatial:
             parent = found[0] if found else defaults[{'IfcSite': 'site', 'IfcBuilding': 'site',
                     'IfcFacility': 'site', 'IfcBuildingStorey': 'building', 'IfcFacilityPartCommon': 'building'}.get(cls, 'storey')]

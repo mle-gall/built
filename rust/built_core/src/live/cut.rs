@@ -575,11 +575,12 @@ fn operand<'p>(
 
 /// Opening geometry for interchange, in the target's definition frame.
 /// Regenerate the tool on demand, so a moving wall never saves world faces.
-#[pyfunction(signature=(scene,owner,all_operations=false))]
+#[pyfunction(signature=(scene,owner,all_operations=false,skip_holes=false))]
 pub(super) fn live_openings<'p>(
     scene: &Obj<'p>,
     owner: &str,
     all_operations: bool,
+    skip_holes: bool,
 ) -> PyResult<Bound<'p, pyo3::types::PyList>> {
     let py = scene.py();
     let result = pyo3::types::PyList::empty(py);
@@ -601,6 +602,7 @@ pub(super) fn live_openings<'p>(
         };
         if cut.on == Some(false)
             || cut.state != "ok"
+            || (skip_holes && matches!(cut.cutter, Some(Cutter::Hole(_))))
             || (!all_operations
                 && !matches!(cut.operation.as_deref(), None | Some("trim" | "subtract")))
             || !(matches!(
@@ -634,6 +636,117 @@ pub(super) fn live_openings<'p>(
         }
     }
     Ok(result)
+}
+fn hole_stations(
+    scene: &Obj<'_>,
+    t: &LiveTable,
+    cut: &Row,
+    h: &hole::Hole,
+    pose: DMat4,
+) -> PyResult<Result<Vec<(String, DMat4)>, &'static str>> {
+    let mut stations = vec![(cut.uid.clone(), pose)];
+    stations.extend(
+        h.stations
+            .iter()
+            .map(|(key, m)| (key.clone(), pose * DMat4::from_cols_array(m))),
+    );
+    if let Some(uid) = &h.repeat {
+        let Some(r) = t.rows.get(uid) else {
+            return Ok(Err("ref_lost"));
+        };
+        let loaded_layout;
+        let layout = if let Some(layout) = t.stock.get(uid).and_then(|s| s.layout.as_ref()) {
+            layout
+        } else {
+            loaded_layout = match repeat::layout(scene, t, r)? {
+                Ok(layout) => layout,
+                Err(state) => return Ok(Err(state)),
+            };
+            &loaded_layout
+        };
+        let into_target =
+            reference::frame(t.groups[&cut.owner]).inverse() * reference::frame(t.groups[&r.owner]);
+        for (i, _, copy) in &layout.poses {
+            let delta = into_target * *copy * layout.base.inverse() * into_target.inverse();
+            stations.push((format!("{}/{i}", cut.uid), delta * pose));
+        }
+    }
+    Ok(Ok(stations))
+}
+
+/// Measured bore extents in model coordinates, keyed by persistent station.
+#[pyfunction]
+pub(super) fn live_holes(
+    scene: &Obj<'_>,
+    uid: &str,
+) -> PyResult<Vec<(String, [f64; 3], [f64; 3], f64)>> {
+    let Some(t) = current(scene.py(), root(scene)?) else {
+        return Ok(vec![]);
+    };
+    let Some(row) = t.rows.get(uid) else {
+        return Ok(vec![]);
+    };
+    let Some(Cutter::Hole(h)) = &row.cutter else {
+        return Ok(vec![]);
+    };
+    if row.on == Some(false) || row.state != "ok" {
+        return Ok(vec![]);
+    }
+    let Some(pose) = h.pose(scene, &t, row)? else {
+        return Ok(vec![]);
+    };
+    let Ok(stations) = hole_stations(scene, &t, row, h, pose)? else {
+        return Ok(vec![]);
+    };
+    let Some(group) = group(scene.py(), &t, &row.owner) else {
+        return Ok(vec![]);
+    };
+    let handle = group
+        .getattr("mesh")?
+        .getattr("_store")?
+        .cast_into::<PyMeshStore>()?;
+    let mesh = handle.try_borrow()?;
+    let st = &mesh.inner;
+    let world = reference::frame(t.groups[&row.owner]);
+    let generated =
+        eid::intern(geometry::h64(b"built:generated:v1")).map_err(PyValueError::new_err)?;
+    let mut holes = Vec::new();
+    for (key, m) in stations {
+        let inv = m.inverse();
+        let height = |slot: u32| {
+            inv.transform_point3(
+                st.state
+                    .frame
+                    .definition_point(*st.state.vpos.get(slot as usize))
+                    .into(),
+            )
+            .z
+        };
+        let cap = |i| {
+            let role = format!("hole/{key}/{i}/vertex/0");
+            let id = eid::pack(
+                generated,
+                geometry::h64(role.as_bytes()) & eid::COUNTER_MASK,
+            );
+            st.slot_of_pid(Kind::Vertex, id).map(height)
+        };
+        let (lo, hi) = match (cap(0), cap(1)) {
+            (Some(a), Some(b)) => (a, b),
+            _ if h.depth.is_number() => (-h.depth.as_f64().unwrap() / 1000., 0.),
+            _ => st
+                .live_slots(Kind::Vertex)
+                .into_iter()
+                .map(height)
+                .fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), z| {
+                    (a.min(z), b.max(z))
+                }),
+        };
+        if hi > lo {
+            let at = |z| (world * m).transform_point3(DVec3::Z * z).to_array();
+            holes.push((key, at(lo), at(hi), h.d / 2000.));
+        }
+    }
+    Ok(holes)
 }
 pub(super) fn bodies<'p>(
     scene: &Obj<'p>,
@@ -719,34 +832,10 @@ pub(super) fn bodies<'p>(
                     }
                 }
             }
-            let mut stations = vec![(id.clone(), pose)];
-            stations.extend(
-                h.stations
-                    .iter()
-                    .map(|(key, m)| (key.clone(), pose * DMat4::from_cols_array(m))),
-            );
-            if let Some(uid) = &h.repeat {
-                let Some(r) = t.rows.get(uid) else {
-                    return Ok(Err("ref_lost"));
-                };
-                let loaded_layout;
-                let layout = if let Some(layout) = t.stock.get(uid).and_then(|s| s.layout.as_ref())
-                {
-                    layout
-                } else {
-                    loaded_layout = match repeat::layout(scene, t, r)? {
-                        Ok(layout) => layout,
-                        Err(state) => return Ok(Err(state)),
-                    };
-                    &loaded_layout
-                };
-                let into_target = reference::frame(t.groups[&target.owner]).inverse()
-                    * reference::frame(t.groups[&r.owner]);
-                for (i, _, copy) in &layout.poses {
-                    let delta = into_target * *copy * layout.base.inverse() * into_target.inverse();
-                    stations.push((format!("{id}/{i}"), delta * pose));
-                }
-            }
+            let stations = match hole_stations(scene, t, cut, h, pose)? {
+                Ok(stations) => stations,
+                Err(state) => return Ok(Err(state)),
+            };
             for (key, m) in stations {
                 let dst = mesh.getattr("_store")?.cast_into::<PyMeshStore>()?;
                 match h.drill(&mut dst.try_borrow_mut()?.inner, m, &key) {

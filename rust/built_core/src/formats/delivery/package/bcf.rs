@@ -28,6 +28,7 @@ pub(super) fn write(scene: &Obj<'_>, path: &Path, selected: &Value) -> PyResult<
         .getattr("plugin_data")?
         .call_method1("get", ("bcf", PyDict::new(py)))?;
     let bcf = decode(&bcf)?;
+    let problems = decode(&py.import("core.ifc_identity")?.call_method1("junction_topics", (scene,))?)?;
     let mut missing: BTreeSet<_> = selected
         .as_array()
         .into_iter()
@@ -43,7 +44,7 @@ pub(super) fn write(scene: &Obj<'_>, path: &Path, selected: &Value) -> PyResult<
         write("bcf.version", r#"<Version VersionId="3.0"/>"#.into())?;
         let mut types = BTreeSet::new();
         let mut statuses = BTreeSet::new();
-        for t in bcf["topics"].as_array().into_iter().flatten() {
+        for t in bcf["topics"].as_array().into_iter().flatten().chain(problems.as_array().into_iter().flatten()) {
             if filter && !missing.remove(t["guid"].as_str().unwrap_or("")) {
                 continue;
             }

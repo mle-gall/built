@@ -1039,6 +1039,13 @@ impl Mutation {
             Edit::Release(id) => {
                 if let Some(repeat) = t.rows.get(id).filter(|r| r.kind == "repeat").cloned() {
                     junction::detach_holes(scene, &mut t, &repeat, true)?;
+                    if repeat.source.as_ref().is_some_and(|s| t.owners.get(s).and_then(|u| t.rows.get(u)).is_some_and(|r| r.kind == "junction")) {
+                        if let Some(g) = group(py, &t, &repeat.owner) {
+                            let record = g.getattr("ifc")?.call_method0("copy")?;
+                            record.set_item("junction_source", repeat.source.as_deref())?;
+                            g.setattr("ifc", record)?;
+                        }
+                    }
                 }
                 if let Some(j) = t.rows.get(id).filter(|r| r.kind == "junction").cloned() {
                     junction::release(scene, &mut t, &j)?;
@@ -1713,6 +1720,7 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(live_cut_display, m)?)?;
     m.add_function(wrap_pyfunction!(live_cuts, m)?)?;
     m.add_function(wrap_pyfunction!(cut::live_openings, m)?)?;
+    m.add_function(wrap_pyfunction!(cut::live_holes, m)?)?;
     m.add_function(wrap_pyfunction!(sweep_thumbnail, m)?)?;
     m.add_function(wrap_pyfunction!(live_repeat, m)?)?;
     m.add_function(wrap_pyfunction!(live_sweep, m)?)?;
