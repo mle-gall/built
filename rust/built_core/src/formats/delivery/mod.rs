@@ -410,6 +410,7 @@ fn delivery_scoped<'p>(py: Python<'p>, scene: &Obj<'p>, record: &Obj<'p>) -> PyR
             scene.call_method0("repeated_uids")?,
         )?
     }
+    out.setattr("_delivery_source", scene)?;
     out.setattr("edit_group", py.None())?;
     out.getattr("__dict__")?
         .call_method1("pop", ("_groups_owner", py.None()))?;

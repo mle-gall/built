@@ -62,9 +62,38 @@ pub(super) fn destination(ui: &mut egui::Ui, report: &Value, jobs: &[super::Job]
         .max_height(ui.available_height())
         .auto_shrink([false, false]).show(ui, |ui| {
         if let Some(review)=report["review"].as_object() {
-            kit::inspector_title(ui, "Review handover", delivery_name(report));
+            if review["schedules_only"] == true {
+                kit::inspector_title(ui, "Junction schedules", "");
+            } else {
+                kit::inspector_title(ui, "Review handover", delivery_name(report));
             kit::prop_row(ui,"Model revision",&review["revision"].to_string());
             kit::prop_row(ui,"IDS",review["ids_result"].as_str().unwrap_or(""));
+            }
+            if let Some(schedules) = review["schedules"].as_object() {
+                for (name, table) in schedules {
+                    kit::disclosure(ui, ("junction schedule", name), name, name == "fasteners", |ui| {
+                        if kit::quiet(ui, "Place on new sheet").clicked() {
+                            cmds.push(format!("deliver:place_schedule:{name}"));
+                        }
+                        egui::ScrollArea::horizontal().id_salt(name).show(ui, |ui| {
+                            let columns = table[0].as_array().map_or(1, Vec::len);
+                            ui.set_width((columns as f32 * 96.).max(ui.available_width()));
+                            for (i, row) in table.as_array().into_iter().flatten().enumerate() {
+                                let cells: Vec<_> = row.as_array().into_iter().flatten().map(|cell| match cell {
+                                    Value::String(text) => text.clone(),
+                                    Value::Null => String::new(),
+                                    _ => cell.to_string(),
+                                }).collect();
+                                kit::table_row(ui, &cells, false, i == 0);
+                            }
+                        });
+                    });
+                }
+            }
+            if review["schedules_only"] == true {
+                if kit::quiet(ui, "Back to deliveries").clicked() { cmds.push("deliver:back".into()); }
+                return;
+            }
             for file in review["ids"].as_array().into_iter().flatten() {
                 if let Some(text)=file["message"].as_str() { kit::caption_plain(ui,text); }
                 for rule in file["specifications"].as_array().into_iter().flatten().filter(|r|r["status"]==false || r["failed"].as_u64().unwrap_or(0)>0) {
@@ -96,6 +125,9 @@ pub(super) fn destination(ui: &mut egui::Ui, report: &Value, jobs: &[super::Job]
             }
             if kit::quiet(ui,"Back to deliveries").clicked() {cmds.push("deliver:back".into());}
             return;
+        }
+        if report["has_junctions"] == true && kit::quiet(ui, "Junction schedules").clicked() {
+            cmds.push("deliver:schedules".into());
         }
         let issues = checks(report);
         let status = match issues.len() {

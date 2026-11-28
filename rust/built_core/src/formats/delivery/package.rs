@@ -84,9 +84,17 @@ impl Package {
                 let model = delivery_scoped(py, scene, &record)?;
                 let text: String = py
                     .import("core.bim")?
-                    .call_method1("quantities_csv", (model,))?
+                    .call_method1("quantities_csv", (&model,))?
                     .extract()?;
                 fs::write(path, text)?;
+                let schedules = py.import("core.bim")?.call_method1("junction_schedules", (&model,))?;
+                self.summary["schedules"] = decode(&schedules)?;
+                for (name, cells) in schedules.cast::<PyDict>()?.iter() {
+                    let stream = py.import("io")?.call_method0("StringIO")?;
+                    py.import("csv")?.call_method1("writer", (&stream,))?.call_method1("writerows", (cells,))?;
+                    let name: String = name.extract()?;
+                    fs::write(root.join(format!("{name}.csv")), stream.call_method0("getvalue")?.extract::<String>()?)?;
+                }
             }
             "manifest" => self.manifest(root)?,
             _ => {

@@ -51,6 +51,9 @@ def component_guid(scene, tool_id):
     path = [p for p in text.split("/") if p]
     if not path:
         return None
+    if len(path) > 1:
+        group = scene.resolve_occurrence(path)
+        return object_guid(scene, {"group": group}, path) if group is not None else None
     from built_core.group import iter_placements
     target = path[-1]
     for root in scene.groups:
@@ -122,3 +125,47 @@ def copied_face_attrs(scene=None):
             out["ifc"] = dict(tags[key])
         return out
     return copy_attrs
+
+
+def junction_topics(scene):
+    """BCF delivery topics for junctions that retain their last good parts."""
+    import datetime
+    from built_core.command_protocol import live_rows
+    all_rows = live_rows(scene)
+    rows = [r for r in all_rows if r['kind'] == 'junction' and r['state'] != 'ok']
+    if not rows:
+        return []
+    from built_core import Vec3
+    from core.bim import JunctionInventory, _compose, _placed_groups
+    inventory = JunctionInventory(scene, all_rows)
+    bases = {g.uid: b for g, b in _placed_groups(scene.groups)}
+    groups = scene.groups_by_uid()
+    ns = uuid.UUID(document_namespace(scene))
+    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    topics = []
+    for row in rows:
+        uid = row['uid']
+        root = inventory.rows[inventory.roots[uid]]
+        group = groups.get(root['owner'])
+        if not group:
+            continue
+        path = scene.occurrence_path(group) or [group.uid]
+        name = (row.get('detail') or {}).get('name') or group.name
+        point = row.get('frames', {}).get('meet', [0.] * 16)[12:15]
+        placement = groups.get(row['owner'])
+        if placement is not None:
+            transform = _compose(bases[placement.uid], placement.xform)
+            if transform is not None:
+                v = transform.map(Vec3(*point))
+                point = (v.x(), v.y(), v.z())
+        x, y, z = point
+        camera = dict(camera_view_point=dict(x=x, y=y-2, z=z),
+                      camera_direction=dict(x=0, y=1, z=0), camera_up_vector=dict(x=0, y=0, z=1),
+                      view_to_world_scale=2., aspect_ratio=1.6)
+        view = dict(guid=str(uuid.uuid5(ns, 'junction-view:' + uid)), orthogonal_camera=camera,
+                    components=dict(selection=[dict(ifc_guid=object_guid(scene, dict(group=group)),
+                                                    originating_system='Built', authoring_tool_id='built:'+'/'.join(path))]))
+        topics.append(dict(guid=str(uuid.uuid5(ns, 'junction-topic:' + uid)), title=f"{name} ({row['state']})",
+                           topic_type='Issue', topic_status='Open', creation_author='Built', creation_date=now,
+                           description=json.dumps(row.get('reason') or {}, ensure_ascii=False), viewpoints=[view]))
+    return topics

@@ -1109,6 +1109,43 @@ fn enqueue_py<'py>(win: &Bound<'py, PyAny>, key: &Bound<'py, PyAny>, record: &Bo
 }
 
 /// `dlv:<verb>[:<key>]` from the dock's Deliveries.
+/// Place the displayed issue snapshot as editable paper cells in one History step.
+fn place_schedule(history: &Bound<'_, PyAny>, name: &str, table: &Bound<'_, PyAny>) -> PyResult<()> {
+    let py = history.py();
+    let rows: Vec<Vec<serde_json::Value>> = serde_json::from_str(&json_dumps(py, table)?)
+        .map_err(|e| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+    let Some((headers, data)) = rows.split_first() else { return Ok(()); };
+    let composition = py.import("built_core.composition")?;
+    let commands = py.import("built_core.history")?;
+    let steps = PyList::empty(py);
+    for (page, chunk) in data.chunks(21).enumerate() {
+        let sheet = composition.call_method0("Composicion")?;
+        sheet.setattr("name", if page == 0 { name.to_owned() } else { format!("{name} · {}", page + 1) })?;
+        let width = 277. / headers.len().max(1) as f64;
+        for (line, row) in std::iter::once(headers).chain(chunk).enumerate() {
+            for (column, cell) in row.iter().enumerate() {
+                let fields = PyDict::new(py);
+                let text = match cell {
+                    serde_json::Value::Null => String::new(),
+                    serde_json::Value::String(s) => s.clone(),
+                    _ => cell.to_string(),
+                };
+                fields.set_item("text", text)?;
+                fields.set_item("x_mm", 10. + column as f64 * width)?;
+                fields.set_item("y_mm", 12. + line as f64 * 8.)?;
+                fields.set_item("w_mm", width - 1.)?;
+                fields.set_item("size_pt", 8.)?;
+                fields.set_item("bold", line == 0)?;
+                let item = composition.getattr("TextoItem")?.call((), Some(&fields))?;
+                sheet.getattr("texts")?.call_method1("append", (item,))?;
+            }
+        }
+        steps.append(commands.call_method1("InsertSheetCommand", (sheet,))?)?;
+    }
+    history.call_method1("execute", (commands.call_method1("CompoundCommand", (steps,))?,))?;
+    Ok(())
+}
+
 #[pyfunction]
 fn delivery_action(win: &Bound<'_, PyAny>, view: &Bound<'_, PyAny>, arg: &str) -> PyResult<()> {
     let py = win.py();
@@ -1118,7 +1155,19 @@ fn delivery_action(win: &Bound<'_, PyAny>, view: &Bound<'_, PyAny>, arg: &str) -
     if matches!(verb, "select" | "new" | "edit" | "run" | "back") {
         view.setattr("_delivery_review", py.None())?;
     }
-    if verb == "new" {
+    if verb == "schedules" {
+        let tables = py.import("core.bim")?.call_method1("junction_schedules", (vp.getattr("scene")?,))?;
+        let review = PyDict::new(py);
+        review.set_item("schedules_only", true)?;
+        review.set_item("schedules", tables)?;
+        return review_run(view, review.as_any());
+    } else if verb == "place_schedule" {
+        if let Some(review) = opt(view, "_delivery_review") {
+            if let Ok(table) = review.get_item("schedules")?.get_item(given) {
+                place_schedule(&vp.getattr("history")?, given, &table)?;
+            }
+        }
+    } else if verb == "new" {
         export_form(win, None, false, "package")?;
     } else if verb == "history" || verb == "review" {
         if let Some((key, i)) = given.rsplit_once(':') {

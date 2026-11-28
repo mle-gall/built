@@ -1041,6 +1041,29 @@ another wall applies the tee. The new wall and its junctions share a
 History step. Loading existing walls leaves their intersections available
 for review.
 
+### Junction interchange and schedules (J5)
+
+In IFC, each connection has one assembly. Its plate, bolts and welds are
+direct children. Child details retain their own connection relationships
+and each part carries the detail that produced it. For a cut-only connection
+the writer uses `IfcRelConnectsElements` because the realizing-elements
+relationship requires at least one product. Wall corners and tees use path
+connections. Hosted openings retain their void and fill relationships.
+
+Design Transfer exports a persistent hole feature at each drilled station.
+Reference View includes the evaluated bores in the ply geometry. A weld
+without a bead has an IFC axis and a STEP product without a solid. STEP
+shares the product definition across instances of a fastener.
+
+Open **Deliveries → Junction schedules** to inspect the model quantities.
+**Place on new sheet** places the displayed table as editable paper text.
+The sheet is a snapshot. A package with Quantity schedule enabled includes
+the nonempty fastener, plate, weld, hole and junction CSVs alongside the
+ordinary takeoff. Reviewing an issued package shows its saved tables.
+Plate dimensions and unit masses describe stock. A missing material density
+leaves mass blank. The BCF package includes a viewpoint targeting the
+exported top assembly for each junction problem.
+
 ## 13. Risks
 
 | Risk | Mitigation |

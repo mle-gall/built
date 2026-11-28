@@ -161,3 +161,29 @@ def test_step_output_can_be_added_to_existing_package(tmp_path):
     folder = Path(steps.summary["folder"])
     assert {"format": "step", "result": "Delivered"} in steps.summary["outputs"]
     assert step.prepare_step(folder / "model.step")["exact"] > 0
+
+
+def test_amber_junction_topic_uses_exported_identity(tmp_path):
+    from core.ifc_identity import junction_topics, component_guid
+    from tests.test_live_junction import setup
+
+    scene, history, main, _, uid = setup()
+    assert junction_topics(scene) == []
+    from tests.test_live_recipes import apply
+    apply(history, "delete_placements", placements=[main.uid])
+    topic, = junction_topics(scene)
+    assert "lost" in topic["title"]
+    selection, = topic["viewpoints"][0]["components"]["selection"]
+    assert selection["authoring_tool_id"].startswith("built:")
+    assert selection["ifc_guid"] == component_guid(scene, selection["authoring_tool_id"])
+    assert topic["guid"] == junction_topics(scene)[0]["guid"]
+    config = preset(str(tmp_path), include_pdf=False, include_ifc=False, include_dxf=False,
+                    include_csv=False, include_manifest=False)
+    key = deliveries.create_delivery(history, config)["key"]
+    deliveries.run_delivery(history, key)
+    folder = Path(deliveries.records(scene)[key]["runs"][-1]["folder"])
+    with zipfile.ZipFile(folder / "topics.bcfzip") as archive:
+        viewpoint = next(n for n in archive.namelist() if n.endswith(".bcfv"))
+        component = ET.fromstring(archive.read(viewpoint)).find(".//Component")
+        assert component.attrib["IfcGuid"] == selection["ifc_guid"]
+        assert component.findtext("AuthoringToolId") == selection["authoring_tool_id"]
