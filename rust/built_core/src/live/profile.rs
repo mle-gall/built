@@ -329,7 +329,7 @@ mod tests {
         let s = built_draft2d::Sketch::from_json(&drawn).unwrap();
         let p = built_draft2d::profile(&s);
         assert!(p.ok(), "{key}: {:?}", p.problems);
-        let table = Profile { sketch: None, drawing: None, library: key.into(), params: Default::default() }.outline(512).unwrap();
+        let table = Profile { sketch: None, drawing: None, library: key.into(), family: String::new(), params: Default::default() }.outline(512).unwrap();
         let ring_area = |ring: &Vec<Node>| {
             ring.iter().enumerate().map(|(i, n)| n.p.perp_dot(ring[(i + 1) % ring.len()].p) / 2.).sum::<f64>().abs()
         };

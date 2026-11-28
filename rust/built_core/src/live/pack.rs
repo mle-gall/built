@@ -1625,6 +1625,7 @@ mod tests {
 
     #[test]
     fn export_then_read_round_trip_and_tamper() {
+        Python::initialize();
         let none = |_: &str| -> PyResult<Option<Vec<u8>>> { Ok(None) };
         let src = Sources { rows: &[], component: &none };
         let (manifest, files) = export(&[knee()], &json!({"name":"Test","licence":"CC-BY-4.0","author":"A"}), &src, "Built|2026-11-28").unwrap();
