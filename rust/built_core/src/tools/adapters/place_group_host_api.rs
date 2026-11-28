@@ -116,7 +116,10 @@ fn value_label<'py>(a: &Args<'py>) -> Reply<'py> {
     let units = py.import("built_core.units")?;
     let sill = units.call_method1("fmt_len", (values.get_item(1)?,))?;
     let offset = units.call_method1("fmt_len", (values.get_item(2)?,))?;
-    let text = format!("Sill {} · Offset {}", sill.str()?, offset.str()?);
+    let width = units.call_method1("fmt_len", (values.get_item(3)?,))?;
+    let height = units.call_method1("fmt_len", (values.get_item(4)?,))?;
+    let tr = py.import("built_core.i18n")?;
+    let text = format!("{width} × {height} · {} {sill} · {} {offset}", tr.call_method1("tr", ("Sill",))?, tr.call_method1("tr", ("Offset",))?);
     let at = py.import("built_core")?.getattr("Vec3")?.call(positional(&values.get_item(0)?)?, None)?;
     (text, at).into_bound_py_any(py)
 }

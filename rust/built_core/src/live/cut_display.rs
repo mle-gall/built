@@ -33,15 +33,37 @@ pub(crate) fn live_cut_display<'p>(scene: &Obj<'p>) -> PyResult<Obj<'p>> {
             let Some(g) = group(py, &t, &target.owner) else {
                 continue;
             };
-            if !all && !selection.contains(&g)? {
-                continue;
-            }
-            let world = reference::frame(t.groups[&target.owner]);
+            let show_target = all || selection.contains(&g)?;
             for id in &target.cuts {
                 let Some(row) = t.rows.get(id) else {
                     continue;
                 };
-                if let Some(item) = outline(scene, &t, target, row, world)? {
+                if !show_target {
+                    let Some(Cutter::Opening(open)) = &row.cutter else {
+                        continue;
+                    };
+                    let assembly = row
+                        .junction
+                        .as_ref()
+                        .and_then(|id| t.rows.get(id))
+                        .map(|j| j.owner.as_str());
+                    let mut show = false;
+                    for owner in [Some(open.fill.as_str()), assembly].into_iter().flatten() {
+                        if let Some(g) = group(py, &t, owner) {
+                            show |= selection.contains(&g)?;
+                        }
+                    }
+                    if !show {
+                        continue;
+                    }
+                }
+                if let Some(item) = outline(
+                    scene,
+                    &t,
+                    target,
+                    row,
+                    reference::frame(t.groups[&target.owner]),
+                )? {
                     items.push(item);
                 }
             }
@@ -63,6 +85,135 @@ fn mesh_outline(group: &Obj<'_>, frame: DMat4, lines: &mut Vec<[DVec3; 2]>) -> P
     Ok(())
 }
 
+type Segments = Vec<[DVec3; 2]>;
+type Dimensions = Vec<(&'static str, [DVec3; 2])>;
+
+fn notch_axes(path: &[[f64; 3]], span: usize, rotation: f64) -> Option<[DVec3; 2]> {
+    let start = DVec3::from(*path.get(span)?);
+    let longitudinal =
+        (DVec3::from(*path.get((span + 1) % path.len())?) - start).try_normalize()?;
+    let across = DVec3::Z
+        .cross(longitudinal)
+        .try_normalize()
+        .unwrap_or(DVec3::X);
+    let up = longitudinal.cross(across);
+    let angle = rotation.to_radians();
+    Some([longitudinal, up * angle.cos() - across * angle.sin()])
+}
+
+fn cut_edges(
+    member: &Obj<'_>,
+    uid: &str,
+    axes: Option<[DVec3; 2]>,
+    world: DMat4,
+) -> PyResult<(Segments, Dimensions)> {
+    let mut lines = Vec::new();
+    let mut measured = [None::<(f64, [DVec3; 2])>; 2];
+    for face in member.getattr("mesh")?.getattr("faces")?.try_iter()? {
+        let face = face?;
+        if !face
+            .getattr("attrs")?
+            .call_method1("get", ("built.cut_face",))?
+            .eq(uid)?
+        {
+            continue;
+        }
+        let ring: Vec<_> = face
+            .getattr("vertices")?
+            .try_iter()?
+            .map(|v| crate::math::xyz(&v?))
+            .collect::<PyResult<_>>()?;
+        for (&a, &b) in ring.iter().zip(ring.iter().cycle().skip(1)) {
+            lines.push([a, b]);
+            let dir = (b - a).normalize_or_zero();
+            if let Some(axes) = axes {
+                for (slot, basis) in measured.iter_mut().zip(axes) {
+                    if dir.dot(basis).abs() < 0.99 {
+                        continue;
+                    }
+                    let length = world.transform_vector3(b - a).length();
+                    if slot.is_none_or(|(best, _)| length > best) {
+                        *slot = Some((length, [a, b]));
+                    }
+                }
+            }
+        }
+    }
+    let dimensions = measured
+        .into_iter()
+        .zip(["Length", "Depth"])
+        .filter_map(|(measurement, label)| measurement.map(|(_, edge)| (label, edge)))
+        .collect();
+    Ok((lines, dimensions))
+}
+
+/// Evaluate the picked pair once per revision/clearance. Detached operands
+/// use the target's frame, as they do on commit.
+pub(crate) fn body_preview(scene: &Obj<'_>, args: &Value) -> PyResult<Value> {
+    let py = scene.py();
+    let key = (scene.getattr("content_version")?, args.to_string()).into_pyobject(py)?;
+    if let Some(cache) = scene.getattr_opt("_cut_body_preview")? {
+        if cache.get_item(0)?.eq(&key)? {
+            return Ok(
+                serde_json::from_str(&cache.get_item(1)?.extract::<String>()?)
+                    .unwrap_or(Value::Null),
+            );
+        }
+    }
+    let Some(t) = current(py, root(scene)?) else {
+        return Ok(Value::Null);
+    };
+    let target = args["target"].as_str().unwrap_or_default();
+    let body = args["body"].as_str().unwrap_or_default();
+    let Some(row) = t.owners.get(target).and_then(|id| t.rows.get(id)) else {
+        return Ok(Value::Null);
+    };
+    let Some(sweep) = &row.sweep else {
+        return Ok(Value::Null);
+    };
+    let (Some(owner), Some(cutter)) = (group(py, &t, target), group(py, &t, body)) else {
+        return Ok(Value::Null);
+    };
+    let world = reference::frame(t.groups[target]);
+    let cls = py.import("built_core.group")?.getattr("Group")?;
+    let tool = cls.call1((cutter.getattr("mesh")?,))?;
+    tool.setattr(
+        "xform",
+        crate::math::Matrix4::from(world.inverse() * reference::frame(t.groups[body])),
+    )?;
+    let subject = cls.call1((owner.getattr("mesh")?,))?;
+    let operands = pyo3::types::PyList::new(py, [tool, subject])?;
+    let value = match crate::solids::operation(
+        "subtract",
+        operands.as_any(),
+        Some("preview"),
+        args["offset"].as_f64().unwrap_or_default(),
+    ) {
+        Ok((_, result)) => {
+            let path = reference::sweep_path(scene, &t, row, &sweep.path)?.unwrap_or_default();
+            let axis = notch_axes(
+                &path,
+                args["span"].as_u64().unwrap_or(0) as usize,
+                sweep.rotation,
+            );
+            let (lines, dims) = cut_edges(&result.get_item(0)?, "preview", axis, world)?;
+            let lines: Vec<_> = lines
+                .into_iter()
+                .map(|ab| ab.map(|p| world.transform_point3(p)))
+                .collect();
+            let sizes: Vec<_> = dims
+                .into_iter()
+                .map(|(label, [a, b])| (label, world.transform_vector3(b - a).length()))
+                .collect();
+            json!({"lines":lines,"sizes":sizes})
+        }
+        Err(e) if e.is_instance_of::<crate::solids::SolidError>(py) => Value::Null,
+        Err(e) => return Err(e),
+    };
+    scene.setattr("_cut_body_preview", (&key, value.to_string()))?;
+    Ok(value)
+}
+
 fn outline(
     scene: &Obj<'_>,
     t: &LiveTable,
@@ -72,6 +223,7 @@ fn outline(
 ) -> PyResult<Option<Value>> {
     let mut lines = Vec::<[DVec3; 2]>::new();
     let mut grips = Vec::new();
+    let mut dimensions = Dimensions::new();
     let mut repeat_source = None;
     let (mut centre, mut normal) = (DVec3::ZERO, DVec3::Z);
     let mut radius = 0.14;
@@ -150,7 +302,7 @@ fn outline(
                 drawing: Some(json!(section)),
                 sketch: None,
                 family: String::new(),
-            params: Default::default(),
+                params: Default::default(),
             };
             let Ok(section) = profile.outline(48) else {
                 return Ok(None);
@@ -193,7 +345,8 @@ fn outline(
             }
         }
         Cutter::Block(b) => {
-            let Some(Reference::Frame { junction, frame }) = row.anchor.as_ref().map(|a| &a.reference)
+            let Some(Reference::Frame { junction, frame }) =
+                row.anchor.as_ref().map(|a| &a.reference)
             else {
                 return Ok(None);
             };
@@ -242,6 +395,24 @@ fn outline(
                 grips.push(("offset", centre));
             }
             if opening.is_some() {
+                let corners = [DVec3::ZERO, DVec3::X, DVec3::X + DVec3::Z, DVec3::Z]
+                    .map(|p| frame.transform_point3(p * DVec3::from(row.size)));
+                dimensions.extend([
+                    ("Width", [corners[0], corners[1]]),
+                    ("Height", [corners[1], corners[2]]),
+                ]);
+                if let Some(fill) = group(scene.py(), t, uid) {
+                    let window = fill
+                        .getattr("ifc")?
+                        .get_item("class")
+                        .is_ok_and(|v| v.eq("IfcWindow").unwrap_or(false));
+                    let facing = reference::frame(t.groups[uid]).transform_vector3(-DVec3::Y);
+                    let front = world.inverse().transform_vector3(facing);
+                    let flipped = front.dot(frame.y_axis.truncate()) > 0.;
+                    lines.extend(crate::hosted_openings::symbol(
+                        corners, front, window, flipped,
+                    ));
+                }
                 for corner in 0..8 {
                     let point = |index: usize| {
                         let coords = std::array::from_fn(|axis| {
@@ -261,7 +432,17 @@ fn outline(
                     }
                 }
             } else if let Some(g) = group(scene.py(), t, uid) {
-                mesh_outline(&g, frame, &mut lines)?;
+                if let (Some(sweep), Some(member)) =
+                    (&target.sweep, group(scene.py(), t, &target.owner))
+                {
+                    let path =
+                        reference::sweep_path(scene, t, target, &sweep.path)?.unwrap_or_default();
+                    let axis = notch_axes(&path, row.span.unwrap_or(0), sweep.rotation);
+                    (lines, dimensions) = cut_edges(&member, &row.uid, axis, world)?;
+                }
+                if lines.is_empty() {
+                    mesh_outline(&g, frame, &mut lines)?;
+                }
             }
         }
     }
@@ -269,11 +450,21 @@ fn outline(
         .into_iter()
         .map(|ab| ab.map(|p| world.transform_point3(p)))
         .collect();
+    let dimensions: Vec<_> = dimensions
+        .into_iter()
+        .map(|(label, [a, b])| {
+            (
+                world.transform_point3((a + b) * 0.5),
+                world.transform_vector3(b - a).length(),
+                label,
+            )
+        })
+        .collect();
     let grips: Vec<_> = grips
         .into_iter()
         .map(|(kind, p)| json!({"kind":kind,"at":world.transform_point3(p)}))
         .collect();
     Ok(Some(
-        json!({"row":row,"repeat_source":repeat_source,"centre":world.transform_point3(centre),"axis":world.transform_vector3(normal),"radius":radius,"grips":grips,"lines":lines}),
+        json!({"row":row,"repeat_source":repeat_source,"centre":world.transform_point3(centre),"axis":world.transform_vector3(normal),"radius":radius,"grips":grips,"lines":lines,"dimensions":dimensions}),
     ))
 }

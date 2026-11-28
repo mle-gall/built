@@ -36,6 +36,7 @@ pub struct PlaceGroup {
     normal: Option<P3>,
     segments: Vec<[P3; 2]>,
     hosted: bool,
+    window: bool,
     dimensions: Option<[f64; 2]>,
     invalid: bool,
     wall: Option<WallFace>,
@@ -150,7 +151,8 @@ impl Tool for PlaceGroup {
             "dimensions" => self.dimensions = serde_json::from_value(v.clone()).ok(),
             "wall_family" => {
                 self.hosted = true;
-                self.sill = if v == "window" { 0.9 } else { 0. };
+                self.window = v == "window";
+                self.sill = if self.window { 0.9 } else { 0. };
             }
             "normal" => self.normal = json_p3(v),
             _ => return false,
@@ -162,7 +164,15 @@ impl Tool for PlaceGroup {
             return self
                 .opening
                 .filter(|_| self.hosted && self.template.is_some())
-                .map(|outline| json!([outline[1], self.sill, self.reveal]))
+                .map(|outline| {
+                    json!([
+                        outline[1],
+                        self.sill,
+                        self.reveal,
+                        DVec3::from(outline[1]).distance(outline[0].into()),
+                        DVec3::from(outline[2]).distance(outline[1].into())
+                    ])
+                })
                 .unwrap_or(Json::Null);
         }
         if k == "basis" {
@@ -258,6 +268,16 @@ impl Tool for PlaceGroup {
             for i in 0..4 {
                 p.lines
                     .push(Preview::rubber(outline[i], outline[(i + 1) % 4]));
+            }
+            if let Some(n) = self.normal {
+                for [a, b] in crate::hosted_openings::symbol(
+                    outline.map(DVec3::from),
+                    n.into(),
+                    self.window,
+                    self.flipped,
+                ) {
+                    p.lines.push(Preview::rubber(a.into(), b.into()));
+                }
             }
             p.value = Some(super::preview::ValueAnchor {
                 at: outline[1],

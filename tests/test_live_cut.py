@@ -294,7 +294,11 @@ def test_hosted_opening_on_a_pitched_wall_follows_its_placement(tmp_path):
     assert joint["roles"]["hosted"]["placement"] == window.uid and joint["roles"]["hosted"]["attached"]
     assert joint["contents"] == [{"key": "opening", "row": cut["uid"]}]
     assert cut["junction"] == joint["uid"]
-    assert len(outline["lines"]) == 12
+    assert len(outline["lines"]) == 14  # aperture prism and sash
+    assert [d[1] for d in outline["dimensions"]] == pytest.approx([1., 1.])
+    scene.show_all_cutters = False
+    scene.select([window])
+    assert command_protocol.live_cut_display(scene) == [outline]
     assert outline["row"]["cutter"]["opening"]["fill"] == window.uid
     apply(h, "move_placements", placements=[wall.uid], delta=[1, 2, 0])
     assert window.xform.data()[12:15] == (3., 2., 1.)

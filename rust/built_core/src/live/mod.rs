@@ -2,7 +2,7 @@
 //! The root's journalled attribute holds a frozen, structurally shared table.
 //! Definition replacements and placement markers are ordinary document ops.
 mod cut;
-mod cut_display;
+pub(crate) mod cut_display;
 pub(crate) mod cut_fit;
 pub(crate) use cut::{assign_cut_roles, hosted, migrate_wall, pushed_row, solid_axis};
 pub(crate) use cut_display::live_cut_display;

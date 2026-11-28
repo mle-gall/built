@@ -126,7 +126,7 @@ impl Tool for CutTool {
         &INFO
     }
     fn state(&self) -> Json {
-        json!({"prompt":self.prompt(),"angle_grip": self.grip.as_ref().is_some_and(|g| g.kind=="angle"),"grip_value":self.grip.as_ref().map(|g| self.point.map_or_else(||g.current(),|p| g.dragged(p))),"editing_grip": self.grip.is_some(),"target":self.targets.first().map(|t| &t.0),"targets":self.targets.iter().map(|t| &t.0).collect::<Vec<_>>(), "cutter":self.hover,"hover_point":self.point,"chip":format!("{} · {}",self.preset["name"].as_str().unwrap_or("Cut"),OPS[self.operation]), "preset":self.preset["name"], "operation":OPS[self.operation], "offset":self.fitting["offset"].as_f64().unwrap_or(self.offset)})
+        json!({"cut_sizes":self.fitting["sizes"],"prompt":self.prompt(),"angle_grip": self.grip.as_ref().is_some_and(|g| g.kind=="angle"),"grip_value":self.grip.as_ref().map(|g| self.point.map_or_else(||g.current(),|p| g.dragged(p))),"editing_grip": self.grip.is_some(),"target":self.targets.first().map(|t| &t.0),"targets":self.targets.iter().map(|t| &t.0).collect::<Vec<_>>(), "cutter":self.hover,"hover_point":self.point,"chip":format!("{} · {}",self.preset["name"].as_str().unwrap_or("Cut"),OPS[self.operation]), "preset":self.preset["name"], "operation":OPS[self.operation], "offset":self.fitting["offset"].as_f64().unwrap_or(self.offset)})
     }
     fn busy(&self) -> bool {
         self.grip.is_some() || !self.targets.is_empty()
@@ -392,6 +392,13 @@ impl Tool for CutTool {
                         "cut_corner",
                         json!({"target":self.targets[0].0,"body":placed}),
                     );
+                }
+                if kind == "body" && self.operation == 0 && self.targets.len() == 1 && placed.is_string()
+                    && placed.as_str() != Some(&self.targets[0].0) && self.anchor.is_null() && self.fitting.is_null() {
+                    self.fitting = host.call("cut_body_preview", json!({"target":self.targets[0].0,"span":self.targets[0].2,"body":placed,"offset":self.offset}));
+                    if let Ok(lines) = serde_json::from_value::<Vec<[P3;2]>>(self.fitting["lines"].clone()) {
+                        if !lines.is_empty() { self.outline = lines; }
+                    }
                 }
                 self.hover = match kind {
                     "plane" => {
