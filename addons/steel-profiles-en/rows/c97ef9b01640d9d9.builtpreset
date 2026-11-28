@@ -1,0 +1,69 @@
+{
+  "uid": "c97ef9b01640d9d9",
+  "name": "HP 220 × 57",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/hp220x57",
+      "family": "i",
+      "params": {
+        "height": 210.0,
+        "width": 224.5,
+        "web": 11.0,
+        "flange": 11.0,
+        "radius": 18.0
+      },
+      "catalogue": {
+        "name": "HP 220 × 57",
+        "series": [
+          [
+            "en/hp220x57",
+            210.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-hp",
+    "source": "https://orangebook.arcelormittal.com/node/200",
+    "standard": "EN 10365",
+    "series": "HP"
+  },
+  "section": {
+    "area_cm2": 72.851,
+    "mass_kg_m": 57.188,
+    "iy_cm4": 5729.32,
+    "iz_cm4": 2079.31,
+    "iu_cm4": 5729.32,
+    "iv_cm4": 2079.31,
+    "wy_cm3": 545.65,
+    "wz_cm3": 185.24,
+    "centroid_mm": [
+      112.25,
+      105.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 72.9,
+      "mass_kg_m": 57.2
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/hp220x57",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:6c8ee6565d4805a882071a6163a0463ef3640d1044bbc26ad666f1a687c32a6d"
+}

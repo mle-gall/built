@@ -1,0 +1,72 @@
+{
+  "uid": "c283c58ae0d689e5",
+  "name": "W14 × 808",
+  "rev": 3,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/w14x808",
+      "family": "i",
+      "params": {
+        "height": 579.12,
+        "width": 472.44,
+        "web": 94.996,
+        "flange": 130.048,
+        "radius": 14.99
+      },
+      "catalogue": {
+        "name": "W14 × 808",
+        "series": [
+          [
+            "aisc/w14x808",
+            579.12
+          ]
+        ],
+        "aliases": [
+          "W14X808"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "W"
+  },
+  "section": {
+    "area_cm2": 1533.787,
+    "mass_kg_m": 1204.022,
+    "iy_cm4": 663008.21,
+    "iz_cm4": 230884.98,
+    "iu_cm4": 663008.21,
+    "iv_cm4": 230884.98,
+    "wy_cm3": 22897.09,
+    "wz_cm3": 9774.15,
+    "centroid_mm": [
+      236.22,
+      289.56
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 1535.48,
+      "mass_kg_m": 1202.44
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/w14x808",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:d63a77e036085cd49afc84cd65e7cfb5b3b6686cb4b88e1bda7c249820edea25"
+}

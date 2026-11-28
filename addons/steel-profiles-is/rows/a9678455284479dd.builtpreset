@@ -1,0 +1,90 @@
+{
+  "uid": "a9678455284479dd",
+  "name": "ISWB 400",
+  "rev": 2,
+  "pack": "Steel profiles · IS",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "is/iswb400",
+      "family": "i",
+      "params": {
+        "height": 400.0,
+        "width": 200.0,
+        "web": 8.6,
+        "flange": 13.0,
+        "radius": 13.0,
+        "toe": 6.5,
+        "slope": 10.51
+      },
+      "catalogue": {
+        "name": "ISWB 400",
+        "series": [
+          [
+            "is/iswb225",
+            225.0
+          ],
+          [
+            "is/iswb350",
+            350.0
+          ],
+          [
+            "is/iswb400",
+            400.0
+          ],
+          [
+            "is/iswb450",
+            450.0
+          ],
+          [
+            "is/iswb500",
+            500.0
+          ]
+        ],
+        "aliases": [
+          "WB 400"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "is808-1989",
+    "source": "https://law.resource.org/pub/in/bis/S03/is.808.1989.pdf",
+    "standard": "IS 808",
+    "series": "ISWB"
+  },
+  "section": {
+    "area_cm2": 85.013,
+    "mass_kg_m": 66.735,
+    "iy_cm4": 23425.82,
+    "iz_cm4": 1388.07,
+    "iu_cm4": 23425.82,
+    "iv_cm4": 1388.07,
+    "wy_cm3": 1171.29,
+    "wz_cm3": 138.81,
+    "centroid_mm": [
+      100.0,
+      200.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 85.0,
+      "mass_kg_m": 66.7
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "is/iswb400",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:7468b2bccd54aa4f946ffb552abc4e3af6162a11b04b9e21adfb77fbe75c8768"
+}

@@ -1,0 +1,81 @@
+{
+  "uid": "516d21d5f10e651b",
+  "name": "RHS 90 × 50 × 5 (cold-formed)",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/rhs90x50x5-cf",
+      "family": "rhs",
+      "params": {
+        "height": 90.0,
+        "width": 50.0,
+        "web": 5.0,
+        "radius": 10.0,
+        "inner": 5.0
+      },
+      "catalogue": {
+        "name": "RHS 90 × 50 × 5 (cold-formed)",
+        "series": [
+          [
+            "en/rhs70x50x5-cf",
+            70.0
+          ],
+          [
+            "en/rhs80x50x5-cf",
+            80.0
+          ],
+          [
+            "en/rhs90x50x5-cf",
+            90.0
+          ],
+          [
+            "en/rhs100x50x5-cf",
+            100.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-cfrhs",
+    "source": "https://www.steelforlifebluebook.co.uk/cfrhs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10219-2",
+    "series": "RHS cold-formed"
+  },
+  "section": {
+    "area_cm2": 12.356,
+    "mass_kg_m": 9.7,
+    "iy_cm4": 120.6,
+    "iz_cm4": 47.37,
+    "iu_cm4": 120.6,
+    "iv_cm4": 47.37,
+    "wy_cm3": 26.8,
+    "wz_cm3": 18.95,
+    "centroid_mm": [
+      25.0,
+      45.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 12.4,
+      "mass_kg_m": 9.7
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/rhs90x50x5-cf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:16d67422667e02914b44abd988ef9379a5158c1355850349d19862b7db9de964"
+}

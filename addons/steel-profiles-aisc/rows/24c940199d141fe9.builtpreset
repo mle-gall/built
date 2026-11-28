@@ -1,0 +1,76 @@
+{
+  "uid": "24c940199d141fe9",
+  "name": "HSS24 × 12 × 1/4",
+  "rev": 3,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/hss24x12x1_4",
+      "family": "rhs",
+      "params": {
+        "height": 609.6,
+        "width": 304.8,
+        "web": 6.35,
+        "radius": 12.7,
+        "inner": 6.35
+      },
+      "catalogue": {
+        "name": "HSS24 × 12 × 1/4",
+        "series": [
+          [
+            "aisc/hss14x12x1_4",
+            355.6
+          ],
+          [
+            "aisc/hss24x12x1_4",
+            609.6
+          ]
+        ],
+        "aliases": [
+          "HSS24X12X1/4"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A500/A1085 (AISC Manual 16th ed.)",
+    "series": "HSS rectangular"
+  },
+  "section": {
+    "area_cm2": 113.477,
+    "mass_kg_m": 89.08,
+    "iy_cm4": 56768.67,
+    "iz_cm4": 19642.64,
+    "iu_cm4": 56768.67,
+    "iv_cm4": 19642.64,
+    "wy_cm3": 1862.49,
+    "wz_cm3": 1288.89,
+    "centroid_mm": [
+      152.4,
+      304.8
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 105.806,
+      "mass_kg_m": 89.067
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/hss24x12x1_4",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:297d9616d99b74317b5f2d49de48565fafe3b196e53eeb7290ce1a05faaaebf4"
+}

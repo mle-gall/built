@@ -1,0 +1,76 @@
+{
+  "uid": "1c3bb0dc053ed54a",
+  "name": "W30 × 90",
+  "rev": 3,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/w30x90",
+      "family": "i",
+      "params": {
+        "height": 749.3,
+        "width": 264.16,
+        "web": 11.938,
+        "flange": 15.494,
+        "radius": 16.51
+      },
+      "catalogue": {
+        "name": "W30 × 90",
+        "series": [
+          [
+            "aisc/w14x90",
+            355.6
+          ],
+          [
+            "aisc/w30x90",
+            749.3
+          ]
+        ],
+        "aliases": [
+          "W30X90"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "W"
+  },
+  "section": {
+    "area_cm2": 169.95,
+    "mass_kg_m": 133.411,
+    "iy_cm4": 150040.16,
+    "iz_cm4": 4772.66,
+    "iu_cm4": 150040.16,
+    "iv_cm4": 4772.66,
+    "wy_cm3": 4004.81,
+    "wz_cm3": 361.35,
+    "centroid_mm": [
+      132.08,
+      374.65
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 169.677,
+      "mass_kg_m": 133.935
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/w30x90",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:156376000c66c524d9bfcff41685b8a6e9acc3f0d68756ba68767421ec69ca47"
+}

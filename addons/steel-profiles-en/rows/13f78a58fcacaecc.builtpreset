@@ -1,0 +1,69 @@
+{
+  "uid": "13f78a58fcacaecc",
+  "name": "RHS 50 × 30 × 3.2 (hot-finished)",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/rhs50x30x3.2-hf",
+      "family": "rhs",
+      "params": {
+        "height": 50.0,
+        "width": 30.0,
+        "web": 3.2,
+        "radius": 4.8,
+        "inner": 3.2
+      },
+      "catalogue": {
+        "name": "RHS 50 × 30 × 3.2 (hot-finished)",
+        "series": [
+          [
+            "en/rhs50x30x3.2-hf",
+            50.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-hfrhs",
+    "source": "https://www.steelforlifebluebook.co.uk/hfrhs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10210-2",
+    "series": "RHS hot-finished"
+  },
+  "section": {
+    "area_cm2": 4.601,
+    "mass_kg_m": 3.611,
+    "iy_cm4": 14.21,
+    "iz_cm4": 6.2,
+    "iu_cm4": 14.21,
+    "iv_cm4": 6.2,
+    "wy_cm3": 5.68,
+    "wz_cm3": 4.13,
+    "centroid_mm": [
+      15.0,
+      25.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 4.6,
+      "mass_kg_m": 3.61
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/rhs50x30x3.2-hf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:106f11f5c8255da4c995f4eb8e84ab3fe8670c58c81ffe2b567a02eece5355ee"
+}

@@ -1,0 +1,82 @@
+{
+  "uid": "df65df3709755f7e",
+  "name": "ISSC 220",
+  "rev": 2,
+  "pack": "Steel profiles · IS",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "is/issc220",
+      "family": "i",
+      "params": {
+        "height": 220.0,
+        "width": 220.0,
+        "web": 9.5,
+        "flange": 16.0,
+        "radius": 18.0,
+        "toe": 9.0,
+        "slope": 14.05
+      },
+      "catalogue": {
+        "name": "ISSC 220",
+        "series": [
+          [
+            "is/issc180",
+            180.0
+          ],
+          [
+            "is/issc200",
+            200.0
+          ],
+          [
+            "is/issc220",
+            220.0
+          ]
+        ],
+        "aliases": [
+          "SC 220"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "is808-1989",
+    "source": "https://law.resource.org/pub/in/bis/S03/is.808.1989.pdf",
+    "standard": "IS 808",
+    "series": "ISSC"
+  },
+  "section": {
+    "area_cm2": 89.754,
+    "mass_kg_m": 70.457,
+    "iy_cm4": 7880.26,
+    "iz_cm4": 2157.29,
+    "iu_cm4": 7880.26,
+    "iv_cm4": 2157.29,
+    "wy_cm3": 716.39,
+    "wz_cm3": 196.12,
+    "centroid_mm": [
+      110.0,
+      110.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 89.8,
+      "mass_kg_m": 70.4
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "is/issc220",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:e1b2295189f5e273a195c05fdc95608f3a159939761495ba36e39e02ead4d2da"
+}

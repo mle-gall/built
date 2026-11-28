@@ -1,0 +1,85 @@
+{
+  "uid": "c9d6e5873c1d9a21",
+  "name": "250 PFC",
+  "rev": 2,
+  "pack": "Steel profiles · AS/NZS",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "as-nzs/250pfc",
+      "family": "channel",
+      "params": {
+        "height": 250.0,
+        "width": 90.0,
+        "web": 8.0,
+        "flange": 15.0,
+        "radius": 12.0
+      },
+      "catalogue": {
+        "name": "250 PFC",
+        "series": [
+          [
+            "as-nzs/200pfc",
+            200.0
+          ],
+          [
+            "as-nzs/230pfc",
+            230.0
+          ],
+          [
+            "as-nzs/250pfc",
+            250.0
+          ],
+          [
+            "as-nzs/300pfc",
+            300.0
+          ],
+          [
+            "as-nzs/380pfc",
+            380.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ib-hrssp9",
+    "source": "https://www.infrabuild.com/wp-content/uploads/sites/8/2022/02/Hot20Rolled20Cat_Edition9_2019.pdf",
+    "standard": "AS/NZS 3679.1",
+    "series": "PFC"
+  },
+  "section": {
+    "area_cm2": 45.218,
+    "mass_kg_m": 35.496,
+    "iy_cm4": 4513.84,
+    "iz_cm4": 364.33,
+    "iu_cm4": 4513.84,
+    "iv_cm4": 364.33,
+    "wy_cm3": 361.11,
+    "wz_cm3": 59.31,
+    "centroid_mm": [
+      28.57,
+      125.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 45.2,
+      "mass_kg_m": 35.5
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "as-nzs/250pfc",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:a1ae1ad188f6d8c97fc57ccdb9d72afc39541279a05b5f97c3188b31e0841d77"
+}

@@ -1,0 +1,69 @@
+{
+  "uid": "1282622dbd0ca7f5",
+  "name": "310 UC 137",
+  "rev": 3,
+  "pack": "Steel profiles · AS/NZS",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "as-nzs/310uc137",
+      "family": "i",
+      "params": {
+        "height": 320.6,
+        "width": 309.0,
+        "web": 13.8,
+        "flange": 21.7,
+        "radius": 16.5
+      },
+      "catalogue": {
+        "name": "310 UC 137",
+        "series": [
+          [
+            "as-nzs/310uc137",
+            320.6
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ib-hrssp9",
+    "source": "https://www.infrabuild.com/wp-content/uploads/sites/8/2022/02/Hot20Rolled20Cat_Edition9_2019.pdf",
+    "standard": "AS/NZS 3679.1",
+    "series": "UC"
+  },
+  "section": {
+    "area_cm2": 174.697,
+    "mass_kg_m": 137.137,
+    "iy_cm4": 32880.75,
+    "iz_cm4": 10679.39,
+    "iu_cm4": 32880.75,
+    "iv_cm4": 10679.39,
+    "wy_cm3": 2051.2,
+    "wz_cm3": 691.22,
+    "centroid_mm": [
+      154.5,
+      160.3
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 175.0,
+      "mass_kg_m": 137.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "as-nzs/310uc137",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:0b7565a549e789780cb60afab298b7eb7a1eff79392ac55ad24ca11121538518"
+}

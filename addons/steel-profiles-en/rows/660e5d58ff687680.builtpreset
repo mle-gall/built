@@ -1,0 +1,81 @@
+{
+  "uid": "660e5d58ff687680",
+  "name": "IPE A 550",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/ipea550",
+      "family": "i",
+      "params": {
+        "height": 547.0,
+        "width": 210.0,
+        "web": 9.0,
+        "flange": 15.7,
+        "radius": 24.0
+      },
+      "catalogue": {
+        "name": "IPE A 550",
+        "series": [
+          [
+            "en/ipea450",
+            447.0
+          ],
+          [
+            "en/ipea500",
+            497.0
+          ],
+          [
+            "en/ipea550",
+            547.0
+          ],
+          [
+            "en/ipea600",
+            597.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-ipe",
+    "source": "https://orangebook.arcelormittal.com/node/6",
+    "standard": "EN 10365",
+    "series": "IPE"
+  },
+  "section": {
+    "area_cm2": 117.289,
+    "mass_kg_m": 92.072,
+    "iy_cm4": 59979.66,
+    "iz_cm4": 2432.24,
+    "iu_cm4": 59979.66,
+    "iv_cm4": 2432.24,
+    "wy_cm3": 2193.04,
+    "wz_cm3": 231.64,
+    "centroid_mm": [
+      105.0,
+      273.5
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 117.0,
+      "mass_kg_m": 92.1
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/ipea550",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:1c5fbe2555039d4af354912940518461e4ee54c3604015120509c31fc3d89b9e"
+}

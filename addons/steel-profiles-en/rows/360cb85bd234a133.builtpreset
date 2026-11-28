@@ -1,0 +1,85 @@
+{
+  "uid": "360cb85bd234a133",
+  "name": "IPE AA 160",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/ipeaa160",
+      "family": "i",
+      "params": {
+        "height": 156.4,
+        "width": 82.0,
+        "web": 4.0,
+        "flange": 5.6,
+        "radius": 9.0
+      },
+      "catalogue": {
+        "name": "IPE AA 160",
+        "series": [
+          [
+            "en/ipeaa120",
+            117.0
+          ],
+          [
+            "en/ipeaa140",
+            136.6
+          ],
+          [
+            "en/ipeaa160",
+            156.4
+          ],
+          [
+            "en/ipeaa180",
+            176.4
+          ],
+          [
+            "en/ipeaa200",
+            196.4
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-ipe",
+    "source": "https://orangebook.arcelormittal.com/node/6",
+    "standard": "EN 10365",
+    "series": "IPE"
+  },
+  "section": {
+    "area_cm2": 15.687,
+    "mass_kg_m": 12.315,
+    "iy_cm4": 659.08,
+    "iz_cm4": 51.67,
+    "iu_cm4": 659.08,
+    "iv_cm4": 51.67,
+    "wy_cm3": 84.28,
+    "wz_cm3": 12.6,
+    "centroid_mm": [
+      41.0,
+      78.2
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 15.7,
+      "mass_kg_m": 12.3
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/ipeaa160",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:6d1ba17949326e3af81f549e42cea5ddc959e7402bd73f2e5cb6adf0d038a93a"
+}

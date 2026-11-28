@@ -1,0 +1,69 @@
+{
+  "uid": "27c3ef336978cd00",
+  "name": "HP 260 × 87",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/hp260x87",
+      "family": "i",
+      "params": {
+        "height": 253.0,
+        "width": 267.0,
+        "web": 14.0,
+        "flange": 14.0,
+        "radius": 24.0
+      },
+      "catalogue": {
+        "name": "HP 260 × 87",
+        "series": [
+          [
+            "en/hp260x87",
+            253.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-hp",
+    "source": "https://orangebook.arcelormittal.com/node/200",
+    "standard": "EN 10365",
+    "series": "HP"
+  },
+  "section": {
+    "area_cm2": 111.205,
+    "mass_kg_m": 87.296,
+    "iy_cm4": 12585.64,
+    "iz_cm4": 4455.01,
+    "iu_cm4": 12585.64,
+    "iv_cm4": 4455.01,
+    "wy_cm3": 994.91,
+    "wz_cm3": 333.71,
+    "centroid_mm": [
+      133.5,
+      126.5
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 111.0,
+      "mass_kg_m": 87.3
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/hp260x87",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:4e9ee9b3a3a7cd2edaabf92f45364f70a1da8fc1d9dc4d7dbca9b74eb4d5000b"
+}

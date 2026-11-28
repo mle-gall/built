@@ -1,0 +1,69 @@
+{
+  "uid": "480c6ac1216af345",
+  "name": "PFC 150 × 75 × 18",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/pfc150x75x18",
+      "family": "channel",
+      "params": {
+        "height": 150.0,
+        "width": 75.0,
+        "web": 5.5,
+        "flange": 10.0,
+        "radius": 12.0
+      },
+      "catalogue": {
+        "name": "PFC 150 × 75 × 18",
+        "series": [
+          [
+            "en/pfc150x75x18",
+            150.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-pfc",
+    "source": "https://orangebook.arcelormittal.com/node/259",
+    "standard": "EN 10365",
+    "series": "PFC"
+  },
+  "section": {
+    "area_cm2": 22.768,
+    "mass_kg_m": 17.873,
+    "iy_cm4": 860.98,
+    "iz_cm4": 130.96,
+    "iu_cm4": 860.98,
+    "iv_cm4": 130.96,
+    "wy_cm3": 114.8,
+    "wz_cm3": 26.61,
+    "centroid_mm": [
+      25.79,
+      75.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 22.8,
+      "mass_kg_m": 17.9
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/pfc150x75x18",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:1e0e6109cbdae2a6cb7e6e2db02c40e9968c03583aa54e978d633d5ceb239c81"
+}

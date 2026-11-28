@@ -1,0 +1,71 @@
+{
+  "uid": "53a32fe7c92131ca",
+  "name": "ISA 40 × 40 × 5",
+  "rev": 2,
+  "pack": "Steel profiles · IS",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "is/isa40x40x5",
+      "family": "angle",
+      "params": {
+        "height": 40.0,
+        "width": 40.0,
+        "web": 5.0,
+        "radius": 5.5
+      },
+      "catalogue": {
+        "name": "ISA 40 × 40 × 5",
+        "series": [
+          [
+            "is/isa40x40x5",
+            40.0
+          ]
+        ],
+        "aliases": [
+          "A 40 x 40 x 5"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "is808-1989",
+    "source": "https://law.resource.org/pub/in/bis/S03/is.808.1989.pdf",
+    "standard": "IS 808",
+    "series": "ISA equal"
+  },
+  "section": {
+    "area_cm2": 3.815,
+    "mass_kg_m": 2.995,
+    "iy_cm4": 5.58,
+    "iz_cm4": 5.58,
+    "iu_cm4": 8.83,
+    "iv_cm4": 2.34,
+    "wy_cm3": 1.98,
+    "wz_cm3": 1.98,
+    "centroid_mm": [
+      11.74,
+      11.74
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 3.78,
+      "mass_kg_m": 3.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "is/isa40x40x5",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:c9c1ecc0798bb404b14879af0a5afea6916aac35c41a36e114efa521cdf5cc57"
+}

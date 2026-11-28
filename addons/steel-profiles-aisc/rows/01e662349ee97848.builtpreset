@@ -1,0 +1,76 @@
+{
+  "uid": "01e662349ee97848",
+  "name": "WT5 × 30",
+  "rev": 3,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/wt5x30",
+      "family": "tee",
+      "params": {
+        "height": 129.794,
+        "width": 256.54,
+        "web": 10.668,
+        "flange": 17.272,
+        "radius": 12.7
+      },
+      "catalogue": {
+        "name": "WT5 × 30",
+        "series": [
+          [
+            "aisc/wt5x30",
+            129.794
+          ],
+          [
+            "aisc/wt9x30",
+            231.648
+          ]
+        ],
+        "aliases": [
+          "WT5X30"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "WT"
+  },
+  "section": {
+    "area_cm2": 57.006,
+    "mass_kg_m": 44.75,
+    "iy_cm4": 535.54,
+    "iz_cm4": 2431.75,
+    "iu_cm4": 2431.75,
+    "iv_cm4": 535.54,
+    "wy_cm3": 49.89,
+    "wz_cm3": 189.58,
+    "centroid_mm": [
+      128.27,
+      107.35
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 57.032,
+      "mass_kg_m": 44.645
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/wt5x30",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:e0933d02f757acbde85eba224fa71fe50c4784c74b10e1b128ae9ccac383be1d"
+}

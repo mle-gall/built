@@ -1,0 +1,88 @@
+{
+  "uid": "b69209ace5b491b5",
+  "name": "HE 180 M",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/he180m",
+      "family": "i",
+      "params": {
+        "height": 200.0,
+        "width": 186.0,
+        "web": 14.5,
+        "flange": 24.0,
+        "radius": 15.0
+      },
+      "catalogue": {
+        "name": "HE 180 M",
+        "series": [
+          [
+            "en/he140m",
+            160.0
+          ],
+          [
+            "en/he160m",
+            180.0
+          ],
+          [
+            "en/he180m",
+            200.0
+          ],
+          [
+            "en/he200m",
+            220.0
+          ],
+          [
+            "en/he220m",
+            240.0
+          ]
+        ],
+        "aliases": [
+          "HEM 180"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-he",
+    "source": "https://orangebook.arcelormittal.com/node/16",
+    "standard": "EN 10365",
+    "series": "HE"
+  },
+  "section": {
+    "area_cm2": 113.252,
+    "mass_kg_m": 88.903,
+    "iy_cm4": 7483.14,
+    "iz_cm4": 2580.13,
+    "iu_cm4": 7483.14,
+    "iv_cm4": 2580.13,
+    "wy_cm3": 748.31,
+    "wz_cm3": 277.43,
+    "centroid_mm": [
+      93.0,
+      100.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 113.0,
+      "mass_kg_m": 88.9
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/he180m",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:bdc4d0ed2eaac1f87c88fb0d10a7ca2652c874c422f3725a667595c92fba2fe8"
+}

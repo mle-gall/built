@@ -1,0 +1,73 @@
+{
+  "uid": "7a53ae598ebdaacf",
+  "name": "W 460 × 74.0",
+  "rev": 4,
+  "pack": "Steel profiles · BR",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "br/w460x74.0",
+      "family": "i",
+      "params": {
+        "height": 457.0,
+        "width": 190.0,
+        "web": 9.0,
+        "flange": 14.5,
+        "radius": 12.0
+      },
+      "catalogue": {
+        "name": "W 460 × 74.0",
+        "series": [
+          [
+            "br/w460x74.0",
+            457.0
+          ],
+          [
+            "br/w530x74.0",
+            529.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "gerdau-perfis",
+    "source": "https://api.aecweb.com.br/cls/catalogos/28792/22314/catalogo-gerdau-perfis-estruturais.pdf",
+    "standard": "ABNT NBR 15980",
+    "series": "W"
+  },
+  "section": {
+    "area_cm2": 94.856,
+    "mass_kg_m": 74.462,
+    "iy_cm4": 33414.28,
+    "iz_cm4": 1660.89,
+    "iu_cm4": 33414.28,
+    "iv_cm4": 1660.89,
+    "wy_cm3": 1462.33,
+    "wz_cm3": 174.83,
+    "centroid_mm": [
+      95.0,
+      228.5
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 94.9,
+      "mass_kg_m": 74.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "br/w460x74.0",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:41bb6633e6e488e6edfc99d2bdd45bf39034a4ee93e8f80d2f42235cf075d583"
+}

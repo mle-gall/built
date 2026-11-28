@@ -1,0 +1,69 @@
+{
+  "uid": "572cdffb043ddfe8",
+  "name": "SHS 200 × 200 × 8 (cold-formed)",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/shs200x200x8-cf",
+      "family": "rhs",
+      "params": {
+        "height": 200.0,
+        "width": 200.0,
+        "web": 8.0,
+        "radius": 20.0,
+        "inner": 12.0
+      },
+      "catalogue": {
+        "name": "SHS 200 × 200 × 8 (cold-formed)",
+        "series": [
+          [
+            "en/shs200x200x8-cf",
+            200.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-cfshs",
+    "source": "https://www.steelforlifebluebook.co.uk/cfshs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10219-2",
+    "series": "SHS cold-formed"
+  },
+  "section": {
+    "area_cm2": 59.242,
+    "mass_kg_m": 46.505,
+    "iy_cm4": 3566.24,
+    "iz_cm4": 3566.24,
+    "iu_cm4": 3566.24,
+    "iv_cm4": 3566.24,
+    "wy_cm3": 356.62,
+    "wz_cm3": 356.62,
+    "centroid_mm": [
+      100.0,
+      100.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 59.2,
+      "mass_kg_m": 46.5
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/shs200x200x8-cf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:fdf87d24fc963693d23cfbb2a52403cbc313c55c2725caa1743c41c0230eb2fd"
+}

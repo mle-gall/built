@@ -1,0 +1,69 @@
+{
+  "uid": "33c2b0bb72984042",
+  "name": "L 80 × 80 × 7",
+  "rev": 4,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/l80x80x7",
+      "family": "angle",
+      "params": {
+        "height": 80.0,
+        "width": 80.0,
+        "web": 7.0,
+        "radius": 10.0,
+        "toe": 5.0
+      },
+      "catalogue": {
+        "name": "L 80 × 80 × 7",
+        "series": [
+          [
+            "en/l80x80x7",
+            80.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-l-equal",
+    "source": "https://orangebook.arcelormittal.com/node/220",
+    "standard": "EN 10056-1",
+    "series": "L equal"
+  },
+  "section": {
+    "area_cm2": 10.817,
+    "mass_kg_m": 8.492,
+    "iy_cm4": 64.19,
+    "iz_cm4": 64.19,
+    "iu_cm4": 101.83,
+    "iv_cm4": 26.54,
+    "wy_cm3": 11.09,
+    "wz_cm3": 11.09,
+    "centroid_mm": [
+      22.12,
+      22.12
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 10.8,
+      "mass_kg_m": 8.49
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/l80x80x7",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:286d5424b6b807bf257328878ad3bb13bdc2df6dbb8e4851b88a02a551d846d6"
+}

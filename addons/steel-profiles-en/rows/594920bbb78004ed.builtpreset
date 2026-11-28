@@ -1,0 +1,72 @@
+{
+  "uid": "594920bbb78004ed",
+  "name": "UC 203 × 203 × 86",
+  "rev": 4,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/uc203x203x86",
+      "family": "i",
+      "params": {
+        "height": 222.2,
+        "width": 209.1,
+        "web": 12.7,
+        "flange": 20.5,
+        "radius": 10.2
+      },
+      "catalogue": {
+        "name": "UC 203 × 203 × 86",
+        "series": [
+          [
+            "en/uc203x203x86",
+            222.2
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-uc;r1=bb-uc",
+    "source": "https://orangebook.arcelormittal.com/node/246",
+    "standard": "EN 10365",
+    "series": "UC",
+    "column_sources": {
+      "r1": "https://www.steelforlifebluebook.co.uk/uc/ec3-ukna/section-properties-dimensions-properties"
+    }
+  },
+  "section": {
+    "area_cm2": 109.637,
+    "mass_kg_m": 86.065,
+    "iy_cm4": 9448.84,
+    "iz_cm4": 3127.46,
+    "iu_cm4": 9448.84,
+    "iv_cm4": 3127.46,
+    "wy_cm3": 850.48,
+    "wz_cm3": 299.14,
+    "centroid_mm": [
+      104.55,
+      111.1
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 110.0,
+      "mass_kg_m": 86.1
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/uc203x203x86",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:cf2cc3dfdfd3b08faac25e70f07618f0701a02de278814264752e126f053debe"
+}

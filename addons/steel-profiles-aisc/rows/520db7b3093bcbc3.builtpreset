@@ -1,0 +1,80 @@
+{
+  "uid": "520db7b3093bcbc3",
+  "name": "W8 × 35",
+  "rev": 3,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/w8x35",
+      "family": "i",
+      "params": {
+        "height": 206.248,
+        "width": 203.708,
+        "web": 7.874,
+        "flange": 12.573,
+        "radius": 10.01
+      },
+      "catalogue": {
+        "name": "W8 × 35",
+        "series": [
+          [
+            "aisc/w8x35",
+            206.248
+          ],
+          [
+            "aisc/w12x35",
+            317.5
+          ],
+          [
+            "aisc/w18x35",
+            449.58
+          ]
+        ],
+        "aliases": [
+          "W8X35"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "W"
+  },
+  "section": {
+    "area_cm2": 66.345,
+    "mass_kg_m": 52.081,
+    "iy_cm4": 5267.19,
+    "iz_cm4": 1772.48,
+    "iu_cm4": 5267.19,
+    "iv_cm4": 1772.48,
+    "wy_cm3": 510.76,
+    "wz_cm3": 174.02,
+    "centroid_mm": [
+      101.85,
+      103.12
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 66.451,
+      "mass_kg_m": 52.086
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/w8x35",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:a8610d4f0051185037af090e2e4b4ad4ba5128cf5f603f64fa8d19e8aca5d920"
+}

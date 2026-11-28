@@ -1,0 +1,75 @@
+{
+  "uid": "41250cfd6d2bb695",
+  "name": "CHS 508 × 12 (cold-formed)",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/chs508x12-cf",
+      "family": "chs",
+      "params": {
+        "height": 508.0,
+        "width": 508.0,
+        "web": 12.0
+      },
+      "catalogue": {
+        "name": "CHS 508 × 12 (cold-formed)",
+        "series": [
+          [
+            "en/chs406.4x12-cf",
+            406.4
+          ],
+          [
+            "en/chs457x12-cf",
+            457.0
+          ],
+          [
+            "en/chs508x12-cf",
+            508.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-cfchs",
+    "source": "https://www.steelforlifebluebook.co.uk/cfchs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10219-2",
+    "series": "CHS cold-formed"
+  },
+  "section": {
+    "area_cm2": 186.983,
+    "mass_kg_m": 146.782,
+    "iy_cm4": 57533.19,
+    "iz_cm4": 57533.19,
+    "iu_cm4": 57533.19,
+    "iv_cm4": 57533.19,
+    "wy_cm3": 2265.09,
+    "wz_cm3": 2265.09,
+    "centroid_mm": [
+      254.0,
+      254.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 187.0,
+      "mass_kg_m": 147.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/chs508x12-cf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:9e1b169c7bf44b686765ab338f827de043ed37489e376f90a6d7ed6ae9c82025"
+}

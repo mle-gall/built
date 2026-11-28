@@ -1,0 +1,72 @@
+{
+  "uid": "b3d95e2ac0e003f9",
+  "name": "WT22 × 204",
+  "rev": 3,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/wt22x204",
+      "family": "tee",
+      "params": {
+        "height": 568.96,
+        "width": 408.94,
+        "web": 30.988,
+        "flange": 55.118,
+        "radius": 20.07
+      },
+      "catalogue": {
+        "name": "WT22 × 204",
+        "series": [
+          [
+            "aisc/wt22x204",
+            568.96
+          ]
+        ],
+        "aliases": [
+          "WT22X204"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "WT"
+  },
+  "section": {
+    "area_cm2": 386.358,
+    "mass_kg_m": 303.291,
+    "iy_cm4": 111248.08,
+    "iz_cm4": 31546.23,
+    "iu_cm4": 111248.08,
+    "iv_cm4": 31546.23,
+    "wy_cm3": 2623.68,
+    "wz_cm3": 1542.83,
+    "centroid_mm": [
+      204.47,
+      424.02
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 386.451,
+      "mass_kg_m": 303.585
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/wt22x204",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:2402cf197de1c4bdb2a2b4360a19808b5b05a838afa71d40206c9838ffcd6259"
+}

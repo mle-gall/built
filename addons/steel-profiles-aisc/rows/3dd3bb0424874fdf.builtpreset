@@ -1,0 +1,76 @@
+{
+  "uid": "3dd3bb0424874fdf",
+  "name": "W36 × 210",
+  "rev": 3,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/w36x210",
+      "family": "i",
+      "params": {
+        "height": 932.18,
+        "width": 309.88,
+        "web": 21.082,
+        "flange": 34.544,
+        "radius": 19.05
+      },
+      "catalogue": {
+        "name": "W36 × 210",
+        "series": [
+          [
+            "aisc/w12x210",
+            373.38
+          ],
+          [
+            "aisc/w36x210",
+            932.18
+          ]
+        ],
+        "aliases": [
+          "W36X210"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "W"
+  },
+  "section": {
+    "area_cm2": 399.162,
+    "mass_kg_m": 313.342,
+    "iy_cm4": 550113.02,
+    "iz_cm4": 17206.37,
+    "iu_cm4": 550113.02,
+    "iv_cm4": 17206.37,
+    "wy_cm3": 11802.72,
+    "wz_cm3": 1110.52,
+    "centroid_mm": [
+      154.94,
+      466.09
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 399.354,
+      "mass_kg_m": 312.514
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/w36x210",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:54df8c6eb3f41691d2aee715fc6540353601f824cb1607c8acd5c2a712c8361c"
+}

@@ -1,0 +1,69 @@
+{
+  "uid": "6c1377a5a264f7df",
+  "name": "SHS 400 × 400 × 17.5 (hot-finished)",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/shs400x400x17.5-hf",
+      "family": "rhs",
+      "params": {
+        "height": 400.0,
+        "width": 400.0,
+        "web": 17.5,
+        "radius": 26.25,
+        "inner": 17.5
+      },
+      "catalogue": {
+        "name": "SHS 400 × 400 × 17.5 (hot-finished)",
+        "series": [
+          [
+            "en/shs400x400x17.5-hf",
+            400.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-hfshs",
+    "source": "https://www.steelforlifebluebook.co.uk/hfshs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10210-2",
+    "series": "SHS hot-finished"
+  },
+  "section": {
+    "area_cm2": 264.464,
+    "mass_kg_m": 207.604,
+    "iy_cm4": 64033.74,
+    "iz_cm4": 64033.74,
+    "iu_cm4": 64033.74,
+    "iv_cm4": 64033.74,
+    "wy_cm3": 3201.69,
+    "wz_cm3": 3201.69,
+    "centroid_mm": [
+      200.0,
+      200.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 264.0,
+      "mass_kg_m": 208.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/shs400x400x17.5-hf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:e00724964c611932e33aa531f6531ba111b2c1bcbaecd8aa0d08eeb02dfc9248"
+}

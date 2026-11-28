@@ -1,0 +1,88 @@
+{
+  "uid": "865c9fa7eff70aea",
+  "name": "HE 220 M",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/he220m",
+      "family": "i",
+      "params": {
+        "height": 240.0,
+        "width": 226.0,
+        "web": 15.5,
+        "flange": 26.0,
+        "radius": 18.0
+      },
+      "catalogue": {
+        "name": "HE 220 M",
+        "series": [
+          [
+            "en/he180m",
+            200.0
+          ],
+          [
+            "en/he200m",
+            220.0
+          ],
+          [
+            "en/he220m",
+            240.0
+          ],
+          [
+            "en/he240m",
+            270.0
+          ],
+          [
+            "en/he260m",
+            290.0
+          ]
+        ],
+        "aliases": [
+          "HEM 220"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-he",
+    "source": "https://orangebook.arcelormittal.com/node/16",
+    "standard": "EN 10365",
+    "series": "HE"
+  },
+  "section": {
+    "area_cm2": 149.441,
+    "mass_kg_m": 117.312,
+    "iy_cm4": 14604.85,
+    "iz_cm4": 5012.05,
+    "iu_cm4": 14604.85,
+    "iv_cm4": 5012.05,
+    "wy_cm3": 1217.07,
+    "wz_cm3": 443.54,
+    "centroid_mm": [
+      113.0,
+      120.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 149.0,
+      "mass_kg_m": 117.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/he220m",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:9dcf556381d8c1d49f01e651eda8390b17b2332a2972e8842c1eab93579ffc3a"
+}

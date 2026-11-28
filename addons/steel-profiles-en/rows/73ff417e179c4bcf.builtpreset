@@ -1,0 +1,88 @@
+{
+  "uid": "73ff417e179c4bcf",
+  "name": "IPN 280",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/ipn280",
+      "family": "i",
+      "params": {
+        "height": 280.0,
+        "width": 119.0,
+        "web": 10.1,
+        "flange": 15.2,
+        "radius": 10.1,
+        "toe": 6.1,
+        "slope": 14.0,
+        "flange_at": 29.75
+      },
+      "catalogue": {
+        "name": "IPN 280",
+        "series": [
+          [
+            "en/ipn240",
+            240.0
+          ],
+          [
+            "en/ipn260",
+            260.0
+          ],
+          [
+            "en/ipn280",
+            280.0
+          ],
+          [
+            "en/ipn300",
+            300.0
+          ],
+          [
+            "en/ipn320",
+            320.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "am-ipn",
+    "source": "https://sections.arcelormittal.com/repository2/Sections/Sections_MB_ArcelorMittal_FR_EN_DE_IPN.pdf",
+    "standard": "EN 10365",
+    "series": "IPN"
+  },
+  "section": {
+    "area_cm2": 61.015,
+    "mass_kg_m": 47.896,
+    "iy_cm4": 7575.16,
+    "iz_cm4": 363.02,
+    "iu_cm4": 7575.16,
+    "iv_cm4": 363.02,
+    "wy_cm3": 541.08,
+    "wz_cm3": 61.01,
+    "centroid_mm": [
+      59.5,
+      140.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 61.0,
+      "mass_kg_m": 47.9
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/ipn280",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:7bb15de50f64cfa5b051b0e40d8dc53c27ea06c38fd36131010657014cfdbcc9"
+}

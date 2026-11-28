@@ -1,0 +1,90 @@
+{
+  "uid": "524c3199c5d7047f",
+  "name": "ISMB 400",
+  "rev": 2,
+  "pack": "Steel profiles · IS",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "is/ismb400",
+      "family": "i",
+      "params": {
+        "height": 400.0,
+        "width": 140.0,
+        "web": 8.9,
+        "flange": 16.0,
+        "radius": 14.0,
+        "toe": 7.0,
+        "slope": 14.05
+      },
+      "catalogue": {
+        "name": "ISMB 400",
+        "series": [
+          [
+            "is/ismb300",
+            300.0
+          ],
+          [
+            "is/ismb350",
+            350.0
+          ],
+          [
+            "is/ismb400",
+            400.0
+          ],
+          [
+            "is/ismb450",
+            450.0
+          ],
+          [
+            "is/ismb500",
+            500.0
+          ]
+        ],
+        "aliases": [
+          "MB 400"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "is808-1989",
+    "source": "https://law.resource.org/pub/in/bis/S03/is.808.1989.pdf",
+    "standard": "IS 808",
+    "series": "ISMB"
+  },
+  "section": {
+    "area_cm2": 78.456,
+    "mass_kg_m": 61.588,
+    "iy_cm4": 20456.3,
+    "iz_cm4": 622.14,
+    "iu_cm4": 20456.3,
+    "iv_cm4": 622.14,
+    "wy_cm3": 1022.82,
+    "wz_cm3": 88.88,
+    "centroid_mm": [
+      70.0,
+      200.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 78.4,
+      "mass_kg_m": 61.5
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "is/ismb400",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:3143768b97db471465e5b7c8f4b974510328901cb90e1a906cf947a5bc1b301b"
+}

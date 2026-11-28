@@ -1,0 +1,80 @@
+{
+  "uid": "a116e82ae5def5d4",
+  "name": "W18 × 40",
+  "rev": 3,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/w18x40",
+      "family": "i",
+      "params": {
+        "height": 454.66,
+        "width": 152.908,
+        "web": 8.001,
+        "flange": 13.335,
+        "radius": 10.21
+      },
+      "catalogue": {
+        "name": "W18 × 40",
+        "series": [
+          [
+            "aisc/w12x40",
+            302.26
+          ],
+          [
+            "aisc/w16x40",
+            406.4
+          ],
+          [
+            "aisc/w18x40",
+            454.66
+          ]
+        ],
+        "aliases": [
+          "W18X40"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "W"
+  },
+  "section": {
+    "area_cm2": 75.919,
+    "mass_kg_m": 59.596,
+    "iy_cm4": 25491.19,
+    "iz_cm4": 796.78,
+    "iu_cm4": 25491.19,
+    "iv_cm4": 796.78,
+    "wy_cm3": 1121.33,
+    "wz_cm3": 104.22,
+    "centroid_mm": [
+      76.45,
+      227.33
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 76.129,
+      "mass_kg_m": 59.527
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/w18x40",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:352286fd68df95bf3ec9245a4b588144171aee0f73aa56ec17f6fc91cf89071d"
+}

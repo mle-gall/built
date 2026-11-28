@@ -1,0 +1,81 @@
+{
+  "uid": "b0a1b8ecb8012c30",
+  "name": "300 PFC",
+  "rev": 2,
+  "pack": "Steel profiles · AS/NZS",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "as-nzs/300pfc",
+      "family": "channel",
+      "params": {
+        "height": 300.0,
+        "width": 90.0,
+        "web": 8.0,
+        "flange": 16.0,
+        "radius": 14.0
+      },
+      "catalogue": {
+        "name": "300 PFC",
+        "series": [
+          [
+            "as-nzs/230pfc",
+            230.0
+          ],
+          [
+            "as-nzs/250pfc",
+            250.0
+          ],
+          [
+            "as-nzs/300pfc",
+            300.0
+          ],
+          [
+            "as-nzs/380pfc",
+            380.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ib-hrssp9",
+    "source": "https://www.infrabuild.com/wp-content/uploads/sites/8/2022/02/Hot20Rolled20Cat_Edition9_2019.pdf",
+    "standard": "AS/NZS 3679.1",
+    "series": "PFC"
+  },
+  "section": {
+    "area_cm2": 51.081,
+    "mass_kg_m": 40.099,
+    "iy_cm4": 7240.79,
+    "iz_cm4": 404.42,
+    "iu_cm4": 7240.79,
+    "iv_cm4": 404.42,
+    "wy_cm3": 482.72,
+    "wz_cm3": 64.43,
+    "centroid_mm": [
+      27.23,
+      150.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 51.1,
+      "mass_kg_m": 40.1
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "as-nzs/300pfc",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:d1087e1cda9ed93e5e8fb12a851f60a2abfb1ed9c92ffe53a6900d9f120eabf7"
+}

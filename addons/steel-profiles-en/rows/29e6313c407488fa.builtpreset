@@ -1,0 +1,80 @@
+{
+  "uid": "29e6313c407488fa",
+  "name": "IPN 80",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/ipn80",
+      "family": "i",
+      "params": {
+        "height": 80.0,
+        "width": 42.0,
+        "web": 3.9,
+        "flange": 5.9,
+        "radius": 3.9,
+        "toe": 2.3,
+        "slope": 14.0,
+        "flange_at": 10.5
+      },
+      "catalogue": {
+        "name": "IPN 80",
+        "series": [
+          [
+            "en/ipn80",
+            80.0
+          ],
+          [
+            "en/ipn100",
+            100.0
+          ],
+          [
+            "en/ipn120",
+            120.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "am-ipn",
+    "source": "https://sections.arcelormittal.com/repository2/Sections/Sections_MB_ArcelorMittal_FR_EN_DE_IPN.pdf",
+    "standard": "EN 10365",
+    "series": "IPN"
+  },
+  "section": {
+    "area_cm2": 7.573,
+    "mass_kg_m": 5.945,
+    "iy_cm4": 77.67,
+    "iz_cm4": 6.28,
+    "iu_cm4": 77.67,
+    "iv_cm4": 6.28,
+    "wy_cm3": 19.42,
+    "wz_cm3": 2.99,
+    "centroid_mm": [
+      21.0,
+      40.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 7.6,
+      "mass_kg_m": 5.9
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/ipn80",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:35d08eb26da13454f2044390b49ff62e8f2f51c374f85dee6d14b23ab71eac2d"
+}

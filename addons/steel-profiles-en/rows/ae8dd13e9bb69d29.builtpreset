@@ -1,0 +1,69 @@
+{
+  "uid": "ae8dd13e9bb69d29",
+  "name": "HP 360 × 133",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/hp360x133",
+      "family": "i",
+      "params": {
+        "height": 352.0,
+        "width": 373.8,
+        "web": 15.6,
+        "flange": 15.7,
+        "radius": 15.2
+      },
+      "catalogue": {
+        "name": "HP 360 × 133",
+        "series": [
+          [
+            "en/hp360x133",
+            352.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-hp",
+    "source": "https://orangebook.arcelormittal.com/node/200",
+    "standard": "EN 10365",
+    "series": "HP"
+  },
+  "section": {
+    "area_cm2": 169.37,
+    "mass_kg_m": 132.956,
+    "iy_cm4": 37983.02,
+    "iz_cm4": 13679.57,
+    "iu_cm4": 37983.02,
+    "iv_cm4": 13679.57,
+    "wy_cm3": 2158.13,
+    "wz_cm3": 731.92,
+    "centroid_mm": [
+      186.9,
+      176.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 169.0,
+      "mass_kg_m": 133.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/hp360x133",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:caef8bf5dcfce194351fcf997f9ec9a83b82db804318f3d563b769fe7ff5c48d"
+}

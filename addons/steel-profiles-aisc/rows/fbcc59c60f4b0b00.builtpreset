@@ -1,0 +1,72 @@
+{
+  "uid": "fbcc59c60f4b0b00",
+  "name": "MC18 × 58",
+  "rev": 3,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/mc18x58",
+      "family": "channel",
+      "params": {
+        "height": 457.2,
+        "width": 106.68,
+        "web": 17.78,
+        "flange": 15.875,
+        "radius": 20.7
+      },
+      "catalogue": {
+        "name": "MC18 × 58",
+        "series": [
+          [
+            "aisc/mc18x58",
+            457.2
+          ]
+        ],
+        "aliases": [
+          "MC18X58"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "MC"
+  },
+  "section": {
+    "area_cm2": 111.355,
+    "mass_kg_m": 87.414,
+    "iy_cm4": 28706.58,
+    "iz_cm4": 803.68,
+    "iu_cm4": 28706.58,
+    "iv_cm4": 803.68,
+    "wy_cm3": 1255.76,
+    "wz_cm3": 95.62,
+    "centroid_mm": [
+      22.63,
+      228.6
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 110.322,
+      "mass_kg_m": 86.314
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/mc18x58",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:901298ce9b72ed48510479baf9056ec188f16727f1e3fb166372f2930923ff4d"
+}

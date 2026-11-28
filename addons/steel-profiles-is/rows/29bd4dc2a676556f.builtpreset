@@ -1,0 +1,90 @@
+{
+  "uid": "29bd4dc2a676556f",
+  "name": "ISMC 200",
+  "rev": 2,
+  "pack": "Steel profiles · IS",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "is/ismc200",
+      "family": "channel",
+      "params": {
+        "height": 200.0,
+        "width": 75.0,
+        "web": 6.2,
+        "flange": 11.4,
+        "radius": 11.0,
+        "toe": 3.2,
+        "slope": 10.51
+      },
+      "catalogue": {
+        "name": "ISMC 200",
+        "series": [
+          [
+            "is/ismc150",
+            150.0
+          ],
+          [
+            "is/ismc175",
+            175.0
+          ],
+          [
+            "is/ismc200",
+            200.0
+          ],
+          [
+            "is/ismc225",
+            225.0
+          ],
+          [
+            "is/ismc250",
+            250.0
+          ]
+        ],
+        "aliases": [
+          "MC 200"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "is808-1989",
+    "source": "https://law.resource.org/pub/in/bis/S03/is.808.1989.pdf",
+    "standard": "IS 808",
+    "series": "ISMC"
+  },
+  "section": {
+    "area_cm2": 28.457,
+    "mass_kg_m": 22.339,
+    "iy_cm4": 1829.62,
+    "iz_cm4": 139.42,
+    "iu_cm4": 1829.62,
+    "iv_cm4": 139.42,
+    "wy_cm3": 182.96,
+    "wz_cm3": 26.19,
+    "centroid_mm": [
+      21.76,
+      100.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 28.5,
+      "mass_kg_m": 22.3
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "is/ismc200",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:51df2ae91c67d9011d738388c313f1fd56ed4fe23c8ac49865d7f0e69cf2aad0"
+}

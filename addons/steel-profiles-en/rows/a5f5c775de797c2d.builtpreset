@@ -1,0 +1,75 @@
+{
+  "uid": "a5f5c775de797c2d",
+  "name": "CHS 273 × 4 (cold-formed)",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/chs273x4-cf",
+      "family": "chs",
+      "params": {
+        "height": 273.0,
+        "width": 273.0,
+        "web": 4.0
+      },
+      "catalogue": {
+        "name": "CHS 273 × 4 (cold-formed)",
+        "series": [
+          [
+            "en/chs168.3x4-cf",
+            168.3
+          ],
+          [
+            "en/chs193.7x4-cf",
+            193.7
+          ],
+          [
+            "en/chs273x4-cf",
+            273.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-cfchs",
+    "source": "https://www.steelforlifebluebook.co.uk/cfchs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10219-2",
+    "series": "CHS cold-formed"
+  },
+  "section": {
+    "area_cm2": 33.803,
+    "mass_kg_m": 26.535,
+    "iy_cm4": 3058.09,
+    "iz_cm4": 3058.09,
+    "iu_cm4": 3058.09,
+    "iv_cm4": 3058.09,
+    "wy_cm3": 224.04,
+    "wz_cm3": 224.04,
+    "centroid_mm": [
+      136.5,
+      136.5
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 33.8,
+      "mass_kg_m": 26.5
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/chs273x4-cf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:612ca027159821d24eccffabd752538a7a8d24bfa44774823c4e0e72e7d6e926"
+}

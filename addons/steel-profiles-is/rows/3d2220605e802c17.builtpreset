@@ -1,0 +1,86 @@
+{
+  "uid": "3d2220605e802c17",
+  "name": "ISWB 550",
+  "rev": 2,
+  "pack": "Steel profiles · IS",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "is/iswb550",
+      "family": "i",
+      "params": {
+        "height": 550.0,
+        "width": 250.0,
+        "web": 10.5,
+        "flange": 17.6,
+        "radius": 16.0,
+        "toe": 8.0,
+        "slope": 10.51
+      },
+      "catalogue": {
+        "name": "ISWB 550",
+        "series": [
+          [
+            "is/iswb450",
+            450.0
+          ],
+          [
+            "is/iswb500",
+            500.0
+          ],
+          [
+            "is/iswb550",
+            550.0
+          ],
+          [
+            "is/iswb600",
+            600.0
+          ]
+        ],
+        "aliases": [
+          "WB 550"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "is808-1989",
+    "source": "https://law.resource.org/pub/in/bis/S03/is.808.1989.pdf",
+    "standard": "IS 808",
+    "series": "ISWB"
+  },
+  "section": {
+    "area_cm2": 143.34,
+    "mass_kg_m": 112.522,
+    "iy_cm4": 74912.13,
+    "iz_cm4": 3740.76,
+    "iu_cm4": 74912.13,
+    "iv_cm4": 3740.76,
+    "wy_cm3": 2724.08,
+    "wz_cm3": 299.26,
+    "centroid_mm": [
+      125.0,
+      275.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 143.0,
+      "mass_kg_m": 112.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "is/iswb550",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:e46c41cafaf4370b91748a70c8574add17cd662e1082c58eb40188f5a1b55f6d"
+}

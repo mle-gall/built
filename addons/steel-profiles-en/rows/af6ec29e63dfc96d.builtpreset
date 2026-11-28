@@ -1,0 +1,69 @@
+{
+  "uid": "af6ec29e63dfc96d",
+  "name": "UB 760 × 380 × 531",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/ub760x380x531",
+      "family": "i",
+      "params": {
+        "height": 833.0,
+        "width": 393.0,
+        "web": 31.5,
+        "flange": 56.9,
+        "radius": 20.0
+      },
+      "catalogue": {
+        "name": "UB 760 × 380 × 531",
+        "series": [
+          [
+            "en/ub760x380x531",
+            833.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-ub",
+    "source": "https://orangebook.arcelormittal.com/node/35",
+    "standard": "EN 10365",
+    "series": "UB"
+  },
+  "section": {
+    "area_cm2": 677.216,
+    "mass_kg_m": 531.615,
+    "iy_cm4": 776646.84,
+    "iz_cm4": 57764.22,
+    "iu_cm4": 776646.84,
+    "iv_cm4": 57764.22,
+    "wy_cm3": 18646.98,
+    "wz_cm3": 2939.65,
+    "centroid_mm": [
+      196.5,
+      416.5
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 676.0,
+      "mass_kg_m": 531.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/ub760x380x531",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:f67b9de0fcc564a33844aac60bbf4c44cb576ab708e0772ce6be26aab266d9d7"
+}

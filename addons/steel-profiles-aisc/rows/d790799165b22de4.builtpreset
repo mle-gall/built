@@ -1,0 +1,73 @@
+{
+  "uid": "d790799165b22de4",
+  "name": "S6 × 17.25",
+  "rev": 3,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/s6x17.25",
+      "family": "i",
+      "params": {
+        "height": 152.4,
+        "width": 90.678,
+        "web": 11.811,
+        "flange": 9.119,
+        "radius": 8.24,
+        "slope": 16.67
+      },
+      "catalogue": {
+        "name": "S6 × 17.25",
+        "series": [
+          [
+            "aisc/s6x17.25",
+            152.4
+          ]
+        ],
+        "aliases": [
+          "S6X17.25"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "S"
+  },
+  "section": {
+    "area_cm2": 32.776,
+    "mass_kg_m": 25.729,
+    "iy_cm4": 1099.13,
+    "iz_cm4": 97.92,
+    "iu_cm4": 1099.13,
+    "iv_cm4": 97.92,
+    "wy_cm3": 144.24,
+    "wz_cm3": 21.6,
+    "centroid_mm": [
+      45.34,
+      76.2
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 32.581,
+      "mass_kg_m": 25.671
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/s6x17.25",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:8ce8ee8dcbc29b0e8e71eeeda1dae17820ac035a2575dd9c02d6548a2bf50a4a"
+}

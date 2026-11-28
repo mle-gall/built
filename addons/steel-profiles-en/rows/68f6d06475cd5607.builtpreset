@@ -1,0 +1,85 @@
+{
+  "uid": "68f6d06475cd5607",
+  "name": "IPE A 240",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/ipea240",
+      "family": "i",
+      "params": {
+        "height": 237.0,
+        "width": 120.0,
+        "web": 5.2,
+        "flange": 8.3,
+        "radius": 15.0
+      },
+      "catalogue": {
+        "name": "IPE A 240",
+        "series": [
+          [
+            "en/ipea200",
+            197.0
+          ],
+          [
+            "en/ipea220",
+            217.0
+          ],
+          [
+            "en/ipea240",
+            237.0
+          ],
+          [
+            "en/ipea270",
+            267.0
+          ],
+          [
+            "en/ipea300",
+            297.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-ipe",
+    "source": "https://orangebook.arcelormittal.com/node/6",
+    "standard": "EN 10365",
+    "series": "IPE"
+  },
+  "section": {
+    "area_cm2": 33.312,
+    "mass_kg_m": 26.15,
+    "iy_cm4": 3290.48,
+    "iz_cm4": 240.14,
+    "iu_cm4": 3290.48,
+    "iv_cm4": 240.14,
+    "wy_cm3": 277.68,
+    "wz_cm3": 40.02,
+    "centroid_mm": [
+      60.0,
+      118.5
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 33.3,
+      "mass_kg_m": 26.2
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/ipea240",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:d8e20a451188a6bb74231bdcd3420d4fa3ac2a0824314bfa4e05d9379893d000"
+}

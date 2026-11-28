@@ -1,0 +1,72 @@
+{
+  "uid": "82a34e7761342952",
+  "name": "W33 × 354",
+  "rev": 3,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/w33x354",
+      "family": "i",
+      "params": {
+        "height": 904.24,
+        "width": 408.94,
+        "web": 29.464,
+        "flange": 53.086,
+        "radius": 20.07
+      },
+      "catalogue": {
+        "name": "W33 × 354",
+        "series": [
+          [
+            "aisc/w33x354",
+            904.24
+          ]
+        ],
+        "aliases": [
+          "W33X354"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "W"
+  },
+  "section": {
+    "area_cm2": 672.781,
+    "mass_kg_m": 528.133,
+    "iy_cm4": 917575.83,
+    "iz_cm4": 60690.64,
+    "iu_cm4": 917575.83,
+    "iv_cm4": 60690.64,
+    "wy_cm3": 20294.96,
+    "wz_cm3": 2968.19,
+    "centroid_mm": [
+      204.47,
+      452.12
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 670.966,
+      "mass_kg_m": 526.81
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/w33x354",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:86c66f404d666040ecb6b2454a36c2402de78e2e4ee3fbd08928ebaded46a115"
+}

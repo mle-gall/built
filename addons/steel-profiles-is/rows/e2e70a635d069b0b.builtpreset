@@ -1,0 +1,72 @@
+{
+  "uid": "e2e70a635d069b0b",
+  "name": "ISA 125 × 95 × 6",
+  "rev": 2,
+  "pack": "Steel profiles · IS",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "is/isa125x95x6",
+      "family": "angle",
+      "params": {
+        "height": 125.0,
+        "width": 95.0,
+        "web": 6.0,
+        "radius": 9.0,
+        "toe": 4.8
+      },
+      "catalogue": {
+        "name": "ISA 125 × 95 × 6",
+        "series": [
+          [
+            "is/isa125x95x6",
+            125.0
+          ]
+        ],
+        "aliases": [
+          "A 125 x 95 x 6"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "is808-1989",
+    "source": "https://law.resource.org/pub/in/bis/S03/is.808.1989.pdf",
+    "standard": "IS 808",
+    "series": "ISA unequal"
+  },
+  "section": {
+    "area_cm2": 12.915,
+    "mass_kg_m": 10.138,
+    "iy_cm4": 205.53,
+    "iz_cm4": 103.55,
+    "iu_cm4": 254.1,
+    "iv_cm4": 54.98,
+    "wy_cm3": 23.4,
+    "wz_cm3": 14.25,
+    "centroid_mm": [
+      22.35,
+      37.15
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 12.9,
+      "mass_kg_m": 10.1
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "is/isa125x95x6",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:34fc371fdceed4a05a8a0118544385c400c717c848760c00e951baf4813ac1dd"
+}

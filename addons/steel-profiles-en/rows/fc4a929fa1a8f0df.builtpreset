@@ -1,0 +1,77 @@
+{
+  "uid": "fc4a929fa1a8f0df",
+  "name": "RHS 300 × 100 × 12.5 (hot-finished)",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/rhs300x100x12.5-hf",
+      "family": "rhs",
+      "params": {
+        "height": 300.0,
+        "width": 100.0,
+        "web": 12.5,
+        "radius": 18.75,
+        "inner": 12.5
+      },
+      "catalogue": {
+        "name": "RHS 300 × 100 × 12.5 (hot-finished)",
+        "series": [
+          [
+            "en/rhs200x100x12.5-hf",
+            200.0
+          ],
+          [
+            "en/rhs250x100x12.5-hf",
+            250.0
+          ],
+          [
+            "en/rhs300x100x12.5-hf",
+            300.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-hfrhs",
+    "source": "https://www.steelforlifebluebook.co.uk/hfrhs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10210-2",
+    "series": "RHS hot-finished"
+  },
+  "section": {
+    "area_cm2": 92.073,
+    "mass_kg_m": 72.278,
+    "iy_cm4": 9103.38,
+    "iz_cm4": 1485.72,
+    "iu_cm4": 9103.38,
+    "iv_cm4": 1485.72,
+    "wy_cm3": 606.89,
+    "wz_cm3": 297.14,
+    "centroid_mm": [
+      50.0,
+      150.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 92.1,
+      "mass_kg_m": 72.3
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/rhs300x100x12.5-hf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:650af9d75058b1c82c4cb76a48458e165cd3ea683756ef16013bd4f73d7c98ad"
+}

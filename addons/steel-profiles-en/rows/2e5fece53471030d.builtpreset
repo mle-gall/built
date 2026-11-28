@@ -1,0 +1,69 @@
+{
+  "uid": "2e5fece53471030d",
+  "name": "IPE 750 × 173",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/ipe750x173",
+      "family": "i",
+      "params": {
+        "height": 762.0,
+        "width": 267.0,
+        "web": 14.4,
+        "flange": 21.6,
+        "radius": 17.0
+      },
+      "catalogue": {
+        "name": "IPE 750 × 173",
+        "series": [
+          [
+            "en/ipe750x173",
+            762.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-ipe",
+    "source": "https://orangebook.arcelormittal.com/node/6",
+    "standard": "EN 10365",
+    "series": "IPE"
+  },
+  "section": {
+    "area_cm2": 221.332,
+    "mass_kg_m": 173.746,
+    "iy_cm4": 205825.31,
+    "iz_cm4": 6873.44,
+    "iu_cm4": 205825.31,
+    "iv_cm4": 6873.44,
+    "wy_cm3": 5402.24,
+    "wz_cm3": 514.86,
+    "centroid_mm": [
+      133.5,
+      381.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 221.0,
+      "mass_kg_m": 173.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/ipe750x173",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:49af9147f7407ccaefcc48945f79ef57038839b3ec61cb2b47a0488fd3a8c6da"
+}

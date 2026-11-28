@@ -1,0 +1,90 @@
+{
+  "uid": "b96958c722dd0f67",
+  "name": "ISLC 250",
+  "rev": 2,
+  "pack": "Steel profiles · IS",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "is/islc250",
+      "family": "channel",
+      "params": {
+        "height": 250.0,
+        "width": 100.0,
+        "web": 6.1,
+        "flange": 10.7,
+        "radius": 11.0,
+        "toe": 3.2,
+        "slope": 10.51
+      },
+      "catalogue": {
+        "name": "ISLC 250",
+        "series": [
+          [
+            "is/islc200",
+            200.0
+          ],
+          [
+            "is/islc225",
+            225.0
+          ],
+          [
+            "is/islc250",
+            250.0
+          ],
+          [
+            "is/islc300",
+            300.0
+          ],
+          [
+            "is/islc350",
+            350.0
+          ]
+        ],
+        "aliases": [
+          "LC 250"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "is808-1989",
+    "source": "https://law.resource.org/pub/in/bis/S03/is.808.1989.pdf",
+    "standard": "IS 808",
+    "series": "ISLC"
+  },
+  "section": {
+    "area_cm2": 35.715,
+    "mass_kg_m": 28.037,
+    "iy_cm4": 3697.36,
+    "iz_cm4": 296.04,
+    "iu_cm4": 3697.36,
+    "iv_cm4": 296.04,
+    "wy_cm3": 295.79,
+    "wz_cm3": 40.6,
+    "centroid_mm": [
+      27.09,
+      125.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 35.7,
+      "mass_kg_m": 28.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "is/islc250",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:a14c6e4aea0453764e699bc6270f2afeddef81c469e71357c461bdfd797584c3"
+}

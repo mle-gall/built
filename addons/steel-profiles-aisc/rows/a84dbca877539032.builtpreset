@@ -1,0 +1,72 @@
+{
+  "uid": "a84dbca877539032",
+  "name": "WT10.5 × 124",
+  "rev": 3,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/wt10.5x124",
+      "family": "tee",
+      "params": {
+        "height": 302.26,
+        "width": 325.12,
+        "web": 27.94,
+        "flange": 50.546,
+        "radius": 29.97
+      },
+      "catalogue": {
+        "name": "WT10.5 × 124",
+        "series": [
+          [
+            "aisc/wt10.5x124",
+            302.26
+          ]
+        ],
+        "aliases": [
+          "WT10.5X124"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "WT"
+  },
+  "section": {
+    "area_cm2": 238.52,
+    "mass_kg_m": 187.238,
+    "iy_cm4": 15320.33,
+    "iz_cm4": 14539.03,
+    "iu_cm4": 15320.33,
+    "iv_cm4": 14539.03,
+    "wy_cm3": 660.62,
+    "wz_cm3": 894.38,
+    "centroid_mm": [
+      162.56,
+      231.91
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 238.709,
+      "mass_kg_m": 184.532
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/wt10.5x124",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:4f24e5c2e7d4d9708da35af685decea16802e45bb6046a0690a76b356ec35cec"
+}

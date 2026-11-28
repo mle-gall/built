@@ -1,0 +1,69 @@
+{
+  "uid": "b0bb1f0d4da98066",
+  "name": "SHS 300 × 300 × 17.5 (hot-finished)",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/shs300x300x17.5-hf",
+      "family": "rhs",
+      "params": {
+        "height": 300.0,
+        "width": 300.0,
+        "web": 17.5,
+        "radius": 26.25,
+        "inner": 17.5
+      },
+      "catalogue": {
+        "name": "SHS 300 × 300 × 17.5 (hot-finished)",
+        "series": [
+          [
+            "en/shs300x300x17.5-hf",
+            300.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-hfshs",
+    "source": "https://www.steelforlifebluebook.co.uk/hfshs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10210-2",
+    "series": "SHS hot-finished"
+  },
+  "section": {
+    "area_cm2": 194.464,
+    "mass_kg_m": 152.654,
+    "iy_cm4": 25608.37,
+    "iz_cm4": 25608.37,
+    "iu_cm4": 25608.37,
+    "iv_cm4": 25608.37,
+    "wy_cm3": 1707.22,
+    "wz_cm3": 1707.22,
+    "centroid_mm": [
+      150.0,
+      150.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 194.0,
+      "mass_kg_m": 153.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/shs300x300x17.5-hf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:d2ee48a5674b15db4847e1a46749df8b3888f28af3d59b2f23fd73038ad10785"
+}

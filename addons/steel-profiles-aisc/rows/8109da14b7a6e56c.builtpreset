@@ -1,0 +1,73 @@
+{
+  "uid": "8109da14b7a6e56c",
+  "name": "S18 × 70",
+  "rev": 3,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/s18x70",
+      "family": "i",
+      "params": {
+        "height": 457.2,
+        "width": 158.75,
+        "web": 18.059,
+        "flange": 17.551,
+        "radius": 14.69,
+        "slope": 16.67
+      },
+      "catalogue": {
+        "name": "S18 × 70",
+        "series": [
+          [
+            "aisc/s18x70",
+            457.2
+          ]
+        ],
+        "aliases": [
+          "S18X70"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "S"
+  },
+  "section": {
+    "area_cm2": 133.197,
+    "mass_kg_m": 104.559,
+    "iy_cm4": 38704.38,
+    "iz_cm4": 1021.77,
+    "iu_cm4": 38704.38,
+    "iv_cm4": 1021.77,
+    "wy_cm3": 1693.11,
+    "wz_cm3": 128.73,
+    "centroid_mm": [
+      79.38,
+      228.6
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 132.258,
+      "mass_kg_m": 104.171
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/s18x70",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:e9eab902fa8928135fa72fd1f5b64eca7f7a2180922bfd1ec89b2561c512ce79"
+}

@@ -1,0 +1,82 @@
+{
+  "uid": "808ca3dd0e9f3510",
+  "name": "ISLC 400",
+  "rev": 2,
+  "pack": "Steel profiles · IS",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "is/islc400",
+      "family": "channel",
+      "params": {
+        "height": 400.0,
+        "width": 100.0,
+        "web": 8.0,
+        "flange": 14.0,
+        "radius": 14.0,
+        "toe": 4.8,
+        "slope": 10.51
+      },
+      "catalogue": {
+        "name": "ISLC 400",
+        "series": [
+          [
+            "is/islc300",
+            300.0
+          ],
+          [
+            "is/islc350",
+            350.0
+          ],
+          [
+            "is/islc400",
+            400.0
+          ]
+        ],
+        "aliases": [
+          "LC 400"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "is808-1989",
+    "source": "https://law.resource.org/pub/in/bis/S03/is.808.1989.pdf",
+    "standard": "IS 808",
+    "series": "ISLC"
+  },
+  "section": {
+    "area_cm2": 58.339,
+    "mass_kg_m": 45.796,
+    "iy_cm4": 14020.74,
+    "iz_cm4": 458.19,
+    "iu_cm4": 14020.74,
+    "iv_cm4": 458.19,
+    "wy_cm3": 701.04,
+    "wz_cm3": 60.04,
+    "centroid_mm": [
+      23.69,
+      200.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 58.3,
+      "mass_kg_m": 45.8
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "is/islc400",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:473953d049e47dc158775d4cf88759854f54a3cd52d0a3989656f4fe145b7ab5"
+}

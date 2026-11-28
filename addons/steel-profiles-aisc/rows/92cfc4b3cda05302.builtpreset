@@ -1,0 +1,76 @@
+{
+  "uid": "92cfc4b3cda05302",
+  "name": "W12 × 210",
+  "rev": 3,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/w12x210",
+      "family": "i",
+      "params": {
+        "height": 373.38,
+        "width": 325.12,
+        "web": 29.972,
+        "flange": 48.26,
+        "radius": 15.24
+      },
+      "catalogue": {
+        "name": "W12 × 210",
+        "series": [
+          [
+            "aisc/w12x210",
+            373.38
+          ],
+          [
+            "aisc/w36x210",
+            932.18
+          ]
+        ],
+        "aliases": [
+          "W12X210"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "W"
+  },
+  "section": {
+    "area_cm2": 398.78,
+    "mass_kg_m": 313.042,
+    "iy_cm4": 89198.77,
+    "iz_cm4": 27710.88,
+    "iu_cm4": 89198.77,
+    "iv_cm4": 27710.88,
+    "wy_cm3": 4777.91,
+    "wz_cm3": 1704.66,
+    "centroid_mm": [
+      162.56,
+      186.69
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 398.709,
+      "mass_kg_m": 312.514
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/w12x210",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:0a5d955fdf021934abfe7b3dd464994783f67798bd6dd9b6c799f1f1154a355c"
+}

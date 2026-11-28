@@ -1,0 +1,73 @@
+{
+  "uid": "604202c91bd6e212",
+  "name": "RHS 500 × 300 × 17.5 (hot-finished)",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/rhs500x300x17.5-hf",
+      "family": "rhs",
+      "params": {
+        "height": 500.0,
+        "width": 300.0,
+        "web": 17.5,
+        "radius": 26.25,
+        "inner": 17.5
+      },
+      "catalogue": {
+        "name": "RHS 500 × 300 × 17.5 (hot-finished)",
+        "series": [
+          [
+            "en/rhs400x300x17.5-hf",
+            400.0
+          ],
+          [
+            "en/rhs500x300x17.5-hf",
+            500.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-hfrhs",
+    "source": "https://www.steelforlifebluebook.co.uk/hfrhs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10210-2",
+    "series": "RHS hot-finished"
+  },
+  "section": {
+    "area_cm2": 264.464,
+    "mass_kg_m": 207.604,
+    "iy_cm4": 88310.82,
+    "iz_cm4": 39592.33,
+    "iu_cm4": 88310.82,
+    "iv_cm4": 39592.33,
+    "wy_cm3": 3532.43,
+    "wz_cm3": 2639.49,
+    "centroid_mm": [
+      150.0,
+      250.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 264.0,
+      "mass_kg_m": 208.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/rhs500x300x17.5-hf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:85ce2927bf798c6359d916632d14d913168aa001b660df272bd3046442dcf3f7"
+}

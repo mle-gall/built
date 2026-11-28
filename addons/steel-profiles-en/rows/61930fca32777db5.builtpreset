@@ -1,0 +1,73 @@
+{
+  "uid": "61930fca32777db5",
+  "name": "RHS 250 × 150 × 17.5 (hot-finished)",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/rhs250x150x17.5-hf",
+      "family": "rhs",
+      "params": {
+        "height": 250.0,
+        "width": 150.0,
+        "web": 17.5,
+        "radius": 26.25,
+        "inner": 17.5
+      },
+      "catalogue": {
+        "name": "RHS 250 × 150 × 17.5 (hot-finished)",
+        "series": [
+          [
+            "en/rhs250x150x17.5-hf",
+            250.0
+          ],
+          [
+            "en/rhs350x150x17.5-hf",
+            350.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-hfrhs",
+    "source": "https://www.steelforlifebluebook.co.uk/hfrhs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10210-2",
+    "series": "RHS hot-finished"
+  },
+  "section": {
+    "area_cm2": 124.464,
+    "mass_kg_m": 97.704,
+    "iy_cm4": 9448.34,
+    "iz_cm4": 4097.96,
+    "iu_cm4": 9448.34,
+    "iv_cm4": 4097.96,
+    "wy_cm3": 755.87,
+    "wz_cm3": 546.39,
+    "centroid_mm": [
+      75.0,
+      125.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 124.0,
+      "mass_kg_m": 97.7
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/rhs250x150x17.5-hf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:68723761d524d24cc8155a9f6d7755dd675cec1bd1157fe0dbec6c61f67e8197"
+}

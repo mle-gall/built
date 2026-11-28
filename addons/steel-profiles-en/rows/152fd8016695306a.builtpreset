@@ -1,0 +1,69 @@
+{
+  "uid": "152fd8016695306a",
+  "name": "SHS 260 × 260 × 14.2 (hot-finished)",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/shs260x260x14.2-hf",
+      "family": "rhs",
+      "params": {
+        "height": 260.0,
+        "width": 260.0,
+        "web": 14.2,
+        "radius": 21.3,
+        "inner": 14.2
+      },
+      "catalogue": {
+        "name": "SHS 260 × 260 × 14.2 (hot-finished)",
+        "series": [
+          [
+            "en/shs260x260x14.2-hf",
+            260.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-hfshs",
+    "source": "https://www.steelforlifebluebook.co.uk/hfshs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10210-2",
+    "series": "SHS hot-finished"
+  },
+  "section": {
+    "area_cm2": 137.451,
+    "mass_kg_m": 107.899,
+    "iy_cm4": 13713.7,
+    "iz_cm4": 13713.7,
+    "iu_cm4": 13713.7,
+    "iv_cm4": 13713.7,
+    "wy_cm3": 1054.9,
+    "wz_cm3": 1054.9,
+    "centroid_mm": [
+      130.0,
+      130.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 137.0,
+      "mass_kg_m": 108.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/shs260x260x14.2-hf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:65ea4fbe43a22689ae4c3a579b65a2a3da791d591cb981151de4ed04b8e444f0"
+}

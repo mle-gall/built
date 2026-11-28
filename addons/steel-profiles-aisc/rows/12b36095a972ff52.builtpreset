@@ -1,0 +1,73 @@
+{
+  "uid": "12b36095a972ff52",
+  "name": "C15 × 40",
+  "rev": 3,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/c15x40",
+      "family": "channel",
+      "params": {
+        "height": 381.0,
+        "width": 89.408,
+        "web": 13.208,
+        "flange": 16.51,
+        "radius": 13.72,
+        "slope": 16.67
+      },
+      "catalogue": {
+        "name": "C15 × 40",
+        "series": [
+          [
+            "aisc/c15x40",
+            381.0
+          ]
+        ],
+        "aliases": [
+          "C15X40"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "C"
+  },
+  "section": {
+    "area_cm2": 76.027,
+    "mass_kg_m": 59.681,
+    "iy_cm4": 14563.18,
+    "iz_cm4": 389.13,
+    "iu_cm4": 14563.18,
+    "iv_cm4": 389.13,
+    "wy_cm3": 764.47,
+    "wz_cm3": 55.94,
+    "centroid_mm": [
+      19.85,
+      190.5
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 76.129,
+      "mass_kg_m": 59.527
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/c15x40",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:245a2f8e2abd7bc0043ca212e81c0d147c3f8de2d09b09dc32cedf15066ef729"
+}

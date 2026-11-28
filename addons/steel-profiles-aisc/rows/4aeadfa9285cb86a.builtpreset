@@ -1,0 +1,72 @@
+{
+  "uid": "4aeadfa9285cb86a",
+  "name": "W40 × 331",
+  "rev": 3,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/w40x331",
+      "family": "i",
+      "params": {
+        "height": 1036.32,
+        "width": 309.88,
+        "web": 30.988,
+        "flange": 54.102,
+        "radius": 29.97
+      },
+      "catalogue": {
+        "name": "W40 × 331",
+        "series": [
+          [
+            "aisc/w40x331",
+            1036.32
+          ]
+        ],
+        "aliases": [
+          "W40X331"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "W"
+  },
+  "section": {
+    "area_cm2": 630.618,
+    "mass_kg_m": 495.035,
+    "iy_cm4": 1032111.8,
+    "iz_cm4": 27101.91,
+    "iu_cm4": 1032111.8,
+    "iv_cm4": 27101.91,
+    "wy_cm3": 19918.79,
+    "wz_cm3": 1749.19,
+    "centroid_mm": [
+      154.94,
+      518.16
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 630.321,
+      "mass_kg_m": 492.582
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/w40x331",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:d6b844db6663d81bfbfaeb9646865ab5b70e387274d7d5348e211385d3903e22"
+}

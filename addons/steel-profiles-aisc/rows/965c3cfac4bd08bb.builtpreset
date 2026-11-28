@@ -1,0 +1,72 @@
+{
+  "uid": "965c3cfac4bd08bb",
+  "name": "W8 × 28",
+  "rev": 3,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/w8x28",
+      "family": "i",
+      "params": {
+        "height": 204.724,
+        "width": 166.116,
+        "web": 7.239,
+        "flange": 11.811,
+        "radius": 10.01
+      },
+      "catalogue": {
+        "name": "W8 × 28",
+        "series": [
+          [
+            "aisc/w8x28",
+            204.724
+          ]
+        ],
+        "aliases": [
+          "W8X28"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "W"
+  },
+  "section": {
+    "area_cm2": 53.21,
+    "mass_kg_m": 41.77,
+    "iy_cm4": 4080.83,
+    "iz_cm4": 903.24,
+    "iu_cm4": 4080.83,
+    "iv_cm4": 903.24,
+    "wy_cm3": 398.67,
+    "wz_cm3": 108.75,
+    "centroid_mm": [
+      83.06,
+      102.36
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 53.226,
+      "mass_kg_m": 41.669
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/w8x28",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:dbe904773126b1b4bde4c34ae0c7eefb00463a9495bde5c87cc13db13dd9eeaa"
+}

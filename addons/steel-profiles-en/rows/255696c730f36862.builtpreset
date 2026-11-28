@@ -1,0 +1,77 @@
+{
+  "uid": "255696c730f36862",
+  "name": "UPE 400",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/upe400",
+      "family": "channel",
+      "params": {
+        "height": 400.0,
+        "width": 115.0,
+        "web": 13.5,
+        "flange": 18.0,
+        "radius": 18.0
+      },
+      "catalogue": {
+        "name": "UPE 400",
+        "series": [
+          [
+            "en/upe330",
+            330.0
+          ],
+          [
+            "en/upe360",
+            360.0
+          ],
+          [
+            "en/upe400",
+            400.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-upe",
+    "source": "https://orangebook.arcelormittal.com/node/253",
+    "standard": "EN 10365",
+    "series": "UPE"
+  },
+  "section": {
+    "area_cm2": 91.931,
+    "mass_kg_m": 72.166,
+    "iy_cm4": 20980.72,
+    "iz_cm4": 1044.72,
+    "iu_cm4": 20980.72,
+    "iv_cm4": 1044.72,
+    "wy_cm3": 1049.04,
+    "wz_cm3": 122.57,
+    "centroid_mm": [
+      29.77,
+      200.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 91.9,
+      "mass_kg_m": 72.2
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/upe400",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:73652f669fe4eb5fc5326072c623c7d679f543c920f8b4218abc014ebec49465"
+}

@@ -1,0 +1,77 @@
+{
+  "uid": "5cb6bc4143c80390",
+  "name": "ST7.5 × 25",
+  "rev": 3,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/st7.5x25",
+      "family": "tee",
+      "params": {
+        "height": 190.5,
+        "width": 143.256,
+        "web": 13.97,
+        "flange": 15.799,
+        "radius": 13.87,
+        "slope": 16.67
+      },
+      "catalogue": {
+        "name": "ST7.5 × 25",
+        "series": [
+          [
+            "aisc/st6x25",
+            152.4
+          ],
+          [
+            "aisc/st7.5x25",
+            190.5
+          ]
+        ],
+        "aliases": [
+          "ST7.5X25"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "ST"
+  },
+  "section": {
+    "area_cm2": 47.594,
+    "mass_kg_m": 37.361,
+    "iy_cm4": 1692.04,
+    "iz_cm4": 332.57,
+    "iu_cm4": 1692.04,
+    "iv_cm4": 332.57,
+    "wy_cm3": 126.8,
+    "wz_cm3": 46.43,
+    "centroid_mm": [
+      71.63,
+      133.45
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 47.355,
+      "mass_kg_m": 37.204
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/st7.5x25",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:991fc250d27987c1d09cdf6e2bdfe944f2150af798ae6080f168866942890789"
+}

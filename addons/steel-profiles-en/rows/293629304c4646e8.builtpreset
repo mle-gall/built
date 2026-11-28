@@ -1,0 +1,88 @@
+{
+  "uid": "293629304c4646e8",
+  "name": "IPN 450",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/ipn450",
+      "family": "i",
+      "params": {
+        "height": 450.0,
+        "width": 170.0,
+        "web": 16.2,
+        "flange": 24.3,
+        "radius": 16.2,
+        "toe": 9.7,
+        "slope": 14.0,
+        "flange_at": 42.5
+      },
+      "catalogue": {
+        "name": "IPN 450",
+        "series": [
+          [
+            "en/ipn380",
+            380.0
+          ],
+          [
+            "en/ipn400",
+            400.0
+          ],
+          [
+            "en/ipn450",
+            450.0
+          ],
+          [
+            "en/ipn500",
+            500.0
+          ],
+          [
+            "en/ipn550",
+            550.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "am-ipn",
+    "source": "https://sections.arcelormittal.com/repository2/Sections/Sections_MB_ArcelorMittal_FR_EN_DE_IPN.pdf",
+    "standard": "EN 10365",
+    "series": "IPN"
+  },
+  "section": {
+    "area_cm2": 146.939,
+    "mass_kg_m": 115.347,
+    "iy_cm4": 45790.65,
+    "iz_cm4": 1722.06,
+    "iu_cm4": 45790.65,
+    "iv_cm4": 1722.06,
+    "wy_cm3": 2035.14,
+    "wz_cm3": 202.59,
+    "centroid_mm": [
+      85.0,
+      225.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 146.9,
+      "mass_kg_m": 115.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/ipn450",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:adad03ec5c6dfa44606b875fb19eb61706821c0da4c5d0f0d14fcadd5023c717"
+}

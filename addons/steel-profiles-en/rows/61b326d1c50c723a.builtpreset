@@ -1,0 +1,88 @@
+{
+  "uid": "61b326d1c50c723a",
+  "name": "HE 240 C",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/he240c",
+      "family": "i",
+      "params": {
+        "height": 255.0,
+        "width": 244.0,
+        "web": 14.0,
+        "flange": 24.5,
+        "radius": 21.0
+      },
+      "catalogue": {
+        "name": "HE 240 C",
+        "series": [
+          [
+            "en/he200c",
+            210.0
+          ],
+          [
+            "en/he220c",
+            230.0
+          ],
+          [
+            "en/he240c",
+            255.0
+          ],
+          [
+            "en/he260c",
+            275.0
+          ],
+          [
+            "en/he280c",
+            295.0
+          ]
+        ],
+        "aliases": [
+          "HEC 240"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-he",
+    "source": "https://orangebook.arcelormittal.com/node/16",
+    "standard": "EN 10365",
+    "series": "HE"
+  },
+  "section": {
+    "area_cm2": 152.186,
+    "mass_kg_m": 119.466,
+    "iy_cm4": 17326.8,
+    "iz_cm4": 5942.24,
+    "iu_cm4": 17326.8,
+    "iv_cm4": 5942.24,
+    "wy_cm3": 1358.96,
+    "wz_cm3": 487.07,
+    "centroid_mm": [
+      122.0,
+      127.5
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 152.0,
+      "mass_kg_m": 119.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/he240c",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:404ff102c3001f33204fd21ad6da2ae218128c321ec3d97ed1030ea503fac3b8"
+}

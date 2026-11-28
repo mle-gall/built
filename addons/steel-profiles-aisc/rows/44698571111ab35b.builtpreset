@@ -1,0 +1,72 @@
+{
+  "uid": "44698571111ab35b",
+  "name": "MT2.5 × 9.45",
+  "rev": 3,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/mt2.5x9.45",
+      "family": "tee",
+      "params": {
+        "height": 63.5,
+        "width": 127.0,
+        "web": 8.026,
+        "flange": 10.566,
+        "radius": 10.08
+      },
+      "catalogue": {
+        "name": "MT2.5 × 9.45",
+        "series": [
+          [
+            "aisc/mt2.5x9.45",
+            63.5
+          ]
+        ],
+        "aliases": [
+          "MT2.5X9.45"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "MT"
+  },
+  "section": {
+    "area_cm2": 18.103,
+    "mass_kg_m": 14.211,
+    "iy_cm4": 43.71,
+    "iz_cm4": 180.77,
+    "iu_cm4": 180.77,
+    "iv_cm4": 43.71,
+    "wy_cm3": 8.64,
+    "wz_cm3": 28.47,
+    "centroid_mm": [
+      63.5,
+      50.58
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 17.935,
+      "mass_kg_m": 14.063
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/mt2.5x9.45",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:f5eb955f737f734b26b54de6ed1762b14dd5399473dad91962ee55fea206ee0b"
+}

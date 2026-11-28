@@ -1,0 +1,84 @@
+{
+  "uid": "6bb7f960726e069c",
+  "name": "W18 × 211",
+  "rev": 3,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/w18x211",
+      "family": "i",
+      "params": {
+        "height": 525.78,
+        "width": 294.64,
+        "web": 26.924,
+        "flange": 48.514,
+        "radius": 10.16
+      },
+      "catalogue": {
+        "name": "W18 × 211",
+        "series": [
+          [
+            "aisc/w14x211",
+            398.78
+          ],
+          [
+            "aisc/w18x211",
+            525.78
+          ],
+          [
+            "aisc/w30x211",
+            784.86
+          ],
+          [
+            "aisc/w40x211",
+            1000.76
+          ]
+        ],
+        "aliases": [
+          "W18X211"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "W"
+  },
+  "section": {
+    "area_cm2": 402.207,
+    "mass_kg_m": 315.732,
+    "iy_cm4": 181441.55,
+    "iz_cm4": 20753.88,
+    "iu_cm4": 181441.55,
+    "iv_cm4": 20753.88,
+    "wy_cm3": 6901.8,
+    "wz_cm3": 1408.76,
+    "centroid_mm": [
+      147.32,
+      262.89
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 401.935,
+      "mass_kg_m": 314.003
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/w18x211",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:15072d9efe1b7bb5a3cba3ce79cdd551c2fa75ba43972a46f9a65bb90518fdd9"
+}

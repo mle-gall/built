@@ -1,0 +1,77 @@
+{
+  "uid": "29f49d2e1cb75b96",
+  "name": "RHS 80 × 60 × 3 (cold-formed)",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/rhs80x60x3-cf",
+      "family": "rhs",
+      "params": {
+        "height": 80.0,
+        "width": 60.0,
+        "web": 3.0,
+        "radius": 6.0,
+        "inner": 3.0
+      },
+      "catalogue": {
+        "name": "RHS 80 × 60 × 3 (cold-formed)",
+        "series": [
+          [
+            "en/rhs80x60x3-cf",
+            80.0
+          ],
+          [
+            "en/rhs100x60x3-cf",
+            100.0
+          ],
+          [
+            "en/rhs120x60x3-cf",
+            120.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-cfrhs",
+    "source": "https://www.steelforlifebluebook.co.uk/cfrhs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10219-2",
+    "series": "RHS cold-formed"
+  },
+  "section": {
+    "area_cm2": 7.808,
+    "mass_kg_m": 6.129,
+    "iy_cm4": 70.05,
+    "iz_cm4": 44.89,
+    "iu_cm4": 70.05,
+    "iv_cm4": 44.89,
+    "wy_cm3": 17.51,
+    "wz_cm3": 14.96,
+    "centroid_mm": [
+      30.0,
+      40.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 7.81,
+      "mass_kg_m": 6.13
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/rhs80x60x3-cf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:c22ac01bf0256366cc27ce05bb75b46d7b7a26db3800db3c0f3588f83cb0ea8c"
+}

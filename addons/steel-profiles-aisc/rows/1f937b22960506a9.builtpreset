@@ -1,0 +1,73 @@
+{
+  "uid": "1f937b22960506a9",
+  "name": "ST10 × 43",
+  "rev": 3,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/st10x43",
+      "family": "tee",
+      "params": {
+        "height": 259.08,
+        "width": 179.324,
+        "web": 16.764,
+        "flange": 23.368,
+        "radius": 14.31,
+        "slope": 16.67
+      },
+      "catalogue": {
+        "name": "ST10 × 43",
+        "series": [
+          [
+            "aisc/st10x43",
+            259.08
+          ]
+        ],
+        "aliases": [
+          "ST10X43"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "ST"
+  },
+  "section": {
+    "area_cm2": 82.01,
+    "mass_kg_m": 64.378,
+    "iy_cm4": 5259.14,
+    "iz_cm4": 986.66,
+    "iu_cm4": 5259.14,
+    "iv_cm4": 986.66,
+    "wy_cm3": 284.77,
+    "wz_cm3": 110.04,
+    "centroid_mm": [
+      89.66,
+      184.68
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 81.935,
+      "mass_kg_m": 63.991
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/st10x43",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:77bb70facd6cd05c85f723c104554e317bbaf5c6fec34cc0511ba5680ebde1f0"
+}

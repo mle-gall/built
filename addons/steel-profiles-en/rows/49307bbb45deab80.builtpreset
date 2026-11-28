@@ -1,0 +1,84 @@
+{
+  "uid": "49307bbb45deab80",
+  "name": "HE 900 M",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/he900m",
+      "family": "i",
+      "params": {
+        "height": 910.0,
+        "width": 302.0,
+        "web": 21.0,
+        "flange": 40.0,
+        "radius": 30.0
+      },
+      "catalogue": {
+        "name": "HE 900 M",
+        "series": [
+          [
+            "en/he700m",
+            716.0
+          ],
+          [
+            "en/he800m",
+            814.0
+          ],
+          [
+            "en/he900m",
+            910.0
+          ],
+          [
+            "en/he1000m",
+            1008.0
+          ]
+        ],
+        "aliases": [
+          "HEM 900"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-he",
+    "source": "https://orangebook.arcelormittal.com/node/16",
+    "standard": "EN 10365",
+    "series": "HE"
+  },
+  "section": {
+    "area_cm2": 423.626,
+    "mass_kg_m": 332.547,
+    "iy_cm4": 570435.37,
+    "iz_cm4": 18451.77,
+    "iu_cm4": 570435.37,
+    "iv_cm4": 18451.77,
+    "wy_cm3": 12537.04,
+    "wz_cm3": 1221.97,
+    "centroid_mm": [
+      151.0,
+      455.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 424.0,
+      "mass_kg_m": 333.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/he900m",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:2db88e7850d7316a56d2addcbb012a9da0052bf4b768451cf4131bb228376a52"
+}

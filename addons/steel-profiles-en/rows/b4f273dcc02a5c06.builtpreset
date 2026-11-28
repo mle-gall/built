@@ -1,0 +1,73 @@
+{
+  "uid": "b4f273dcc02a5c06",
+  "name": "RHS 120 × 60 × 4 (hot-finished)",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/rhs120x60x4-hf",
+      "family": "rhs",
+      "params": {
+        "height": 120.0,
+        "width": 60.0,
+        "web": 4.0,
+        "radius": 6.0,
+        "inner": 4.0
+      },
+      "catalogue": {
+        "name": "RHS 120 × 60 × 4 (hot-finished)",
+        "series": [
+          [
+            "en/rhs100x60x4-hf",
+            100.0
+          ],
+          [
+            "en/rhs120x60x4-hf",
+            120.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-hfrhs",
+    "source": "https://www.steelforlifebluebook.co.uk/hfrhs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10210-2",
+    "series": "RHS hot-finished"
+  },
+  "section": {
+    "area_cm2": 13.588,
+    "mass_kg_m": 10.667,
+    "iy_cm4": 248.73,
+    "iz_cm4": 83.09,
+    "iu_cm4": 248.73,
+    "iv_cm4": 83.09,
+    "wy_cm3": 41.46,
+    "wz_cm3": 27.7,
+    "centroid_mm": [
+      30.0,
+      60.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 13.6,
+      "mass_kg_m": 10.7
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/rhs120x60x4-hf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:564fa0f51c644f6643839fb484081cc520f0916945759e38b905c9c94def3947"
+}

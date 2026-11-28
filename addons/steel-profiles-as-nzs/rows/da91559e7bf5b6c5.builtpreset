@@ -1,0 +1,69 @@
+{
+  "uid": "da91559e7bf5b6c5",
+  "name": "610 UB 101",
+  "rev": 3,
+  "pack": "Steel profiles · AS/NZS",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "as-nzs/610ub101",
+      "family": "i",
+      "params": {
+        "height": 602.0,
+        "width": 228.0,
+        "web": 10.6,
+        "flange": 14.8,
+        "radius": 14.0
+      },
+      "catalogue": {
+        "name": "610 UB 101",
+        "series": [
+          [
+            "as-nzs/610ub101",
+            602.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ib-hrssp9",
+    "source": "https://www.infrabuild.com/wp-content/uploads/sites/8/2022/02/Hot20Rolled20Cat_Edition9_2019.pdf",
+    "standard": "AS/NZS 3679.1",
+    "series": "UB"
+  },
+  "section": {
+    "area_cm2": 129.845,
+    "mass_kg_m": 101.928,
+    "iy_cm4": 76102.26,
+    "iz_cm4": 2930.57,
+    "iu_cm4": 76102.26,
+    "iv_cm4": 2930.57,
+    "wy_cm3": 2528.31,
+    "wz_cm3": 257.07,
+    "centroid_mm": [
+      114.0,
+      301.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 130.0,
+      "mass_kg_m": 101.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "as-nzs/610ub101",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:83c8c3c601a1337fb56856bfce089230ce530d67a73d59452b3578981e52d3ad"
+}

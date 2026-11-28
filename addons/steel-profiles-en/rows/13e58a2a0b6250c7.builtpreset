@@ -1,0 +1,69 @@
+{
+  "uid": "13e58a2a0b6250c7",
+  "name": "PFC 180 × 75 × 20",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/pfc180x75x20",
+      "family": "channel",
+      "params": {
+        "height": 180.0,
+        "width": 75.0,
+        "web": 6.0,
+        "flange": 10.5,
+        "radius": 12.0
+      },
+      "catalogue": {
+        "name": "PFC 180 × 75 × 20",
+        "series": [
+          [
+            "en/pfc180x75x20",
+            180.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-pfc",
+    "source": "https://orangebook.arcelormittal.com/node/259",
+    "standard": "EN 10365",
+    "series": "PFC"
+  },
+  "section": {
+    "area_cm2": 25.908,
+    "mass_kg_m": 20.338,
+    "iy_cm4": 1370.19,
+    "iz_cm4": 146.37,
+    "iu_cm4": 1370.19,
+    "iv_cm4": 146.37,
+    "wy_cm3": 152.24,
+    "wz_cm3": 28.76,
+    "centroid_mm": [
+      24.11,
+      90.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 25.9,
+      "mass_kg_m": 20.3
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/pfc180x75x20",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:a046bb448ad0d7e000508707ce0f6ca87953b58cb963ba20ba19b214fbc6d0c5"
+}

@@ -1,0 +1,73 @@
+{
+  "uid": "e215971554bc0acf",
+  "name": "RHS 450 × 250 × 8 (hot-finished)",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/rhs450x250x8-hf",
+      "family": "rhs",
+      "params": {
+        "height": 450.0,
+        "width": 250.0,
+        "web": 8.0,
+        "radius": 12.0,
+        "inner": 8.0
+      },
+      "catalogue": {
+        "name": "RHS 450 × 250 × 8 (hot-finished)",
+        "series": [
+          [
+            "en/rhs350x250x8-hf",
+            350.0
+          ],
+          [
+            "en/rhs450x250x8-hf",
+            450.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-hfrhs",
+    "source": "https://www.steelforlifebluebook.co.uk/hfrhs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10210-2",
+    "series": "RHS hot-finished"
+  },
+  "section": {
+    "area_cm2": 108.753,
+    "mass_kg_m": 85.371,
+    "iy_cm4": 30081.48,
+    "iz_cm4": 12141.66,
+    "iu_cm4": 30081.48,
+    "iv_cm4": 12141.66,
+    "wy_cm3": 1336.95,
+    "wz_cm3": 971.33,
+    "centroid_mm": [
+      125.0,
+      225.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 109.0,
+      "mass_kg_m": 85.4
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/rhs450x250x8-hf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:5eff5e6613fbaf192d059a238d522dbe2ac091aa943ac6731c3e7a1f723c2161"
+}

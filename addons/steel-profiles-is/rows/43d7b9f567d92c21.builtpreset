@@ -1,0 +1,74 @@
+{
+  "uid": "43d7b9f567d92c21",
+  "name": "ISHB 400 × 82.2",
+  "rev": 3,
+  "pack": "Steel profiles · IS",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "is/ishb400x82.2",
+      "family": "i",
+      "params": {
+        "height": 400.0,
+        "width": 251.5,
+        "web": 10.6,
+        "flange": 12.7,
+        "radius": 14.0,
+        "toe": 7.0,
+        "slope": 6.99
+      },
+      "catalogue": {
+        "name": "ISHB 400 × 82.2",
+        "series": [
+          [
+            "is/ishb400x82.2",
+            400.0
+          ]
+        ],
+        "aliases": [
+          "HB 400 x 82.2"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "is808-1989",
+    "source": "https://law.resource.org/pub/in/bis/S03/is.808.1989.pdf",
+    "standard": "IS 808",
+    "series": "ISHB"
+  },
+  "section": {
+    "area_cm2": 104.659,
+    "mass_kg_m": 82.157,
+    "iy_cm4": 28886.07,
+    "iz_cm4": 2783.2,
+    "iu_cm4": 28886.07,
+    "iv_cm4": 2783.2,
+    "wy_cm3": 1444.3,
+    "wz_cm3": 221.33,
+    "centroid_mm": [
+      125.75,
+      200.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 105.0,
+      "mass_kg_m": 82.2
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "is/ishb400x82.2",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:298c9267207a449a3c030d10bc10f2542e51eee28fbdd7ef8bb6259f188803b1"
+}

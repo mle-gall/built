@@ -1,0 +1,85 @@
+{
+  "uid": "a347fd01c6673406",
+  "name": "IPE 270",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/ipe270",
+      "family": "i",
+      "params": {
+        "height": 270.0,
+        "width": 135.0,
+        "web": 6.6,
+        "flange": 10.2,
+        "radius": 15.0
+      },
+      "catalogue": {
+        "name": "IPE 270",
+        "series": [
+          [
+            "en/ipe220",
+            220.0
+          ],
+          [
+            "en/ipe240",
+            240.0
+          ],
+          [
+            "en/ipe270",
+            270.0
+          ],
+          [
+            "en/ipe300",
+            300.0
+          ],
+          [
+            "en/ipe330",
+            330.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-ipe",
+    "source": "https://orangebook.arcelormittal.com/node/6",
+    "standard": "EN 10365",
+    "series": "IPE"
+  },
+  "section": {
+    "area_cm2": 45.945,
+    "mass_kg_m": 36.067,
+    "iy_cm4": 5789.81,
+    "iz_cm4": 419.87,
+    "iu_cm4": 5789.81,
+    "iv_cm4": 419.87,
+    "wy_cm3": 428.87,
+    "wz_cm3": 62.2,
+    "centroid_mm": [
+      67.5,
+      135.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 45.9,
+      "mass_kg_m": 36.1
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/ipe270",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:4ccc9c1bd6b8a62dfa584b0e08faf7f517c4cdd545de66b0badc8be1c7f92add"
+}

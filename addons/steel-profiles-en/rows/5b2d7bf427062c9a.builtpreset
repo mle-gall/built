@@ -1,0 +1,75 @@
+{
+  "uid": "5b2d7bf427062c9a",
+  "name": "CHS 508 × 10 (hot-finished)",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/chs508x10-hf",
+      "family": "chs",
+      "params": {
+        "height": 508.0,
+        "width": 508.0,
+        "web": 10.0
+      },
+      "catalogue": {
+        "name": "CHS 508 × 10 (hot-finished)",
+        "series": [
+          [
+            "en/chs406.4x10-hf",
+            406.4
+          ],
+          [
+            "en/chs457x10-hf",
+            457.0
+          ],
+          [
+            "en/chs508x10-hf",
+            508.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-hfchs",
+    "source": "https://www.steelforlifebluebook.co.uk/hfchs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10210-2",
+    "series": "CHS hot-finished"
+  },
+  "section": {
+    "area_cm2": 156.447,
+    "mass_kg_m": 122.811,
+    "iy_cm4": 48517.81,
+    "iz_cm4": 48517.81,
+    "iu_cm4": 48517.81,
+    "iv_cm4": 48517.81,
+    "wy_cm3": 1910.15,
+    "wz_cm3": 1910.15,
+    "centroid_mm": [
+      254.0,
+      254.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 156.0,
+      "mass_kg_m": 123.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/chs508x10-hf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:1347487ef8a6557239c02c277403db8d1ea71ce879d78f2dcb6155ccc05eed99"
+}

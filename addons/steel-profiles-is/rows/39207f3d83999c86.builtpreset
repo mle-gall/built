@@ -1,0 +1,73 @@
+{
+  "uid": "39207f3d83999c86",
+  "name": "ISMCP 250 × 34.2",
+  "rev": 2,
+  "pack": "Steel profiles · IS",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "is/ismcp250x34.2",
+      "family": "channel",
+      "params": {
+        "height": 250.0,
+        "width": 82.0,
+        "web": 9.0,
+        "flange": 14.1,
+        "radius": 12.0,
+        "toe": 7.0
+      },
+      "catalogue": {
+        "name": "ISMCP 250 × 34.2",
+        "series": [
+          [
+            "is/ismcp250x34.2",
+            250.0
+          ]
+        ],
+        "aliases": [
+          "MCP 250 x 34.2"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "is808-1989",
+    "source": "https://law.resource.org/pub/in/bis/S03/is.808.1989.pdf",
+    "standard": "IS 808",
+    "series": "ISMCP"
+  },
+  "section": {
+    "area_cm2": 43.494,
+    "mass_kg_m": 34.143,
+    "iy_cm4": 4085.07,
+    "iz_cm4": 267.86,
+    "iu_cm4": 4085.07,
+    "iv_cm4": 267.86,
+    "wy_cm3": 326.81,
+    "wz_cm3": 45.9,
+    "centroid_mm": [
+      23.64,
+      125.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 43.5,
+      "mass_kg_m": 34.2
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "is/ismcp250x34.2",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:3db06b4752825b0d9f5794115e3454dc6d76661bc2703aeaa3be5ea51a13686d"
+}

@@ -1,0 +1,73 @@
+{
+  "uid": "6a8d43ca05f637f8",
+  "name": "ST12 × 50",
+  "rev": 3,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/st12x50",
+      "family": "tee",
+      "params": {
+        "height": 304.8,
+        "width": 184.15,
+        "web": 18.923,
+        "flange": 22.098,
+        "radius": 15.47,
+        "slope": 16.67
+      },
+      "catalogue": {
+        "name": "ST12 × 50",
+        "series": [
+          [
+            "aisc/st12x50",
+            304.8
+          ]
+        ],
+        "aliases": [
+          "ST12X50"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "ST"
+  },
+  "section": {
+    "area_cm2": 94.88,
+    "mass_kg_m": 74.481,
+    "iy_cm4": 8957.91,
+    "iz_cm4": 1007.96,
+    "iu_cm4": 8957.91,
+    "iv_cm4": 1007.96,
+    "wy_cm3": 431.63,
+    "wz_cm3": 109.47,
+    "centroid_mm": [
+      92.08,
+      207.54
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 94.839,
+      "mass_kg_m": 74.408
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/st12x50",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:38573b94c699b4b90d2f960922059d5bc56b9bacaeeb7fd5599c1325d3bfe199"
+}

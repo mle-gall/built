@@ -1,0 +1,80 @@
+{
+  "uid": "262a11cc34f2f885",
+  "name": "WT4 × 20",
+  "rev": 3,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/wt4x20",
+      "family": "tee",
+      "params": {
+        "height": 104.902,
+        "width": 204.978,
+        "web": 9.144,
+        "flange": 14.224,
+        "radius": 10.01
+      },
+      "catalogue": {
+        "name": "WT4 × 20",
+        "series": [
+          [
+            "aisc/wt4x20",
+            104.902
+          ],
+          [
+            "aisc/wt6x20",
+            151.638
+          ],
+          [
+            "aisc/wt8x20",
+            203.454
+          ]
+        ],
+        "aliases": [
+          "WT4X20"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "WT"
+  },
+  "section": {
+    "area_cm2": 37.878,
+    "mass_kg_m": 29.734,
+    "iy_cm4": 239.37,
+    "iz_cm4": 1021.64,
+    "iu_cm4": 1021.64,
+    "iv_cm4": 239.37,
+    "wy_cm3": 27.77,
+    "wz_cm3": 99.68,
+    "centroid_mm": [
+      102.49,
+      86.2
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 37.871,
+      "mass_kg_m": 29.763
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/wt4x20",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:db6a3ba29c19e2f1c0b77c1171fdfbb36c008890cac7e10c48cb2b88126c5ee1"
+}

@@ -1,0 +1,83 @@
+{
+  "uid": "1d64ad49fa8b7eed",
+  "name": "CHS 219.1 × 5 (hot-finished)",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/chs219.1x5-hf",
+      "family": "chs",
+      "params": {
+        "height": 219.1,
+        "width": 219.1,
+        "web": 5.0
+      },
+      "catalogue": {
+        "name": "CHS 219.1 × 5 (hot-finished)",
+        "series": [
+          [
+            "en/chs168.3x5-hf",
+            168.3
+          ],
+          [
+            "en/chs193.7x5-hf",
+            193.7
+          ],
+          [
+            "en/chs219.1x5-hf",
+            219.1
+          ],
+          [
+            "en/chs244.5x5-hf",
+            244.5
+          ],
+          [
+            "en/chs273x5-hf",
+            273.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-hfchs",
+    "source": "https://www.steelforlifebluebook.co.uk/hfchs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10210-2",
+    "series": "CHS hot-finished"
+  },
+  "section": {
+    "area_cm2": 33.63,
+    "mass_kg_m": 26.399,
+    "iy_cm4": 1927.95,
+    "iz_cm4": 1927.95,
+    "iu_cm4": 1927.95,
+    "iv_cm4": 1927.95,
+    "wy_cm3": 175.99,
+    "wz_cm3": 175.99,
+    "centroid_mm": [
+      109.55,
+      109.55
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 33.6,
+      "mass_kg_m": 26.4
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/chs219.1x5-hf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:f36b436a2d603633a17460fc3bc52c29b9567276c6f381f3fed48b4c8d823bfd"
+}

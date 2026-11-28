@@ -1,0 +1,69 @@
+{
+  "uid": "969344a1ebb5a411",
+  "name": "W 310 × 44.5",
+  "rev": 4,
+  "pack": "Steel profiles · BR",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "br/w310x44.5",
+      "family": "i",
+      "params": {
+        "height": 313.0,
+        "width": 166.0,
+        "web": 6.6,
+        "flange": 11.2,
+        "radius": 10.0
+      },
+      "catalogue": {
+        "name": "W 310 × 44.5",
+        "series": [
+          [
+            "br/w310x44.5",
+            313.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "gerdau-perfis",
+    "source": "https://api.aecweb.com.br/cls/catalogos/28792/22314/catalogo-gerdau-perfis-estruturais.pdf",
+    "standard": "ABNT NBR 15980",
+    "series": "W"
+  },
+  "section": {
+    "area_cm2": 57.222,
+    "mass_kg_m": 44.919,
+    "iy_cm4": 9996.47,
+    "iz_cm4": 854.86,
+    "iu_cm4": 9996.47,
+    "iv_cm4": 854.86,
+    "wy_cm3": 638.75,
+    "wz_cm3": 102.99,
+    "centroid_mm": [
+      83.0,
+      156.5
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 57.2,
+      "mass_kg_m": 44.5
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "br/w310x44.5",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:96daa82597be1c1d7ec417b2c1ec9091c0fd5e482eb9b9b4dc3d22b1363c8932"
+}

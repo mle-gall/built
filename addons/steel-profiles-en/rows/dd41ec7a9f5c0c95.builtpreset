@@ -1,0 +1,84 @@
+{
+  "uid": "dd41ec7a9f5c0c95",
+  "name": "HE 120 C",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/he120c",
+      "family": "i",
+      "params": {
+        "height": 130.0,
+        "width": 123.0,
+        "web": 9.5,
+        "flange": 16.0,
+        "radius": 12.0
+      },
+      "catalogue": {
+        "name": "HE 120 C",
+        "series": [
+          [
+            "en/he100c",
+            110.0
+          ],
+          [
+            "en/he120c",
+            130.0
+          ],
+          [
+            "en/he140c",
+            150.0
+          ],
+          [
+            "en/he160c",
+            170.0
+          ]
+        ],
+        "aliases": [
+          "HEC 120"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-he",
+    "source": "https://orangebook.arcelormittal.com/node/16",
+    "standard": "EN 10365",
+    "series": "HE"
+  },
+  "section": {
+    "area_cm2": 49.906,
+    "mass_kg_m": 39.176,
+    "iy_cm4": 1388.3,
+    "iz_cm4": 497.68,
+    "iu_cm4": 1388.3,
+    "iv_cm4": 497.68,
+    "wy_cm3": 213.58,
+    "wz_cm3": 80.92,
+    "centroid_mm": [
+      61.5,
+      65.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 49.9,
+      "mass_kg_m": 39.2
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/he120c",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:1057ef42f6bd2f361f11d64cb66fe3b4216fd255e0193aabded6fe7151aa5756"
+}

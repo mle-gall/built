@@ -1,0 +1,69 @@
+{
+  "uid": "b43da592e7443ed0",
+  "name": "50 × 50 × 3 EA",
+  "rev": 3,
+  "pack": "Steel profiles · AS/NZS",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "as-nzs/50x50x3ea",
+      "family": "angle",
+      "params": {
+        "height": 50.0,
+        "width": 50.0,
+        "web": 3.0,
+        "radius": 6.0,
+        "toe": 3.0
+      },
+      "catalogue": {
+        "name": "50 × 50 × 3 EA",
+        "series": [
+          [
+            "as-nzs/50x50x3ea",
+            50.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ib-hrssp9",
+    "source": "https://www.infrabuild.com/wp-content/uploads/sites/8/2022/02/Hot20Rolled20Cat_Edition9_2019.pdf",
+    "standard": "AS/NZS 3679.1",
+    "series": "EA"
+  },
+  "section": {
+    "area_cm2": 2.949,
+    "mass_kg_m": 2.315,
+    "iy_cm4": 6.94,
+    "iz_cm4": 6.94,
+    "iu_cm4": 10.99,
+    "iv_cm4": 2.89,
+    "wy_cm3": 1.89,
+    "wz_cm3": 1.89,
+    "centroid_mm": [
+      13.21,
+      13.21
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 2.95,
+      "mass_kg_m": 2.31
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "as-nzs/50x50x3ea",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:06ceed4565e47d11e20909c6bb6dbed21fb2046df347ac7152405208559eaeed"
+}

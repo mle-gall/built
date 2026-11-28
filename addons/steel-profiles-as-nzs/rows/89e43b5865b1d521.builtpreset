@@ -1,0 +1,73 @@
+{
+  "uid": "89e43b5865b1d521",
+  "name": "125 × 75 × 8 UA",
+  "rev": 3,
+  "pack": "Steel profiles · AS/NZS",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "as-nzs/125x75x8ua",
+      "family": "angle",
+      "params": {
+        "height": 125.0,
+        "width": 75.0,
+        "web": 7.8,
+        "radius": 8.0,
+        "toe": 5.0
+      },
+      "catalogue": {
+        "name": "125 × 75 × 8 UA",
+        "series": [
+          [
+            "as-nzs/100x75x8ua",
+            100.0
+          ],
+          [
+            "as-nzs/125x75x8ua",
+            125.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ib-hrssp9",
+    "source": "https://www.infrabuild.com/wp-content/uploads/sites/8/2022/02/Hot20Rolled20Cat_Edition9_2019.pdf",
+    "standard": "AS/NZS 3679.1",
+    "series": "UA"
+  },
+  "section": {
+    "area_cm2": 15.022,
+    "mass_kg_m": 11.792,
+    "iy_cm4": 241.43,
+    "iz_cm4": 66.43,
+    "iu_cm4": 267.93,
+    "iv_cm4": 39.94,
+    "wy_cm3": 28.93,
+    "wz_cm3": 11.41,
+    "centroid_mm": [
+      16.78,
+      41.55
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 15.0,
+      "mass_kg_m": 11.8
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "as-nzs/125x75x8ua",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:ce383930cc50d3771094f3fc45e27a38f7986a2f71aa516344d710c0c5c6598c"
+}

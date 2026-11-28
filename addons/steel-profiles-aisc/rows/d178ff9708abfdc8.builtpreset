@@ -1,0 +1,73 @@
+{
+  "uid": "d178ff9708abfdc8",
+  "name": "ST1.5 × 2.85",
+  "rev": 3,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/st1.5x2.85",
+      "family": "tee",
+      "params": {
+        "height": 38.1,
+        "width": 59.182,
+        "web": 4.318,
+        "flange": 6.604,
+        "radius": 6.98,
+        "slope": 16.67
+      },
+      "catalogue": {
+        "name": "ST1.5 × 2.85",
+        "series": [
+          [
+            "aisc/st1.5x2.85",
+            38.1
+          ]
+        ],
+        "aliases": [
+          "ST1.5X2.85"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "ST"
+  },
+  "section": {
+    "area_cm2": 5.409,
+    "mass_kg_m": 4.246,
+    "iy_cm4": 4.92,
+    "iz_cm4": 9.63,
+    "iu_cm4": 9.63,
+    "iv_cm4": 4.92,
+    "wy_cm3": 1.65,
+    "wz_cm3": 3.25,
+    "centroid_mm": [
+      29.59,
+      29.75
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 5.355,
+      "mass_kg_m": 4.241
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/st1.5x2.85",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:dff330fc3f8ef98593ad9bc076492ee0b495375d02f425ccc64125cb3ce896be"
+}

@@ -1,0 +1,69 @@
+{
+  "uid": "d374da1f3d26a564",
+  "name": "HD 400 × 1086",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/hd400x1086",
+      "family": "i",
+      "params": {
+        "height": 569.0,
+        "width": 454.0,
+        "web": 78.0,
+        "flange": 125.0,
+        "radius": 15.0
+      },
+      "catalogue": {
+        "name": "HD 400 × 1086",
+        "series": [
+          [
+            "en/hd400x1086",
+            569.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-hd",
+    "source": "https://orangebook.arcelormittal.com/node/136",
+    "standard": "EN 10365",
+    "series": "HD"
+  },
+  "section": {
+    "area_cm2": 1385.752,
+    "mass_kg_m": 1087.815,
+    "iy_cm4": 595723.31,
+    "iz_cm4": 196247.7,
+    "iu_cm4": 595723.31,
+    "iv_cm4": 196247.7,
+    "wy_cm3": 20939.31,
+    "wz_cm3": 8645.27,
+    "centroid_mm": [
+      227.0,
+      284.5
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 1386.0,
+      "mass_kg_m": 1086.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/hd400x1086",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:dcb8e622dbf1a02b72addc832b9c4e23f764cad7cb591f31e9c9c9b2fc965041"
+}

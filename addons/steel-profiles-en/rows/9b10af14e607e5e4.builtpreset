@@ -1,0 +1,83 @@
+{
+  "uid": "9b10af14e607e5e4",
+  "name": "CHS 323.9 × 8 (cold-formed)",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/chs323.9x8-cf",
+      "family": "chs",
+      "params": {
+        "height": 323.9,
+        "width": 323.9,
+        "web": 8.0
+      },
+      "catalogue": {
+        "name": "CHS 323.9 × 8 (cold-formed)",
+        "series": [
+          [
+            "en/chs244.5x8-cf",
+            244.5
+          ],
+          [
+            "en/chs273x8-cf",
+            273.0
+          ],
+          [
+            "en/chs323.9x8-cf",
+            323.9
+          ],
+          [
+            "en/chs355.6x8-cf",
+            355.6
+          ],
+          [
+            "en/chs406.4x8-cf",
+            406.4
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-cfchs",
+    "source": "https://www.steelforlifebluebook.co.uk/cfchs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10219-2",
+    "series": "CHS cold-formed"
+  },
+  "section": {
+    "area_cm2": 79.392,
+    "mass_kg_m": 62.323,
+    "iy_cm4": 9909.58,
+    "iz_cm4": 9909.58,
+    "iu_cm4": 9909.58,
+    "iv_cm4": 9909.58,
+    "wy_cm3": 611.89,
+    "wz_cm3": 611.89,
+    "centroid_mm": [
+      161.95,
+      161.95
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 79.4,
+      "mass_kg_m": 62.3
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/chs323.9x8-cf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:229c31c0e761bda00abacc4b22dda33cbb727d76a390379c3da051fd85af405a"
+}

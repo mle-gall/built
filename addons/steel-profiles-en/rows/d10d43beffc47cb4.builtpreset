@@ -1,0 +1,88 @@
+{
+  "uid": "d10d43beffc47cb4",
+  "name": "HE 800 B",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/he800b",
+      "family": "i",
+      "params": {
+        "height": 800.0,
+        "width": 300.0,
+        "web": 17.5,
+        "flange": 33.0,
+        "radius": 30.0
+      },
+      "catalogue": {
+        "name": "HE 800 B",
+        "series": [
+          [
+            "en/he650b",
+            650.0
+          ],
+          [
+            "en/he700b",
+            700.0
+          ],
+          [
+            "en/he800b",
+            800.0
+          ],
+          [
+            "en/he900b",
+            900.0
+          ],
+          [
+            "en/he1000b",
+            1000.0
+          ]
+        ],
+        "aliases": [
+          "HEB 800"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-he",
+    "source": "https://orangebook.arcelormittal.com/node/16",
+    "standard": "EN 10365",
+    "series": "HE"
+  },
+  "section": {
+    "area_cm2": 334.176,
+    "mass_kg_m": 262.328,
+    "iy_cm4": 359084.53,
+    "iz_cm4": 14903.67,
+    "iu_cm4": 359084.53,
+    "iv_cm4": 14903.67,
+    "wy_cm3": 8977.11,
+    "wz_cm3": 993.58,
+    "centroid_mm": [
+      150.0,
+      400.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 334.0,
+      "mass_kg_m": 262.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/he800b",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:fa0d17bd0b8dbfca9a1bb92f9f490babba7de54acdddc4c00683bf153fb23dbd"
+}

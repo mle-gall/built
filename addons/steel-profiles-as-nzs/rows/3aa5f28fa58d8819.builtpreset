@@ -1,0 +1,69 @@
+{
+  "uid": "3aa5f28fa58d8819",
+  "name": "360 UB 56.7",
+  "rev": 3,
+  "pack": "Steel profiles · AS/NZS",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "as-nzs/360ub56.7",
+      "family": "i",
+      "params": {
+        "height": 358.6,
+        "width": 172.0,
+        "web": 8.0,
+        "flange": 13.0,
+        "radius": 11.4
+      },
+      "catalogue": {
+        "name": "360 UB 56.7",
+        "series": [
+          [
+            "as-nzs/360ub56.7",
+            358.6
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ib-hrssp9",
+    "source": "https://www.infrabuild.com/wp-content/uploads/sites/8/2022/02/Hot20Rolled20Cat_Edition9_2019.pdf",
+    "standard": "AS/NZS 3679.1",
+    "series": "UB"
+  },
+  "section": {
+    "area_cm2": 72.444,
+    "mass_kg_m": 56.868,
+    "iy_cm4": 16111.72,
+    "iz_cm4": 1104.45,
+    "iu_cm4": 16111.72,
+    "iv_cm4": 1104.45,
+    "wy_cm3": 898.59,
+    "wz_cm3": 128.42,
+    "centroid_mm": [
+      86.0,
+      179.3
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 72.4,
+      "mass_kg_m": 56.7
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "as-nzs/360ub56.7",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:ce399661367e948e2f2ce84dd3ca43f6047baa4929b028523d1ca1e8b707eb9c"
+}

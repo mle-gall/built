@@ -1,0 +1,85 @@
+{
+  "uid": "aeb12df5e6389ed5",
+  "name": "ISMCP 350",
+  "rev": 2,
+  "pack": "Steel profiles · IS",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "is/ismcp350",
+      "family": "channel",
+      "params": {
+        "height": 350.0,
+        "width": 100.0,
+        "web": 8.3,
+        "flange": 13.5,
+        "radius": 14.0,
+        "toe": 8.0
+      },
+      "catalogue": {
+        "name": "ISMCP 350",
+        "series": [
+          [
+            "is/ismcp250",
+            250.0
+          ],
+          [
+            "is/ismcp300",
+            300.0
+          ],
+          [
+            "is/ismcp350",
+            350.0
+          ],
+          [
+            "is/ismcp400",
+            400.0
+          ]
+        ],
+        "aliases": [
+          "MCP 350"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "is808-1989",
+    "source": "https://law.resource.org/pub/in/bis/S03/is.808.1989.pdf",
+    "standard": "IS 808",
+    "series": "ISMCP"
+  },
+  "section": {
+    "area_cm2": 54.376,
+    "mass_kg_m": 42.685,
+    "iy_cm4": 10115.9,
+    "iz_cm4": 497.4,
+    "iu_cm4": 10115.9,
+    "iv_cm4": 497.4,
+    "wy_cm3": 578.05,
+    "wz_cm3": 67.72,
+    "centroid_mm": [
+      26.55,
+      175.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 54.4,
+      "mass_kg_m": 42.7
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "is/ismcp350",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:0820e8888c072c6384342941c822cb534f41bc536adcba8b3da3d9bcd1c90b9a"
+}

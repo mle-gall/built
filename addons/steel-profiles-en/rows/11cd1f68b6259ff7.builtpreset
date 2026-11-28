@@ -1,0 +1,77 @@
+{
+  "uid": "11cd1f68b6259ff7",
+  "name": "RHS 300 × 100 × 10 (hot-finished)",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/rhs300x100x10-hf",
+      "family": "rhs",
+      "params": {
+        "height": 300.0,
+        "width": 100.0,
+        "web": 10.0,
+        "radius": 15.0,
+        "inner": 10.0
+      },
+      "catalogue": {
+        "name": "RHS 300 × 100 × 10 (hot-finished)",
+        "series": [
+          [
+            "en/rhs200x100x10-hf",
+            200.0
+          ],
+          [
+            "en/rhs250x100x10-hf",
+            250.0
+          ],
+          [
+            "en/rhs300x100x10-hf",
+            300.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-hfrhs",
+    "source": "https://www.steelforlifebluebook.co.uk/hfrhs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10210-2",
+    "series": "RHS hot-finished"
+  },
+  "section": {
+    "area_cm2": 74.927,
+    "mass_kg_m": 58.818,
+    "iy_cm4": 7612.74,
+    "iz_cm4": 1275.42,
+    "iu_cm4": 7612.74,
+    "iv_cm4": 1275.42,
+    "wy_cm3": 507.52,
+    "wz_cm3": 255.08,
+    "centroid_mm": [
+      50.0,
+      150.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 74.9,
+      "mass_kg_m": 58.8
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/rhs300x100x10-hf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:96365ec3f9c9af6fab75cd0d8179df3e7b24ba1874d88a6a1036d6c0e35f1bd0"
+}

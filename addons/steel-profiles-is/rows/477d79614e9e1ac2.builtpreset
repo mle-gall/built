@@ -1,0 +1,90 @@
+{
+  "uid": "477d79614e9e1ac2",
+  "name": "ISLC 175",
+  "rev": 2,
+  "pack": "Steel profiles · IS",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "is/islc175",
+      "family": "channel",
+      "params": {
+        "height": 175.0,
+        "width": 75.0,
+        "web": 5.1,
+        "flange": 9.5,
+        "radius": 8.0,
+        "toe": 3.2,
+        "slope": 2.62
+      },
+      "catalogue": {
+        "name": "ISLC 175",
+        "series": [
+          [
+            "is/islc125",
+            125.0
+          ],
+          [
+            "is/islc150",
+            150.0
+          ],
+          [
+            "is/islc175",
+            175.0
+          ],
+          [
+            "is/islc200",
+            200.0
+          ],
+          [
+            "is/islc225",
+            225.0
+          ]
+        ],
+        "aliases": [
+          "LC 175"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "is808-1989",
+    "source": "https://law.resource.org/pub/in/bis/S03/is.808.1989.pdf",
+    "standard": "IS 808",
+    "series": "ISLC"
+  },
+  "section": {
+    "area_cm2": 22.423,
+    "mass_kg_m": 17.602,
+    "iy_cm4": 1149.97,
+    "iz_cm4": 124.48,
+    "iu_cm4": 1149.97,
+    "iv_cm4": 124.48,
+    "wy_cm3": 131.42,
+    "wz_cm3": 24.41,
+    "centroid_mm": [
+      24.01,
+      87.5
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 22.4,
+      "mass_kg_m": 17.6
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "is/islc175",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:b35b20ae31733b5088d3abb35a80c825e70802d83b7bb5b081ed3678cf816896"
+}

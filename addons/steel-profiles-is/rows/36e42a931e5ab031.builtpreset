@@ -1,0 +1,75 @@
+{
+  "uid": "36e42a931e5ab031",
+  "name": "ISA 100 × 75 × 10",
+  "rev": 2,
+  "pack": "Steel profiles · IS",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "is/isa100x75x10",
+      "family": "angle",
+      "params": {
+        "height": 100.0,
+        "width": 75.0,
+        "web": 10.0,
+        "radius": 8.5
+      },
+      "catalogue": {
+        "name": "ISA 100 × 75 × 10",
+        "series": [
+          [
+            "is/isa100x75x10",
+            100.0
+          ],
+          [
+            "is/isa150x75x10",
+            150.0
+          ]
+        ],
+        "aliases": [
+          "A 100 x 75 x 10"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "is808-1989",
+    "source": "https://law.resource.org/pub/in/bis/S03/is.808.1989.pdf",
+    "standard": "IS 808",
+    "series": "ISA unequal"
+  },
+  "section": {
+    "area_cm2": 16.655,
+    "mass_kg_m": 13.074,
+    "iy_cm4": 164.29,
+    "iz_cm4": 79.22,
+    "iu_cm4": 200.47,
+    "iv_cm4": 43.04,
+    "wy_cm3": 24.19,
+    "wz_cm3": 14.32,
+    "centroid_mm": [
+      19.7,
+      32.08
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 16.5,
+      "mass_kg_m": 13.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "is/isa100x75x10",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:101d28e1fdc8bad4be19391ecde0746339baaf029cb465bc8e70bed4887b780a"
+}

@@ -1,0 +1,72 @@
+{
+  "uid": "88c6e0e5f4c545fc",
+  "name": "HP12 × 53",
+  "rev": 3,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/hp12x53",
+      "family": "i",
+      "params": {
+        "height": 299.72,
+        "width": 304.8,
+        "web": 11.049,
+        "flange": 11.049,
+        "radius": 17.65
+      },
+      "catalogue": {
+        "name": "HP12 × 53",
+        "series": [
+          [
+            "aisc/hp12x53",
+            299.72
+          ]
+        ],
+        "aliases": [
+          "HP12X53"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "HP"
+  },
+  "section": {
+    "area_cm2": 100.704,
+    "mass_kg_m": 79.052,
+    "iy_cm4": 16495.6,
+    "iz_cm4": 5220.36,
+    "iu_cm4": 16495.6,
+    "iv_cm4": 5220.36,
+    "wy_cm3": 1100.73,
+    "wz_cm3": 342.54,
+    "centroid_mm": [
+      152.4,
+      149.86
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 100.0,
+      "mass_kg_m": 78.873
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/hp12x53",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:2b0ff87124e08a39c34f424dc41cc5e7ce1c6d0454fae3df9ea26dbde91a9492"
+}

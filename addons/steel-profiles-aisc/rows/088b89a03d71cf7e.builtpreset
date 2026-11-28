@@ -1,0 +1,76 @@
+{
+  "uid": "088b89a03d71cf7e",
+  "name": "W24 × 84",
+  "rev": 3,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/w24x84",
+      "family": "i",
+      "params": {
+        "height": 612.14,
+        "width": 229.108,
+        "web": 11.938,
+        "flange": 19.558,
+        "radius": 12.7
+      },
+      "catalogue": {
+        "name": "W24 × 84",
+        "series": [
+          [
+            "aisc/w24x84",
+            612.14
+          ],
+          [
+            "aisc/w27x84",
+            678.18
+          ]
+        ],
+        "aliases": [
+          "W24X84"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "W"
+  },
+  "section": {
+    "area_cm2": 159.41,
+    "mass_kg_m": 125.137,
+    "iy_cm4": 98535.37,
+    "iz_cm4": 3929.35,
+    "iu_cm4": 98535.37,
+    "iv_cm4": 3929.35,
+    "wy_cm3": 3219.37,
+    "wz_cm3": 343.01,
+    "centroid_mm": [
+      114.55,
+      306.07
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 159.355,
+      "mass_kg_m": 125.006
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/w24x84",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:5af9a7032090912925a18239391d34d29c49b37edf1f8dd877fa5459306cdc26"
+}

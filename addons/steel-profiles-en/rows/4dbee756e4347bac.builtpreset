@@ -1,0 +1,88 @@
+{
+  "uid": "4dbee756e4347bac",
+  "name": "UPN 100",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/upn100",
+      "family": "channel",
+      "params": {
+        "height": 100.0,
+        "width": 50.0,
+        "web": 6.0,
+        "flange": 8.5,
+        "radius": 8.5,
+        "toe": 4.5,
+        "slope": 8.0,
+        "flange_at": 25.0
+      },
+      "catalogue": {
+        "name": "UPN 100",
+        "series": [
+          [
+            "en/upn65",
+            65.0
+          ],
+          [
+            "en/upn80",
+            80.0
+          ],
+          [
+            "en/upn100",
+            100.0
+          ],
+          [
+            "en/upn120",
+            120.0
+          ],
+          [
+            "en/upn140",
+            140.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-upn",
+    "source": "https://orangebook.arcelormittal.com/node/265",
+    "standard": "EN 10365",
+    "series": "UPN"
+  },
+  "section": {
+    "area_cm2": 13.454,
+    "mass_kg_m": 10.561,
+    "iy_cm4": 205.35,
+    "iz_cm4": 29.15,
+    "iu_cm4": 205.35,
+    "iv_cm4": 29.15,
+    "wy_cm3": 41.07,
+    "wz_cm3": 8.45,
+    "centroid_mm": [
+      15.51,
+      50.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 13.5,
+      "mass_kg_m": 10.6
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/upn100",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:df9ed685854e40999c773c9a98b9458b16c8f86d569d38eda6d135eb48dd22eb"
+}

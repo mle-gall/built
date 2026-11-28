@@ -1,0 +1,170 @@
+{
+  "title": "Steel profiles · AISC",
+  "prefix": "aisc",
+  "status": "provisional",
+  "note": "Provisional: transcribed from the AISC Shapes Database until checked against the purchased ASTM A6 tables.",
+  "families": [
+    {
+      "file": "w.csv",
+      "shape": "i",
+      "series": "W",
+      "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+      "label_x": true,
+      "mass": "nominal",
+      "replaced_by": "ASTM A6/A6M tables for dimensions; root radii stay derived from kdes until a mill table gives them"
+    },
+    {
+      "file": "m.csv",
+      "shape": "i",
+      "series": "M",
+      "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+      "label_x": true,
+      "left_out_note": "M shapes: kdes - tf overstates the fillet (some M shapes have sloped flanges); needs ASTM A6 dimensions",
+      "mass": "nominal",
+      "replaced_by": "ASTM A6/A6M tables for dimensions; root radii stay derived from kdes until a mill table gives them"
+    },
+    {
+      "file": "s.csv",
+      "shape": "i",
+      "series": "S",
+      "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+      "label_x": true,
+      "sloped": true,
+      "mass": "nominal",
+      "replaced_by": "ASTM A6/A6M tables for dimensions; root radii stay derived from kdes until a mill table gives them"
+    },
+    {
+      "file": "hp.csv",
+      "shape": "i",
+      "series": "HP",
+      "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+      "label_x": true,
+      "mass": "nominal",
+      "replaced_by": "ASTM A6/A6M tables for dimensions; root radii stay derived from kdes until a mill table gives them"
+    },
+    {
+      "file": "c.csv",
+      "shape": "channel",
+      "series": "C",
+      "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+      "label_x": true,
+      "sloped": true,
+      "mass": "nominal",
+      "replaced_by": "ASTM A6/A6M tables for dimensions; root radii stay derived from kdes until a mill table gives them"
+    },
+    {
+      "file": "mc.csv",
+      "shape": "channel",
+      "series": "MC",
+      "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+      "label_x": true,
+      "left_out_note": "MC flange slopes vary by size and are not in the database; drawn parallel, so heavier",
+      "mass": "nominal",
+      "replaced_by": "ASTM A6/A6M tables for dimensions; root radii stay derived from kdes until a mill table gives them"
+    },
+    {
+      "file": "l.csv",
+      "shape": "angle",
+      "series": "L",
+      "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+      "label_x": true,
+      "left_out_note": "AISC gives no toe radius; without one the drawing is heavier than the listed area",
+      "mass": "nominal",
+      "replaced_by": "ASTM A6/A6M tables for dimensions; root radii stay derived from kdes until a mill table gives them"
+    },
+    {
+      "file": "wt.csv",
+      "shape": "tee",
+      "series": "WT",
+      "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+      "label_x": true,
+      "mass": "nominal",
+      "replaced_by": "ASTM A6/A6M tables for dimensions; root radii stay derived from kdes until a mill table gives them"
+    },
+    {
+      "file": "mt.csv",
+      "shape": "tee",
+      "series": "MT",
+      "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+      "label_x": true,
+      "left_out_note": "cut from M shapes, same fillet issue",
+      "mass": "nominal",
+      "replaced_by": "ASTM A6/A6M tables for dimensions; root radii stay derived from kdes until a mill table gives them"
+    },
+    {
+      "file": "st.csv",
+      "shape": "tee",
+      "series": "ST",
+      "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+      "label_x": true,
+      "sloped": true,
+      "mass": "nominal",
+      "replaced_by": "ASTM A6/A6M tables for dimensions; root radii stay derived from kdes until a mill table gives them"
+    },
+    {
+      "file": "hss-rect.csv",
+      "shape": "rhs",
+      "series": "HSS rectangular",
+      "standard": "ASTM A500/A1085 (AISC Manual 16th ed.)",
+      "label_x": true,
+      "replaced_by": "ASTM A500/A1085 and A53 dimension tables (AISC Manual Part 1)"
+    },
+    {
+      "file": "hss-square.csv",
+      "shape": "rhs",
+      "series": "HSS square",
+      "standard": "ASTM A500/A1085 (AISC Manual 16th ed.)",
+      "label_x": true,
+      "replaced_by": "ASTM A500/A1085 and A53 dimension tables (AISC Manual Part 1)"
+    },
+    {
+      "file": "hss-round.csv",
+      "shape": "chs",
+      "series": "HSS round",
+      "standard": "ASTM A500/A1085 (AISC Manual 16th ed.)",
+      "label_x": true,
+      "replaced_by": "ASTM A500/A1085 and A53 dimension tables (AISC Manual Part 1)"
+    },
+    {
+      "file": "pipe.csv",
+      "shape": "chs",
+      "series": "Pipe",
+      "standard": "ASTM A53 (AISC Manual 16th ed.)",
+      "label_x": true,
+      "left_out_note": "the listed area uses a design wall the 0.93 rule does not reproduce for this size",
+      "replaced_by": "ASTM A500/A1085 and A53 dimension tables (AISC Manual Part 1)"
+    }
+  ],
+  "keys": {},
+  "sources": {
+    "aisc-v16": {
+      "url": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+      "file_url": "https://raw.githubusercontent.com/TLCFEM/suanPan-manual/HEAD/docs/Library/Section/Code/aisc-shapes-database-v16.0.xlsx",
+      "title": "AISC Shapes Database v16.0 (sheet 'Database v16.0', U.S. customary columns converted to mm)",
+      "edition": "v16.0, August 2023",
+      "accessed": "2026-11-28",
+      "kind": "standards / industry body (AISC)",
+      "terms": "AISC Readme sheet (August 2023): 'consistent with shape properties and dimensions tabulated in the AISC Steel Construction Manual, 16th Edition, 1st Printing'; it carries a disclaimer of warranties and no licence terms. The official page (aisc.org) sits behind a browser challenge, so the file was taken from two public mirrors whose data agree (only four EDI names differ). Only defining dimensions, nominal weight and area are taken; every property is recomputed.",
+      "columns": "AISC_Manual_Label, d (or Ht, OD), bf (or B), tw, tf (or t, tnom, tdes), kdes, W, A. r1 = kdes - tf (design fillet, derived); no toe radii; S, C and ST flanges at the standard 2:12 (16.67 %) slope, MC flanges as parallel; HSS corners ro = 2 t, ri = t (AISC Manual Part 1)",
+      "sha256": "sha256:39a250fd5e995ea802698271d034dbc750e8df7ae532cf3847f31b6a044f1e77"
+    }
+  },
+  "checks": {
+    "aisc-v16-mirror-2": {
+      "url": "https://github.com/OpenCivil-Project/Open-Structures/blob/f32abe5b162cb66aa590e3c2b107b7a726124713/app/resources/aisc-shapes-database-v16.0.xlsx",
+      "title": "Second public mirror of the same AISC v16.0 file",
+      "accessed": "2026-11-28",
+      "kind": "mirror",
+      "sha256": "sha256:82d0ceb96a0d938ae1a6bd9637cb10a1e269225b5d668dce5b0bdc8d86013496"
+    },
+    "aisc-v16 metric columns": {
+      "url": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+      "title": "The database's own SI columns (3 significant figures)",
+      "accessed": "2026-11-28",
+      "kind": "same file"
+    }
+  },
+  "missing": [
+    "2L double angles (assemblies of two L, not a section)"
+  ]
+}

@@ -1,0 +1,69 @@
+{
+  "uid": "7248f20136125681",
+  "name": "SHS 90 × 90 × 6.3 (hot-finished)",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/shs90x90x6.3-hf",
+      "family": "rhs",
+      "params": {
+        "height": 90.0,
+        "width": 90.0,
+        "web": 6.3,
+        "radius": 9.45,
+        "inner": 6.3
+      },
+      "catalogue": {
+        "name": "SHS 90 × 90 × 6.3 (hot-finished)",
+        "series": [
+          [
+            "en/shs90x90x6.3-hf",
+            90.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-hfshs",
+    "source": "https://www.steelforlifebluebook.co.uk/hfshs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10210-2",
+    "series": "SHS hot-finished"
+  },
+  "section": {
+    "area_cm2": 20.666,
+    "mass_kg_m": 16.223,
+    "iy_cm4": 238.29,
+    "iz_cm4": 238.29,
+    "iu_cm4": 238.29,
+    "iv_cm4": 238.29,
+    "wy_cm3": 52.95,
+    "wz_cm3": 52.95,
+    "centroid_mm": [
+      45.0,
+      45.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 20.7,
+      "mass_kg_m": 16.2
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/shs90x90x6.3-hf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:4b5bd44c5abeb4c4864c8bde70ff41733816cd9c0084fa8b5cc0e57b90420881"
+}

@@ -1,0 +1,69 @@
+{
+  "uid": "d5eb6455d0db5003",
+  "name": "HL 920 × 787",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/hl920x787",
+      "family": "i",
+      "params": {
+        "height": 1011.0,
+        "width": 437.0,
+        "web": 40.9,
+        "flange": 73.9,
+        "radius": 19.0
+      },
+      "catalogue": {
+        "name": "HL 920 × 787",
+        "series": [
+          [
+            "en/hl920x787",
+            1011.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-hl",
+    "source": "https://orangebook.arcelormittal.com/node/26",
+    "standard": "EN 10365",
+    "series": "HL / HLZ"
+  },
+  "section": {
+    "area_cm2": 1002.034,
+    "mass_kg_m": 786.597,
+    "iy_cm4": 1645790.27,
+    "iz_cm4": 103298.28,
+    "iu_cm4": 1645790.27,
+    "iv_cm4": 103298.28,
+    "wy_cm3": 32557.67,
+    "wz_cm3": 4727.61,
+    "centroid_mm": [
+      218.5,
+      505.5
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 1002.0,
+      "mass_kg_m": 787.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/hl920x787",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:0782cf73d0c9613fc0477e49ce38488f65a523680a3fd85378024aa2161395d5"
+}

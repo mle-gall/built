@@ -1,0 +1,72 @@
+{
+  "uid": "a0c33de1d137e19c",
+  "name": "HSS18 × 18 × 3/8",
+  "rev": 3,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/hss18x18x3_8",
+      "family": "rhs",
+      "params": {
+        "height": 457.2,
+        "width": 457.2,
+        "web": 9.525,
+        "radius": 19.05,
+        "inner": 9.525
+      },
+      "catalogue": {
+        "name": "HSS18 × 18 × 3/8",
+        "series": [
+          [
+            "aisc/hss18x18x3_8",
+            457.2
+          ]
+        ],
+        "aliases": [
+          "HSS18X18X3/8"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A500/A1085 (AISC Manual 16th ed.)",
+    "series": "HSS square"
+  },
+  "section": {
+    "area_cm2": 168.228,
+    "mass_kg_m": 132.059,
+    "iy_cm4": 55796.07,
+    "iz_cm4": 55796.07,
+    "iu_cm4": 55796.07,
+    "iv_cm4": 55796.07,
+    "wy_cm3": 2440.77,
+    "wz_cm3": 2440.77,
+    "centroid_mm": [
+      228.6,
+      228.6
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 156.774,
+      "mass_kg_m": 132.045
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/hss18x18x3_8",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:8b64ea012dcd40ba5b82e217ed71a4e5b04cecad43e0deb2a3a3bacb89ff90c0"
+}

@@ -1,0 +1,88 @@
+{
+  "uid": "25c104ee8d5ec9e4",
+  "name": "IPN 340",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/ipn340",
+      "family": "i",
+      "params": {
+        "height": 340.0,
+        "width": 137.0,
+        "web": 12.2,
+        "flange": 18.3,
+        "radius": 12.2,
+        "toe": 7.3,
+        "slope": 14.0,
+        "flange_at": 34.25
+      },
+      "catalogue": {
+        "name": "IPN 340",
+        "series": [
+          [
+            "en/ipn300",
+            300.0
+          ],
+          [
+            "en/ipn320",
+            320.0
+          ],
+          [
+            "en/ipn340",
+            340.0
+          ],
+          [
+            "en/ipn360",
+            360.0
+          ],
+          [
+            "en/ipn380",
+            380.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "am-ipn",
+    "source": "https://sections.arcelormittal.com/repository2/Sections/Sections_MB_ArcelorMittal_FR_EN_DE_IPN.pdf",
+    "standard": "EN 10365",
+    "series": "IPN"
+  },
+  "section": {
+    "area_cm2": 86.679,
+    "mass_kg_m": 68.043,
+    "iy_cm4": 15669.51,
+    "iz_cm4": 671.88,
+    "iu_cm4": 15669.51,
+    "iv_cm4": 671.88,
+    "wy_cm3": 921.74,
+    "wz_cm3": 98.08,
+    "centroid_mm": [
+      68.5,
+      170.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 86.7,
+      "mass_kg_m": 68.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/ipn340",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:611f900edffd70efc1adadfd686ba6a2acfa1959456359be1385f9403fd2104f"
+}

@@ -141,5 +141,8 @@ def test_a_steel_beat_starts_with_its_addons_in_my_library(tmp_path):
     beat = compile_beat("addon steel-profiles-en steel-connections-en\npause 300\n")
     result = play(beat, background=True, shots=None, quit_at_end=True, binary=binary, timeout=120)
     assert result.returncode == 0, result.stderr[-2000:]
-    assert "add-on steel-profiles-en.builtpack: 12 rows in My library" in result.stdout, result.stdout[-2000:]
+    import json
+    from pathlib import Path
+    rows = len(json.loads((Path(__file__).resolve().parents[1] / "addons/steel-profiles-en/pack.json").read_text())["rows"])
+    assert f"add-on steel-profiles-en.builtpack: {rows} rows in My library" in result.stdout, result.stdout[-2000:]
     assert "add-on steel-connections-en.builtpack: " in result.stdout

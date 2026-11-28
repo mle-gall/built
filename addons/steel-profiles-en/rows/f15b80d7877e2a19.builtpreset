@@ -1,0 +1,72 @@
+{
+  "uid": "f15b80d7877e2a19",
+  "name": "UB 610 × 178 × 82",
+  "rev": 4,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/ub610x178x82",
+      "family": "i",
+      "params": {
+        "height": 599.0,
+        "width": 178.0,
+        "web": 10.0,
+        "flange": 12.8,
+        "radius": 12.7
+      },
+      "catalogue": {
+        "name": "UB 610 × 178 × 82",
+        "series": [
+          [
+            "en/ub610x178x82",
+            599.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-ub;r1=bb-ub",
+    "source": "https://orangebook.arcelormittal.com/node/35",
+    "standard": "EN 10365",
+    "series": "UB",
+    "column_sources": {
+      "r1": "https://www.steelforlifebluebook.co.uk/ub/ec3-ukna/section-properties-dimensions-properties"
+    }
+  },
+  "section": {
+    "area_cm2": 104.293,
+    "mass_kg_m": 81.87,
+    "iy_cm4": 55978.97,
+    "iz_cm4": 1208.85,
+    "iu_cm4": 55978.97,
+    "iv_cm4": 1208.85,
+    "wy_cm3": 1869.08,
+    "wz_cm3": 135.83,
+    "centroid_mm": [
+      89.0,
+      299.5
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 104.0,
+      "mass_kg_m": 82.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/ub610x178x82",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:81e9b49a9e52de8a3d469b13d9550e1da322f258c5b2fe38af9c3e61c10ffec5"
+}

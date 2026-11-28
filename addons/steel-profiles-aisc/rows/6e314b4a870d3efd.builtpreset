@@ -1,0 +1,80 @@
+{
+  "uid": "6e314b4a870d3efd",
+  "name": "WT4 × 7.5",
+  "rev": 3,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/wt4x7.5",
+      "family": "tee",
+      "params": {
+        "height": 103.124,
+        "width": 102.108,
+        "web": 6.223,
+        "flange": 8.001,
+        "radius": 7.62
+      },
+      "catalogue": {
+        "name": "WT4 × 7.5",
+        "series": [
+          [
+            "aisc/wt3x7.5",
+            76.2
+          ],
+          [
+            "aisc/wt4x7.5",
+            103.124
+          ],
+          [
+            "aisc/wt5x7.5",
+            127.0
+          ]
+        ],
+        "aliases": [
+          "WT4X7.5"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "WT"
+  },
+  "section": {
+    "area_cm2": 14.338,
+    "mass_kg_m": 11.256,
+    "iy_cm4": 136.96,
+    "iz_cm4": 71.23,
+    "iu_cm4": 136.96,
+    "iv_cm4": 71.23,
+    "wy_cm3": 17.62,
+    "wz_cm3": 13.95,
+    "centroid_mm": [
+      51.05,
+      77.74
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 14.323,
+      "mass_kg_m": 11.161
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/wt4x7.5",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:02404c7b40f601b1bc686815ab15a2231f8149f2d209866c6e5dbd73d23b8f8d"
+}

@@ -1,0 +1,125 @@
+designation,h,b,tw,tf,r1,r2,slope,mass,area,status,source
+HE 1000 x 584,1056,314,36,64,30,0,0,584,744,provisional,ob-he
+HE 1000 x 494,1036,309,31,54,30,0,0,494,629,provisional,ob-he
+HE 1000 x 438,1026,305,26.9,49,30,0,0,438,556,provisional,ob-he
+HE 1000 x 415,1020,304,26,46,30,0,0,415,529,provisional,ob-he
+HE 1000 x 393,1016,303,24.4,43.9,30,0,0,393,500,provisional,ob-he
+HE 1000 M,1008,302,21,40,30,0,0,349,444,provisional,ob-he
+HE 1000 B,1000,300,19,36,30,0,0,314,400,provisional,ob-he
+HE 1000 A,990,300,16.5,31,30,0,0,272,347,provisional,ob-he
+HE 1000 x 249,980,300,16.5,26,30,0,0,249,317,provisional,ob-he
+HE 1000 AA,970,300,16,21,30,0,0,222,282,provisional,ob-he
+HE 900 x 466,938,312,30,54,30,0,0,466,594,provisional,ob-he
+HE 900 x 391,922,307,25,46,30,0,0,391,498,provisional,ob-he
+HE 900 M,910,302,21,40,30,0,0,333,424,provisional,ob-he
+HE 900 B,900,300,18.5,35,30,0,0,291,371,provisional,ob-he
+HE 900 A,890,300,16,30,30,0,0,252,320,provisional,ob-he
+HE 900 AA,870,300,15,20,30,0,0,198,252,provisional,ob-he
+HE 800 x 444,842,313,30,54,30,0,0,444,566,provisional,ob-he
+HE 800 x 373,826,308,25,46,30,0,0,373,475,provisional,ob-he
+HE 800 M,814,303,21,40,30,0,0,317,404,provisional,ob-he
+HE 800 B,800,300,17.5,33,30,0,0,262,334,provisional,ob-he
+HE 800 A,790,300,15,28,30,0,0,224,286,provisional,ob-he
+HE 800 AA,770,300,14,18,30,0,0,172,218,provisional,ob-he
+HE 700 x 418,744,313,29.5,54,27,0,0,418,532,provisional,ob-he
+HE 700 x 352,728,308,25,46,27,0,0,352,449,provisional,ob-he
+HE 700 M,716,304,21,40,27,0,0,301,383,provisional,ob-he
+HE 700 B,700,300,17,32,27,0,0,241,306,provisional,ob-he
+HE 700 A,690,300,14.5,27,27,0,0,204,260,provisional,ob-he
+HE 700 AA,670,300,13,17,27,0,0,150,191,provisional,ob-he
+HE 650 x 407,696,314,29.5,54,27,0,0,407,519,provisional,ob-he
+HE 650 x 343,680,309,25,46,27,0,0,343,438,provisional,ob-he
+HE 650 M,668,305,21,40,27,0,0,293,374,provisional,ob-he
+HE 650 B,650,300,16,31,27,0,0,225,286,provisional,ob-he
+HE 650 A,640,300,13.5,26,27,0,0,190,242,provisional,ob-he
+HE 650 AA,620,300,12.5,16,27,0,0,138,176,provisional,ob-he
+HE 600 x 399,648,315,30,54,27,0,0,399,508,provisional,ob-he
+HE 600 x 337,632,310,25.5,46,27,0,0,337,429,provisional,ob-he
+HE 600 M,620,305,21,40,27,0,0,285,364,provisional,ob-he
+HE 600 B,600,300,15.5,30,27,0,0,212,270,provisional,ob-he
+HE 600 A,590,300,13,25,27,0,0,178,226,provisional,ob-he
+HE 600 AA,571,300,12,15.5,27,0,0,129,164,provisional,ob-he
+HE 550 M,572,306,21,40,27,0,0,278,354,provisional,ob-he
+HE 550 B,550,300,15,29,27,0,0,199,254,provisional,ob-he
+HE 550 A,540,300,12.5,24,27,0,0,166,212,provisional,ob-he
+HE 550 AA,522,300,11.5,15,27,0,0,120,153,provisional,ob-he
+HE 500 M,524,306,21,40,27,0,0,270,344,provisional,ob-he
+HE 500 B,500,300,14.5,28,27,0,0,187,239,provisional,ob-he
+HE 500 A,490,300,12,23,27,0,0,155,198,provisional,ob-he
+HE 500 AA,472,300,10.5,14,27,0,0,107,137,provisional,ob-he
+HE 450 M,478,307,21,40,27,0,0,263,335,provisional,ob-he
+HE 450 B,450,300,14,26,27,0,0,171,218,provisional,ob-he
+HE 450 A,440,300,11.5,21,27,0,0,140,178,provisional,ob-he
+HE 450 AA,425,300,10,13.5,27,0,0,99.7,127,provisional,ob-he
+HE 400 M,432,307,21,40,27,0,0,256,326,provisional,ob-he
+HE 400 B,400,300,13.5,24,27,0,0,155,198,provisional,ob-he
+HE 400 A,390,300,11,19,27,0,0,125,159,provisional,ob-he
+HE 400 AA,378,300,9.5,13,27,0,0,92.4,118,provisional,ob-he
+HE 360 M,395,308,21,40,27,0,0,250,319,provisional,ob-he
+HE 360 B,360,300,12.5,22.5,27,0,0,142,181,provisional,ob-he
+HE 360 A,350,300,10,17.5,27,0,0,112,143,provisional,ob-he
+HE 360 AA,339,300,9,12,27,0,0,83.7,107,provisional,ob-he
+HE 340 M,377,309,21,40,27,0,0,248,316,provisional,ob-he
+HE 340 B,340,300,12,21.5,27,0,0,134,171,provisional,ob-he
+HE 340 A,330,300,9.5,16.5,27,0,0,105,134,provisional,ob-he
+HE 340 AA,320,300,8.5,11.5,27,0,0,78.9,100,provisional,ob-he
+HE 320 M,359,309,21,40,27,0,0,245,312,provisional,ob-he
+HE 320 C,340,305,16,30.5,27,0,0,186,237,provisional,ob-he
+HE 320 B,320,300,11.5,20.5,27,0,0,127,161,provisional,ob-he
+HE 320 A,310,300,9,15.5,27,0,0,97.6,124,provisional,ob-he
+HE 320 AA,301,300,8,11,27,0,0,74.2,94.6,provisional,ob-he
+HE 300 M,340,310,21,39,27,0,0,238,303,provisional,ob-he
+HE 300 C,320,305,16,29,27,0,0,177,225,provisional,ob-he
+HE 300 B,300,300,11,19,27,0,0,117,149,provisional,ob-he
+HE 300 A,290,300,8.5,14,27,0,0,88.3,112,provisional,ob-he
+HE 300 AA,283,300,7.5,10.5,27,0,0,69.8,88.9,provisional,ob-he
+HE 280 M,310,288,18.5,33,24,0,0,189,240,provisional,ob-he
+HE 280 C,295,284,14.5,25.5,24,0,0,145,185,provisional,ob-he
+HE 280 B,280,280,10.5,18,24,0,0,103,131,provisional,ob-he
+HE 280 A,270,280,8,13,24,0,0,76.4,97.3,provisional,ob-he
+HE 280 AA,264,280,7,10,24,0,0,61.2,78,provisional,ob-he
+HE 260 M,290,268,18,32.5,24,0,0,172,220,provisional,ob-he
+HE 260 C,275,264,14,25,24,0,0,132,168,provisional,ob-he
+HE 260 B,260,260,10,17.5,24,0,0,93,118,provisional,ob-he
+HE 260 A,250,260,7.5,12.5,24,0,0,68.2,86.8,provisional,ob-he
+HE 260 AA,244,260,6.5,9.5,24,0,0,54.1,69,provisional,ob-he
+HE 240 M,270,248,18,32,21,0,0,157,200,provisional,ob-he
+HE 240 C,255,244,14,24.5,21,0,0,119,152,provisional,ob-he
+HE 240 B,240,240,10,17,21,0,0,83.2,106,provisional,ob-he
+HE 240 A,230,240,7.5,12,21,0,0,60.3,76.8,provisional,ob-he
+HE 240 AA,224,240,6.5,9,21,0,0,47.4,60.4,provisional,ob-he
+HE 220 M,240,226,15.5,26,18,0,0,117,149,provisional,ob-he
+HE 220 C,230,223,12.5,21,18,0,0,94.1,120,provisional,ob-he
+HE 220 B,220,220,9.5,16,18,0,0,71.5,91,provisional,ob-he
+HE 220 A,210,220,7,11,18,0,0,50.5,64.3,provisional,ob-he
+HE 220 AA,205,220,6,8.5,18,0,0,40.4,51.5,provisional,ob-he
+HE 200 M,220,206,15,25,18,0,0,103,131,provisional,ob-he
+HE 200 C,210,203,12,20,18,0,0,81.9,104,provisional,ob-he
+HE 200 B,200,200,9,15,18,0,0,61.3,78.1,provisional,ob-he
+HE 200 A,190,200,6.5,10,18,0,0,42.3,53.8,provisional,ob-he
+HE 200 AA,186,200,5.5,8,18,0,0,34.6,44.1,provisional,ob-he
+HE 180 M,200,186,14.5,24,15,0,0,88.9,113,provisional,ob-he
+HE 180 C,190,183,11.5,19,15,0,0,69.8,89,provisional,ob-he
+HE 180 B,180,180,8.5,14,15,0,0,51.2,65.3,provisional,ob-he
+HE 180 A,171,180,6,9.5,15,0,0,35.5,45.3,provisional,ob-he
+HE 180 AA,167,180,5,7.5,15,0,0,28.7,36.5,provisional,ob-he
+HE 160 M,180,166,14,23,15,0,0,76.2,97.1,provisional,ob-he
+HE 160 C,170,163,11,18,15,0,0,59.2,75.4,provisional,ob-he
+HE 160 B,160,160,8,13,15,0,0,42.6,54.3,provisional,ob-he
+HE 160 A,152,160,6,9,15,0,0,30.4,38.8,provisional,ob-he
+HE 160 AA,148,160,4.5,7,15,0,0,23.8,30.4,provisional,ob-he
+HE 140 M,160,146,13,22,12,0,0,63.2,80.6,provisional,ob-he
+HE 140 C,150,143,10,17,12,0,0,48.2,61.5,provisional,ob-he
+HE 140 B,140,140,7,12,12,0,0,33.7,43,provisional,ob-he
+HE 140 A,133,140,5.5,8.5,12,0,0,24.7,31.4,provisional,ob-he
+HE 140 AA,128,140,4.3,6,12,0,0,18.1,23,provisional,ob-he
+HE 120 M,140,126,12.5,21,12,0,0,52.1,66.4,provisional,ob-he
+HE 120 C,130,123,9.5,16,12,0,0,39.2,49.9,provisional,ob-he
+HE 120 B,120,120,6.5,11,12,0,0,26.7,34,provisional,ob-he
+HE 120 A,114,120,5,8,12,0,0,19.9,25.3,provisional,ob-he
+HE 120 AA,109,120,4.2,5.5,12,0,0,14.6,18.6,provisional,ob-he
+HE 100 M,120,106,12,20,12,0,0,41.8,53.2,provisional,ob-he
+HE 100 C,110,103,9,15,12,0,0,30.9,39.3,provisional,ob-he
+HE 100 B,100,100,6,10,12,0,0,20.4,26,provisional,ob-he
+HE 100 A,96,100,5,8,12,0,0,16.7,21.2,provisional,ob-he
+HE 100 AA,91,100,4.2,5.5,12,0,0,12.2,15.6,provisional,ob-he

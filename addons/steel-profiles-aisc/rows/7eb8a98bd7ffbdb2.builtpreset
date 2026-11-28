@@ -1,0 +1,76 @@
+{
+  "uid": "7eb8a98bd7ffbdb2",
+  "name": "WT9 × 53",
+  "rev": 3,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/wt9x53",
+      "family": "tee",
+      "params": {
+        "height": 237.998,
+        "width": 284.48,
+        "web": 14.986,
+        "flange": 23.876,
+        "radius": 10.16
+      },
+      "catalogue": {
+        "name": "WT9 × 53",
+        "series": [
+          [
+            "aisc/wt6x53",
+            163.83
+          ],
+          [
+            "aisc/wt9x53",
+            237.998
+          ]
+        ],
+        "aliases": [
+          "WT9X53"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "WT"
+  },
+  "section": {
+    "area_cm2": 100.454,
+    "mass_kg_m": 78.856,
+    "iy_cm4": 4346.84,
+    "iz_cm4": 4587.18,
+    "iu_cm4": 4587.18,
+    "iv_cm4": 4346.84,
+    "wy_cm3": 231.23,
+    "wz_cm3": 322.5,
+    "centroid_mm": [
+      142.24,
+      187.99
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 100.645,
+      "mass_kg_m": 78.873
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/wt9x53",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:415948e58a1db1c687da3d3147f1009a12345e5bdf9b7ec2788b211a73f910ca"
+}

@@ -1,0 +1,88 @@
+{
+  "uid": "017c0b05b046231f",
+  "name": "UPN 350",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/upn350",
+      "family": "channel",
+      "params": {
+        "height": 350.0,
+        "width": 100.0,
+        "web": 14.0,
+        "flange": 16.0,
+        "radius": 16.0,
+        "toe": 8.0,
+        "slope": 5.0,
+        "flange_at": 50.0
+      },
+      "catalogue": {
+        "name": "UPN 350",
+        "series": [
+          [
+            "en/upn300",
+            300.0
+          ],
+          [
+            "en/upn320",
+            320.0
+          ],
+          [
+            "en/upn350",
+            350.0
+          ],
+          [
+            "en/upn380",
+            380.0
+          ],
+          [
+            "en/upn400",
+            400.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-upn",
+    "source": "https://orangebook.arcelormittal.com/node/265",
+    "standard": "EN 10365",
+    "series": "UPN"
+  },
+  "section": {
+    "area_cm2": 76.651,
+    "mass_kg_m": 60.171,
+    "iy_cm4": 12693.07,
+    "iz_cm4": 560.62,
+    "iu_cm4": 12693.07,
+    "iv_cm4": 560.62,
+    "wy_cm3": 725.32,
+    "wz_cm3": 73.48,
+    "centroid_mm": [
+      23.71,
+      175.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 77.3,
+      "mass_kg_m": 60.6
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/upn350",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:672e26ff712b897ee021f1490287d753e9632eab098a46492c9859f26122428c"
+}

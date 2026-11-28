@@ -1,0 +1,72 @@
+{
+  "uid": "cddcdfc7e64cb2c2",
+  "name": "W21 × 147",
+  "rev": 3,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/w21x147",
+      "family": "i",
+      "params": {
+        "height": 561.34,
+        "width": 317.5,
+        "web": 18.288,
+        "flange": 29.21,
+        "radius": 12.7
+      },
+      "catalogue": {
+        "name": "W21 × 147",
+        "series": [
+          [
+            "aisc/w21x147",
+            561.34
+          ]
+        ],
+        "aliases": [
+          "W21X147"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "W"
+  },
+  "section": {
+    "area_cm2": 278.842,
+    "mass_kg_m": 218.891,
+    "iy_cm4": 151678.42,
+    "iz_cm4": 15609.28,
+    "iu_cm4": 151678.42,
+    "iv_cm4": 15609.28,
+    "wy_cm3": 5404.16,
+    "wz_cm3": 983.26,
+    "centroid_mm": [
+      158.75,
+      280.67
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 278.709,
+      "mass_kg_m": 218.76
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/w21x147",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:f2c001da7c9d4821b3499825ba03bff84c9f70f89588c6a876708daa3eab0d39"
+}

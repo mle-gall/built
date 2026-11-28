@@ -1,0 +1,69 @@
+{
+  "uid": "8bc66424a8552c2f",
+  "name": "SHS 40 × 40 × 2.5 (cold-formed)",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/shs40x40x2.5-cf",
+      "family": "rhs",
+      "params": {
+        "height": 40.0,
+        "width": 40.0,
+        "web": 2.5,
+        "radius": 5.0,
+        "inner": 2.5
+      },
+      "catalogue": {
+        "name": "SHS 40 × 40 × 2.5 (cold-formed)",
+        "series": [
+          [
+            "en/shs40x40x2.5-cf",
+            40.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-cfshs",
+    "source": "https://www.steelforlifebluebook.co.uk/cfshs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10219-2",
+    "series": "SHS cold-formed"
+  },
+  "section": {
+    "area_cm2": 3.589,
+    "mass_kg_m": 2.817,
+    "iy_cm4": 8.22,
+    "iz_cm4": 8.22,
+    "iu_cm4": 8.22,
+    "iv_cm4": 8.22,
+    "wy_cm3": 4.11,
+    "wz_cm3": 4.11,
+    "centroid_mm": [
+      20.0,
+      20.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 3.59,
+      "mass_kg_m": 2.82
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/shs40x40x2.5-cf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:0a4827a13e85f641f686a03eb724f86069249f3c07706a90a0ed3225b60b973f"
+}

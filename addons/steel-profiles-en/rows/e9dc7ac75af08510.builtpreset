@@ -1,0 +1,73 @@
+{
+  "uid": "e9dc7ac75af08510",
+  "name": "RHS 100 × 50 × 3.6 (hot-finished)",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/rhs100x50x3.6-hf",
+      "family": "rhs",
+      "params": {
+        "height": 100.0,
+        "width": 50.0,
+        "web": 3.6,
+        "radius": 5.4,
+        "inner": 3.6
+      },
+      "catalogue": {
+        "name": "RHS 100 × 50 × 3.6 (hot-finished)",
+        "series": [
+          [
+            "en/rhs90x50x3.6-hf",
+            90.0
+          ],
+          [
+            "en/rhs100x50x3.6-hf",
+            100.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-hfrhs",
+    "source": "https://www.steelforlifebluebook.co.uk/hfrhs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10210-2",
+    "series": "RHS hot-finished"
+  },
+  "section": {
+    "area_cm2": 10.143,
+    "mass_kg_m": 7.962,
+    "iy_cm4": 127.98,
+    "iz_cm4": 42.59,
+    "iu_cm4": 127.98,
+    "iv_cm4": 42.59,
+    "wy_cm3": 25.6,
+    "wz_cm3": 17.04,
+    "centroid_mm": [
+      25.0,
+      50.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 10.1,
+      "mass_kg_m": 7.96
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/rhs100x50x3.6-hf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:aeabe4604ad322e7f303170e31268170b8071530ac385f231ea1bfef7f745ae7"
+}

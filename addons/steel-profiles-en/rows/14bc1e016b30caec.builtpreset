@@ -1,0 +1,88 @@
+{
+  "uid": "14bc1e016b30caec",
+  "name": "HE 320 M",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/he320m",
+      "family": "i",
+      "params": {
+        "height": 359.0,
+        "width": 309.0,
+        "web": 21.0,
+        "flange": 40.0,
+        "radius": 27.0
+      },
+      "catalogue": {
+        "name": "HE 320 M",
+        "series": [
+          [
+            "en/he280m",
+            310.0
+          ],
+          [
+            "en/he300m",
+            340.0
+          ],
+          [
+            "en/he320m",
+            359.0
+          ],
+          [
+            "en/he340m",
+            377.0
+          ],
+          [
+            "en/he360m",
+            395.0
+          ]
+        ],
+        "aliases": [
+          "HEM 320"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-he",
+    "source": "https://orangebook.arcelormittal.com/node/16",
+    "standard": "EN 10365",
+    "series": "HE"
+  },
+  "section": {
+    "area_cm2": 312.048,
+    "mass_kg_m": 244.958,
+    "iy_cm4": 68134.95,
+    "iz_cm4": 19709.33,
+    "iu_cm4": 68134.95,
+    "iv_cm4": 19709.33,
+    "wy_cm3": 3795.82,
+    "wz_cm3": 1275.68,
+    "centroid_mm": [
+      154.5,
+      179.5
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 312.0,
+      "mass_kg_m": 245.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/he320m",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:ec5f740f4ec1b55eb13f718a312015d4c42a608b6337c69804b18859f0084438"
+}

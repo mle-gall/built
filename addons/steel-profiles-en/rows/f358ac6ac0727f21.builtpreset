@@ -1,7 +1,7 @@
 {
   "uid": "f358ac6ac0727f21",
-  "name": "RHS 100 × 50 × 5",
-  "rev": 1,
+  "name": "RHS 100 × 50 × 5 (hot-finished)",
+  "rev": 4,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
   "record": {
@@ -13,21 +13,18 @@
       "library": "en/rhs100x5",
       "family": "rhs",
       "params": {
-        "width": 50,
-        "height": 100,
-        "web": 5,
-        "radius": 7.5
+        "height": 100.0,
+        "width": 50.0,
+        "web": 5.0,
+        "radius": 7.5,
+        "inner": 5.0
       },
       "catalogue": {
-        "name": "RHS 100 × 50 × 5",
+        "name": "RHS 100 × 50 × 5 (hot-finished)",
         "series": [
           [
             "en/rhs100x5",
-            100
-          ],
-          [
-            "en/rhs100x4",
-            100
+            100.0
           ]
         ]
       }
@@ -35,8 +32,30 @@
   },
   "provenance": {
     "created_with": "Built",
-    "source": "https://www.tatasteeluk.com/sites/default/files/tata-steel-celsius-s420nh-technical-guide-en.pdf",
-    "standard": "EN 10210"
+    "status": "provisional",
+    "source_id": "bb-hfrhs",
+    "source": "https://www.steelforlifebluebook.co.uk/hfrhs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10210-2",
+    "series": "RHS hot-finished"
+  },
+  "section": {
+    "area_cm2": 13.732,
+    "mass_kg_m": 10.779,
+    "iy_cm4": 166.52,
+    "iz_cm4": 54.3,
+    "iu_cm4": 166.52,
+    "iv_cm4": 54.3,
+    "wy_cm3": 33.3,
+    "wz_cm3": 21.72,
+    "centroid_mm": [
+      25.0,
+      50.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 13.7,
+      "mass_kg_m": 10.8
+    }
   },
   "profile_size": true,
   "depends": [
@@ -46,5 +65,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:0c5a68568f9dad50a6089945bfdd8c43a751dbe92135e5bf3821ff71cae59b13"
+  "hash": "sha256:bb95026c2406716c3457c6952603f8efc6551c3457594b6db91d01df9120dcb0"
 }

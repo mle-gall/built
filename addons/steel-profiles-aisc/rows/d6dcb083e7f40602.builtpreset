@@ -1,0 +1,84 @@
+{
+  "uid": "d6dcb083e7f40602",
+  "name": "WT8 × 25",
+  "rev": 3,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/wt8x25",
+      "family": "tee",
+      "params": {
+        "height": 206.502,
+        "width": 179.578,
+        "web": 9.652,
+        "flange": 16.002,
+        "radius": 10.16
+      },
+      "catalogue": {
+        "name": "WT8 × 25",
+        "series": [
+          [
+            "aisc/wt6x25",
+            154.94
+          ],
+          [
+            "aisc/wt8x25",
+            206.502
+          ],
+          [
+            "aisc/wt9x25",
+            228.6
+          ],
+          [
+            "aisc/wt10.5x25",
+            264.16
+          ]
+        ],
+        "aliases": [
+          "WT8X25"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "WT"
+  },
+  "section": {
+    "area_cm2": 47.566,
+    "mass_kg_m": 37.339,
+    "iy_cm4": 1761.51,
+    "iz_cm4": 773.91,
+    "iu_cm4": 1761.51,
+    "iv_cm4": 773.91,
+    "wy_cm3": 111.14,
+    "wz_cm3": 86.19,
+    "centroid_mm": [
+      89.79,
+      158.49
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 47.548,
+      "mass_kg_m": 37.204
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/wt8x25",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:220b58776deac89d100e2c9ff9b3bf9cd5e8553fddcacfe0d8646fd2b8c95809"
+}

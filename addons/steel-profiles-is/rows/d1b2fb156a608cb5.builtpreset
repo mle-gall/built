@@ -1,0 +1,90 @@
+{
+  "uid": "d1b2fb156a608cb5",
+  "name": "ISMB 175",
+  "rev": 2,
+  "pack": "Steel profiles · IS",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "is/ismb175",
+      "family": "i",
+      "params": {
+        "height": 175.0,
+        "width": 85.0,
+        "web": 5.8,
+        "flange": 9.0,
+        "radius": 10.0,
+        "toe": 5.0,
+        "slope": 14.05
+      },
+      "catalogue": {
+        "name": "ISMB 175",
+        "series": [
+          [
+            "is/ismb125",
+            125.0
+          ],
+          [
+            "is/ismb150",
+            150.0
+          ],
+          [
+            "is/ismb175",
+            175.0
+          ],
+          [
+            "is/ismb200",
+            200.0
+          ],
+          [
+            "is/ismb225",
+            225.0
+          ]
+        ],
+        "aliases": [
+          "MB 175"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "is808-1989",
+    "source": "https://law.resource.org/pub/in/bis/S03/is.808.1989.pdf",
+    "standard": "IS 808",
+    "series": "ISMB"
+  },
+  "section": {
+    "area_cm2": 24.867,
+    "mass_kg_m": 19.521,
+    "iy_cm4": 1262.29,
+    "iz_cm4": 76.67,
+    "iu_cm4": 1262.29,
+    "iv_cm4": 76.67,
+    "wy_cm3": 144.26,
+    "wz_cm3": 18.04,
+    "centroid_mm": [
+      42.5,
+      87.5
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 25.0,
+      "mass_kg_m": 19.6
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "is/ismb175",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:3ca13cd2f5ec21e5cda7598920963ba9dc24219bba79e3f9c4c5aba2c7ef009f"
+}

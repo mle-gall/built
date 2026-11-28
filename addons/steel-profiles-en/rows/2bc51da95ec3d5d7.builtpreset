@@ -1,0 +1,85 @@
+{
+  "uid": "2bc51da95ec3d5d7",
+  "name": "UPE 140",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/upe140",
+      "family": "channel",
+      "params": {
+        "height": 140.0,
+        "width": 65.0,
+        "web": 5.0,
+        "flange": 9.0,
+        "radius": 12.0
+      },
+      "catalogue": {
+        "name": "UPE 140",
+        "series": [
+          [
+            "en/upe100",
+            100.0
+          ],
+          [
+            "en/upe120",
+            120.0
+          ],
+          [
+            "en/upe140",
+            140.0
+          ],
+          [
+            "en/upe160",
+            160.0
+          ],
+          [
+            "en/upe180",
+            180.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-upe",
+    "source": "https://orangebook.arcelormittal.com/node/253",
+    "standard": "EN 10365",
+    "series": "UPE"
+  },
+  "section": {
+    "area_cm2": 18.418,
+    "mass_kg_m": 14.458,
+    "iy_cm4": 599.46,
+    "iz_cm4": 78.7,
+    "iu_cm4": 599.46,
+    "iv_cm4": 78.7,
+    "wy_cm3": 85.64,
+    "wz_cm3": 18.19,
+    "centroid_mm": [
+      21.73,
+      70.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 18.4,
+      "mass_kg_m": 14.5
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/upe140",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:a3adb8e9600f5a52baf759e12001417e4cb5fdabea21f5bdae799488f7d05bd1"
+}

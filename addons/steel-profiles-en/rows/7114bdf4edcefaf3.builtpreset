@@ -1,0 +1,85 @@
+{
+  "uid": "7114bdf4edcefaf3",
+  "name": "IPE O 500",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/ipeo500",
+      "family": "i",
+      "params": {
+        "height": 506.0,
+        "width": 202.0,
+        "web": 12.0,
+        "flange": 19.0,
+        "radius": 21.0
+      },
+      "catalogue": {
+        "name": "IPE O 500",
+        "series": [
+          [
+            "en/ipeo400",
+            404.0
+          ],
+          [
+            "en/ipeo450",
+            456.0
+          ],
+          [
+            "en/ipeo500",
+            506.0
+          ],
+          [
+            "en/ipeo550",
+            556.0
+          ],
+          [
+            "en/ipeo600",
+            610.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-ipe",
+    "source": "https://orangebook.arcelormittal.com/node/6",
+    "standard": "EN 10365",
+    "series": "IPE"
+  },
+  "section": {
+    "area_cm2": 136.706,
+    "mass_kg_m": 107.314,
+    "iy_cm4": 57777.47,
+    "iz_cm4": 2621.75,
+    "iu_cm4": 57777.47,
+    "iv_cm4": 2621.75,
+    "wy_cm3": 2283.69,
+    "wz_cm3": 259.58,
+    "centroid_mm": [
+      101.0,
+      253.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 137.0,
+      "mass_kg_m": 107.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/ipeo500",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:926ba25a147ca8d915fdd6000bcbb38a36af817ec1aa96d916d8190adcdcfc11"
+}

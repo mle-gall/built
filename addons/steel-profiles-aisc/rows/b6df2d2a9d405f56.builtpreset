@@ -1,0 +1,76 @@
+{
+  "uid": "b6df2d2a9d405f56",
+  "name": "W44 × 335",
+  "rev": 3,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/w44x335",
+      "family": "i",
+      "params": {
+        "height": 1117.6,
+        "width": 403.86,
+        "web": 26.162,
+        "flange": 44.958,
+        "radius": 20.07
+      },
+      "catalogue": {
+        "name": "W44 × 335",
+        "series": [
+          [
+            "aisc/w24x335",
+            698.5
+          ],
+          [
+            "aisc/w44x335",
+            1117.6
+          ]
+        ],
+        "aliases": [
+          "W44X335"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "W"
+  },
+  "section": {
+    "area_cm2": 635.455,
+    "mass_kg_m": 498.833,
+    "iy_cm4": 1290734.73,
+    "iz_cm4": 49521.45,
+    "iu_cm4": 1290734.73,
+    "iv_cm4": 49521.45,
+    "wy_cm3": 23098.33,
+    "wz_cm3": 2452.41,
+    "centroid_mm": [
+      201.93,
+      558.8
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 635.483,
+      "mass_kg_m": 498.535
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/w44x335",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:3a6c23220f457db5e42580e78e2b84826903e1f32aa498bb932e848340de80cf"
+}

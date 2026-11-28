@@ -1,0 +1,73 @@
+{
+  "uid": "25a07a5d59950e00",
+  "name": "C4 × 5.4",
+  "rev": 3,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/c4x5.4",
+      "family": "channel",
+      "params": {
+        "height": 101.6,
+        "width": 40.132,
+        "web": 4.674,
+        "flange": 7.518,
+        "radius": 8.58,
+        "slope": 16.67
+      },
+      "catalogue": {
+        "name": "C4 × 5.4",
+        "series": [
+          [
+            "aisc/c4x5.4",
+            101.6
+          ]
+        ],
+        "aliases": [
+          "C4X5.4"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "C"
+  },
+  "section": {
+    "area_cm2": 10.293,
+    "mass_kg_m": 8.08,
+    "iy_cm4": 161.42,
+    "iz_cm4": 13.36,
+    "iu_cm4": 161.42,
+    "iv_cm4": 13.36,
+    "wy_cm3": 31.78,
+    "wz_cm3": 4.68,
+    "centroid_mm": [
+      11.61,
+      50.8
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 10.194,
+      "mass_kg_m": 8.036
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/c4x5.4",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:f293d0614ecf822368cf5e7d446386d96669a77a62835b600662e9f095270203"
+}

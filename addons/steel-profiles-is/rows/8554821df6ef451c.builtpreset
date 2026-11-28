@@ -1,0 +1,90 @@
+{
+  "uid": "8554821df6ef451c",
+  "name": "ISWB 350",
+  "rev": 2,
+  "pack": "Steel profiles · IS",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "is/iswb350",
+      "family": "i",
+      "params": {
+        "height": 350.0,
+        "width": 200.0,
+        "web": 8.0,
+        "flange": 11.4,
+        "radius": 12.0,
+        "toe": 6.0,
+        "slope": 10.51
+      },
+      "catalogue": {
+        "name": "ISWB 350",
+        "series": [
+          [
+            "is/iswb200",
+            200.0
+          ],
+          [
+            "is/iswb225",
+            225.0
+          ],
+          [
+            "is/iswb350",
+            350.0
+          ],
+          [
+            "is/iswb400",
+            400.0
+          ],
+          [
+            "is/iswb450",
+            450.0
+          ]
+        ],
+        "aliases": [
+          "WB 350"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "is808-1989",
+    "source": "https://law.resource.org/pub/in/bis/S03/is.808.1989.pdf",
+    "standard": "IS 808",
+    "series": "ISWB"
+  },
+  "section": {
+    "area_cm2": 72.499,
+    "mass_kg_m": 56.912,
+    "iy_cm4": 15523.61,
+    "iz_cm4": 1175.94,
+    "iu_cm4": 15523.61,
+    "iv_cm4": 1175.94,
+    "wy_cm3": 887.06,
+    "wz_cm3": 117.59,
+    "centroid_mm": [
+      100.0,
+      175.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 72.5,
+      "mass_kg_m": 56.9
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "is/iswb350",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:92d6d7cbbba2d1225d45f92131f19aeafdfe64014f8c00e6dcb49e50f386dd1f"
+}

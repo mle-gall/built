@@ -1,0 +1,88 @@
+{
+  "uid": "b82ae767f7be8c12",
+  "name": "IPN 240",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/ipn240",
+      "family": "i",
+      "params": {
+        "height": 240.0,
+        "width": 106.0,
+        "web": 8.7,
+        "flange": 13.1,
+        "radius": 8.7,
+        "toe": 5.2,
+        "slope": 14.0,
+        "flange_at": 26.5
+      },
+      "catalogue": {
+        "name": "IPN 240",
+        "series": [
+          [
+            "en/ipn200",
+            200.0
+          ],
+          [
+            "en/ipn220",
+            220.0
+          ],
+          [
+            "en/ipn240",
+            240.0
+          ],
+          [
+            "en/ipn260",
+            260.0
+          ],
+          [
+            "en/ipn280",
+            280.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "am-ipn",
+    "source": "https://sections.arcelormittal.com/repository2/Sections/Sections_MB_ArcelorMittal_FR_EN_DE_IPN.pdf",
+    "standard": "EN 10365",
+    "series": "IPN"
+  },
+  "section": {
+    "area_cm2": 46.08,
+    "mass_kg_m": 36.172,
+    "iy_cm4": 4239.2,
+    "iz_cm4": 220.02,
+    "iu_cm4": 4239.2,
+    "iv_cm4": 220.02,
+    "wy_cm3": 353.27,
+    "wz_cm3": 41.51,
+    "centroid_mm": [
+      53.0,
+      120.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 46.1,
+      "mass_kg_m": 36.2
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/ipn240",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:163ce74602445579ad0704dcb08e73afd0a242ce664248e093c3b969b199d5bb"
+}

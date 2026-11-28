@@ -1,0 +1,72 @@
+{
+  "uid": "6341e4c320761b86",
+  "name": "UC 356 × 368 × 177",
+  "rev": 4,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/uc356x368x177",
+      "family": "i",
+      "params": {
+        "height": 368.2,
+        "width": 372.6,
+        "web": 14.4,
+        "flange": 23.8,
+        "radius": 15.2
+      },
+      "catalogue": {
+        "name": "UC 356 × 368 × 177",
+        "series": [
+          [
+            "en/uc356x368x177",
+            368.2
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-uc;r1=bb-uc",
+    "source": "https://orangebook.arcelormittal.com/node/246",
+    "standard": "EN 10365",
+    "series": "UC",
+    "column_sources": {
+      "r1": "https://www.steelforlifebluebook.co.uk/uc/ec3-ukna/section-properties-dimensions-properties"
+    }
+  },
+  "section": {
+    "area_cm2": 225.507,
+    "mass_kg_m": 177.023,
+    "iy_cm4": 57118.07,
+    "iz_cm4": 20529.27,
+    "iu_cm4": 57118.07,
+    "iv_cm4": 20529.27,
+    "wy_cm3": 3102.56,
+    "wz_cm3": 1101.95,
+    "centroid_mm": [
+      186.3,
+      184.1
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 226.0,
+      "mass_kg_m": 177.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/uc356x368x177",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:4717a47a78f6096486c24b315cb506b2323a2d26ce5153eb90daba08ae607bf1"
+}

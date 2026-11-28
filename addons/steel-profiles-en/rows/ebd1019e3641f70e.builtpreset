@@ -1,0 +1,72 @@
+{
+  "uid": "ebd1019e3641f70e",
+  "name": "UB 914 × 305 × 576",
+  "rev": 4,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/ub914x305x576",
+      "family": "i",
+      "params": {
+        "height": 993.0,
+        "width": 322.0,
+        "web": 36.1,
+        "flange": 65.0,
+        "radius": 19.0
+      },
+      "catalogue": {
+        "name": "UB 914 × 305 × 576",
+        "series": [
+          [
+            "en/ub914x305x576",
+            993.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-ub;r1=bb-ub",
+    "source": "https://orangebook.arcelormittal.com/node/35",
+    "standard": "EN 10365",
+    "series": "UB",
+    "column_sources": {
+      "r1": "https://www.steelforlifebluebook.co.uk/ub/ec3-ukna/section-properties-dimensions-properties"
+    }
+  },
+  "section": {
+    "area_cm2": 733.242,
+    "mass_kg_m": 575.595,
+    "iy_cm4": 1101716.97,
+    "iz_cm4": 36522.57,
+    "iu_cm4": 1101716.97,
+    "iv_cm4": 36522.57,
+    "wy_cm3": 22189.67,
+    "wz_cm3": 2268.48,
+    "centroid_mm": [
+      161.0,
+      496.5
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 733.0,
+      "mass_kg_m": 576.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/ub914x305x576",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:cb4c5ae1a175f13a54cd5f56db256a3af7b73a71f1e2379388d8e4072fc07925"
+}

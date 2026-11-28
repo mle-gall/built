@@ -1,0 +1,80 @@
+{
+  "uid": "4914442ed6a20047",
+  "name": "HE 100 AA",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/he100aa",
+      "family": "i",
+      "params": {
+        "height": 91.0,
+        "width": 100.0,
+        "web": 4.2,
+        "flange": 5.5,
+        "radius": 12.0
+      },
+      "catalogue": {
+        "name": "HE 100 AA",
+        "series": [
+          [
+            "en/he100aa",
+            91.0
+          ],
+          [
+            "en/he120aa",
+            109.0
+          ],
+          [
+            "en/he140aa",
+            128.0
+          ]
+        ],
+        "aliases": [
+          "HEAA 100"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-he",
+    "source": "https://orangebook.arcelormittal.com/node/16",
+    "standard": "EN 10365",
+    "series": "HE"
+  },
+  "section": {
+    "area_cm2": 15.596,
+    "mass_kg_m": 12.243,
+    "iy_cm4": 236.51,
+    "iz_cm4": 92.06,
+    "iu_cm4": 236.51,
+    "iv_cm4": 92.06,
+    "wy_cm3": 51.98,
+    "wz_cm3": 18.41,
+    "centroid_mm": [
+      50.0,
+      45.5
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 15.6,
+      "mass_kg_m": 12.2
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/he100aa",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:65f0a20a34dee890957f59dd1351678d4d1c75136399a27a4764913b2df36ac4"
+}

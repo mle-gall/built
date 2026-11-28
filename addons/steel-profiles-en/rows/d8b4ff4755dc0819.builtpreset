@@ -1,0 +1,69 @@
+{
+  "uid": "d8b4ff4755dc0819",
+  "name": "SHS 90 × 90 × 5 (cold-formed)",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/shs90x90x5-cf",
+      "family": "rhs",
+      "params": {
+        "height": 90.0,
+        "width": 90.0,
+        "web": 5.0,
+        "radius": 10.0,
+        "inner": 5.0
+      },
+      "catalogue": {
+        "name": "SHS 90 × 90 × 5 (cold-formed)",
+        "series": [
+          [
+            "en/shs90x90x5-cf",
+            90.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-cfshs",
+    "source": "https://www.steelforlifebluebook.co.uk/cfshs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10219-2",
+    "series": "SHS cold-formed"
+  },
+  "section": {
+    "area_cm2": 16.356,
+    "mass_kg_m": 12.84,
+    "iy_cm4": 192.93,
+    "iz_cm4": 192.93,
+    "iu_cm4": 192.93,
+    "iv_cm4": 192.93,
+    "wy_cm3": 42.87,
+    "wz_cm3": 42.87,
+    "centroid_mm": [
+      45.0,
+      45.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 16.4,
+      "mass_kg_m": 12.8
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/shs90x90x5-cf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:0b3201f6323a7328d9c625ebee77cfdcb8c78bea2cd74f4442bd87ce7528992e"
+}

@@ -1,0 +1,74 @@
+{
+  "uid": "16075e6acc376cfd",
+  "name": "ISMC 300 × 46.2",
+  "rev": 2,
+  "pack": "Steel profiles · IS",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "is/ismc300x46.2",
+      "family": "channel",
+      "params": {
+        "height": 300.0,
+        "width": 93.0,
+        "web": 12.0,
+        "flange": 13.6,
+        "radius": 13.0,
+        "toe": 3.2,
+        "slope": 10.51
+      },
+      "catalogue": {
+        "name": "ISMC 300 × 46.2",
+        "series": [
+          [
+            "is/ismc300x46.2",
+            300.0
+          ]
+        ],
+        "aliases": [
+          "MC 300 x 46.2"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "is808-1989",
+    "source": "https://law.resource.org/pub/in/bis/S03/is.808.1989.pdf",
+    "standard": "IS 808",
+    "series": "ISMC"
+  },
+  "section": {
+    "area_cm2": 58.563,
+    "mass_kg_m": 45.972,
+    "iy_cm4": 7296.55,
+    "iz_cm4": 363.75,
+    "iu_cm4": 7296.55,
+    "iv_cm4": 363.75,
+    "wy_cm3": 486.44,
+    "wz_cm3": 51.19,
+    "centroid_mm": [
+      21.94,
+      150.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 58.8,
+      "mass_kg_m": 46.2
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "is/ismc300x46.2",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:b6e25de3688f3bb8c912b07d660b36f06fa8266ed09b1d0575bccbdd3e211469"
+}

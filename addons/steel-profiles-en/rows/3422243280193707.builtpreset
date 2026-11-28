@@ -1,0 +1,88 @@
+{
+  "uid": "3422243280193707",
+  "name": "HE 160 B",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/he160b",
+      "family": "i",
+      "params": {
+        "height": 160.0,
+        "width": 160.0,
+        "web": 8.0,
+        "flange": 13.0,
+        "radius": 15.0
+      },
+      "catalogue": {
+        "name": "HE 160 B",
+        "series": [
+          [
+            "en/he120b",
+            120.0
+          ],
+          [
+            "en/he140b",
+            140.0
+          ],
+          [
+            "en/he160b",
+            160.0
+          ],
+          [
+            "en/he180b",
+            180.0
+          ],
+          [
+            "en/he200b",
+            200.0
+          ]
+        ],
+        "aliases": [
+          "HEB 160"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-he",
+    "source": "https://orangebook.arcelormittal.com/node/16",
+    "standard": "EN 10365",
+    "series": "HE"
+  },
+  "section": {
+    "area_cm2": 54.252,
+    "mass_kg_m": 42.588,
+    "iy_cm4": 2492.01,
+    "iz_cm4": 889.23,
+    "iu_cm4": 2492.01,
+    "iv_cm4": 889.23,
+    "wy_cm3": 311.5,
+    "wz_cm3": 111.15,
+    "centroid_mm": [
+      80.0,
+      80.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 54.3,
+      "mass_kg_m": 42.6
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/he160b",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:a596ce90cf72663d25ed0f11300191f9901285e2c95c33096bbb593e249cd5d4"
+}

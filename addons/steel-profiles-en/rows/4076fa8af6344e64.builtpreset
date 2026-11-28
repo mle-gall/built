@@ -1,0 +1,69 @@
+{
+  "uid": "4076fa8af6344e64",
+  "name": "L 150 × 150 × 14",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/l150x150x14",
+      "family": "angle",
+      "params": {
+        "height": 150.0,
+        "width": 150.0,
+        "web": 14.0,
+        "radius": 16.0,
+        "toe": 8.0
+      },
+      "catalogue": {
+        "name": "L 150 × 150 × 14",
+        "series": [
+          [
+            "en/l150x150x14",
+            150.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-l-equal",
+    "source": "https://orangebook.arcelormittal.com/node/220",
+    "standard": "EN 10056-1",
+    "series": "L equal"
+  },
+  "section": {
+    "area_cm2": 40.315,
+    "mass_kg_m": 31.647,
+    "iy_cm4": 845.4,
+    "iz_cm4": 845.4,
+    "iu_cm4": 1342.56,
+    "iv_cm4": 348.23,
+    "wy_cm3": 78.33,
+    "wz_cm3": 78.33,
+    "centroid_mm": [
+      42.07,
+      42.07
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 40.3,
+      "mass_kg_m": 31.6
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/l150x150x14",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:9023fb3207a470c826e6c33aa72b026635ad22475b0ed873f88c2323fd6a92e3"
+}

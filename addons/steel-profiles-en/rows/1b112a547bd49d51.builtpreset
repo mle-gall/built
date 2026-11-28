@@ -1,0 +1,72 @@
+{
+  "uid": "1b112a547bd49d51",
+  "name": "UB 406 × 178 × 85",
+  "rev": 4,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/ub406x178x85",
+      "family": "i",
+      "params": {
+        "height": 417.0,
+        "width": 181.0,
+        "web": 10.9,
+        "flange": 18.2,
+        "radius": 10.2
+      },
+      "catalogue": {
+        "name": "UB 406 × 178 × 85",
+        "series": [
+          [
+            "en/ub406x178x85",
+            417.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-ub;r1=bb-ub",
+    "source": "https://orangebook.arcelormittal.com/node/35",
+    "standard": "EN 10365",
+    "series": "UB",
+    "column_sources": {
+      "r1": "https://www.steelforlifebluebook.co.uk/ub/ec3-ukna/section-properties-dimensions-properties"
+    }
+  },
+  "section": {
+    "area_cm2": 108.263,
+    "mass_kg_m": 84.986,
+    "iy_cm4": 31537.54,
+    "iz_cm4": 1803.36,
+    "iu_cm4": 31537.54,
+    "iv_cm4": 1803.36,
+    "wy_cm3": 1512.59,
+    "wz_cm3": 199.27,
+    "centroid_mm": [
+      90.5,
+      208.5
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 108.0,
+      "mass_kg_m": 85.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/ub406x178x85",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:a0ac74e0cc385dec7d087ec377c8fde7d27073cb521afe33b45054aad3b242c8"
+}

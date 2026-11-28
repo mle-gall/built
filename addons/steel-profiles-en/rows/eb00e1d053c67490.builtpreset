@@ -1,0 +1,72 @@
+{
+  "uid": "eb00e1d053c67490",
+  "name": "UB 305 × 102 × 33",
+  "rev": 4,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/ub305x102x33",
+      "family": "i",
+      "params": {
+        "height": 312.7,
+        "width": 102.4,
+        "web": 6.6,
+        "flange": 10.8,
+        "radius": 7.6
+      },
+      "catalogue": {
+        "name": "UB 305 × 102 × 33",
+        "series": [
+          [
+            "en/ub305x102x33",
+            312.7
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-ub;r1=bb-ub",
+    "source": "https://orangebook.arcelormittal.com/node/35",
+    "standard": "EN 10365",
+    "series": "UB",
+    "column_sources": {
+      "r1": "https://www.steelforlifebluebook.co.uk/ub/ec3-ukna/section-properties-dimensions-properties"
+    }
+  },
+  "section": {
+    "area_cm2": 41.827,
+    "mass_kg_m": 32.834,
+    "iy_cm4": 6501.37,
+    "iz_cm4": 194.1,
+    "iu_cm4": 6501.37,
+    "iv_cm4": 194.1,
+    "wy_cm3": 415.82,
+    "wz_cm3": 37.91,
+    "centroid_mm": [
+      51.2,
+      156.35
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 41.8,
+      "mass_kg_m": 32.8
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/ub305x102x33",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:6768a14ecb7f52398ebe08c312de0adff24d33da79283a7c7165f3f36a8f7e76"
+}

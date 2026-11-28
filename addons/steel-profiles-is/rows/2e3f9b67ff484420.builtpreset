@@ -1,0 +1,90 @@
+{
+  "uid": "2e3f9b67ff484420",
+  "name": "ISLB 400",
+  "rev": 3,
+  "pack": "Steel profiles · IS",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "is/islb400",
+      "family": "i",
+      "params": {
+        "height": 400.0,
+        "width": 165.0,
+        "web": 8.0,
+        "flange": 12.5,
+        "radius": 16.0,
+        "toe": 8.0,
+        "slope": 14.05
+      },
+      "catalogue": {
+        "name": "ISLB 400",
+        "series": [
+          [
+            "is/islb200",
+            200.0
+          ],
+          [
+            "is/islb225",
+            225.0
+          ],
+          [
+            "is/islb400",
+            400.0
+          ],
+          [
+            "is/islb450",
+            450.0
+          ],
+          [
+            "is/islb550",
+            550.0
+          ]
+        ],
+        "aliases": [
+          "LB 400"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "is808-1989",
+    "source": "https://law.resource.org/pub/in/bis/S03/is.808.1989.pdf",
+    "standard": "IS 808",
+    "series": "ISLB"
+  },
+  "section": {
+    "area_cm2": 72.427,
+    "mass_kg_m": 56.855,
+    "iy_cm4": 19302.79,
+    "iz_cm4": 716.32,
+    "iu_cm4": 19302.79,
+    "iv_cm4": 716.32,
+    "wy_cm3": 965.14,
+    "wz_cm3": 86.83,
+    "centroid_mm": [
+      82.5,
+      200.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 72.4,
+      "mass_kg_m": 56.9
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "is/islb400",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:1838589d746a1188924656dd7fe3ea7b57550526e4b0d34c74c4bdd872d03d95"
+}

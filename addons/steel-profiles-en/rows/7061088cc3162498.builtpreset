@@ -1,0 +1,83 @@
+{
+  "uid": "7061088cc3162498",
+  "name": "CHS 406.4 × 6.3 (cold-formed)",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/chs406.4x6.3-cf",
+      "family": "chs",
+      "params": {
+        "height": 406.4,
+        "width": 406.4,
+        "web": 6.3
+      },
+      "catalogue": {
+        "name": "CHS 406.4 × 6.3 (cold-formed)",
+        "series": [
+          [
+            "en/chs323.9x6.3-cf",
+            323.9
+          ],
+          [
+            "en/chs355.6x6.3-cf",
+            355.6
+          ],
+          [
+            "en/chs406.4x6.3-cf",
+            406.4
+          ],
+          [
+            "en/chs457x6.3-cf",
+            457.0
+          ],
+          [
+            "en/chs508x6.3-cf",
+            508.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-cfchs",
+    "source": "https://www.steelforlifebluebook.co.uk/cfchs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10219-2",
+    "series": "CHS cold-formed"
+  },
+  "section": {
+    "area_cm2": 79.186,
+    "mass_kg_m": 62.161,
+    "iy_cm4": 15848.64,
+    "iz_cm4": 15848.64,
+    "iu_cm4": 15848.64,
+    "iv_cm4": 15848.64,
+    "wy_cm3": 779.95,
+    "wz_cm3": 779.95,
+    "centroid_mm": [
+      203.2,
+      203.2
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 79.2,
+      "mass_kg_m": 62.2
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/chs406.4x6.3-cf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:95e68a98ecb6ef98df5bdb3e745dff14985c20ba24e8a3b76cd6d4639e9e3e76"
+}

@@ -1,0 +1,71 @@
+{
+  "uid": "f3bb9507bef98c72",
+  "name": "L10 × 10 × 1",
+  "rev": 3,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/l10x10x1",
+      "family": "angle",
+      "params": {
+        "height": 254.0,
+        "width": 254.0,
+        "web": 25.4,
+        "radius": 20.32
+      },
+      "catalogue": {
+        "name": "L10 × 10 × 1",
+        "series": [
+          [
+            "aisc/l10x10x1",
+            254.0
+          ]
+        ],
+        "aliases": [
+          "L10X10X1"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "L"
+  },
+  "section": {
+    "area_cm2": 123.467,
+    "mass_kg_m": 96.921,
+    "iy_cm4": 7508.68,
+    "iz_cm4": 7508.68,
+    "iu_cm4": 11928.7,
+    "iv_cm4": 3088.66,
+    "wy_cm3": 413.82,
+    "wz_cm3": 413.82,
+    "centroid_mm": [
+      72.55,
+      72.55
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 122.58,
+      "mass_kg_m": 96.284
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/l10x10x1",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:175bf00ba7fae2d40abfa620a680493c835c879e6edb9eb8124ed1d78ed669a3"
+}

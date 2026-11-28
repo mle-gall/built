@@ -1,0 +1,71 @@
+{
+  "uid": "54013daf43482cba",
+  "name": "L12 × 12 × 1",
+  "rev": 3,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/l12x12x1",
+      "family": "angle",
+      "params": {
+        "height": 304.8,
+        "width": 304.8,
+        "web": 25.4,
+        "radius": 18.03
+      },
+      "catalogue": {
+        "name": "L12 × 12 × 1",
+        "series": [
+          [
+            "aisc/l12x12x1",
+            304.8
+          ]
+        ],
+        "aliases": [
+          "L12X12X1"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "L"
+  },
+  "section": {
+    "area_cm2": 149.084,
+    "mass_kg_m": 117.031,
+    "iy_cm4": 13280.01,
+    "iz_cm4": 13280.01,
+    "iu_cm4": 21141.21,
+    "iv_cm4": 5418.8,
+    "wy_cm3": 605.08,
+    "wz_cm3": 605.08,
+    "centroid_mm": [
+      85.32,
+      85.32
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 148.387,
+      "mass_kg_m": 115.779
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/l12x12x1",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:3cd77e6fb25d2833d134f9501cf40fa92851755c451b154605309a9e2b63ed64"
+}

@@ -1,0 +1,73 @@
+{
+  "uid": "bab896094f50ef0c",
+  "name": "RHS 250 × 150 × 10 (cold-formed)",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/rhs250x150x10-cf",
+      "family": "rhs",
+      "params": {
+        "height": 250.0,
+        "width": 150.0,
+        "web": 10.0,
+        "radius": 25.0,
+        "inner": 15.0
+      },
+      "catalogue": {
+        "name": "RHS 250 × 150 × 10 (cold-formed)",
+        "series": [
+          [
+            "en/rhs200x150x10-cf",
+            200.0
+          ],
+          [
+            "en/rhs250x150x10-cf",
+            250.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-cfrhs",
+    "source": "https://www.steelforlifebluebook.co.uk/cfrhs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10219-2",
+    "series": "RHS cold-formed"
+  },
+  "section": {
+    "area_cm2": 72.566,
+    "mass_kg_m": 56.964,
+    "iy_cm4": 5824.96,
+    "iz_cm4": 2634.18,
+    "iu_cm4": 5824.96,
+    "iv_cm4": 2634.18,
+    "wy_cm3": 466.0,
+    "wz_cm3": 351.22,
+    "centroid_mm": [
+      75.0,
+      125.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 72.6,
+      "mass_kg_m": 57.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/rhs250x150x10-cf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:4487bb834c386494aa5751a875529ab59764dc82bb4997052e1478317962f366"
+}

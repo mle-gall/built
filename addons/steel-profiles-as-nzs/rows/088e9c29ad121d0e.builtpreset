@@ -1,0 +1,69 @@
+{
+  "uid": "088e9c29ad121d0e",
+  "name": "460 UB 74.6",
+  "rev": 3,
+  "pack": "Steel profiles · AS/NZS",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "as-nzs/460ub74.6",
+      "family": "i",
+      "params": {
+        "height": 457.4,
+        "width": 190.0,
+        "web": 9.1,
+        "flange": 14.5,
+        "radius": 11.4
+      },
+      "catalogue": {
+        "name": "460 UB 74.6",
+        "series": [
+          [
+            "as-nzs/460ub74.6",
+            457.4
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ib-hrssp9",
+    "source": "https://www.infrabuild.com/wp-content/uploads/sites/8/2022/02/Hot20Rolled20Cat_Edition9_2019.pdf",
+    "standard": "AS/NZS 3679.1",
+    "series": "UB"
+  },
+  "section": {
+    "area_cm2": 95.2,
+    "mass_kg_m": 74.732,
+    "iy_cm4": 33492.83,
+    "iz_cm4": 1660.89,
+    "iu_cm4": 33492.83,
+    "iv_cm4": 1660.89,
+    "wy_cm3": 1464.49,
+    "wz_cm3": 174.83,
+    "centroid_mm": [
+      95.0,
+      228.7
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 95.2,
+      "mass_kg_m": 74.6
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "as-nzs/460ub74.6",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:646f833902c359556605f8d91fe9ba87b49f44f963d4f8203661b412d21523d5"
+}

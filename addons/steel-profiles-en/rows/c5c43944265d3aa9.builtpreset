@@ -1,0 +1,81 @@
+{
+  "uid": "c5c43944265d3aa9",
+  "name": "RHS 160 × 80 × 8 (cold-formed)",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/rhs160x80x8-cf",
+      "family": "rhs",
+      "params": {
+        "height": 160.0,
+        "width": 80.0,
+        "web": 8.0,
+        "radius": 20.0,
+        "inner": 12.0
+      },
+      "catalogue": {
+        "name": "RHS 160 × 80 × 8 (cold-formed)",
+        "series": [
+          [
+            "en/rhs120x80x8-cf",
+            120.0
+          ],
+          [
+            "en/rhs140x80x8-cf",
+            140.0
+          ],
+          [
+            "en/rhs160x80x8-cf",
+            160.0
+          ],
+          [
+            "en/rhs180x80x8-cf",
+            180.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-cfrhs",
+    "source": "https://www.steelforlifebluebook.co.uk/cfrhs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10219-2",
+    "series": "RHS cold-formed"
+  },
+  "section": {
+    "area_cm2": 33.642,
+    "mass_kg_m": 26.409,
+    "iy_cm4": 1001.21,
+    "iz_cm4": 334.95,
+    "iu_cm4": 1001.21,
+    "iv_cm4": 334.95,
+    "wy_cm3": 125.15,
+    "wz_cm3": 83.74,
+    "centroid_mm": [
+      40.0,
+      80.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 33.6,
+      "mass_kg_m": 26.4
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/rhs160x80x8-cf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:dd1c30ec42ce89b4db5e52b08d5da2a9e1edf217d425f642941f725309dc1f33"
+}

@@ -1,0 +1,88 @@
+{
+  "uid": "3d2d7fd577d9ca26",
+  "name": "HE 650 M",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/he650m",
+      "family": "i",
+      "params": {
+        "height": 668.0,
+        "width": 305.0,
+        "web": 21.0,
+        "flange": 40.0,
+        "radius": 27.0
+      },
+      "catalogue": {
+        "name": "HE 650 M",
+        "series": [
+          [
+            "en/he550m",
+            572.0
+          ],
+          [
+            "en/he600m",
+            620.0
+          ],
+          [
+            "en/he650m",
+            668.0
+          ],
+          [
+            "en/he700m",
+            716.0
+          ],
+          [
+            "en/he800m",
+            814.0
+          ]
+        ],
+        "aliases": [
+          "HEM 650"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-he",
+    "source": "https://orangebook.arcelormittal.com/node/16",
+    "standard": "EN 10365",
+    "series": "HE"
+  },
+  "section": {
+    "area_cm2": 373.738,
+    "mass_kg_m": 293.385,
+    "iy_cm4": 281668.05,
+    "iz_cm4": 18979.17,
+    "iu_cm4": 281668.05,
+    "iv_cm4": 18979.17,
+    "wy_cm3": 8433.18,
+    "wz_cm3": 1244.54,
+    "centroid_mm": [
+      152.5,
+      334.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 374.0,
+      "mass_kg_m": 293.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/he650m",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:3768306f60aff2f28948141913c0885269cd1d02dd59ae3324a4815493042bfa"
+}

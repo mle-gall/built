@@ -1,0 +1,81 @@
+{
+  "uid": "cc6a3cd403c856fb",
+  "name": "100 PFC",
+  "rev": 2,
+  "pack": "Steel profiles · AS/NZS",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "as-nzs/100pfc",
+      "family": "channel",
+      "params": {
+        "height": 100.0,
+        "width": 50.0,
+        "web": 4.2,
+        "flange": 6.7,
+        "radius": 8.0
+      },
+      "catalogue": {
+        "name": "100 PFC",
+        "series": [
+          [
+            "as-nzs/75pfc",
+            75.0
+          ],
+          [
+            "as-nzs/100pfc",
+            100.0
+          ],
+          [
+            "as-nzs/125pfc",
+            125.0
+          ],
+          [
+            "as-nzs/150pfc",
+            150.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ib-hrssp9",
+    "source": "https://www.infrabuild.com/wp-content/uploads/sites/8/2022/02/Hot20Rolled20Cat_Edition9_2019.pdf",
+    "standard": "AS/NZS 3679.1",
+    "series": "PFC"
+  },
+  "section": {
+    "area_cm2": 10.612,
+    "mass_kg_m": 8.33,
+    "iy_cm4": 173.53,
+    "iz_cm4": 26.7,
+    "iu_cm4": 173.53,
+    "iv_cm4": 26.7,
+    "wy_cm3": 34.71,
+    "wz_cm3": 8.01,
+    "centroid_mm": [
+      16.66,
+      50.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 10.6,
+      "mass_kg_m": 8.33
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "as-nzs/100pfc",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:fdea5e1fa65469c5af8949fdc6db944102083d3f12b1693e88cb9749d3a5b35c"
+}

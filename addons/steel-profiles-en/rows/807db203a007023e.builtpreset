@@ -1,0 +1,69 @@
+{
+  "uid": "807db203a007023e",
+  "name": "RHS 50 × 30 × 4 (cold-formed)",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/rhs50x30x4-cf",
+      "family": "rhs",
+      "params": {
+        "height": 50.0,
+        "width": 30.0,
+        "web": 4.0,
+        "radius": 8.0,
+        "inner": 4.0
+      },
+      "catalogue": {
+        "name": "RHS 50 × 30 × 4 (cold-formed)",
+        "series": [
+          [
+            "en/rhs50x30x4-cf",
+            50.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-cfrhs",
+    "source": "https://www.steelforlifebluebook.co.uk/cfrhs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10219-2",
+    "series": "RHS cold-formed"
+  },
+  "section": {
+    "area_cm2": 5.348,
+    "mass_kg_m": 4.198,
+    "iy_cm4": 15.25,
+    "iz_cm4": 6.69,
+    "iu_cm4": 15.25,
+    "iv_cm4": 6.69,
+    "wy_cm3": 6.1,
+    "wz_cm3": 4.46,
+    "centroid_mm": [
+      15.0,
+      25.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 5.35,
+      "mass_kg_m": 4.2
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/rhs50x30x4-cf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:3fc12a5cf3057537d4357886d35b69ed0194234e0cf8247333aea6fe12fbc288"
+}

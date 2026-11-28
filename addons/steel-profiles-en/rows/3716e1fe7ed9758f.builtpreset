@@ -1,0 +1,69 @@
+{
+  "uid": "3716e1fe7ed9758f",
+  "name": "PFC 200 × 90 × 30",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/pfc200x90x30",
+      "family": "channel",
+      "params": {
+        "height": 200.0,
+        "width": 90.0,
+        "web": 7.0,
+        "flange": 14.0,
+        "radius": 12.0
+      },
+      "catalogue": {
+        "name": "PFC 200 × 90 × 30",
+        "series": [
+          [
+            "en/pfc200x90x30",
+            200.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-pfc",
+    "source": "https://orangebook.arcelormittal.com/node/259",
+    "standard": "EN 10365",
+    "series": "PFC"
+  },
+  "section": {
+    "area_cm2": 37.858,
+    "mass_kg_m": 29.719,
+    "iy_cm4": 2523.43,
+    "iz_cm4": 313.86,
+    "iu_cm4": 2523.43,
+    "iv_cm4": 313.86,
+    "wy_cm3": 252.34,
+    "wz_cm3": 53.4,
+    "centroid_mm": [
+      31.23,
+      100.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 37.9,
+      "mass_kg_m": 29.7
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/pfc200x90x30",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:acfbf67cf3b47f7e775bdc32484490bd85ecf8f8e4313242865d0d7b5a49ad72"
+}

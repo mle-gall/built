@@ -1,0 +1,69 @@
+{
+  "uid": "3b1ad32a190bdc41",
+  "name": "SHS 300 × 300 × 12.5 (cold-formed)",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/shs300x300x12.5-cf",
+      "family": "rhs",
+      "params": {
+        "height": 300.0,
+        "width": 300.0,
+        "web": 12.5,
+        "radius": 37.5,
+        "inner": 25.0
+      },
+      "catalogue": {
+        "name": "SHS 300 × 300 × 12.5 (cold-formed)",
+        "series": [
+          [
+            "en/shs300x300x12.5-cf",
+            300.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-cfshs",
+    "source": "https://www.steelforlifebluebook.co.uk/cfshs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10219-2",
+    "series": "SHS cold-formed"
+  },
+  "section": {
+    "area_cm2": 137.043,
+    "mass_kg_m": 107.579,
+    "iy_cm4": 18348.01,
+    "iz_cm4": 18348.01,
+    "iu_cm4": 18348.01,
+    "iv_cm4": 18348.01,
+    "wy_cm3": 1223.2,
+    "wz_cm3": 1223.2,
+    "centroid_mm": [
+      150.0,
+      150.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 137.0,
+      "mass_kg_m": 108.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/shs300x300x12.5-cf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:69cffb77fe614ff915a866d4fca662b3643ad0411e8ce413fca22c6aa393cc9c"
+}

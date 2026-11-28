@@ -1,0 +1,80 @@
+{
+  "uid": "41c07a56d3deb845",
+  "name": "W12 × 19",
+  "rev": 3,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/w12x19",
+      "family": "i",
+      "params": {
+        "height": 309.88,
+        "width": 101.854,
+        "web": 5.969,
+        "flange": 8.89,
+        "radius": 7.62
+      },
+      "catalogue": {
+        "name": "W12 × 19",
+        "series": [
+          [
+            "aisc/w5x19",
+            130.81
+          ],
+          [
+            "aisc/w10x19",
+            259.08
+          ],
+          [
+            "aisc/w12x19",
+            309.88
+          ]
+        ],
+        "aliases": [
+          "W12X19"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "W"
+  },
+  "section": {
+    "area_cm2": 36.044,
+    "mass_kg_m": 28.294,
+    "iy_cm4": 5446.37,
+    "iz_cm4": 157.2,
+    "iu_cm4": 5446.37,
+    "iv_cm4": 157.2,
+    "wy_cm3": 351.51,
+    "wz_cm3": 30.87,
+    "centroid_mm": [
+      50.93,
+      154.94
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 35.935,
+      "mass_kg_m": 28.275
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/w12x19",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:b5b5776d5fc6f7b06dc4242a90be95c89e7a89a499b646f375bcbb75dcdf6843"
+}

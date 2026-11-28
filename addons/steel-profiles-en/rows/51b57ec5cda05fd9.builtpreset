@@ -1,0 +1,69 @@
+{
+  "uid": "51b57ec5cda05fd9",
+  "name": "RHS 500 × 300 × 6.3 (cold-formed)",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/rhs500x300x6.3-cf",
+      "family": "rhs",
+      "params": {
+        "height": 500.0,
+        "width": 300.0,
+        "web": 6.3,
+        "radius": 15.75,
+        "inner": 9.45
+      },
+      "catalogue": {
+        "name": "RHS 500 × 300 × 6.3 (cold-formed)",
+        "series": [
+          [
+            "en/rhs500x300x6.3-cf",
+            500.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-cfrhs",
+    "source": "https://www.steelforlifebluebook.co.uk/cfrhs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10219-2",
+    "series": "RHS cold-formed"
+  },
+  "section": {
+    "area_cm2": 97.849,
+    "mass_kg_m": 76.812,
+    "iy_cm4": 34345.7,
+    "iz_cm4": 15777.16,
+    "iu_cm4": 34345.7,
+    "iv_cm4": 15777.16,
+    "wy_cm3": 1373.83,
+    "wz_cm3": 1051.81,
+    "centroid_mm": [
+      150.0,
+      250.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 97.8,
+      "mass_kg_m": 76.8
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/rhs500x300x6.3-cf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:77cdee834ee8dd2fe98ba0e5f0bd07159ff6a2ddcbccbce03a5c10873c276cb3"
+}

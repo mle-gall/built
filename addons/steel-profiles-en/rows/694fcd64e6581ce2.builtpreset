@@ -1,0 +1,69 @@
+{
+  "uid": "694fcd64e6581ce2",
+  "name": "HP 320 × 147",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/hp320x147",
+      "family": "i",
+      "params": {
+        "height": 319.0,
+        "width": 312.0,
+        "web": 20.0,
+        "flange": 20.0,
+        "radius": 27.0
+      },
+      "catalogue": {
+        "name": "HP 320 × 147",
+        "series": [
+          [
+            "en/hp320x147",
+            319.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-hp",
+    "source": "https://orangebook.arcelormittal.com/node/200",
+    "standard": "EN 10365",
+    "series": "HP"
+  },
+  "section": {
+    "area_cm2": 186.858,
+    "mass_kg_m": 146.684,
+    "iy_cm4": 32670.78,
+    "iz_cm4": 10160.06,
+    "iu_cm4": 32670.78,
+    "iv_cm4": 10160.06,
+    "wy_cm3": 2048.32,
+    "wz_cm3": 651.29,
+    "centroid_mm": [
+      156.0,
+      159.5
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 187.0,
+      "mass_kg_m": 147.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/hp320x147",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:5b337ec1b554e6caf1337ab68e9b39190feb6322fbc983463ab63e43a33a1c1d"
+}

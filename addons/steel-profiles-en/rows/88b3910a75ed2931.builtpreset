@@ -1,0 +1,85 @@
+{
+  "uid": "88b3910a75ed2931",
+  "name": "IPE A 300",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/ipea300",
+      "family": "i",
+      "params": {
+        "height": 297.0,
+        "width": 150.0,
+        "web": 6.1,
+        "flange": 9.2,
+        "radius": 15.0
+      },
+      "catalogue": {
+        "name": "IPE A 300",
+        "series": [
+          [
+            "en/ipea240",
+            237.0
+          ],
+          [
+            "en/ipea270",
+            267.0
+          ],
+          [
+            "en/ipea300",
+            297.0
+          ],
+          [
+            "en/ipea330",
+            327.0
+          ],
+          [
+            "en/ipea360",
+            357.6
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-ipe",
+    "source": "https://orangebook.arcelormittal.com/node/6",
+    "standard": "EN 10365",
+    "series": "IPE"
+  },
+  "section": {
+    "area_cm2": 46.526,
+    "mass_kg_m": 36.523,
+    "iy_cm4": 7173.53,
+    "iz_cm4": 518.97,
+    "iu_cm4": 7173.53,
+    "iv_cm4": 518.97,
+    "wy_cm3": 483.07,
+    "wz_cm3": 69.2,
+    "centroid_mm": [
+      75.0,
+      148.5
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 46.5,
+      "mass_kg_m": 36.5
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/ipea300",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:c574fe78adf9fdd4079a54cf51b010117fefb71470774c8e46e2e2f7c1d0fac4"
+}

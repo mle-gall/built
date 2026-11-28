@@ -1,0 +1,81 @@
+{
+  "uid": "f193969b2d40fa26",
+  "name": "RHS 200 × 100 × 10 (cold-formed)",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/rhs200x100x10-cf",
+      "family": "rhs",
+      "params": {
+        "height": 200.0,
+        "width": 100.0,
+        "web": 10.0,
+        "radius": 25.0,
+        "inner": 15.0
+      },
+      "catalogue": {
+        "name": "RHS 200 × 100 × 10 (cold-formed)",
+        "series": [
+          [
+            "en/rhs150x100x10-cf",
+            150.0
+          ],
+          [
+            "en/rhs180x100x10-cf",
+            180.0
+          ],
+          [
+            "en/rhs200x100x10-cf",
+            200.0
+          ],
+          [
+            "en/rhs300x100x10-cf",
+            300.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-cfrhs",
+    "source": "https://www.steelforlifebluebook.co.uk/cfrhs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10219-2",
+    "series": "RHS cold-formed"
+  },
+  "section": {
+    "area_cm2": 52.566,
+    "mass_kg_m": 41.264,
+    "iy_cm4": 2444.37,
+    "iz_cm4": 817.74,
+    "iu_cm4": 2444.37,
+    "iv_cm4": 817.74,
+    "wy_cm3": 244.44,
+    "wz_cm3": 163.55,
+    "centroid_mm": [
+      50.0,
+      100.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 52.6,
+      "mass_kg_m": 41.3
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/rhs200x100x10-cf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:63062dc70c925877f1655547674179d32d9381b61d4d814d5d09bdf960b4301f"
+}

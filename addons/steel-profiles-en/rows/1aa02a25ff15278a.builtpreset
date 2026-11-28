@@ -1,0 +1,69 @@
+{
+  "uid": "1aa02a25ff15278a",
+  "name": "SHS 80 × 80 × 3.6 (hot-finished)",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/shs80x80x3.6-hf",
+      "family": "rhs",
+      "params": {
+        "height": 80.0,
+        "width": 80.0,
+        "web": 3.6,
+        "radius": 5.4,
+        "inner": 3.6
+      },
+      "catalogue": {
+        "name": "SHS 80 × 80 × 3.6 (hot-finished)",
+        "series": [
+          [
+            "en/shs80x80x3.6-hf",
+            80.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-hfshs",
+    "source": "https://www.steelforlifebluebook.co.uk/hfshs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10210-2",
+    "series": "SHS hot-finished"
+  },
+  "section": {
+    "area_cm2": 10.863,
+    "mass_kg_m": 8.527,
+    "iy_cm4": 104.9,
+    "iz_cm4": 104.9,
+    "iu_cm4": 104.9,
+    "iv_cm4": 104.9,
+    "wy_cm3": 26.23,
+    "wz_cm3": 26.23,
+    "centroid_mm": [
+      40.0,
+      40.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 10.9,
+      "mass_kg_m": 8.53
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/shs80x80x3.6-hf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:b8cbf7bb529d46dde854670caa242af5b9504a34fa1842b86747d6215b5c4772"
+}

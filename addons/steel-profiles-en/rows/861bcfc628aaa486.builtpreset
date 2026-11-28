@@ -1,0 +1,69 @@
+{
+  "uid": "861bcfc628aaa486",
+  "name": "SHS 200 × 200 × 5 (hot-finished)",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/shs200x200x5-hf",
+      "family": "rhs",
+      "params": {
+        "height": 200.0,
+        "width": 200.0,
+        "web": 5.0,
+        "radius": 7.5,
+        "inner": 5.0
+      },
+      "catalogue": {
+        "name": "SHS 200 × 200 × 5 (hot-finished)",
+        "series": [
+          [
+            "en/shs200x200x5-hf",
+            200.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-hfshs",
+    "source": "https://www.steelforlifebluebook.co.uk/hfshs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10210-2",
+    "series": "SHS hot-finished"
+  },
+  "section": {
+    "area_cm2": 38.732,
+    "mass_kg_m": 30.404,
+    "iy_cm4": 2445.47,
+    "iz_cm4": 2445.47,
+    "iu_cm4": 2445.47,
+    "iv_cm4": 2445.47,
+    "wy_cm3": 244.55,
+    "wz_cm3": 244.55,
+    "centroid_mm": [
+      100.0,
+      100.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 38.7,
+      "mass_kg_m": 30.4
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/shs200x200x5-hf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:27e0e309b78ff69119e45256ed13ab421b9a9ff7de3c8c5e830d1f4fcf71bafa"
+}

@@ -1,0 +1,77 @@
+{
+  "uid": "feaf705c7d8f4bce",
+  "name": "RHS 200 × 150 × 12.5 (hot-finished)",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/rhs200x150x12.5-hf",
+      "family": "rhs",
+      "params": {
+        "height": 200.0,
+        "width": 150.0,
+        "web": 12.5,
+        "radius": 18.75,
+        "inner": 12.5
+      },
+      "catalogue": {
+        "name": "RHS 200 × 150 × 12.5 (hot-finished)",
+        "series": [
+          [
+            "en/rhs200x150x12.5-hf",
+            200.0
+          ],
+          [
+            "en/rhs250x150x12.5-hf",
+            250.0
+          ],
+          [
+            "en/rhs350x150x12.5-hf",
+            350.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-hfrhs",
+    "source": "https://www.steelforlifebluebook.co.uk/hfrhs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10210-2",
+    "series": "RHS hot-finished"
+  },
+  "section": {
+    "area_cm2": 79.573,
+    "mass_kg_m": 62.465,
+    "iy_cm4": 4236.21,
+    "iz_cm4": 2672.88,
+    "iu_cm4": 4236.21,
+    "iv_cm4": 2672.88,
+    "wy_cm3": 423.62,
+    "wz_cm3": 356.38,
+    "centroid_mm": [
+      75.0,
+      100.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 79.6,
+      "mass_kg_m": 62.5
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/rhs200x150x12.5-hf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:a1f97817423c666f990c4a20c50a2da2347b5b6c0939994d21af4c7c994ed7d1"
+}

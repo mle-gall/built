@@ -1,0 +1,72 @@
+{
+  "uid": "6b138c59c3b1fbb5",
+  "name": "WT4 × 12",
+  "rev": 3,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/wt4x12",
+      "family": "tee",
+      "params": {
+        "height": 100.838,
+        "width": 165.1,
+        "web": 6.223,
+        "flange": 10.16,
+        "radius": 10.01
+      },
+      "catalogue": {
+        "name": "WT4 × 12",
+        "series": [
+          [
+            "aisc/wt4x12",
+            100.838
+          ]
+        ],
+        "aliases": [
+          "WT4X12"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "WT"
+  },
+  "section": {
+    "area_cm2": 22.847,
+    "mass_kg_m": 17.935,
+    "iy_cm4": 147.58,
+    "iz_cm4": 381.35,
+    "iu_cm4": 381.35,
+    "iv_cm4": 147.58,
+    "wy_cm3": 17.75,
+    "wz_cm3": 46.2,
+    "centroid_mm": [
+      82.55,
+      83.17
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 22.839,
+      "mass_kg_m": 17.858
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/wt4x12",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:f18a1a425bfac32c6de8a87908a55161cbeae79b287628ac44b480448d2ef616"
+}

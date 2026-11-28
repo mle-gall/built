@@ -1,0 +1,90 @@
+{
+  "uid": "2bc541b8d0e6965e",
+  "name": "ISMC 225",
+  "rev": 2,
+  "pack": "Steel profiles · IS",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "is/ismc225",
+      "family": "channel",
+      "params": {
+        "height": 225.0,
+        "width": 80.0,
+        "web": 6.5,
+        "flange": 12.4,
+        "radius": 12.0,
+        "toe": 3.2,
+        "slope": 10.51
+      },
+      "catalogue": {
+        "name": "ISMC 225",
+        "series": [
+          [
+            "is/ismc175",
+            175.0
+          ],
+          [
+            "is/ismc200",
+            200.0
+          ],
+          [
+            "is/ismc225",
+            225.0
+          ],
+          [
+            "is/ismc250",
+            250.0
+          ],
+          [
+            "is/ismc300",
+            300.0
+          ]
+        ],
+        "aliases": [
+          "MC 225"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "is808-1989",
+    "source": "https://law.resource.org/pub/in/bis/S03/is.808.1989.pdf",
+    "standard": "IS 808",
+    "series": "ISMC"
+  },
+  "section": {
+    "area_cm2": 33.301,
+    "mass_kg_m": 26.141,
+    "iy_cm4": 2710.69,
+    "iz_cm4": 186.09,
+    "iu_cm4": 2710.69,
+    "iv_cm4": 186.09,
+    "wy_cm3": 240.95,
+    "wz_cm3": 32.68,
+    "centroid_mm": [
+      23.06,
+      112.5
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 33.3,
+      "mass_kg_m": 26.1
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "is/ismc225",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:fb82087b17ef80b3f1dd04e07fc95de604055dbde2654b5caa659eb7de24e090"
+}

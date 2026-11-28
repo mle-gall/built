@@ -1,0 +1,76 @@
+{
+  "uid": "a29fbcb6d1213b32",
+  "name": "W14 × 370",
+  "rev": 3,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/w14x370",
+      "family": "i",
+      "params": {
+        "height": 454.66,
+        "width": 419.1,
+        "web": 42.164,
+        "flange": 67.564,
+        "radius": 15.24
+      },
+      "catalogue": {
+        "name": "W14 × 370",
+        "series": [
+          [
+            "aisc/w14x370",
+            454.66
+          ],
+          [
+            "aisc/w24x370",
+            711.2
+          ]
+        ],
+        "aliases": [
+          "W14X370"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "W"
+  },
+  "section": {
+    "area_cm2": 703.043,
+    "mass_kg_m": 551.889,
+    "iy_cm4": 226253.83,
+    "iz_cm4": 83104.57,
+    "iu_cm4": 226253.83,
+    "iv_cm4": 83104.57,
+    "wy_cm3": 9952.66,
+    "wz_cm3": 3965.86,
+    "centroid_mm": [
+      209.55,
+      227.33
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 703.224,
+      "mass_kg_m": 550.621
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/w14x370",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:3555a78ae3a60defb07fb85931ffb7aa510432f32f3c768a84f532e5e06e40d5"
+}

@@ -1,0 +1,76 @@
+{
+  "uid": "abca66a4e964e51f",
+  "name": "WT16.5 × 65",
+  "rev": 3,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/wt16.5x65",
+      "family": "tee",
+      "params": {
+        "height": 419.1,
+        "width": 292.1,
+        "web": 14.732,
+        "flange": 21.717,
+        "radius": 17.91
+      },
+      "catalogue": {
+        "name": "WT16.5 × 65",
+        "series": [
+          [
+            "aisc/wt9x65",
+            244.602
+          ],
+          [
+            "aisc/wt16.5x65",
+            419.1
+          ]
+        ],
+        "aliases": [
+          "WT16.5X65"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "WT"
+  },
+  "section": {
+    "area_cm2": 123.355,
+    "mass_kg_m": 96.833,
+    "iy_cm4": 21197.91,
+    "iz_cm4": 4522.9,
+    "iu_cm4": 21197.91,
+    "iv_cm4": 4522.9,
+    "wy_cm3": 686.85,
+    "wz_cm3": 309.68,
+    "centroid_mm": [
+      146.05,
+      308.63
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 123.226,
+      "mass_kg_m": 96.731
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/wt16.5x65",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:9e329a48b5530726c49fc59b1fe88961ccc051b43ca4493d9b4501ccedf3075c"
+}

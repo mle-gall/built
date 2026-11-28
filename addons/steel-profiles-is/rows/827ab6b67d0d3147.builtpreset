@@ -1,0 +1,89 @@
+{
+  "uid": "827ab6b67d0d3147",
+  "name": "ISMCP 125",
+  "rev": 2,
+  "pack": "Steel profiles · IS",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "is/ismcp125",
+      "family": "channel",
+      "params": {
+        "height": 125.0,
+        "width": 65.0,
+        "web": 5.3,
+        "flange": 8.1,
+        "radius": 9.5,
+        "toe": 5.0
+      },
+      "catalogue": {
+        "name": "ISMCP 125",
+        "series": [
+          [
+            "is/ismcp75",
+            75.0
+          ],
+          [
+            "is/ismcp100",
+            100.0
+          ],
+          [
+            "is/ismcp125",
+            125.0
+          ],
+          [
+            "is/ismcp150",
+            150.0
+          ],
+          [
+            "is/ismcp175",
+            175.0
+          ]
+        ],
+        "aliases": [
+          "MCP 125"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "is808-1989",
+    "source": "https://law.resource.org/pub/in/bis/S03/is.808.1989.pdf",
+    "standard": "IS 808",
+    "series": "ISMCP"
+  },
+  "section": {
+    "area_cm2": 16.576,
+    "mass_kg_m": 13.013,
+    "iy_cm4": 424.5,
+    "iz_cm4": 69.29,
+    "iu_cm4": 424.5,
+    "iv_cm4": 69.29,
+    "wy_cm3": 67.92,
+    "wz_cm3": 15.86,
+    "centroid_mm": [
+      21.33,
+      62.5
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 16.7,
+      "mass_kg_m": 13.1
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "is/ismcp125",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:e9a04243cc494e776b5b9d425e1b2293904fc7fb9722154ae7a650241ed69e47"
+}

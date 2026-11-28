@@ -1,0 +1,69 @@
+{
+  "uid": "4562251ebf5305b4",
+  "name": "L 40 × 40 × 6",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/l40x40x6",
+      "family": "angle",
+      "params": {
+        "height": 40.0,
+        "width": 40.0,
+        "web": 6.0,
+        "radius": 6.0,
+        "toe": 3.0
+      },
+      "catalogue": {
+        "name": "L 40 × 40 × 6",
+        "series": [
+          [
+            "en/l40x40x6",
+            40.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-l-equal",
+    "source": "https://orangebook.arcelormittal.com/node/220",
+    "standard": "EN 10056-1",
+    "series": "L equal"
+  },
+  "section": {
+    "area_cm2": 4.479,
+    "mass_kg_m": 3.516,
+    "iy_cm4": 6.31,
+    "iz_cm4": 6.31,
+    "iu_cm4": 9.98,
+    "iv_cm4": 2.65,
+    "wy_cm3": 2.26,
+    "wz_cm3": 2.26,
+    "centroid_mm": [
+      12.02,
+      12.02
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 4.48,
+      "mass_kg_m": 3.52
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/l40x40x6",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:bec011546b6547462e44b6ea7bc11a8a81415a22477a86326b3869cdb3b55467"
+}

@@ -1,0 +1,88 @@
+{
+  "uid": "68f52d9429428f51",
+  "name": "IPN 200",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/ipn200",
+      "family": "i",
+      "params": {
+        "height": 200.0,
+        "width": 90.0,
+        "web": 7.5,
+        "flange": 11.3,
+        "radius": 7.5,
+        "toe": 4.5,
+        "slope": 14.0,
+        "flange_at": 22.5
+      },
+      "catalogue": {
+        "name": "IPN 200",
+        "series": [
+          [
+            "en/ipn160",
+            160.0
+          ],
+          [
+            "en/ipn180",
+            180.0
+          ],
+          [
+            "en/ipn200",
+            200.0
+          ],
+          [
+            "en/ipn220",
+            220.0
+          ],
+          [
+            "en/ipn240",
+            240.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "am-ipn",
+    "source": "https://sections.arcelormittal.com/repository2/Sections/Sections_MB_ArcelorMittal_FR_EN_DE_IPN.pdf",
+    "standard": "EN 10365",
+    "series": "IPN"
+  },
+  "section": {
+    "area_cm2": 33.434,
+    "mass_kg_m": 26.245,
+    "iy_cm4": 2137.74,
+    "iz_cm4": 116.43,
+    "iu_cm4": 2137.74,
+    "iv_cm4": 116.43,
+    "wy_cm3": 213.77,
+    "wz_cm3": 25.87,
+    "centroid_mm": [
+      45.0,
+      100.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 33.4,
+      "mass_kg_m": 26.2
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/ipn200",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:153e368d84abb97fb9e5b07121b5910c775752ad67c4c18862e04919faa02d83"
+}

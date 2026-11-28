@@ -1,0 +1,73 @@
+{
+  "uid": "ca5043798c46033a",
+  "name": "RHS 160 × 80 × 4 (hot-finished)",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/rhs160x80x4-hf",
+      "family": "rhs",
+      "params": {
+        "height": 160.0,
+        "width": 80.0,
+        "web": 4.0,
+        "radius": 6.0,
+        "inner": 4.0
+      },
+      "catalogue": {
+        "name": "RHS 160 × 80 × 4 (hot-finished)",
+        "series": [
+          [
+            "en/rhs120x80x4-hf",
+            120.0
+          ],
+          [
+            "en/rhs160x80x4-hf",
+            160.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-hfrhs",
+    "source": "https://www.steelforlifebluebook.co.uk/hfrhs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10210-2",
+    "series": "RHS hot-finished"
+  },
+  "section": {
+    "area_cm2": 18.388,
+    "mass_kg_m": 14.435,
+    "iy_cm4": 612.2,
+    "iz_cm4": 206.96,
+    "iu_cm4": 612.2,
+    "iv_cm4": 206.96,
+    "wy_cm3": 76.53,
+    "wz_cm3": 51.74,
+    "centroid_mm": [
+      40.0,
+      80.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 18.4,
+      "mass_kg_m": 14.4
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/rhs160x80x4-hf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:b2f72dd91f18eea001eecaf05b9a44a9d489187149fad3cd864b3bfffd6d6907"
+}

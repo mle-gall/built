@@ -1,0 +1,72 @@
+{
+  "uid": "e3b5002f1033d06f",
+  "name": "WT7 × 213",
+  "rev": 3,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/wt7x213",
+      "family": "tee",
+      "params": {
+        "height": 237.236,
+        "width": 424.18,
+        "web": 47.752,
+        "flange": 77.216,
+        "radius": 14.99
+      },
+      "catalogue": {
+        "name": "WT7 × 213",
+        "series": [
+          [
+            "aisc/wt7x213",
+            237.236
+          ]
+        ],
+        "aliases": [
+          "WT7X213"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "WT"
+  },
+  "section": {
+    "area_cm2": 404.912,
+    "mass_kg_m": 317.856,
+    "iy_cm4": 11979.33,
+    "iz_cm4": 49263.18,
+    "iu_cm4": 49263.18,
+    "iv_cm4": 11979.33,
+    "wy_cm3": 680.09,
+    "wz_cm3": 2322.75,
+    "centroid_mm": [
+      212.09,
+      176.14
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 404.515,
+      "mass_kg_m": 316.979
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/wt7x213",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:fd0041a4fbea0dbf51486a303338c9600f339bee1156647261c3096c3ab9634f"
+}

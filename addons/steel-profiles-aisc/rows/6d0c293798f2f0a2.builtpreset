@@ -1,0 +1,72 @@
+{
+  "uid": "6d0c293798f2f0a2",
+  "name": "W44 × 290",
+  "rev": 3,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/w44x290",
+      "family": "i",
+      "params": {
+        "height": 1107.44,
+        "width": 401.32,
+        "web": 21.971,
+        "flange": 40.132,
+        "radius": 19.81
+      },
+      "catalogue": {
+        "name": "W44 × 290",
+        "series": [
+          [
+            "aisc/w44x290",
+            1107.44
+          ]
+        ],
+        "aliases": [
+          "W44X290"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "W"
+  },
+  "section": {
+    "area_cm2": 551.165,
+    "mass_kg_m": 432.665,
+    "iy_cm4": 1124936.65,
+    "iz_cm4": 43331.91,
+    "iu_cm4": 1124936.65,
+    "iv_cm4": 43331.91,
+    "wy_cm3": 20315.98,
+    "wz_cm3": 2159.47,
+    "centroid_mm": [
+      200.66,
+      553.72
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 550.967,
+      "mass_kg_m": 431.568
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/w44x290",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:1f005b49fbce04f554e1d996690762b1ce7376067499c54b4670c97d4748129a"
+}

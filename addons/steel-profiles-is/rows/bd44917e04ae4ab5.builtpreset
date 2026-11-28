@@ -1,0 +1,86 @@
+{
+  "uid": "bd44917e04ae4ab5",
+  "name": "ISHB 400",
+  "rev": 2,
+  "pack": "Steel profiles · IS",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "is/ishb400",
+      "family": "i",
+      "params": {
+        "height": 400.0,
+        "width": 250.0,
+        "web": 9.1,
+        "flange": 12.7,
+        "radius": 14.0,
+        "toe": 7.0,
+        "slope": 6.99
+      },
+      "catalogue": {
+        "name": "ISHB 400",
+        "series": [
+          [
+            "is/ishb300",
+            300.0
+          ],
+          [
+            "is/ishb350",
+            350.0
+          ],
+          [
+            "is/ishb400",
+            400.0
+          ],
+          [
+            "is/ishb450",
+            450.0
+          ]
+        ],
+        "aliases": [
+          "HB 400"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "is808-1989",
+    "source": "https://law.resource.org/pub/in/bis/S03/is.808.1989.pdf",
+    "standard": "IS 808",
+    "series": "ISHB"
+  },
+  "section": {
+    "area_cm2": 98.659,
+    "mass_kg_m": 77.447,
+    "iy_cm4": 28086.07,
+    "iz_cm4": 2728.55,
+    "iu_cm4": 28086.07,
+    "iv_cm4": 2728.55,
+    "wy_cm3": 1404.3,
+    "wz_cm3": 218.28,
+    "centroid_mm": [
+      125.0,
+      200.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 98.7,
+      "mass_kg_m": 77.4
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "is/ishb400",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:8637674c8325f1361ac62add37f46db51fa859615ac9a2f2bc8212ed0301f8f0"
+}

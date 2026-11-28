@@ -1,0 +1,83 @@
+{
+  "uid": "b32d9d3a59bd19cf",
+  "name": "CHS 273 × 14.2 (hot-finished)",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/chs273x14.2-hf",
+      "family": "chs",
+      "params": {
+        "height": 273.0,
+        "width": 273.0,
+        "web": 14.2
+      },
+      "catalogue": {
+        "name": "CHS 273 × 14.2 (hot-finished)",
+        "series": [
+          [
+            "en/chs219.1x14.2-hf",
+            219.1
+          ],
+          [
+            "en/chs244.5x14.2-hf",
+            244.5
+          ],
+          [
+            "en/chs273x14.2-hf",
+            273.0
+          ],
+          [
+            "en/chs323.9x14.2-hf",
+            323.9
+          ],
+          [
+            "en/chs355.6x14.2-hf",
+            355.6
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-hfchs",
+    "source": "https://www.steelforlifebluebook.co.uk/hfchs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10210-2",
+    "series": "CHS hot-finished"
+  },
+  "section": {
+    "area_cm2": 115.449,
+    "mass_kg_m": 90.628,
+    "iy_cm4": 9694.49,
+    "iz_cm4": 9694.49,
+    "iu_cm4": 9694.49,
+    "iv_cm4": 9694.49,
+    "wy_cm3": 710.22,
+    "wz_cm3": 710.22,
+    "centroid_mm": [
+      136.5,
+      136.5
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 115.0,
+      "mass_kg_m": 90.6
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/chs273x14.2-hf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:f8d74b3e2d12442123f5d5febfd1e1b7b29ff0c82a7b2e317521939a83447406"
+}

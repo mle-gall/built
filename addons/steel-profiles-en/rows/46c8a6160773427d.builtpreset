@@ -1,0 +1,88 @@
+{
+  "uid": "46c8a6160773427d",
+  "name": "UPN 240",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/upn240",
+      "family": "channel",
+      "params": {
+        "height": 240.0,
+        "width": 85.0,
+        "web": 9.5,
+        "flange": 13.0,
+        "radius": 13.0,
+        "toe": 6.5,
+        "slope": 8.0,
+        "flange_at": 42.5
+      },
+      "catalogue": {
+        "name": "UPN 240",
+        "series": [
+          [
+            "en/upn200",
+            200.0
+          ],
+          [
+            "en/upn220",
+            220.0
+          ],
+          [
+            "en/upn240",
+            240.0
+          ],
+          [
+            "en/upn260",
+            260.0
+          ],
+          [
+            "en/upn280",
+            280.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-upn",
+    "source": "https://orangebook.arcelormittal.com/node/265",
+    "standard": "EN 10365",
+    "series": "UPN"
+  },
+  "section": {
+    "area_cm2": 42.307,
+    "mass_kg_m": 33.211,
+    "iy_cm4": 3598.82,
+    "iz_cm4": 247.44,
+    "iu_cm4": 3598.82,
+    "iv_cm4": 247.44,
+    "wy_cm3": 299.9,
+    "wz_cm3": 39.5,
+    "centroid_mm": [
+      22.36,
+      120.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 42.3,
+      "mass_kg_m": 33.2
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/upn240",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:4859749ff844d4ebf03907f7ffe7f98aa9f9e3f5fb86c710d0c19e6d75d2bba2"
+}

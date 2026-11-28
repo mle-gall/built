@@ -1,0 +1,88 @@
+{
+  "uid": "c631e7bab956a408",
+  "name": "HE 300 AA",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/he300aa",
+      "family": "i",
+      "params": {
+        "height": 283.0,
+        "width": 300.0,
+        "web": 7.5,
+        "flange": 10.5,
+        "radius": 27.0
+      },
+      "catalogue": {
+        "name": "HE 300 AA",
+        "series": [
+          [
+            "en/he260aa",
+            244.0
+          ],
+          [
+            "en/he280aa",
+            264.0
+          ],
+          [
+            "en/he300aa",
+            283.0
+          ],
+          [
+            "en/he320aa",
+            301.0
+          ],
+          [
+            "en/he340aa",
+            320.0
+          ]
+        ],
+        "aliases": [
+          "HEAA 300"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-he",
+    "source": "https://orangebook.arcelormittal.com/node/16",
+    "standard": "EN 10365",
+    "series": "HE"
+  },
+  "section": {
+    "area_cm2": 88.908,
+    "mass_kg_m": 69.793,
+    "iy_cm4": 13804.18,
+    "iz_cm4": 4733.51,
+    "iu_cm4": 13804.18,
+    "iv_cm4": 4733.51,
+    "wy_cm3": 975.56,
+    "wz_cm3": 315.57,
+    "centroid_mm": [
+      150.0,
+      141.5
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 88.9,
+      "mass_kg_m": 69.8
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/he300aa",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:4d3c6b787fd0abdb4d256a5a3b60550e6c13b32b009e0eb5e2bfee7e6f941a03"
+}

@@ -1,0 +1,76 @@
+{
+  "uid": "2bad1c0275483427",
+  "name": "W24 × 176",
+  "rev": 3,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/w24x176",
+      "family": "i",
+      "params": {
+        "height": 640.08,
+        "width": 327.66,
+        "web": 19.05,
+        "flange": 34.036,
+        "radius": 12.7
+      },
+      "catalogue": {
+        "name": "W24 × 176",
+        "series": [
+          [
+            "aisc/w14x176",
+            386.08
+          ],
+          [
+            "aisc/w24x176",
+            640.08
+          ]
+        ],
+        "aliases": [
+          "W24X176"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "W"
+  },
+  "section": {
+    "area_cm2": 333.397,
+    "mass_kg_m": 261.717,
+    "iy_cm4": 235841.71,
+    "iz_cm4": 19990.42,
+    "iu_cm4": 235841.71,
+    "iv_cm4": 19990.42,
+    "wy_cm3": 7369.13,
+    "wz_cm3": 1220.19,
+    "centroid_mm": [
+      163.83,
+      320.04
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 333.548,
+      "mass_kg_m": 261.917
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/w24x176",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:f93391f3a9e4e0afe8e144b11c14e07bb9c9a72fa169521fd07c68c6fe297ade"
+}

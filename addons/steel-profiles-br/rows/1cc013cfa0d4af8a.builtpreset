@@ -1,0 +1,69 @@
+{
+  "uid": "1cc013cfa0d4af8a",
+  "name": "HP 250 × 62.0",
+  "rev": 3,
+  "pack": "Steel profiles · BR",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "br/hp250x62.0",
+      "family": "i",
+      "params": {
+        "height": 246.0,
+        "width": 256.0,
+        "web": 10.5,
+        "flange": 10.7,
+        "radius": 12.0
+      },
+      "catalogue": {
+        "name": "HP 250 × 62.0",
+        "series": [
+          [
+            "br/hp250x62.0",
+            246.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "gerdau-perfis",
+    "source": "https://api.aecweb.com.br/cls/catalogos/28792/22314/catalogo-gerdau-perfis-estruturais.pdf",
+    "standard": "ABNT NBR 15980",
+    "series": "HP"
+  },
+  "section": {
+    "area_cm2": 79.603,
+    "mass_kg_m": 62.489,
+    "iy_cm4": 8728.15,
+    "iz_cm4": 2994.94,
+    "iu_cm4": 8728.15,
+    "iv_cm4": 2994.94,
+    "wy_cm3": 709.61,
+    "wz_cm3": 233.98,
+    "centroid_mm": [
+      128.0,
+      123.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 79.6,
+      "mass_kg_m": 62.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "br/hp250x62.0",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:bda55bd43734afccc717d7c2d7cf375f778ce188fa0d0716362750cc391d955f"
+}

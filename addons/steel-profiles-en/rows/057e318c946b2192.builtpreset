@@ -1,0 +1,69 @@
+{
+  "uid": "057e318c946b2192",
+  "name": "HE 700 × 352",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/he700x352",
+      "family": "i",
+      "params": {
+        "height": 728.0,
+        "width": 308.0,
+        "web": 25.0,
+        "flange": 46.0,
+        "radius": 27.0
+      },
+      "catalogue": {
+        "name": "HE 700 × 352",
+        "series": [
+          [
+            "en/he700x352",
+            728.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-he",
+    "source": "https://orangebook.arcelormittal.com/node/16",
+    "standard": "EN 10365",
+    "series": "HE"
+  },
+  "section": {
+    "area_cm2": 448.618,
+    "mass_kg_m": 352.165,
+    "iy_cm4": 389681.74,
+    "iz_cm4": 22506.46,
+    "iu_cm4": 389681.74,
+    "iv_cm4": 22506.46,
+    "wy_cm3": 10705.54,
+    "wz_cm3": 1461.46,
+    "centroid_mm": [
+      154.0,
+      364.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 449.0,
+      "mass_kg_m": 352.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/he700x352",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:9464b143dd7f839e0ccce50330e998fe6a901ce1f0db59228f1777129343bbfa"
+}

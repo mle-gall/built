@@ -1,0 +1,71 @@
+{
+  "uid": "ecb5fb1062bbad53",
+  "name": "ISA 40 × 25 × 6",
+  "rev": 2,
+  "pack": "Steel profiles · IS",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "is/isa40x25x6",
+      "family": "angle",
+      "params": {
+        "height": 40.0,
+        "width": 25.0,
+        "web": 6.0,
+        "radius": 5.0
+      },
+      "catalogue": {
+        "name": "ISA 40 × 25 × 6",
+        "series": [
+          [
+            "is/isa40x25x6",
+            40.0
+          ]
+        ],
+        "aliases": [
+          "A 40 x 25 x 6"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "is808-1989",
+    "source": "https://law.resource.org/pub/in/bis/S03/is.808.1989.pdf",
+    "standard": "IS 808",
+    "series": "ISA unequal"
+  },
+  "section": {
+    "area_cm2": 3.594,
+    "mass_kg_m": 2.821,
+    "iy_cm4": 5.5,
+    "iz_cm4": 1.62,
+    "iu_cm4": 6.1,
+    "iv_cm4": 1.02,
+    "wy_cm3": 2.15,
+    "wz_cm3": 0.9,
+    "centroid_mm": [
+      7.03,
+      14.41
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 3.56,
+      "mass_kg_m": 2.8
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "is/isa40x25x6",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:abc5b0a5f6f1ccbd729f026a7eebca756870a4a61de03ed7728de61137ffbda8"
+}

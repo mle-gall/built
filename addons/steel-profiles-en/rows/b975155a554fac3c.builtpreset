@@ -1,0 +1,69 @@
+{
+  "uid": "b975155a554fac3c",
+  "name": "HLZ 1100 C",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/hlz1100c",
+      "family": "i",
+      "params": {
+        "height": 1083.0,
+        "width": 459.0,
+        "web": 21.0,
+        "flange": 35.0,
+        "radius": 35.0
+      },
+      "catalogue": {
+        "name": "HLZ 1100 C",
+        "series": [
+          [
+            "en/hlz1100c",
+            1083.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-hl",
+    "source": "https://orangebook.arcelormittal.com/node/26",
+    "standard": "EN 10365",
+    "series": "HL / HLZ"
+  },
+  "section": {
+    "area_cm2": 544.546,
+    "mass_kg_m": 427.469,
+    "iy_cm4": 1090612.0,
+    "iz_cm4": 56527.84,
+    "iu_cm4": 1090612.0,
+    "iv_cm4": 56527.84,
+    "wy_cm3": 20140.57,
+    "wz_cm3": 2463.09,
+    "centroid_mm": [
+      229.5,
+      541.5
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 548.0,
+      "mass_kg_m": 430.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/hlz1100c",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:00df2b5e067b80e5cb1e1f1a905e08ea02f6edcc7b998b55c22ea37a8606ba8c"
+}

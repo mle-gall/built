@@ -1,0 +1,72 @@
+{
+  "uid": "d3088edabca51054",
+  "name": "W44 × 408",
+  "rev": 3,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/w44x408",
+      "family": "i",
+      "params": {
+        "height": 1137.92,
+        "width": 408.94,
+        "web": 30.988,
+        "flange": 55.118,
+        "radius": 20.07
+      },
+      "catalogue": {
+        "name": "W44 × 408",
+        "series": [
+          [
+            "aisc/w44x408",
+            1137.92
+          ]
+        ],
+        "aliases": [
+          "W44X408"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "W"
+  },
+  "section": {
+    "area_cm2": 772.716,
+    "mass_kg_m": 606.582,
+    "iy_cm4": 1611752.79,
+    "iz_cm4": 63092.46,
+    "iu_cm4": 1611752.79,
+    "iv_cm4": 63092.46,
+    "wy_cm3": 28328.05,
+    "wz_cm3": 3085.66,
+    "centroid_mm": [
+      204.47,
+      568.96
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 774.192,
+      "mass_kg_m": 607.171
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/w44x408",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:41e9eaa8dfb0969d5cddfa33962dee6a776a299ebe2b71ed6eb150eec1167eea"
+}

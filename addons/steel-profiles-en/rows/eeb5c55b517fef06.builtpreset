@@ -1,0 +1,69 @@
+{
+  "uid": "eeb5c55b517fef06",
+  "name": "UBP 254 × 254 × 63",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/ubp254x254x63",
+      "family": "i",
+      "params": {
+        "height": 247.1,
+        "width": 256.6,
+        "web": 10.6,
+        "flange": 10.7,
+        "radius": 12.7
+      },
+      "catalogue": {
+        "name": "UBP 254 × 254 × 63",
+        "series": [
+          [
+            "en/ubp254x254x63",
+            247.1
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-ubp",
+    "source": "https://orangebook.arcelormittal.com/node/210",
+    "standard": "EN 10365",
+    "series": "UBP"
+  },
+  "section": {
+    "area_cm2": 80.221,
+    "mass_kg_m": 62.974,
+    "iy_cm4": 8860.44,
+    "iz_cm4": 3016.26,
+    "iu_cm4": 8860.44,
+    "iv_cm4": 3016.26,
+    "wy_cm3": 717.15,
+    "wz_cm3": 235.09,
+    "centroid_mm": [
+      128.3,
+      123.55
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 80.2,
+      "mass_kg_m": 63.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/ubp254x254x63",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:a628e9def94599ff432962bafa8b88464887df69f636be62a2a2abbc078547ac"
+}

@@ -1,0 +1,85 @@
+{
+  "uid": "dbbdca1d69167100",
+  "name": "230 PFC",
+  "rev": 2,
+  "pack": "Steel profiles · AS/NZS",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "as-nzs/230pfc",
+      "family": "channel",
+      "params": {
+        "height": 230.0,
+        "width": 75.0,
+        "web": 6.5,
+        "flange": 12.0,
+        "radius": 12.0
+      },
+      "catalogue": {
+        "name": "230 PFC",
+        "series": [
+          [
+            "as-nzs/180pfc",
+            180.0
+          ],
+          [
+            "as-nzs/200pfc",
+            200.0
+          ],
+          [
+            "as-nzs/230pfc",
+            230.0
+          ],
+          [
+            "as-nzs/250pfc",
+            250.0
+          ],
+          [
+            "as-nzs/300pfc",
+            300.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ib-hrssp9",
+    "source": "https://www.infrabuild.com/wp-content/uploads/sites/8/2022/02/Hot20Rolled20Cat_Edition9_2019.pdf",
+    "standard": "AS/NZS 3679.1",
+    "series": "PFC"
+  },
+  "section": {
+    "area_cm2": 32.008,
+    "mass_kg_m": 25.126,
+    "iy_cm4": 2676.49,
+    "iz_cm4": 176.09,
+    "iu_cm4": 2676.49,
+    "iv_cm4": 176.09,
+    "wy_cm3": 232.74,
+    "wz_cm3": 33.62,
+    "centroid_mm": [
+      22.63,
+      115.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 32.0,
+      "mass_kg_m": 25.1
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "as-nzs/230pfc",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:f5d9d727f1dfde588a05e4331aaf39c30d0ad684baa562067db44dc91f38e73b"
+}

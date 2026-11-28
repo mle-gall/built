@@ -1,0 +1,474 @@
+{
+  "title": "Steel profiles · EN",
+  "notes": {
+    "ipe.csv:IPE V 450": "EN 10365:2017 itself lists G 107 kg/m with A 132.0 cm² (132 cm² is 103.6 kg/m): the standard's mass and area disagree",
+    "ipe.csv:IPE AA 80": "the listed mass is rounded to 0.1 kg/m (4.9), within rounding of the computed 4.95",
+    "hl.csv:HL 1100 A": "the Orange Book's radius (r 35) gives more area than listed; check r1 against EN 10365 or the mill",
+    "l-equal.csv:L 110 x 110 x 14": "listed mass and area disagree with each other in the Orange Book export (23.3 kg/m vs 29.0 cm²)",
+    "l-equal.csv:L 100 x 100 x 18": "listed mass and area disagree with each other in the Orange Book export",
+    "l-equal.csv:L 90 x 90 x 5": "the listed toe radius r2 is larger than the leg thickness t, which no section can have",
+    "l-equal.csv:L 75 x 75 x 4": "the listed toe radius r2 is larger than the leg thickness t, which no section can have",
+    "l-equal.csv:L 65 x 65 x 4": "the listed toe radius r2 is larger than the leg thickness t, which no section can have",
+    "l-equal.csv:L 45 x 45 x 3": "the listed toe radius r2 is larger than the leg thickness t, which no section can have"
+  },
+  "prefix": "en",
+  "status": "provisional",
+  "note": "Provisional: transcribed from public sources until the purchased standards are checked size by size.",
+  "families": [
+    {
+      "file": "ipe.csv",
+      "shape": "i",
+      "series": "IPE",
+      "standard": "EN 10365",
+      "replaced_by": "EN 10365:2017 Table 1"
+    },
+    {
+      "file": "he.csv",
+      "shape": "i",
+      "series": "HE",
+      "standard": "EN 10365",
+      "replaced_by": "EN 10365:2017 Tables 2-4 (HE AA/A/B/M and HE x)"
+    },
+    {
+      "file": "hl.csv",
+      "shape": "i",
+      "series": "HL / HLZ",
+      "standard": "EN 10365",
+      "replaced_by": "EN 10365:2017 (HL, HLZ)"
+    },
+    {
+      "file": "hd.csv",
+      "shape": "i",
+      "series": "HD",
+      "standard": "EN 10365",
+      "replaced_by": "EN 10365:2017 (HD)"
+    },
+    {
+      "file": "hp.csv",
+      "shape": "i",
+      "series": "HP",
+      "standard": "EN 10365",
+      "replaced_by": "EN 10365:2017 (HP)"
+    },
+    {
+      "file": "ubp.csv",
+      "shape": "i",
+      "series": "UBP",
+      "standard": "EN 10365",
+      "mass": "nominal",
+      "replaced_by": "EN 10365:2017 (UBP)"
+    },
+    {
+      "file": "ub.csv",
+      "shape": "i",
+      "series": "UB",
+      "standard": "EN 10365",
+      "mass": "nominal",
+      "replaced_by": "EN 10365:2017 (UB); radii still from a mill"
+    },
+    {
+      "file": "uc.csv",
+      "shape": "i",
+      "series": "UC",
+      "standard": "EN 10365",
+      "mass": "nominal",
+      "replaced_by": "EN 10365:2017 (UC); radii still from a mill"
+    },
+    {
+      "file": "ipn.csv",
+      "shape": "i",
+      "series": "IPN",
+      "standard": "EN 10365",
+      "sloped": true,
+      "flange_at": "b/4",
+      "replaced_by": "EN 10365:2017 (IPN); slope and radii from EN 10024/mill"
+    },
+    {
+      "file": "upe.csv",
+      "shape": "channel",
+      "series": "UPE",
+      "standard": "EN 10365",
+      "replaced_by": "EN 10365:2017 (UPE)"
+    },
+    {
+      "file": "pfc.csv",
+      "shape": "channel",
+      "series": "PFC",
+      "standard": "EN 10365",
+      "replaced_by": "EN 10365:2017 (PFC)"
+    },
+    {
+      "file": "upn.csv",
+      "shape": "channel",
+      "series": "UPN",
+      "standard": "EN 10365",
+      "sloped": true,
+      "flange_at": "b/2",
+      "replaced_by": "EN 10365:2017 (UPN); slope from EN 10279/DIN 1026-1"
+    },
+    {
+      "file": "l-equal.csv",
+      "shape": "angle",
+      "series": "L equal",
+      "standard": "EN 10056-1",
+      "replaced_by": "EN 10056-1:2017 Table 1 (r1, r2 included)"
+    },
+    {
+      "file": "l-unequal.csv",
+      "shape": "angle",
+      "series": "L unequal",
+      "standard": "EN 10056-1",
+      "replaced_by": "EN 10056-1:2017 Table 2"
+    },
+    {
+      "file": "chs-hf.csv",
+      "shape": "chs",
+      "series": "CHS hot-finished",
+      "standard": "EN 10210-2",
+      "label_suffix": "hot-finished",
+      "key_suffix": "-hf",
+      "replaced_by": "EN 10210-2:2019 Annex B"
+    },
+    {
+      "file": "shs-hf.csv",
+      "shape": "rhs",
+      "series": "SHS hot-finished",
+      "standard": "EN 10210-2",
+      "label_suffix": "hot-finished",
+      "key_suffix": "-hf",
+      "replaced_by": "EN 10210-2:2019 Annex B"
+    },
+    {
+      "file": "rhs-hf.csv",
+      "shape": "rhs",
+      "series": "RHS hot-finished",
+      "standard": "EN 10210-2",
+      "label_suffix": "hot-finished",
+      "key_suffix": "-hf",
+      "replaced_by": "EN 10210-2:2019 Annex B"
+    },
+    {
+      "file": "chs-cf.csv",
+      "shape": "chs",
+      "series": "CHS cold-formed",
+      "standard": "EN 10219-2",
+      "label_suffix": "cold-formed",
+      "key_suffix": "-cf",
+      "replaced_by": "EN 10219-2:2019 Annex B"
+    },
+    {
+      "file": "shs-cf.csv",
+      "shape": "rhs",
+      "series": "SHS cold-formed",
+      "standard": "EN 10219-2",
+      "label_suffix": "cold-formed",
+      "key_suffix": "-cf",
+      "replaced_by": "EN 10219-2:2019 Annex B"
+    },
+    {
+      "file": "rhs-cf.csv",
+      "shape": "rhs",
+      "series": "RHS cold-formed",
+      "standard": "EN 10219-2",
+      "label_suffix": "cold-formed",
+      "key_suffix": "-cf",
+      "replaced_by": "EN 10219-2:2019 Annex B"
+    }
+  ],
+  "keys": {
+    "l-equal.csv:L 50 x 50 x 5": "en/l50x5",
+    "rhs-hf.csv:RHS 100 x 50 x 5": "en/rhs100x5",
+    "rhs-cf.csv:RHS 100 x 50 x 4": "en/rhs100x4",
+    "shs-cf.csv:SHS 80 x 80 x 4": "en/shs80x4",
+    "chs-cf.csv:CHS 114.3 x 5": "en/chs114.3x5"
+  },
+  "sources": {
+    "ob-ipe": {
+      "url": "https://orangebook.arcelormittal.com/node/6",
+      "file_url": "https://orangebook.arcelormittal.com/sites/default/files/2024-11/IPE-secpropsdimsprops-Eurocode3-UK-07_11_2023.xlsx",
+      "title": "ArcelorMittal Orange Book (SCI): Parallel flange I sections IPE - Section properties - Dimensions and properties (Eurocode 3, UK NA) xlsx export",
+      "edition": "data dated 07/11/2023",
+      "accessed": "2026-11-28",
+      "kind": "mill catalogue (ArcelorMittal with SCI)",
+      "columns": "designation, h, b, tw, tf, r (r1, r2 for UPN), mass, A",
+      "terms": "Export footer: 'This data is subject to the same terms as defined by the Orange Book website (http://orangebook.arcelormittal.com/terms-conditions/)'; that page returned 404 on 2026-11-28. Only defining dimensions and the listed mass and area are taken; every property is recomputed.",
+      "sha256": "sha256:4c25ae30a98a0e4ba64b071e304e5a5559c5c8c09bea0092e68977b08aec982e"
+    },
+    "ob-he": {
+      "url": "https://orangebook.arcelormittal.com/node/16",
+      "file_url": "https://orangebook.arcelormittal.com/sites/default/files/2025-04/HE-secpropsdimsprops-Eurocode3-UK-07_11_2023_EN.xlsx",
+      "title": "ArcelorMittal Orange Book (SCI): Wide flange beams HE - Section properties - Dimensions and properties (Eurocode 3, UK NA) xlsx export",
+      "edition": "data dated 07/11/2023",
+      "accessed": "2026-11-28",
+      "kind": "mill catalogue (ArcelorMittal with SCI)",
+      "columns": "designation, h, b, tw, tf, r (r1, r2 for UPN), mass, A",
+      "terms": "Export footer: 'This data is subject to the same terms as defined by the Orange Book website (http://orangebook.arcelormittal.com/terms-conditions/)'; that page returned 404 on 2026-11-28. Only defining dimensions and the listed mass and area are taken; every property is recomputed.",
+      "sha256": "sha256:95eea8535030f3a52548ace9afe82877c5b9b51c1b6addba48f80dcef7bb9b71"
+    },
+    "ob-hl": {
+      "url": "https://orangebook.arcelormittal.com/node/26",
+      "file_url": "https://orangebook.arcelormittal.com/sites/default/files/2024-11/HL-HLZ-secpropsdimsprops-Eurocode3-UK-07_11_2023_EN.xlsx",
+      "title": "ArcelorMittal Orange Book (SCI): Extra wide flange beams HL and HLZ - Section properties - Dimensions and properties (Eurocode 3, UK NA) xlsx export",
+      "edition": "data dated 07/11/2023",
+      "accessed": "2026-11-28",
+      "kind": "mill catalogue (ArcelorMittal with SCI)",
+      "columns": "designation, h, b, tw, tf, r (r1, r2 for UPN), mass, A",
+      "terms": "Export footer: 'This data is subject to the same terms as defined by the Orange Book website (http://orangebook.arcelormittal.com/terms-conditions/)'; that page returned 404 on 2026-11-28. Only defining dimensions and the listed mass and area are taken; every property is recomputed.",
+      "sha256": "sha256:0ee36f537799a7d9f0cb27a12602d9c040d3b1ccfa9ebe636a98cdd345ca492e"
+    },
+    "ob-hd": {
+      "url": "https://orangebook.arcelormittal.com/node/136",
+      "file_url": "https://orangebook.arcelormittal.com/sites/default/files/2024-11/HD-secpropsdimsprops-Eurocode3-UK-07_11_2023_EN.xlsx",
+      "title": "ArcelorMittal Orange Book (SCI): Wide flange columns HD - Section properties - Dimensions and properties (Eurocode 3, UK NA) xlsx export",
+      "edition": "data dated 07/11/2023",
+      "accessed": "2026-11-28",
+      "kind": "mill catalogue (ArcelorMittal with SCI)",
+      "columns": "designation, h, b, tw, tf, r (r1, r2 for UPN), mass, A",
+      "terms": "Export footer: 'This data is subject to the same terms as defined by the Orange Book website (http://orangebook.arcelormittal.com/terms-conditions/)'; that page returned 404 on 2026-11-28. Only defining dimensions and the listed mass and area are taken; every property is recomputed.",
+      "sha256": "sha256:1063e886a2e75b34cc06d5fff0c77a9a83582d8fe17669caad7b8e043995521d"
+    },
+    "ob-hp": {
+      "url": "https://orangebook.arcelormittal.com/node/200",
+      "file_url": "https://orangebook.arcelormittal.com/sites/default/files/2025-04/HP-secpropsdimsprops-Eurocode3-UK-06_11_2023.xlsx",
+      "title": "ArcelorMittal Orange Book (SCI): Wide flange bearing piles HP - Section properties - Dimensions and properties (Eurocode 3, UK NA) xlsx export",
+      "edition": "data dated 06/11/2023",
+      "accessed": "2026-11-28",
+      "kind": "mill catalogue (ArcelorMittal with SCI)",
+      "columns": "designation, h, b, tw, tf, r (r1, r2 for UPN), mass, A",
+      "terms": "Export footer: 'This data is subject to the same terms as defined by the Orange Book website (http://orangebook.arcelormittal.com/terms-conditions/)'; that page returned 404 on 2026-11-28. Only defining dimensions and the listed mass and area are taken; every property is recomputed.",
+      "sha256": "sha256:d0739f3313f302257a15c21650de8271e41a06bf619180c50ed43e564dc87ad6"
+    },
+    "ob-ubp": {
+      "url": "https://orangebook.arcelormittal.com/node/210",
+      "file_url": "https://orangebook.arcelormittal.com/sites/default/files/2025-04/UBP-secpropsdimsprops-Eurocode3-UK-07_11_2023.xlsx",
+      "title": "ArcelorMittal Orange Book (SCI): Wide flange bearing piles UBP - Section properties - Dimensions and properties (Eurocode 3, UK NA) xlsx export",
+      "edition": "data dated 07/11/2023",
+      "accessed": "2026-11-28",
+      "kind": "mill catalogue (ArcelorMittal with SCI)",
+      "columns": "designation, h, b, tw, tf, r (r1, r2 for UPN), mass, A",
+      "terms": "Export footer: 'This data is subject to the same terms as defined by the Orange Book website (http://orangebook.arcelormittal.com/terms-conditions/)'; that page returned 404 on 2026-11-28. Only defining dimensions and the listed mass and area are taken; every property is recomputed.",
+      "sha256": "sha256:1c879533a8b98a649d40d103238f0023c845e6fba36cbdbea247982218a210a7"
+    },
+    "ob-ub": {
+      "url": "https://orangebook.arcelormittal.com/node/35",
+      "file_url": "https://orangebook.arcelormittal.com/sites/default/files/2024-11/UB-secpropsdimsprops-Eurocode3-UK-07_11_2023_EN.xlsx",
+      "title": "ArcelorMittal Orange Book (SCI): Universal beams UB - Section properties - Dimensions and properties (Eurocode 3, UK NA) xlsx export",
+      "edition": "data dated 07/11/2023",
+      "accessed": "2026-11-28",
+      "kind": "mill catalogue (ArcelorMittal with SCI)",
+      "columns": "designation, h, b, tw, tf, r (r1, r2 for UPN), mass, A",
+      "terms": "Export footer: 'This data is subject to the same terms as defined by the Orange Book website (http://orangebook.arcelormittal.com/terms-conditions/)'; that page returned 404 on 2026-11-28. Only defining dimensions and the listed mass and area are taken; every property is recomputed.",
+      "sha256": "sha256:2ec9251439a6a76535eca25875a8512c64763657ee9df9e0450d471f67123676"
+    },
+    "ob-uc": {
+      "url": "https://orangebook.arcelormittal.com/node/246",
+      "file_url": "https://orangebook.arcelormittal.com/sites/default/files/2025-02/UC-secpropsdimsprops-Eurocode3-UK-07_11_2023_EN.xlsx",
+      "title": "ArcelorMittal Orange Book (SCI): Universal columns UC - Section properties - Dimensions and properties (Eurocode 3, UK NA) xlsx export",
+      "edition": "data dated 07/11/2023",
+      "accessed": "2026-11-28",
+      "kind": "mill catalogue (ArcelorMittal with SCI)",
+      "columns": "designation, h, b, tw, tf, r (r1, r2 for UPN), mass, A",
+      "terms": "Export footer: 'This data is subject to the same terms as defined by the Orange Book website (http://orangebook.arcelormittal.com/terms-conditions/)'; that page returned 404 on 2026-11-28. Only defining dimensions and the listed mass and area are taken; every property is recomputed.",
+      "sha256": "sha256:3fdbcc59d84cfb0f7e009fd91fb3ea76ee24e4f039ab7396d1ce66b1a94e59a9"
+    },
+    "ob-upe": {
+      "url": "https://orangebook.arcelormittal.com/node/253",
+      "file_url": "https://orangebook.arcelormittal.com/sites/default/files/2025-04/UPE-secpropsdimsprops-Eurocode3-UK-08_11_2023.xlsx",
+      "title": "ArcelorMittal Orange Book (SCI): Parallel flange channels UPE - Section properties - Dimensions and properties (Eurocode 3, UK NA) xlsx export",
+      "edition": "data dated 08/11/2023",
+      "accessed": "2026-11-28",
+      "kind": "mill catalogue (ArcelorMittal with SCI)",
+      "columns": "designation, h, b, tw, tf, r (r1, r2 for UPN), mass, A",
+      "terms": "Export footer: 'This data is subject to the same terms as defined by the Orange Book website (http://orangebook.arcelormittal.com/terms-conditions/)'; that page returned 404 on 2026-11-28. Only defining dimensions and the listed mass and area are taken; every property is recomputed.",
+      "sha256": "sha256:6e579e596315319b2f8ccd4da51d2424fa7dfc802bd89b296dc0b1697f7cd13e"
+    },
+    "ob-pfc": {
+      "url": "https://orangebook.arcelormittal.com/node/259",
+      "file_url": "https://orangebook.arcelormittal.com/sites/default/files/2025-04/PFC-secpropsdimsprops-Eurocode3-UK-09_11_2023.xlsx",
+      "title": "ArcelorMittal Orange Book (SCI): Parallel flange channels PFC - Section properties - Dimensions and properties (Eurocode 3, UK NA) xlsx export",
+      "edition": "data dated 09/11/2023",
+      "accessed": "2026-11-28",
+      "kind": "mill catalogue (ArcelorMittal with SCI)",
+      "columns": "designation, h, b, tw, tf, r (r1, r2 for UPN), mass, A",
+      "terms": "Export footer: 'This data is subject to the same terms as defined by the Orange Book website (http://orangebook.arcelormittal.com/terms-conditions/)'; that page returned 404 on 2026-11-28. Only defining dimensions and the listed mass and area are taken; every property is recomputed.",
+      "sha256": "sha256:e77e6f0c39ae4ea48e607055ba3fa7a3eddb15d2481070067e099c16d201fc80"
+    },
+    "ob-upn": {
+      "url": "https://orangebook.arcelormittal.com/node/265",
+      "file_url": "https://orangebook.arcelormittal.com/sites/default/files/2025-04/UPN-secpropsdimsprops-Eurocode3-UK-09_11_2023.xlsx",
+      "title": "ArcelorMittal Orange Book (SCI): Taper flange channels UPN - Section properties - Dimensions and properties (Eurocode 3, UK NA) xlsx export",
+      "edition": "data dated 09/11/2023",
+      "accessed": "2026-11-28",
+      "kind": "mill catalogue (ArcelorMittal with SCI)",
+      "columns": "designation, h, b, tw, tf, r1, r2, mass, A (slope: 8 %, 5 % from UPN 320, DIN 1026-1 convention, not in the export)",
+      "terms": "Export footer: 'This data is subject to the same terms as defined by the Orange Book website (http://orangebook.arcelormittal.com/terms-conditions/)'; that page returned 404 on 2026-11-28. Only defining dimensions and the listed mass and area are taken; every property is recomputed.",
+      "sha256": "sha256:6092a7e834f1c74155407bccb1989ffd80093f3f568507be82261ceec120fd1c"
+    },
+    "ob-l-equal": {
+      "url": "https://orangebook.arcelormittal.com/node/220",
+      "file_url": "https://orangebook.arcelormittal.com/sites/default/files/2025-04/L-equal-secpropsdimsprops-Eurocode3-UK-07_11_2023.xlsx",
+      "title": "ArcelorMittal Orange Book (SCI): Equal leg angles L - Section properties - Dimensions and properties (Eurocode 3, UK NA) xlsx export",
+      "edition": "data dated 07/11/2023",
+      "accessed": "2026-11-28",
+      "kind": "mill catalogue (ArcelorMittal with SCI)",
+      "columns": "h x h, t, r1, r2, mass, A",
+      "terms": "Export footer: 'This data is subject to the same terms as defined by the Orange Book website (http://orangebook.arcelormittal.com/terms-conditions/)'; that page returned 404 on 2026-11-28. Only defining dimensions and the listed mass and area are taken; every property is recomputed.",
+      "sha256": "sha256:29957cefcf405a7fca2cac144ed829c7c7a2bec5b0c63318cc2d156e29c2c907"
+    },
+    "ob-l-unequal": {
+      "url": "https://orangebook.arcelormittal.com/node/225",
+      "file_url": "https://orangebook.arcelormittal.com/sites/default/files/2025-04/L-unequal-secpropsdimsprops-Eurocode3-UK-08_11_2023.xlsx",
+      "title": "ArcelorMittal Orange Book (SCI): Unequal leg angles L - Section properties - Dimensions and properties (Eurocode 3, UK NA) xlsx export",
+      "edition": "data dated 08/11/2023",
+      "accessed": "2026-11-28",
+      "kind": "mill catalogue (ArcelorMittal with SCI)",
+      "columns": "h x b, t, r1, r2, mass, A",
+      "terms": "Export footer: 'This data is subject to the same terms as defined by the Orange Book website (http://orangebook.arcelormittal.com/terms-conditions/)'; that page returned 404 on 2026-11-28. Only defining dimensions and the listed mass and area are taken; every property is recomputed.",
+      "sha256": "sha256:8e9a7ca6fbdef8b3246b5135118b9c7c2d1f4c9b3fd8a6c71c214abc76460dc1"
+    },
+    "am-ipn": {
+      "url": "https://sections.arcelormittal.com/repository2/Sections/Sections_MB_ArcelorMittal_FR_EN_DE_IPN.pdf",
+      "title": "ArcelorMittal Sections and Merchant Bars sales programme, IPN taper flange I sections page (FR/EN/DE)",
+      "edition": "dimensions EN 10365:2017, flange slope 14 %",
+      "accessed": "2026-11-28",
+      "kind": "mill catalogue",
+      "columns": "designation, G, h, b, tw, tf (at b/4 from the flange tip, per its figure), r1, r2, A; slope 14 %",
+      "sha256": "sha256:d42c6469765f3e2d7aafff9173ff5664afff983b8a174ca81c09625e8d6da109"
+    },
+    "bb-hfchs": {
+      "url": "https://www.steelforlifebluebook.co.uk/hfchs/ec3-ukna/section-properties-dimensions-properties",
+      "title": "Steel for Life Blue Book (SCI, Tata Steel Celsius): hot-finished circular hollow sections to EN 10210-2, Eurocode 3 UK NA, v18 data",
+      "edition": "ec3_properties_hfchs_uk-v18.xml",
+      "accessed": "2026-11-28",
+      "kind": "industry body / mill (SCI, BCSA, Tata Steel)",
+      "columns": "size, t, mass, A; no corners",
+      "sha256": "sha256:27ab583133400b29a12bad2fc7193e3670022e44e03e53d7e317c849871778f6"
+    },
+    "bb-hfshs": {
+      "url": "https://www.steelforlifebluebook.co.uk/hfshs/ec3-ukna/section-properties-dimensions-properties",
+      "title": "Steel for Life Blue Book (SCI, Tata Steel Celsius): hot-finished square hollow sections to EN 10210-2, Eurocode 3 UK NA, v18 data",
+      "edition": "ec3_properties_hfshs_uk-v18.xml",
+      "accessed": "2026-11-28",
+      "kind": "industry body / mill (SCI, BCSA, Tata Steel)",
+      "columns": "size, t, mass, A; corner radii not tabulated: ro = 1.5 t, ri = 1.0 t as EN 10210-2 specifies for calculating properties (Blue Book appendix)",
+      "sha256": "sha256:00aba7f616e77913ca5e86b30ff7596d086847884953f873a127859313985d4f"
+    },
+    "bb-hfrhs": {
+      "url": "https://www.steelforlifebluebook.co.uk/hfrhs/ec3-ukna/section-properties-dimensions-properties",
+      "title": "Steel for Life Blue Book (SCI, Tata Steel Celsius): hot-finished rectangular hollow sections to EN 10210-2, Eurocode 3 UK NA, v18 data",
+      "edition": "ec3_properties_hfrhs_uk-v18.xml",
+      "accessed": "2026-11-28",
+      "kind": "industry body / mill (SCI, BCSA, Tata Steel)",
+      "columns": "size, t, mass, A; corner radii not tabulated: ro = 1.5 t, ri = 1.0 t (EN 10210-2, Blue Book appendix)",
+      "sha256": "sha256:3ced8364917f5204242f9640f0aa7c5b12b1895c21fb7f83a9968b2e914fb4a0"
+    },
+    "bb-cfchs": {
+      "url": "https://www.steelforlifebluebook.co.uk/cfchs/ec3-ukna/section-properties-dimensions-properties",
+      "title": "Steel for Life Blue Book (SCI, Tata Steel Hybox): cold-formed circular hollow sections to EN 10219-2, Eurocode 3 UK NA, v18 data",
+      "edition": "ec3_properties_cfchs_uk-v18.xml",
+      "accessed": "2026-11-28",
+      "kind": "industry body / mill (SCI, BCSA, Tata Steel)",
+      "columns": "size, t, mass, A; no corners",
+      "sha256": "sha256:7fe1d610493c2a13776fa2b9928b6c910692791faa4cc4e631e2552c66f9fdc0"
+    },
+    "bb-cfshs": {
+      "url": "https://www.steelforlifebluebook.co.uk/cfshs/ec3-ukna/section-properties-dimensions-properties",
+      "title": "Steel for Life Blue Book (SCI, Tata Steel Hybox): cold-formed square hollow sections to EN 10219-2, Eurocode 3 UK NA, v18 data",
+      "edition": "ec3_properties_cfshs_uk-v18.xml",
+      "accessed": "2026-11-28",
+      "kind": "industry body / mill (SCI, BCSA, Tata Steel)",
+      "columns": "size, t, mass, A; corner radii not tabulated: ro = 2 t (t <= 6), 2.5 t (6 < t <= 10), 3 t (t > 10), ri = ro - t (EN 10219-2 values for calculation)",
+      "sha256": "sha256:c13c0d067e6cbdbe366c1f705db7617a60423552eec1e6654da3e155b0ec8de4"
+    },
+    "bb-cfrhs": {
+      "url": "https://www.steelforlifebluebook.co.uk/cfrhs/ec3-ukna/section-properties-dimensions-properties",
+      "title": "Steel for Life Blue Book (SCI, Tata Steel Hybox): cold-formed rectangular hollow sections to EN 10219-2, Eurocode 3 UK NA, v18 data",
+      "edition": "ec3_properties_cfrhs_uk-v18.xml",
+      "accessed": "2026-11-28",
+      "kind": "industry body / mill (SCI, BCSA, Tata Steel)",
+      "columns": "size, t, mass, A; corner radii as for cold-formed SHS",
+      "sha256": "sha256:8e1eacdaa2945891676d17829e30d1232a58a7367bcb3c6fb112a99bb59fb477"
+    },
+    "bb-ub": {
+      "url": "https://www.steelforlifebluebook.co.uk/ub/ec3-ukna/section-properties-dimensions-properties",
+      "title": "Blue Book UB (BS 4-1)",
+      "accessed": "2026-11-28",
+      "kind": "industry body",
+      "sha256": "sha256:1a8d80ca08dfb15ebc0ba692f5059916393ed6953fb5c0156bd866e7748c3374",
+      "edition": "ec3_properties_ub_uk-v18.xml",
+      "columns": "r1 only (BS 4-1:2005 root radius): the Orange Book lists r = 20 mm for these sizes but its areas follow these radii"
+    },
+    "bb-uc": {
+      "url": "https://www.steelforlifebluebook.co.uk/uc/ec3-ukna/section-properties-dimensions-properties",
+      "title": "Blue Book UC (BS 4-1)",
+      "accessed": "2026-11-28",
+      "kind": "industry body",
+      "sha256": "sha256:04866c1a2ef4d52a2bbc8030d35b3b8ee0e5854eec6dd186de99d0c9dbff24f7",
+      "edition": "ec3_properties_uc_uk-v18.xml",
+      "columns": "r1 only (BS 4-1:2005 root radius): the Orange Book lists r = 20 mm for these sizes but its areas follow these radii"
+    }
+  },
+  "checks": {
+    "en10365-iteh": {
+      "url": "https://cdn.standards.iteh.ai/samples/39756/98dfca1f56144a8582559ebaf18c8619/SIST-EN-10365-2017.pdf",
+      "title": "SIST EN 10365:2017 free preview (iTeh): Table 1 IPE",
+      "accessed": "2026-11-28",
+      "kind": "official preview of the standard",
+      "sha256": "sha256:fc23b19072a4642d0cda9e5bd96ab42877bbd57a94725353ca9425f9d5af9f6a",
+      "note": "States that root and toe radii are not specified by the standard."
+    },
+    "bauforumstahl": {
+      "url": "https://bauforumstahl.de/stahlbau/technische-vorgaben/digitale-stahlbautabellen/stahlprofile",
+      "title": "bauforumstahl e.V. digitale Stahlbautabellen: Stahlprofile",
+      "accessed": "2026-11-28",
+      "kind": "industry body",
+      "sha256": "sha256:71c41aac558cf548f6bfab63b3538ac66be6887ac40e9ae91271b90963d7cd31"
+    },
+    "bb-ub": {
+      "url": "https://www.steelforlifebluebook.co.uk/ub/ec3-ukna/section-properties-dimensions-properties",
+      "title": "Blue Book UB (BS 4-1)",
+      "accessed": "2026-11-28",
+      "kind": "industry body",
+      "sha256": "sha256:1a8d80ca08dfb15ebc0ba692f5059916393ed6953fb5c0156bd866e7748c3374"
+    },
+    "bb-uc": {
+      "url": "https://www.steelforlifebluebook.co.uk/uc/ec3-ukna/section-properties-dimensions-properties",
+      "title": "Blue Book UC (BS 4-1)",
+      "accessed": "2026-11-28",
+      "kind": "industry body",
+      "sha256": "sha256:04866c1a2ef4d52a2bbc8030d35b3b8ee0e5854eec6dd186de99d0c9dbff24f7"
+    },
+    "bb-ubp": {
+      "url": "https://www.steelforlifebluebook.co.uk/ubp/ec3-ukna/section-properties-dimensions-properties",
+      "title": "Blue Book UBP",
+      "accessed": "2026-11-28",
+      "kind": "industry body",
+      "sha256": "sha256:2bb3ca91a929be67a38c0f4a65dcf6cb94408368e3abf7120b6b2e67df6a8fde"
+    },
+    "bb-pfc": {
+      "url": "https://www.steelforlifebluebook.co.uk/pfc/ec3-ukna/section-properties-dimensions-properties",
+      "title": "Blue Book PFC",
+      "accessed": "2026-11-28",
+      "kind": "industry body",
+      "sha256": "sha256:d1d9efe2cea64257b9a5f920d3caa950d63a7ed1fcafce8bef817964694d22dd"
+    },
+    "bb-l-equal": {
+      "url": "https://www.steelforlifebluebook.co.uk/l-equal/ec3-ukna/section-properties-dimensions-properties",
+      "title": "Blue Book equal angles (BS EN 10056-1)",
+      "accessed": "2026-11-28",
+      "kind": "industry body",
+      "sha256": "sha256:4e9abc2bbe16aa867cc66f7b7b41af7c078c7a45529cff38953e46f484dd33d4"
+    },
+    "bb-l-unequal": {
+      "url": "https://www.steelforlifebluebook.co.uk/l-unequal/ec3-ukna/section-properties-dimensions-properties",
+      "title": "Blue Book unequal angles (BS EN 10056-1)",
+      "accessed": "2026-11-28",
+      "kind": "industry body",
+      "sha256": "sha256:3c936c46db38bae74815dce226fcbfd0c23a535428f04ae582aff816364cf2d6"
+    }
+  },
+  "missing": [
+    "EN 10055 equal flange tees: no free source with r1, r2, r3 found yet",
+    "EN 10365 J, U and CH sections: not in the sources used"
+  ]
+}

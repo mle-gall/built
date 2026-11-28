@@ -1,0 +1,73 @@
+{
+  "uid": "dc5d43810c816331",
+  "name": "RHS 60 × 40 × 5 (hot-finished)",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/rhs60x40x5-hf",
+      "family": "rhs",
+      "params": {
+        "height": 60.0,
+        "width": 40.0,
+        "web": 5.0,
+        "radius": 7.5,
+        "inner": 5.0
+      },
+      "catalogue": {
+        "name": "RHS 60 × 40 × 5 (hot-finished)",
+        "series": [
+          [
+            "en/rhs60x40x5-hf",
+            60.0
+          ],
+          [
+            "en/rhs80x40x5-hf",
+            80.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-hfrhs",
+    "source": "https://www.steelforlifebluebook.co.uk/hfrhs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10210-2",
+    "series": "RHS hot-finished"
+  },
+  "section": {
+    "area_cm2": 8.732,
+    "mass_kg_m": 6.854,
+    "iy_cm4": 38.09,
+    "iz_cm4": 19.53,
+    "iu_cm4": 38.09,
+    "iv_cm4": 19.53,
+    "wy_cm3": 12.7,
+    "wz_cm3": 9.77,
+    "centroid_mm": [
+      20.0,
+      30.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 8.73,
+      "mass_kg_m": 6.85
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/rhs60x40x5-hf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:e8b12554df2b84a290914dbf0c44ef15dcd49cd6931f27e365198f211c4bceaf"
+}

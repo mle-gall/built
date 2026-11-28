@@ -1,0 +1,72 @@
+{
+  "uid": "9074230c4991a507",
+  "name": "WT15 × 74",
+  "rev": 3,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/wt15x74",
+      "family": "tee",
+      "params": {
+        "height": 388.62,
+        "width": 266.7,
+        "web": 16.51,
+        "flange": 29.972,
+        "radius": 16.51
+      },
+      "catalogue": {
+        "name": "WT15 × 74",
+        "series": [
+          [
+            "aisc/wt15x74",
+            388.62
+          ]
+        ],
+        "aliases": [
+          "WT15X74"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "WT"
+  },
+  "section": {
+    "area_cm2": 140.318,
+    "mass_kg_m": 110.15,
+    "iy_cm4": 19297.55,
+    "iz_cm4": 4753.32,
+    "iu_cm4": 19297.55,
+    "iv_cm4": 4753.32,
+    "wy_cm3": 662.05,
+    "wz_cm3": 356.45,
+    "centroid_mm": [
+      133.35,
+      291.48
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 140.645,
+      "mass_kg_m": 110.124
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/wt15x74",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:9e4bb944fb2393d295c1cb7a02392265abd4268c7d35ae49943d9c4a01a5abbe"
+}

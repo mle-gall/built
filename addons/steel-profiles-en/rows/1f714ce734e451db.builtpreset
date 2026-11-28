@@ -1,7 +1,7 @@
 {
   "uid": "1f714ce734e451db",
-  "name": "SHS 80 × 80 × 4",
-  "rev": 1,
+  "name": "SHS 80 × 80 × 4 (cold-formed)",
+  "rev": 4,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
   "record": {
@@ -13,17 +13,18 @@
       "library": "en/shs80x4",
       "family": "rhs",
       "params": {
-        "width": 80,
-        "height": 80,
-        "web": 4,
-        "radius": 8
+        "height": 80.0,
+        "width": 80.0,
+        "web": 4.0,
+        "radius": 8.0,
+        "inner": 4.0
       },
       "catalogue": {
-        "name": "SHS 80 × 80 × 4",
+        "name": "SHS 80 × 80 × 4 (cold-formed)",
         "series": [
           [
             "en/shs80x4",
-            80
+            80.0
           ]
         ]
       }
@@ -31,8 +32,30 @@
   },
   "provenance": {
     "created_with": "Built",
-    "source": "https://www.tatasteeluk.com/sites/default/files/pimcore_doc/tata-steel-uk-hybox-technical-guide-en.pdf",
-    "standard": "EN 10219"
+    "status": "provisional",
+    "source_id": "bb-cfshs",
+    "source": "https://www.steelforlifebluebook.co.uk/cfshs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10219-2",
+    "series": "SHS cold-formed"
+  },
+  "section": {
+    "area_cm2": 11.748,
+    "mass_kg_m": 9.222,
+    "iy_cm4": 111.04,
+    "iz_cm4": 111.04,
+    "iu_cm4": 111.04,
+    "iv_cm4": 111.04,
+    "wy_cm3": 27.76,
+    "wz_cm3": 27.76,
+    "centroid_mm": [
+      40.0,
+      40.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 11.7,
+      "mass_kg_m": 9.22
+    }
   },
   "profile_size": true,
   "depends": [
@@ -42,5 +65,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:1555e4e63ac9771046fb583947193548d5483a0b4743946900ba892607ed36b3"
+  "hash": "sha256:4b261a60ed3fda735703d7a863301104ef2144e6d3866047936c8bc970454f10"
 }

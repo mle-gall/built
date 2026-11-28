@@ -1,0 +1,83 @@
+{
+  "uid": "b46bc44d2cb8353c",
+  "name": "Pipe5XXS",
+  "rev": 4,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/pipe5xxs",
+      "family": "chs",
+      "params": {
+        "height": 141.3,
+        "width": 141.3,
+        "web": 19.05
+      },
+      "catalogue": {
+        "name": "Pipe5XXS",
+        "series": [
+          [
+            "aisc/pipe3xxs",
+            88.9
+          ],
+          [
+            "aisc/pipe4xxs",
+            114.3
+          ],
+          [
+            "aisc/pipe5xxs",
+            141.3
+          ],
+          [
+            "aisc/pipe6xxs",
+            168.275
+          ],
+          [
+            "aisc/pipe8xxs",
+            219.075
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A53 (AISC Manual 16th ed.)",
+    "series": "Pipe"
+  },
+  "section": {
+    "area_cm2": 73.162,
+    "mass_kg_m": 57.432,
+    "iy_cm4": 1399.91,
+    "iz_cm4": 1399.91,
+    "iu_cm4": 1399.91,
+    "iv_cm4": 1399.91,
+    "wy_cm3": 198.15,
+    "wz_cm3": 198.15,
+    "centroid_mm": [
+      70.65,
+      70.65
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 69.032,
+      "mass_kg_m": 57.443
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/pipe5xxs",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:7092e15d4c2c6e31d0f6318764f8509d42a9e0159cac07304653600f8bcd6a1b"
+}

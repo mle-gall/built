@@ -1,0 +1,88 @@
+{
+  "uid": "c49dbfb86b19b182",
+  "name": "HE 280 A",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/he280a",
+      "family": "i",
+      "params": {
+        "height": 270.0,
+        "width": 280.0,
+        "web": 8.0,
+        "flange": 13.0,
+        "radius": 24.0
+      },
+      "catalogue": {
+        "name": "HE 280 A",
+        "series": [
+          [
+            "en/he240a",
+            230.0
+          ],
+          [
+            "en/he260a",
+            250.0
+          ],
+          [
+            "en/he280a",
+            270.0
+          ],
+          [
+            "en/he300a",
+            290.0
+          ],
+          [
+            "en/he320a",
+            310.0
+          ]
+        ],
+        "aliases": [
+          "HEA 280"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-he",
+    "source": "https://orangebook.arcelormittal.com/node/16",
+    "standard": "EN 10365",
+    "series": "HE"
+  },
+  "section": {
+    "area_cm2": 97.265,
+    "mass_kg_m": 76.353,
+    "iy_cm4": 13673.36,
+    "iz_cm4": 4762.64,
+    "iu_cm4": 13673.36,
+    "iv_cm4": 4762.64,
+    "wy_cm3": 1012.84,
+    "wz_cm3": 340.19,
+    "centroid_mm": [
+      140.0,
+      135.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 97.3,
+      "mass_kg_m": 76.4
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/he280a",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:39d9274ce9a67d2bbdd1c9fdf979538b7e1d7db592af30b5593f1732c2252ee3"
+}

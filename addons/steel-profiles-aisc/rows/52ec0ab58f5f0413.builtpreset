@@ -1,0 +1,76 @@
+{
+  "uid": "52ec0ab58f5f0413",
+  "name": "W27 × 258",
+  "rev": 3,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/w27x258",
+      "family": "i",
+      "params": {
+        "height": 736.6,
+        "width": 363.22,
+        "web": 24.892,
+        "flange": 44.958,
+        "radius": 20.07
+      },
+      "catalogue": {
+        "name": "W27 × 258",
+        "series": [
+          [
+            "aisc/w18x258",
+            546.1
+          ],
+          [
+            "aisc/w27x258",
+            736.6
+          ]
+        ],
+        "aliases": [
+          "W27X258"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "W"
+  },
+  "section": {
+    "area_cm2": 491.024,
+    "mass_kg_m": 385.453,
+    "iy_cm4": 450744.87,
+    "iz_cm4": 35999.35,
+    "iu_cm4": 450744.87,
+    "iv_cm4": 35999.35,
+    "wy_cm3": 12238.52,
+    "wz_cm3": 1982.23,
+    "centroid_mm": [
+      181.61,
+      368.3
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 490.967,
+      "mass_kg_m": 383.946
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/w27x258",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:507bf255b1e9b0463ffaaf9e45348c28057c3e6c2fce8e47f24a17c997c1295e"
+}

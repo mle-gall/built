@@ -1,0 +1,77 @@
+{
+  "uid": "27f78567cf296d26",
+  "name": "L 250 × 90 × 14",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/l250x90x14",
+      "family": "angle",
+      "params": {
+        "height": 250.0,
+        "width": 90.0,
+        "web": 14.0,
+        "radius": 18.0,
+        "toe": 9.0
+      },
+      "catalogue": {
+        "name": "L 250 × 90 × 14",
+        "series": [
+          [
+            "en/l130x90x14",
+            130.0
+          ],
+          [
+            "en/l140x90x14",
+            140.0
+          ],
+          [
+            "en/l250x90x14",
+            250.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-l-unequal",
+    "source": "https://orangebook.arcelormittal.com/node/225",
+    "standard": "EN 10056-1",
+    "series": "L unequal"
+  },
+  "section": {
+    "area_cm2": 45.988,
+    "mass_kg_m": 36.1,
+    "iy_cm4": 2951.72,
+    "iz_cm4": 213.51,
+    "iu_cm4": 3015.24,
+    "iv_cm4": 150.0,
+    "wy_cm3": 191.72,
+    "wz_cm3": 29.35,
+    "centroid_mm": [
+      17.25,
+      96.04
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 46.0,
+      "mass_kg_m": 36.1
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/l250x90x14",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:ddc08e0b0d92cb4a2ee4f14fad2943e3be9df2d3d770f00ecefc85e65be1c61e"
+}

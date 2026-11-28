@@ -1899,6 +1899,17 @@ fn profile_sketch<'p>(py: Python<'p>, key: &Obj<'p>) -> PyResult<Obj<'p>> {
         None => Ok(py.None().into_bound(py)),
     }
 }
+/// The section properties (mm, mm², mm⁴, mm³) of a parametric profile,
+/// `{"family", "params"}` or a catalogue `{"library"}` key, drawn with
+/// `segments` facets per full turn: what the profile packs' generator and
+/// validation compute instead of copying tabulated values.
+#[pyfunction(signature = (profile, segments=512))]
+fn profile_properties<'p>(profile: &Obj<'p>, segments: usize) -> PyResult<Obj<'p>> {
+    let p: profile::Profile = json(profile)?;
+    let outline = p.outline(segments).map_err(PyValueError::new_err)?;
+    let props = outline.properties();
+    to_py(profile.py(), &serde_json::to_value(props).map_err(|e| PyValueError::new_err(e.to_string()))?)
+}
 #[pyfunction]
 fn live_release<'p>(history: &Obj<'p>, uid: String) -> PyResult<Bound<'p, PyDict>> {
     edit(history, Edit::Release(uid))
@@ -1988,6 +1999,7 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(sketch_scene::sketch_context, m)?)?;
     m.add_function(wrap_pyfunction!(live_release, m)?)?;
     m.add_function(wrap_pyfunction!(profile_sketch, m)?)?;
+    m.add_function(wrap_pyfunction!(profile_properties, m)?)?;
     m.add_function(wrap_pyfunction!(live_reevaluate, m)?)?;
     m.add_function(wrap_pyfunction!(live_rows, m)?)
 }

@@ -1,0 +1,17 @@
+designation,h,b,tw,tf,r1,r2,slope,mass,area,status,source
+PFC 430 x 100 x 64,430,100,11,19,15,0,0,64.4,82.1,provisional,ob-pfc
+PFC 380 x 100 x 54,380,100,9.5,17.5,15,0,0,54,68.7,provisional,ob-pfc
+PFC 300 x 100 x 46,300,100,9,16.5,15,0,0,45.5,58,provisional,ob-pfc
+PFC 300 x 90 x 41,300,90,9,15.5,12,0,0,41.4,52.7,provisional,ob-pfc
+PFC 260 x 90 x 35,260,90,8,14,12,0,0,34.8,44.4,provisional,ob-pfc
+PFC 260 x 75 x 28,260,75,7,12,12,0,0,27.6,35.1,provisional,ob-pfc
+PFC 230 x 90 x 32,230,90,7.5,14,12,0,0,32.2,41,provisional,ob-pfc
+PFC 230 x 75 x 26,230,75,6.5,12.5,12,0,0,25.7,32.7,provisional,ob-pfc
+PFC 200 x 90 x 30,200,90,7,14,12,0,0,29.7,37.9,provisional,ob-pfc
+PFC 200 x 75 x 23,200,75,6,12.5,12,0,0,23.4,29.9,provisional,ob-pfc
+PFC 180 x 90 x 26,180,90,6.5,12.5,12,0,0,26.1,33.2,provisional,ob-pfc
+PFC 180 x 75 x 20,180,75,6,10.5,12,0,0,20.3,25.9,provisional,ob-pfc
+PFC 150 x 90 x 24,150,90,6.5,12,12,0,0,23.9,30.4,provisional,ob-pfc
+PFC 150 x 75 x 18,150,75,5.5,10,12,0,0,17.9,22.8,provisional,ob-pfc
+PFC 125 x 65 x 15,125,65,5.5,9.5,12,0,0,14.8,18.8,provisional,ob-pfc
+PFC 100 x 50 x 10,100,50,5,8.5,9,0,0,10.2,13,provisional,ob-pfc

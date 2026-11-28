@@ -1,0 +1,90 @@
+{
+  "uid": "d46d4601128bb7d6",
+  "name": "ISHB 225",
+  "rev": 2,
+  "pack": "Steel profiles · IS",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "is/ishb225",
+      "family": "i",
+      "params": {
+        "height": 225.0,
+        "width": 225.0,
+        "web": 6.5,
+        "flange": 9.1,
+        "radius": 10.0,
+        "toe": 5.0,
+        "slope": 6.99
+      },
+      "catalogue": {
+        "name": "ISHB 225",
+        "series": [
+          [
+            "is/ishb150",
+            150.0
+          ],
+          [
+            "is/ishb200",
+            200.0
+          ],
+          [
+            "is/ishb225",
+            225.0
+          ],
+          [
+            "is/ishb250",
+            250.0
+          ],
+          [
+            "is/ishb300",
+            300.0
+          ]
+        ],
+        "aliases": [
+          "HB 225"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "is808-1989",
+    "source": "https://law.resource.org/pub/in/bis/S03/is.808.1989.pdf",
+    "standard": "IS 808",
+    "series": "ISHB"
+  },
+  "section": {
+    "area_cm2": 54.938,
+    "mass_kg_m": 43.126,
+    "iy_cm4": 5280.08,
+    "iz_cm4": 1353.98,
+    "iu_cm4": 5280.08,
+    "iv_cm4": 1353.98,
+    "wy_cm3": 469.34,
+    "wz_cm3": 120.35,
+    "centroid_mm": [
+      112.5,
+      112.5
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 54.9,
+      "mass_kg_m": 43.1
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "is/ishb225",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:5fea3b6b5f513e7d73f5a68c6a6eb754f7809ffe4cf4b5a6ea91db77bb1bdd7a"
+}

@@ -1,0 +1,69 @@
+{
+  "uid": "e09916f46d4e0210",
+  "name": "UB 1100 × 400 × 390",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/ub1100x400x390",
+      "family": "i",
+      "params": {
+        "height": 1100.0,
+        "width": 400.0,
+        "web": 20.0,
+        "flange": 36.0,
+        "radius": 30.0
+      },
+      "catalogue": {
+        "name": "UB 1100 × 400 × 390",
+        "series": [
+          [
+            "en/ub1100x400x390",
+            1100.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-ub",
+    "source": "https://orangebook.arcelormittal.com/node/35",
+    "standard": "EN 10365",
+    "series": "UB"
+  },
+  "section": {
+    "area_cm2": 501.326,
+    "mass_kg_m": 393.541,
+    "iy_cm4": 1016368.9,
+    "iz_cm4": 38492.53,
+    "iu_cm4": 1016368.9,
+    "iv_cm4": 38492.53,
+    "wy_cm3": 18479.43,
+    "wz_cm3": 1924.63,
+    "centroid_mm": [
+      200.0,
+      550.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 501.0,
+      "mass_kg_m": 390.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/ub1100x400x390",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:ebb3f3822eec8122eb1c0c5553481a0b310a1e9d63faa716c4c0b72c794e0ba1"
+}

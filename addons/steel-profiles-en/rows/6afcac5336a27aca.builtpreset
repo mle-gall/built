@@ -1,0 +1,69 @@
+{
+  "uid": "6afcac5336a27aca",
+  "name": "L 30 × 30 × 4",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/l30x30x4",
+      "family": "angle",
+      "params": {
+        "height": 30.0,
+        "width": 30.0,
+        "web": 4.0,
+        "radius": 5.0,
+        "toe": 2.5
+      },
+      "catalogue": {
+        "name": "L 30 × 30 × 4",
+        "series": [
+          [
+            "en/l30x30x4",
+            30.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-l-equal",
+    "source": "https://orangebook.arcelormittal.com/node/220",
+    "standard": "EN 10056-1",
+    "series": "L equal"
+  },
+  "section": {
+    "area_cm2": 2.267,
+    "mass_kg_m": 1.779,
+    "iy_cm4": 1.8,
+    "iz_cm4": 1.8,
+    "iu_cm4": 2.85,
+    "iv_cm4": 0.75,
+    "wy_cm3": 0.85,
+    "wz_cm3": 0.85,
+    "centroid_mm": [
+      8.78,
+      8.78
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 2.27,
+      "mass_kg_m": 1.78
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/l30x30x4",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:3db09e5aef7bf04f01686c68a2f563cf09046f6181210ab7bb3256970b555613"
+}

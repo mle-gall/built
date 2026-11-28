@@ -1,0 +1,73 @@
+{
+  "uid": "ebf09666cb1c5e75",
+  "name": "ST7.5 × 21.45",
+  "rev": 3,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/st7.5x21.45",
+      "family": "tee",
+      "params": {
+        "height": 190.5,
+        "width": 139.7,
+        "web": 10.439,
+        "flange": 15.799,
+        "radius": 13.87,
+        "slope": 16.67
+      },
+      "catalogue": {
+        "name": "ST7.5 × 21.45",
+        "series": [
+          [
+            "aisc/st7.5x21.45",
+            190.5
+          ]
+        ],
+        "aliases": [
+          "ST7.5X21.45"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "ST"
+  },
+  "section": {
+    "area_cm2": 40.863,
+    "mass_kg_m": 32.078,
+    "iy_cm4": 1374.26,
+    "iz_cm4": 304.66,
+    "iu_cm4": 1374.26,
+    "iv_cm4": 304.66,
+    "wy_cm3": 98.35,
+    "wz_cm3": 43.62,
+    "centroid_mm": [
+      69.85,
+      139.73
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 40.645,
+      "mass_kg_m": 31.921
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/st7.5x21.45",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:5501921044e3e73123bf8c30f0c23768a01deb577681f38fe7a2ac88c63c3afc"
+}

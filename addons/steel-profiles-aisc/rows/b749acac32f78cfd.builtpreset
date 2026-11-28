@@ -1,0 +1,72 @@
+{
+  "uid": "b749acac32f78cfd",
+  "name": "W14 × 74",
+  "rev": 3,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/w14x74",
+      "family": "i",
+      "params": {
+        "height": 360.68,
+        "width": 256.54,
+        "web": 11.43,
+        "flange": 19.939,
+        "radius": 15.11
+      },
+      "catalogue": {
+        "name": "W14 × 74",
+        "series": [
+          [
+            "aisc/w14x74",
+            360.68
+          ]
+        ],
+        "aliases": [
+          "W14X74"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "W"
+  },
+  "section": {
+    "area_cm2": 140.931,
+    "mass_kg_m": 110.631,
+    "iy_cm4": 33356.6,
+    "iz_cm4": 5616.47,
+    "iu_cm4": 33356.6,
+    "iv_cm4": 5616.47,
+    "wy_cm3": 1849.65,
+    "wz_cm3": 437.86,
+    "centroid_mm": [
+      128.27,
+      180.34
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 140.645,
+      "mass_kg_m": 110.124
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/w14x74",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:c079342af4e55355410bac9d612dc5c8fb8de21df95e909cf570988fdcb10acb"
+}

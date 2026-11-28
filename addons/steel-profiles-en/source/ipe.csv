@@ -1,0 +1,69 @@
+designation,h,b,tw,tf,r1,r2,slope,mass,area,status,source
+IPE 750 x 220,779,266,16.5,30,17,0,0,220,281,provisional,ob-ipe
+IPE 750 x 196,770,268,15.6,25.4,17,0,0,196,251,provisional,ob-ipe
+IPE 750 x 173,762,267,14.4,21.6,17,0,0,173,221,provisional,ob-ipe
+IPE 750 x 147,753,265,13.2,17,17,0,0,147,188,provisional,ob-ipe
+IPE 750 x 134,750,264,12,15.5,17,0,0,134,171,provisional,ob-ipe
+IPE V 600,618,228,18,28,24,0,0,184,234,provisional,ob-ipe
+IPE O 600,610,224,15,24,24,0,0,154,197,provisional,ob-ipe
+IPE 600,600,220,12,19,24,0,0,122,156,provisional,ob-ipe
+IPE A 600,597,220,9.8,17.5,24,0,0,108,137,provisional,ob-ipe
+IPE V 550,566,216,17.1,25.2,24,0,0,159,202,provisional,ob-ipe
+IPE O 550,556,212,12.7,20.2,24,0,0,123,156,provisional,ob-ipe
+IPE 550,550,210,11.1,17.2,24,0,0,106,134,provisional,ob-ipe
+IPE A 550,547,210,9,15.7,24,0,0,92.1,117,provisional,ob-ipe
+IPE V 500,514,204,14.2,23,21,0,0,129,164,provisional,ob-ipe
+IPE O 500,506,202,12,19,21,0,0,107,137,provisional,ob-ipe
+IPE 500,500,200,10.2,16,21,0,0,90.7,116,provisional,ob-ipe
+IPE A 500,497,200,8.4,14.5,21,0,0,79.4,101,provisional,ob-ipe
+IPE V 450,460,194,12.4,19.6,21,0,0,107,132,provisional,ob-ipe
+IPE O 450,456,192,11,17.6,21,0,0,92.4,118,provisional,ob-ipe
+IPE 450,450,190,9.4,14.6,21,0,0,77.6,98.8,provisional,ob-ipe
+IPE A 450,447,190,7.6,13.1,21,0,0,67.2,85.6,provisional,ob-ipe
+IPE V 400,408,182,10.6,17.5,21,0,0,84,107,provisional,ob-ipe
+IPE O 400,404,182,9.7,15.5,21,0,0,75.7,96.4,provisional,ob-ipe
+IPE 400,400,180,8.6,13.5,21,0,0,66.3,84.5,provisional,ob-ipe
+IPE A 400,397,180,7,12,21,0,0,57.4,73.1,provisional,ob-ipe
+IPE O 360,364,172,9.2,14.7,18,0,0,66,84.1,provisional,ob-ipe
+IPE 360,360,170,8,12.7,18,0,0,57.1,72.7,provisional,ob-ipe
+IPE A 360,357.6,170,6.6,11.5,18,0,0,50.2,64,provisional,ob-ipe
+IPE O 330,334,162,8.5,13.5,18,0,0,57,72.6,provisional,ob-ipe
+IPE 330,330,160,7.5,11.5,18,0,0,49.1,62.6,provisional,ob-ipe
+IPE A 330,327,160,6.5,10,18,0,0,43,54.7,provisional,ob-ipe
+IPE O 300,304,152,8,12.7,15,0,0,49.3,62.8,provisional,ob-ipe
+IPE 300,300,150,7.1,10.7,15,0,0,42.2,53.8,provisional,ob-ipe
+IPE A 300,297,150,6.1,9.2,15,0,0,36.5,46.5,provisional,ob-ipe
+IPE O 270,274,136,7.5,12.2,15,0,0,42.3,53.8,provisional,ob-ipe
+IPE 270,270,135,6.6,10.2,15,0,0,36.1,45.9,provisional,ob-ipe
+IPE A 270,267,135,5.5,8.7,15,0,0,30.7,39.2,provisional,ob-ipe
+IPE O 240,242,122,7,10.8,15,0,0,34.3,43.7,provisional,ob-ipe
+IPE 240,240,120,6.2,9.8,15,0,0,30.7,39.1,provisional,ob-ipe
+IPE A 240,237,120,5.2,8.3,15,0,0,26.2,33.3,provisional,ob-ipe
+IPE AA 240,236.4,120,4.8,8,15,0,0,24.9,31.7,provisional,ob-ipe
+IPE O 220,222,112,6.6,10.2,12,0,0,29.4,37.4,provisional,ob-ipe
+IPE 220,220,110,5.9,9.2,12,0,0,26.2,33.4,provisional,ob-ipe
+IPE A 220,217,110,5,7.7,12,0,0,22.2,28.3,provisional,ob-ipe
+IPE AA 220,216.4,110,4.7,7.4,12,0,0,21.2,27,provisional,ob-ipe
+IPE O 200,202,102,6.2,9.5,12,0,0,25.1,32,provisional,ob-ipe
+IPE 200,200,100,5.6,8.5,12,0,0,22.4,28.5,provisional,ob-ipe
+IPE A 200,197,100,4.5,7,12,0,0,18.4,23.5,provisional,ob-ipe
+IPE AA 200,196.4,100,4.5,6.7,12,0,0,18,22.9,provisional,ob-ipe
+IPE O 180,182,92,6,9,9,0,0,21.3,27.1,provisional,ob-ipe
+IPE 180,180,91,5.3,8,9,0,0,18.8,23.9,provisional,ob-ipe
+IPE A 180,177,91,4.3,6.5,9,0,0,15.4,19.6,provisional,ob-ipe
+IPE AA 180,176.4,91,4.3,6.2,9,0,0,14.9,19,provisional,ob-ipe
+IPE 160,160,82,5,7.4,9,0,0,15.8,20.1,provisional,ob-ipe
+IPE A 160,157,82,4,5.9,9,0,0,12.7,16.2,provisional,ob-ipe
+IPE AA 160,156.4,82,4,5.6,9,0,0,12.3,15.7,provisional,ob-ipe
+IPE 140,140,73,4.7,6.9,7,0,0,12.9,16.4,provisional,ob-ipe
+IPE A 140,137.4,73,3.8,5.6,7,0,0,10.5,13.4,provisional,ob-ipe
+IPE AA 140,136.6,73,3.8,5.2,7,0,0,10.1,12.8,provisional,ob-ipe
+IPE 120,120,64,4.4,6.3,7,0,0,10.4,13.2,provisional,ob-ipe
+IPE A 120,117.6,64,3.8,5.1,7,0,0,8.7,11,provisional,ob-ipe
+IPE AA 120,117,64,3.8,4.8,7,0,0,8.4,10.7,provisional,ob-ipe
+IPE 100,100,55,4.1,5.7,7,0,0,8.1,10.3,provisional,ob-ipe
+IPE A 100,98,55,3.6,4.7,7,0,0,6.9,8.8,provisional,ob-ipe
+IPE AA 100,97.6,55,3.6,4.5,7,0,0,6.7,8.6,provisional,ob-ipe
+IPE 80,80,46,3.8,5.2,5,0,0,6,7.6,provisional,ob-ipe
+IPE A 80,78,46,3.3,4.2,5,0,0,5,6.4,provisional,ob-ipe
+IPE AA 80,78,46,3.2,4.2,5,0,0,4.9,6.3,provisional,ob-ipe

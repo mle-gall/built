@@ -1,0 +1,76 @@
+{
+  "uid": "95716102664ef01f",
+  "name": "WT18 × 131",
+  "rev": 3,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/wt18x131",
+      "family": "tee",
+      "params": {
+        "height": 467.36,
+        "width": 421.64,
+        "web": 21.336,
+        "flange": 36.576,
+        "radius": 24.13
+      },
+      "catalogue": {
+        "name": "WT18 × 131",
+        "series": [
+          [
+            "aisc/wt18x131",
+            467.36
+          ],
+          [
+            "aisc/wt22x131",
+            551.18
+          ]
+        ],
+        "aliases": [
+          "WT18X131"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "WT"
+  },
+  "section": {
+    "area_cm2": 248.63,
+    "mass_kg_m": 195.175,
+    "iy_cm4": 45933.85,
+    "iz_cm4": 22889.41,
+    "iu_cm4": 45933.85,
+    "iv_cm4": 22889.41,
+    "wy_cm3": 1267.32,
+    "wz_cm3": 1085.73,
+    "centroid_mm": [
+      210.82,
+      362.45
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 248.387,
+      "mass_kg_m": 194.949
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/wt18x131",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:e2df09e7341fa45caa4a9ff7fb4be4cf52fb67d5442fa70d735295652930c6ce"
+}

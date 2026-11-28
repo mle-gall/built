@@ -1,0 +1,72 @@
+{
+  "uid": "435f918d79d50e7c",
+  "name": "W36 × 723",
+  "rev": 3,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/w36x723",
+      "family": "i",
+      "params": {
+        "height": 1061.72,
+        "width": 452.12,
+        "web": 55.118,
+        "flange": 99.06,
+        "radius": 19.05
+      },
+      "catalogue": {
+        "name": "W36 × 723",
+        "series": [
+          [
+            "aisc/w36x723",
+            1061.72
+          ]
+        ],
+        "aliases": [
+          "W36X723"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "W"
+  },
+  "section": {
+    "area_cm2": 1374.855,
+    "mass_kg_m": 1079.261,
+    "iy_cm4": 2384093.45,
+    "iz_cm4": 153820.73,
+    "iu_cm4": 2384093.45,
+    "iv_cm4": 153820.73,
+    "wy_cm3": 44910.02,
+    "wz_cm3": 6804.42,
+    "centroid_mm": [
+      226.06,
+      530.86
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 1374.19,
+      "mass_kg_m": 1075.94
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/w36x723",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:f025be8e1f5be22226b81bdcf0e7cd5eb7263a068ab892cd31a5b481e2e47f49"
+}

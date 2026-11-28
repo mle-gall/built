@@ -1,0 +1,69 @@
+{
+  "uid": "d29c3c978b3caf4b",
+  "name": "SHS 140 × 140 × 5 (cold-formed)",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/shs140x140x5-cf",
+      "family": "rhs",
+      "params": {
+        "height": 140.0,
+        "width": 140.0,
+        "web": 5.0,
+        "radius": 10.0,
+        "inner": 5.0
+      },
+      "catalogue": {
+        "name": "SHS 140 × 140 × 5 (cold-formed)",
+        "series": [
+          [
+            "en/shs140x140x5-cf",
+            140.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-cfshs",
+    "source": "https://www.steelforlifebluebook.co.uk/cfshs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10219-2",
+    "series": "SHS cold-formed"
+  },
+  "section": {
+    "area_cm2": 26.356,
+    "mass_kg_m": 20.69,
+    "iy_cm4": 790.56,
+    "iz_cm4": 790.56,
+    "iu_cm4": 790.56,
+    "iv_cm4": 790.56,
+    "wy_cm3": 112.94,
+    "wz_cm3": 112.94,
+    "centroid_mm": [
+      70.0,
+      70.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 26.4,
+      "mass_kg_m": 20.7
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/shs140x140x5-cf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:8db5c07faa930e4eefeeac8bbf62131469ff5b9eff896cca0b19efb07762692c"
+}

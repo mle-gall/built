@@ -1,0 +1,73 @@
+{
+  "uid": "5cd2c9880259699d",
+  "name": "RHS 100 × 60 × 5 (hot-finished)",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/rhs100x60x5-hf",
+      "family": "rhs",
+      "params": {
+        "height": 100.0,
+        "width": 60.0,
+        "web": 5.0,
+        "radius": 7.5,
+        "inner": 5.0
+      },
+      "catalogue": {
+        "name": "RHS 100 × 60 × 5 (hot-finished)",
+        "series": [
+          [
+            "en/rhs100x60x5-hf",
+            100.0
+          ],
+          [
+            "en/rhs120x60x5-hf",
+            120.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-hfrhs",
+    "source": "https://www.steelforlifebluebook.co.uk/hfrhs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10210-2",
+    "series": "RHS hot-finished"
+  },
+  "section": {
+    "area_cm2": 14.732,
+    "mass_kg_m": 11.564,
+    "iy_cm4": 189.1,
+    "iz_cm4": 83.59,
+    "iu_cm4": 189.1,
+    "iv_cm4": 83.59,
+    "wy_cm3": 37.82,
+    "wz_cm3": 27.86,
+    "centroid_mm": [
+      30.0,
+      50.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 14.7,
+      "mass_kg_m": 11.6
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/rhs100x60x5-hf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:097cbd006d6ba12da438fab4550ffdb9c6739c7097dbe762196374142af72e73"
+}

@@ -1,0 +1,73 @@
+{
+  "uid": "db83ce1a3772b6b0",
+  "name": "S20 × 75",
+  "rev": 3,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/s20x75",
+      "family": "i",
+      "params": {
+        "height": 508.0,
+        "width": 162.306,
+        "web": 16.129,
+        "flange": 20.193,
+        "radius": 15.12,
+        "slope": 16.67
+      },
+      "catalogue": {
+        "name": "S20 × 75",
+        "series": [
+          [
+            "aisc/s20x75",
+            508.0
+          ]
+        ],
+        "aliases": [
+          "S20X75"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "S"
+  },
+  "section": {
+    "area_cm2": 142.29,
+    "mass_kg_m": 111.698,
+    "iy_cm4": 53345.68,
+    "iz_cm4": 1263.39,
+    "iu_cm4": 53345.68,
+    "iv_cm4": 1263.39,
+    "wy_cm3": 2100.22,
+    "wz_cm3": 155.68,
+    "centroid_mm": [
+      81.15,
+      254.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 141.935,
+      "mass_kg_m": 111.612
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/s20x75",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:41b20e56dc2cb6161116d1f94adbfac08099a8ae3ee81a13aa245dc4aa382aa5"
+}

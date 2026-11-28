@@ -1,0 +1,77 @@
+{
+  "uid": "9c6bbce88076c925",
+  "name": "RHS 120 × 60 × 3.5 (cold-formed)",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/rhs120x60x3.5-cf",
+      "family": "rhs",
+      "params": {
+        "height": 120.0,
+        "width": 60.0,
+        "web": 3.5,
+        "radius": 7.0,
+        "inner": 3.5
+      },
+      "catalogue": {
+        "name": "RHS 120 × 60 × 3.5 (cold-formed)",
+        "series": [
+          [
+            "en/rhs80x60x3.5-cf",
+            80.0
+          ],
+          [
+            "en/rhs100x60x3.5-cf",
+            100.0
+          ],
+          [
+            "en/rhs120x60x3.5-cf",
+            120.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-cfrhs",
+    "source": "https://www.steelforlifebluebook.co.uk/cfrhs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10219-2",
+    "series": "RHS cold-formed"
+  },
+  "section": {
+    "area_cm2": 11.795,
+    "mass_kg_m": 9.259,
+    "iy_cm4": 215.61,
+    "iz_cm4": 73.09,
+    "iu_cm4": 215.61,
+    "iv_cm4": 73.09,
+    "wy_cm3": 35.94,
+    "wz_cm3": 24.36,
+    "centroid_mm": [
+      30.0,
+      60.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 11.8,
+      "mass_kg_m": 9.26
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/rhs120x60x3.5-cf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:65f985a000e3c25a0cfcdbcc5e9afd2a6ed43d237032764b52e5dfc1eb05fcf0"
+}

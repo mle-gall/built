@@ -1,0 +1,69 @@
+{
+  "uid": "d65530020ee67967",
+  "name": "SHS 150 × 150 × 12.5 (hot-finished)",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/shs150x150x12.5-hf",
+      "family": "rhs",
+      "params": {
+        "height": 150.0,
+        "width": 150.0,
+        "web": 12.5,
+        "radius": 18.75,
+        "inner": 12.5
+      },
+      "catalogue": {
+        "name": "SHS 150 × 150 × 12.5 (hot-finished)",
+        "series": [
+          [
+            "en/shs150x150x12.5-hf",
+            150.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-hfshs",
+    "source": "https://www.steelforlifebluebook.co.uk/hfshs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10210-2",
+    "series": "SHS hot-finished"
+  },
+  "section": {
+    "area_cm2": 67.073,
+    "mass_kg_m": 52.653,
+    "iy_cm4": 2080.43,
+    "iz_cm4": 2080.43,
+    "iu_cm4": 2080.43,
+    "iv_cm4": 2080.43,
+    "wy_cm3": 277.39,
+    "wz_cm3": 277.39,
+    "centroid_mm": [
+      75.0,
+      75.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 67.1,
+      "mass_kg_m": 52.7
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/shs150x150x12.5-hf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:0d040eff9d863c881695eb76987541d31f36b652d1565f9d5cdc8e26eedb85bf"
+}

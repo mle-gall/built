@@ -1,0 +1,73 @@
+{
+  "uid": "459f185c928d1272",
+  "name": "RHS 300 × 200 × 8 (cold-formed)",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/rhs300x200x8-cf",
+      "family": "rhs",
+      "params": {
+        "height": 300.0,
+        "width": 200.0,
+        "web": 8.0,
+        "radius": 20.0,
+        "inner": 12.0
+      },
+      "catalogue": {
+        "name": "RHS 300 × 200 × 8 (cold-formed)",
+        "series": [
+          [
+            "en/rhs300x200x8-cf",
+            300.0
+          ],
+          [
+            "en/rhs400x200x8-cf",
+            400.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-cfrhs",
+    "source": "https://www.steelforlifebluebook.co.uk/cfrhs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10219-2",
+    "series": "RHS cold-formed"
+  },
+  "section": {
+    "area_cm2": 75.242,
+    "mass_kg_m": 59.065,
+    "iy_cm4": 9389.23,
+    "iz_cm4": 5041.65,
+    "iu_cm4": 9389.23,
+    "iv_cm4": 5041.65,
+    "wy_cm3": 625.95,
+    "wz_cm3": 504.16,
+    "centroid_mm": [
+      100.0,
+      150.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 75.2,
+      "mass_kg_m": 59.1
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/rhs300x200x8-cf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:3f71fd18ec39804ff2f7332f65f2c7d79255d3892cc62b9fa6ad47c2e9f27320"
+}

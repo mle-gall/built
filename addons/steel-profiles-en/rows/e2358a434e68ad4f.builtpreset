@@ -1,0 +1,77 @@
+{
+  "uid": "e2358a434e68ad4f",
+  "name": "RHS 400 × 200 × 8 (hot-finished)",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/rhs400x200x8-hf",
+      "family": "rhs",
+      "params": {
+        "height": 400.0,
+        "width": 200.0,
+        "web": 8.0,
+        "radius": 12.0,
+        "inner": 8.0
+      },
+      "catalogue": {
+        "name": "RHS 400 × 200 × 8 (hot-finished)",
+        "series": [
+          [
+            "en/rhs300x200x8-hf",
+            300.0
+          ],
+          [
+            "en/rhs400x200x8-hf",
+            400.0
+          ],
+          [
+            "en/rhs500x200x8-hf",
+            500.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-hfrhs",
+    "source": "https://www.steelforlifebluebook.co.uk/hfrhs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10210-2",
+    "series": "RHS hot-finished"
+  },
+  "section": {
+    "area_cm2": 92.753,
+    "mass_kg_m": 72.811,
+    "iy_cm4": 19561.99,
+    "iz_cm4": 6659.84,
+    "iu_cm4": 19561.99,
+    "iv_cm4": 6659.84,
+    "wy_cm3": 978.1,
+    "wz_cm3": 665.98,
+    "centroid_mm": [
+      100.0,
+      200.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 92.8,
+      "mass_kg_m": 72.8
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/rhs400x200x8-hf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:3d67ff4592c56c5a83f60b5170c43f701b49ebf10cd1c886409d543cc7fb0bb2"
+}

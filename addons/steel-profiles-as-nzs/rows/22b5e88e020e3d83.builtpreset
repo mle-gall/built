@@ -1,0 +1,75 @@
+{
+  "uid": "22b5e88e020e3d83",
+  "name": "100 TFB",
+  "rev": 2,
+  "pack": "Steel profiles · AS/NZS",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "as-nzs/100tfb",
+      "family": "i",
+      "params": {
+        "height": 100.0,
+        "width": 45.0,
+        "web": 4.0,
+        "flange": 6.0,
+        "radius": 7.0,
+        "toe": 3.0,
+        "slope": 14.05
+      },
+      "catalogue": {
+        "name": "100 TFB",
+        "series": [
+          [
+            "as-nzs/100tfb",
+            100.0
+          ],
+          [
+            "as-nzs/125tfb",
+            125.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ib-hrssp9",
+    "source": "https://www.infrabuild.com/wp-content/uploads/sites/8/2022/02/Hot20Rolled20Cat_Edition9_2019.pdf",
+    "standard": "AS/NZS 3679.1",
+    "series": "TFB"
+  },
+  "section": {
+    "area_cm2": 9.166,
+    "mass_kg_m": 7.195,
+    "iy_cm4": 145.92,
+    "iz_cm4": 7.94,
+    "iu_cm4": 145.92,
+    "iv_cm4": 7.94,
+    "wy_cm3": 29.18,
+    "wz_cm3": 3.53,
+    "centroid_mm": [
+      22.5,
+      50.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 9.17,
+      "mass_kg_m": 7.2
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "as-nzs/100tfb",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:7965d09d5d1a770b29f1af6791a8fb9515a81a26915c9a4b924cc381d0977147"
+}

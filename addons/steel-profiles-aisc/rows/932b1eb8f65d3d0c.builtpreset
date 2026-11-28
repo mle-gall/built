@@ -1,0 +1,77 @@
+{
+  "uid": "932b1eb8f65d3d0c",
+  "name": "S15 × 50",
+  "rev": 3,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/s15x50",
+      "family": "i",
+      "params": {
+        "height": 381.0,
+        "width": 143.256,
+        "web": 13.97,
+        "flange": 15.799,
+        "radius": 13.87,
+        "slope": 16.67
+      },
+      "catalogue": {
+        "name": "S15 × 50",
+        "series": [
+          [
+            "aisc/s12x50",
+            304.8
+          ],
+          [
+            "aisc/s15x50",
+            381.0
+          ]
+        ],
+        "aliases": [
+          "S15X50"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "S"
+  },
+  "section": {
+    "area_cm2": 95.188,
+    "mass_kg_m": 74.723,
+    "iy_cm4": 20334.95,
+    "iz_cm4": 665.13,
+    "iu_cm4": 20334.95,
+    "iv_cm4": 665.13,
+    "wy_cm3": 1067.45,
+    "wz_cm3": 92.86,
+    "centroid_mm": [
+      71.63,
+      190.5
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 94.839,
+      "mass_kg_m": 74.408
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/s15x50",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:f82b14c2b5d574b97fea691a3aa8d9b1fc93409854e0a632e25df635c83a1a2a"
+}

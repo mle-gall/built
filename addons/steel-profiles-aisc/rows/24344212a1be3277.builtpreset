@@ -1,0 +1,72 @@
+{
+  "uid": "24344212a1be3277",
+  "name": "MC12 × 50",
+  "rev": 3,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/mc12x50",
+      "family": "channel",
+      "params": {
+        "height": 304.8,
+        "width": 105.156,
+        "web": 21.209,
+        "flange": 17.78,
+        "radius": 15.49
+      },
+      "catalogue": {
+        "name": "MC12 × 50",
+        "series": [
+          [
+            "aisc/mc12x50",
+            304.8
+          ]
+        ],
+        "aliases": [
+          "MC12X50"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "MC"
+  },
+  "section": {
+    "area_cm2": 95.527,
+    "mass_kg_m": 74.988,
+    "iy_cm4": 11337.86,
+    "iz_cm4": 764.23,
+    "iu_cm4": 11337.86,
+    "iv_cm4": 764.23,
+    "wy_cm3": 743.95,
+    "wz_cm3": 98.02,
+    "centroid_mm": [
+      27.19,
+      152.4
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 94.839,
+      "mass_kg_m": 74.408
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/mc12x50",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:44186f862a62e77b18cc2a34b7c7ff8604d2fe124e3982fc53af529670bf5807"
+}

@@ -1,0 +1,72 @@
+{
+  "uid": "789f9aaeb93a936f",
+  "name": "HSS4-1/2 × 4-1/2 × 1/2",
+  "rev": 3,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/hss4-1_2x4-1_2x1_2",
+      "family": "rhs",
+      "params": {
+        "height": 114.3,
+        "width": 114.3,
+        "web": 12.7,
+        "radius": 25.4,
+        "inner": 12.7
+      },
+      "catalogue": {
+        "name": "HSS4-1/2 × 4-1/2 × 1/2",
+        "series": [
+          [
+            "aisc/hss4-1_2x4-1_2x1_2",
+            114.3
+          ]
+        ],
+        "aliases": [
+          "HSS4-1/2X4-1/2X1/2"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A500/A1085 (AISC Manual 16th ed.)",
+    "series": "HSS square"
+  },
+  "section": {
+    "area_cm2": 47.459,
+    "mass_kg_m": 37.255,
+    "iy_cm4": 777.87,
+    "iz_cm4": 777.87,
+    "iu_cm4": 777.87,
+    "iv_cm4": 777.87,
+    "wy_cm3": 136.11,
+    "wz_cm3": 136.11,
+    "centroid_mm": [
+      57.15,
+      57.15
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 44.839,
+      "mass_kg_m": 37.249
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/hss4-1_2x4-1_2x1_2",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:dcc9257926f660c0895d3f77f79064b55dea252efb8dbca05649f19582fc9e06"
+}

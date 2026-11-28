@@ -1,0 +1,83 @@
+{
+  "uid": "f6680c417c689f0c",
+  "name": "CHS 406.4 × 14.2 (hot-finished)",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/chs406.4x14.2-hf",
+      "family": "chs",
+      "params": {
+        "height": 406.4,
+        "width": 406.4,
+        "web": 14.2
+      },
+      "catalogue": {
+        "name": "CHS 406.4 × 14.2 (hot-finished)",
+        "series": [
+          [
+            "en/chs323.9x14.2-hf",
+            323.9
+          ],
+          [
+            "en/chs355.6x14.2-hf",
+            355.6
+          ],
+          [
+            "en/chs406.4x14.2-hf",
+            406.4
+          ],
+          [
+            "en/chs457x14.2-hf",
+            457.0
+          ],
+          [
+            "en/chs508x14.2-hf",
+            508.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-hfchs",
+    "source": "https://www.steelforlifebluebook.co.uk/hfchs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10210-2",
+    "series": "CHS hot-finished"
+  },
+  "section": {
+    "area_cm2": 174.958,
+    "mass_kg_m": 137.342,
+    "iy_cm4": 33683.57,
+    "iz_cm4": 33683.57,
+    "iu_cm4": 33683.57,
+    "iv_cm4": 33683.57,
+    "wy_cm3": 1657.66,
+    "wz_cm3": 1657.66,
+    "centroid_mm": [
+      203.2,
+      203.2
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 175.0,
+      "mass_kg_m": 137.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/chs406.4x14.2-hf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:2d314d18e9f54496a4c4457c6d2ca864ce2a532e19be64873b02608c1d590c73"
+}

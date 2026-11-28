@@ -1,0 +1,69 @@
+{
+  "uid": "b736d0df103e67c1",
+  "name": "SHS 250 × 250 × 10 (hot-finished)",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/shs250x250x10-hf",
+      "family": "rhs",
+      "params": {
+        "height": 250.0,
+        "width": 250.0,
+        "web": 10.0,
+        "radius": 15.0,
+        "inner": 10.0
+      },
+      "catalogue": {
+        "name": "SHS 250 × 250 × 10 (hot-finished)",
+        "series": [
+          [
+            "en/shs250x250x10-hf",
+            250.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-hfshs",
+    "source": "https://www.steelforlifebluebook.co.uk/hfshs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10210-2",
+    "series": "SHS hot-finished"
+  },
+  "section": {
+    "area_cm2": 94.927,
+    "mass_kg_m": 74.518,
+    "iy_cm4": 9055.2,
+    "iz_cm4": 9055.2,
+    "iu_cm4": 9055.2,
+    "iv_cm4": 9055.2,
+    "wy_cm3": 724.42,
+    "wz_cm3": 724.42,
+    "centroid_mm": [
+      125.0,
+      125.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 94.9,
+      "mass_kg_m": 74.5
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/shs250x250x10-hf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:c729fec89d02a79b61665ca913e9d6ebbd2d8b354f8f1d386e32b2c298e97e38"
+}

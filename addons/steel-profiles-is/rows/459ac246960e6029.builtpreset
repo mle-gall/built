@@ -1,0 +1,74 @@
+{
+  "uid": "459ac246960e6029",
+  "name": "ISHB 200 × 40",
+  "rev": 3,
+  "pack": "Steel profiles · IS",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "is/ishb200x40",
+      "family": "i",
+      "params": {
+        "height": 200.0,
+        "width": 201.7,
+        "web": 7.8,
+        "flange": 9.0,
+        "radius": 9.0,
+        "toe": 4.5,
+        "slope": 6.99
+      },
+      "catalogue": {
+        "name": "ISHB 200 × 40",
+        "series": [
+          [
+            "is/ishb200x40",
+            200.0
+          ]
+        ],
+        "aliases": [
+          "HB 200 x 40"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "is808-1989",
+    "source": "https://law.resource.org/pub/in/bis/S03/is.808.1989.pdf",
+    "standard": "IS 808",
+    "series": "ISHB"
+  },
+  "section": {
+    "area_cm2": 50.944,
+    "mass_kg_m": 39.991,
+    "iy_cm4": 3722.14,
+    "iz_cm4": 994.66,
+    "iu_cm4": 3722.14,
+    "iv_cm4": 994.66,
+    "wy_cm3": 372.21,
+    "wz_cm3": 98.63,
+    "centroid_mm": [
+      100.85,
+      100.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 50.9,
+      "mass_kg_m": 40.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "is/ishb200x40",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:ad5df3db99118dc9c49802d5382b141c2dbcf0123745358361279ea10310f53d"
+}

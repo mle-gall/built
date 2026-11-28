@@ -1,0 +1,88 @@
+{
+  "uid": "4db07dba020a4896",
+  "name": "UPN 140",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/upn140",
+      "family": "channel",
+      "params": {
+        "height": 140.0,
+        "width": 60.0,
+        "web": 7.0,
+        "flange": 10.0,
+        "radius": 10.0,
+        "toe": 5.0,
+        "slope": 8.0,
+        "flange_at": 30.0
+      },
+      "catalogue": {
+        "name": "UPN 140",
+        "series": [
+          [
+            "en/upn100",
+            100.0
+          ],
+          [
+            "en/upn120",
+            120.0
+          ],
+          [
+            "en/upn140",
+            140.0
+          ],
+          [
+            "en/upn160",
+            160.0
+          ],
+          [
+            "en/upn180",
+            180.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-upn",
+    "source": "https://orangebook.arcelormittal.com/node/265",
+    "standard": "EN 10365",
+    "series": "UPN"
+  },
+  "section": {
+    "area_cm2": 20.37,
+    "mass_kg_m": 15.99,
+    "iy_cm4": 604.81,
+    "iz_cm4": 62.49,
+    "iu_cm4": 604.81,
+    "iv_cm4": 62.49,
+    "wy_cm3": 86.4,
+    "wz_cm3": 14.72,
+    "centroid_mm": [
+      17.55,
+      70.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 20.4,
+      "mass_kg_m": 16.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/upn140",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:648cda7bf5822a945eb241cb43b0e26d3b8d1e9b5518d441c7854ed53c0dfd65"
+}

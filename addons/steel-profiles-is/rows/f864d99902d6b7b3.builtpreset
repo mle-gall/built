@@ -1,0 +1,90 @@
+{
+  "uid": "f864d99902d6b7b3",
+  "name": "ISSC 150",
+  "rev": 2,
+  "pack": "Steel profiles · IS",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "is/issc150",
+      "family": "i",
+      "params": {
+        "height": 152.0,
+        "width": 152.0,
+        "web": 7.9,
+        "flange": 11.9,
+        "radius": 11.7,
+        "toe": 3.0,
+        "slope": 14.05
+      },
+      "catalogue": {
+        "name": "ISSC 150",
+        "series": [
+          [
+            "is/issc120",
+            120.0
+          ],
+          [
+            "is/issc140",
+            140.0
+          ],
+          [
+            "is/issc150",
+            152.0
+          ],
+          [
+            "is/issc160",
+            160.0
+          ],
+          [
+            "is/issc180",
+            180.0
+          ]
+        ],
+        "aliases": [
+          "SC 150"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "is808-1989",
+    "source": "https://law.resource.org/pub/in/bis/S03/is.808.1989.pdf",
+    "standard": "IS 808",
+    "series": "ISSC"
+  },
+  "section": {
+    "area_cm2": 47.09,
+    "mass_kg_m": 36.966,
+    "iy_cm4": 1927.18,
+    "iz_cm4": 554.19,
+    "iu_cm4": 1927.18,
+    "iv_cm4": 554.19,
+    "wy_cm3": 253.58,
+    "wz_cm3": 72.92,
+    "centroid_mm": [
+      76.0,
+      76.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 47.4,
+      "mass_kg_m": 37.1
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "is/issc150",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:cfd02f941310099e511a541631b9bff758f4b78cd87d59c29e3d280874ac2156"
+}

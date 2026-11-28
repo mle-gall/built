@@ -1,0 +1,88 @@
+{
+  "uid": "62617d46c04af9fb",
+  "name": "HE 240 AA",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/he240aa",
+      "family": "i",
+      "params": {
+        "height": 224.0,
+        "width": 240.0,
+        "web": 6.5,
+        "flange": 9.0,
+        "radius": 21.0
+      },
+      "catalogue": {
+        "name": "HE 240 AA",
+        "series": [
+          [
+            "en/he200aa",
+            186.0
+          ],
+          [
+            "en/he220aa",
+            205.0
+          ],
+          [
+            "en/he240aa",
+            224.0
+          ],
+          [
+            "en/he260aa",
+            244.0
+          ],
+          [
+            "en/he280aa",
+            264.0
+          ]
+        ],
+        "aliases": [
+          "HEAA 240"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-he",
+    "source": "https://orangebook.arcelormittal.com/node/16",
+    "standard": "EN 10365",
+    "series": "HE"
+  },
+  "section": {
+    "area_cm2": 60.376,
+    "mass_kg_m": 47.395,
+    "iy_cm4": 5835.21,
+    "iz_cm4": 2077.05,
+    "iu_cm4": 5835.21,
+    "iv_cm4": 2077.05,
+    "wy_cm3": 521.0,
+    "wz_cm3": 173.09,
+    "centroid_mm": [
+      120.0,
+      112.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 60.4,
+      "mass_kg_m": 47.4
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/he240aa",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:5bea5f779b610e13676e63da506b4fa014c68606ea2291068705b61c337625d9"
+}

@@ -1,0 +1,69 @@
+{
+  "uid": "ecbecc821b0009ad",
+  "name": "W 410 × 53.0",
+  "rev": 3,
+  "pack": "Steel profiles · BR",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "br/w410x53.0",
+      "family": "i",
+      "params": {
+        "height": 403.0,
+        "width": 177.0,
+        "web": 7.5,
+        "flange": 10.9,
+        "radius": 12.0
+      },
+      "catalogue": {
+        "name": "W 410 × 53.0",
+        "series": [
+          [
+            "br/w410x53.0",
+            403.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "gerdau-perfis",
+    "source": "https://api.aecweb.com.br/cls/catalogos/28792/22314/catalogo-gerdau-perfis-estruturais.pdf",
+    "standard": "ABNT NBR 15980",
+    "series": "W"
+  },
+  "section": {
+    "area_cm2": 68.412,
+    "mass_kg_m": 53.704,
+    "iy_cm4": 18733.29,
+    "iz_cm4": 1009.3,
+    "iu_cm4": 18733.29,
+    "iv_cm4": 1009.3,
+    "wy_cm3": 929.69,
+    "wz_cm3": 114.04,
+    "centroid_mm": [
+      88.5,
+      201.5
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 68.4,
+      "mass_kg_m": 53.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "br/w410x53.0",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:2dbb8b50a1ee58996b2df2b58c3b2fc8eea7993d734f293d01cdbf27b0b34f0b"
+}

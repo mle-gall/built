@@ -1,0 +1,71 @@
+{
+  "uid": "1d149b6660748b64",
+  "name": "L5 × 3-1/2 × 3/4",
+  "rev": 3,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/l5x3-1_2x3_4",
+      "family": "angle",
+      "params": {
+        "height": 127.0,
+        "width": 88.9,
+        "web": 19.05,
+        "radius": 11.18
+      },
+      "catalogue": {
+        "name": "L5 × 3-1/2 × 3/4",
+        "series": [
+          [
+            "aisc/l5x3-1_2x3_4",
+            127.0
+          ]
+        ],
+        "aliases": [
+          "L5X3-1/2X3/4"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "L"
+  },
+  "section": {
+    "area_cm2": 37.768,
+    "mass_kg_m": 29.648,
+    "iy_cm4": 580.7,
+    "iz_cm4": 231.09,
+    "iu_cm4": 675.87,
+    "iv_cm4": 135.92,
+    "wy_cm3": 70.12,
+    "wz_cm3": 36.32,
+    "centroid_mm": [
+      25.27,
+      44.19
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 37.742,
+      "mass_kg_m": 29.466
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/l5x3-1_2x3_4",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:527b903aa9f4f5b99457ba2a3189daffa9daddb52ae50eadea2ad917f59212fc"
+}

@@ -1,0 +1,72 @@
+{
+  "uid": "ec20616902b2b31a",
+  "name": "ISA 200 × 200 × 16",
+  "rev": 2,
+  "pack": "Steel profiles · IS",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "is/isa200x200x16",
+      "family": "angle",
+      "params": {
+        "height": 200.0,
+        "width": 200.0,
+        "web": 16.0,
+        "radius": 15.0,
+        "toe": 4.8
+      },
+      "catalogue": {
+        "name": "ISA 200 × 200 × 16",
+        "series": [
+          [
+            "is/isa200x200x16",
+            200.0
+          ]
+        ],
+        "aliases": [
+          "A 200 x 200 x 16"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "is808-1989",
+    "source": "https://law.resource.org/pub/in/bis/S03/is.808.1989.pdf",
+    "standard": "IS 808",
+    "series": "ISA equal"
+  },
+  "section": {
+    "area_cm2": 61.824,
+    "mass_kg_m": 48.532,
+    "iy_cm4": 2366.23,
+    "iz_cm4": 2366.23,
+    "iu_cm4": 3764.75,
+    "iv_cm4": 967.71,
+    "wy_cm3": 163.81,
+    "wz_cm3": 163.81,
+    "centroid_mm": [
+      55.55,
+      55.55
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 61.8,
+      "mass_kg_m": 48.5
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "is/isa200x200x16",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:e175467d3e0978a8d778b3f622559d3482cc08959c30d1459044b9019fad845d"
+}

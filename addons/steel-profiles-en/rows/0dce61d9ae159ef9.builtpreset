@@ -1,0 +1,72 @@
+{
+  "uid": "0dce61d9ae159ef9",
+  "name": "UB 356 × 171 × 45",
+  "rev": 4,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/ub356x171x45",
+      "family": "i",
+      "params": {
+        "height": 351.4,
+        "width": 171.1,
+        "web": 7.0,
+        "flange": 9.7,
+        "radius": 10.2
+      },
+      "catalogue": {
+        "name": "UB 356 × 171 × 45",
+        "series": [
+          [
+            "en/ub356x171x45",
+            351.4
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-ub;r1=bb-ub",
+    "source": "https://orangebook.arcelormittal.com/node/35",
+    "standard": "EN 10365",
+    "series": "UB",
+    "column_sources": {
+      "r1": "https://www.steelforlifebluebook.co.uk/ub/ec3-ukna/section-properties-dimensions-properties"
+    }
+  },
+  "section": {
+    "area_cm2": 57.327,
+    "mass_kg_m": 45.001,
+    "iy_cm4": 12065.78,
+    "iz_cm4": 811.07,
+    "iu_cm4": 12065.78,
+    "iv_cm4": 811.07,
+    "wy_cm3": 686.73,
+    "wz_cm3": 94.81,
+    "centroid_mm": [
+      85.55,
+      175.7
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 57.3,
+      "mass_kg_m": 45.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/ub356x171x45",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:09d103ca262e43e64bbe6b2590a071600f33e3aba9518d755e92407b10404226"
+}

@@ -1570,15 +1570,16 @@ impl ProfilesProvider {
 
     fn items<'p>(&self,py:Python<'p>,ctx:&Bound<'p,PyAny>)->PyResult<Bound<'p,PyAny>> {
         let catalogue:serde_json::Value=serde_json::from_str(include_str!("../../../resources/profiles/starter.builtprofile")).expect("bundled profiles");
+        let title=|family:&str| family_title(py,family);
         let mut items:Vec<_>=catalogue["table"]["sizes"].as_array().unwrap().iter().map(|size|{
-            let mut details=vec![("Family".to_owned(),size["family"].as_str().unwrap().to_owned(),"")];
+            let mut details=vec![("Family".to_owned(),title(size["family"].as_str().unwrap()),"")];
             for (key,v) in size["params"].as_object().unwrap(){
                 if v.as_f64()!=Some(0.){details.push((key.to_owned(),format!("{v} mm"),""));}
             }
             for (key,title) in [("standard","Standard"),("source","Source")]{
                 if let Some(v)=size[key].as_str().filter(|s|!s.is_empty()){details.push((title.into(),v.into(),""));}
             }
-            serde_json::json!({"key":size["key"],"name":size["label"],"category":size["family"],
+            serde_json::json!({"key":size["key"],"name":size["label"],"category":title(size["family"].as_str().unwrap_or("")),"family":size["family"],
                 "thumb":format!("profile:{}",size["key"].as_str().unwrap()),"defaults":details,
                 "aliases":size.get("aliases").cloned().unwrap_or_else(||serde_json::json!([])),
                 "source":"bundled","dimensions":size["params"],"verbs":["apply","size"]})
@@ -1614,8 +1615,9 @@ impl ProfilesProvider {
             if preset["source"]["profile_size"] == true {
                 let profile = &preset["values"]["profile"];
                 items.push(serde_json::json!({"key":format!("size:{source}:{}",preset["uid"]),
-                    "name":preset["name"],"category":profile["family"],"source":source,
+                    "name":preset["name"],"category":title(profile["family"].as_str().unwrap_or("")),"family":profile["family"],"source":source,
                     "aliases":profile["catalogue"].get("aliases").cloned().unwrap_or_else(||serde_json::json!([])),
+                    "defaults":size_details(py,&preset)?,
                     "profile_preset":preset,"thumb":presets::profile_thumb(profile),"verbs":["apply"]}));
             }
         }
@@ -1665,13 +1667,63 @@ impl ProfilesProvider {
     }
 }
 
+/// A pack size's details: its status (provisional until checked against the
+/// standard), standard and source, dimensions, and the section values the
+/// pack's generator computed.
+fn size_details(py: Python<'_>, preset: &serde_json::Value) -> PyResult<Vec<(String, String, String)>> {
+    use crate::settings_rows::tr;
+    let prov = &preset["provenance"];
+    let mut out = Vec::new();
+    if prov["status"] == "provisional" {
+        out.push((tr(py, "Status")?, tr(py, "Provisional")?, String::new()));
+    }
+    let profile = &preset["values"]["profile"];
+    out.push((tr(py, "Family")?, family_title(py, profile["family"].as_str().unwrap_or("")), String::new()));
+    for (key, v) in profile["params"].as_object().into_iter().flatten() {
+        if let Some(n) = v.as_f64().filter(|n| *n != 0.) {
+            out.push((key.clone(), if key == "slope" { format!("{n} %") } else { format!("{n} mm") }, String::new()));
+        }
+    }
+    let sec = &preset["section"];
+    if let (Some(m), Some(a)) = (sec["mass_kg_m"].as_f64(), sec["area_cm2"].as_f64()) {
+        out.push((tr(py, "Mass")?, format!("{m} kg/m"), String::new()));
+        out.push((tr(py, "Area")?, format!("{a} cm²"), String::new()));
+    }
+    for (key, title) in [("standard", "Standard"), ("source", "Source")] {
+        if let Some(v) = prov[key].as_str().filter(|v| !v.is_empty()) {
+            out.push((tr(py, title)?, v.to_owned(), String::new()));
+        }
+    }
+    Ok(out)
+}
+
+/// The Library's collection name for a parametric profile family (the
+/// sidebar groups Profiles by it); an unknown family keeps its key.
+pub(crate) fn family_title(py: Python<'_>, family: &str) -> String {
+    use crate::settings_rows::tr;
+    match family {
+        "i" => tr(py, "I and H sections"),
+        "channel" => tr(py, "Channels"),
+        "angle" => tr(py, "Angles"),
+        "tee" => tr(py, "Tees"),
+        "zed" => tr(py, "Z sections"),
+        "rhs" => tr(py, "Rectangular and square tubes"),
+        "chs" => tr(py, "Round tubes"),
+        "round" => tr(py, "Round bars"),
+        "rectangle" => tr(py, "Rectangles"),
+        other => Ok(other.to_owned()),
+    }
+    .unwrap_or_else(|_| family.to_owned())
+}
+
 /// Arm Sweep with a user-sized family without changing its Library defaults.
 fn profile_dimensions(ctx: &Bound<'_, PyAny>, item: &Bound<'_, PyAny>) -> PyResult<()> {
     let py = ctx.py();
     let forms = py.import("built_render.chrome_forms")?;
     let fields = PyList::empty(py);
     let params = item.get_item("dimensions")?;
-    let circular = matches!(item.get_item("category")?.extract::<String>()?.as_str(), "round" | "chs");
+    // The family key, not the collection's (translated) name.
+    let circular = matches!(item.get_item("family")?.extract::<String>()?.as_str(), "round" | "chs");
     let mut keys = Vec::new();
     for key in ["width", "height", "web", "flange", "radius"] {
         if !params.contains(key)? || (circular && key == "height") { continue; }

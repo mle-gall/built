@@ -1,0 +1,69 @@
+{
+  "uid": "bb2e829dcaed0215",
+  "name": "HP 200 × 53.0",
+  "rev": 3,
+  "pack": "Steel profiles · BR",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "br/hp200x53.0",
+      "family": "i",
+      "params": {
+        "height": 204.0,
+        "width": 207.0,
+        "web": 11.3,
+        "flange": 11.3,
+        "radius": 10.0
+      },
+      "catalogue": {
+        "name": "HP 200 × 53.0",
+        "series": [
+          [
+            "br/hp200x53.0",
+            204.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "gerdau-perfis",
+    "source": "https://api.aecweb.com.br/cls/catalogos/28792/22314/catalogo-gerdau-perfis-estruturais.pdf",
+    "standard": "ABNT NBR 15980",
+    "series": "HP"
+  },
+  "section": {
+    "area_cm2": 68.139,
+    "mass_kg_m": 53.489,
+    "iy_cm4": 4977.21,
+    "iz_cm4": 1673.21,
+    "iu_cm4": 4977.21,
+    "iv_cm4": 1673.21,
+    "wy_cm3": 487.96,
+    "wz_cm3": 161.66,
+    "centroid_mm": [
+      103.5,
+      102.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 68.1,
+      "mass_kg_m": 53.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "br/hp200x53.0",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:29ec14f5ea0afb66729c731a604f63dbe1bb8861a883960d9003c27e851f8e1a"
+}

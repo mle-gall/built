@@ -1,0 +1,69 @@
+{
+  "uid": "822256ea5d640d4d",
+  "name": "75 × 75 × 10 EA",
+  "rev": 3,
+  "pack": "Steel profiles · AS/NZS",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "as-nzs/75x75x10ea",
+      "family": "angle",
+      "params": {
+        "height": 75.0,
+        "width": 75.0,
+        "web": 9.5,
+        "radius": 8.0,
+        "toe": 5.0
+      },
+      "catalogue": {
+        "name": "75 × 75 × 10 EA",
+        "series": [
+          [
+            "as-nzs/75x75x10ea",
+            75.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ib-hrssp9",
+    "source": "https://www.infrabuild.com/wp-content/uploads/sites/8/2022/02/Hot20Rolled20Cat_Edition9_2019.pdf",
+    "standard": "AS/NZS 3679.1",
+    "series": "EA"
+  },
+  "section": {
+    "area_cm2": 13.378,
+    "mass_kg_m": 10.501,
+    "iy_cm4": 68.12,
+    "iz_cm4": 68.12,
+    "iu_cm4": 107.99,
+    "iv_cm4": 28.24,
+    "wy_cm3": 12.84,
+    "wz_cm3": 12.84,
+    "centroid_mm": [
+      21.97,
+      21.97
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 13.4,
+      "mass_kg_m": 10.5
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "as-nzs/75x75x10ea",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:74f6a0c29bac42858d573fbc92f7e6a86a8144be8b90050f183846ab10777f23"
+}

@@ -1,0 +1,69 @@
+{
+  "uid": "cb3ee98461fbcbfb",
+  "name": "SHS 160 × 160 × 4 (cold-formed)",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/shs160x160x4-cf",
+      "family": "rhs",
+      "params": {
+        "height": 160.0,
+        "width": 160.0,
+        "web": 4.0,
+        "radius": 8.0,
+        "inner": 4.0
+      },
+      "catalogue": {
+        "name": "SHS 160 × 160 × 4 (cold-formed)",
+        "series": [
+          [
+            "en/shs160x160x4-cf",
+            160.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-cfshs",
+    "source": "https://www.steelforlifebluebook.co.uk/cfshs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10219-2",
+    "series": "SHS cold-formed"
+  },
+  "section": {
+    "area_cm2": 24.548,
+    "mass_kg_m": 19.27,
+    "iy_cm4": 987.17,
+    "iz_cm4": 987.17,
+    "iu_cm4": 987.17,
+    "iv_cm4": 987.17,
+    "wy_cm3": 123.4,
+    "wz_cm3": 123.4,
+    "centroid_mm": [
+      80.0,
+      80.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 24.5,
+      "mass_kg_m": 19.3
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/shs160x160x4-cf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:09c9189fc8dd164053103df9cce7b400932188a7ef25a1eab817287eb1829f71"
+}

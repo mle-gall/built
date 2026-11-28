@@ -1,0 +1,80 @@
+{
+  "uid": "09a8aac8b226d8b3",
+  "name": "W24 × 55",
+  "rev": 3,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/w24x55",
+      "family": "i",
+      "params": {
+        "height": 599.44,
+        "width": 178.054,
+        "web": 10.033,
+        "flange": 12.827,
+        "radius": 12.83
+      },
+      "catalogue": {
+        "name": "W24 × 55",
+        "series": [
+          [
+            "aisc/w18x55",
+            459.74
+          ],
+          [
+            "aisc/w21x55",
+            528.32
+          ],
+          [
+            "aisc/w24x55",
+            599.44
+          ]
+        ],
+        "aliases": [
+          "W24X55"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "W"
+  },
+  "section": {
+    "area_cm2": 104.659,
+    "mass_kg_m": 82.157,
+    "iy_cm4": 56236.78,
+    "iz_cm4": 1212.57,
+    "iu_cm4": 56236.78,
+    "iv_cm4": 1212.57,
+    "wy_cm3": 1876.31,
+    "wz_cm3": 136.2,
+    "centroid_mm": [
+      89.03,
+      299.72
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 104.516,
+      "mass_kg_m": 81.849
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/w24x55",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:bd139fecdb8862e1124dfa4f2b7b7ca9e9d8c8a3e3afe27a7bd678d45ec6062c"
+}

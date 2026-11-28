@@ -1,0 +1,85 @@
+{
+  "uid": "b5b8729663272b8c",
+  "name": "RHS 140 × 80 × 5 (cold-formed)",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/rhs140x80x5-cf",
+      "family": "rhs",
+      "params": {
+        "height": 140.0,
+        "width": 80.0,
+        "web": 5.0,
+        "radius": 10.0,
+        "inner": 5.0
+      },
+      "catalogue": {
+        "name": "RHS 140 × 80 × 5 (cold-formed)",
+        "series": [
+          [
+            "en/rhs100x80x5-cf",
+            100.0
+          ],
+          [
+            "en/rhs120x80x5-cf",
+            120.0
+          ],
+          [
+            "en/rhs140x80x5-cf",
+            140.0
+          ],
+          [
+            "en/rhs160x80x5-cf",
+            160.0
+          ],
+          [
+            "en/rhs180x80x5-cf",
+            180.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-cfrhs",
+    "source": "https://www.steelforlifebluebook.co.uk/cfrhs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10219-2",
+    "series": "RHS cold-formed"
+  },
+  "section": {
+    "area_cm2": 20.356,
+    "mass_kg_m": 15.98,
+    "iy_cm4": 517.06,
+    "iz_cm4": 215.94,
+    "iu_cm4": 517.06,
+    "iv_cm4": 215.94,
+    "wy_cm3": 73.87,
+    "wz_cm3": 53.99,
+    "centroid_mm": [
+      40.0,
+      70.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 20.4,
+      "mass_kg_m": 16.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/rhs140x80x5-cf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:71c14de4705ef039281af30ff8ebd35b83f9193ab7aa9c26fc8a44c3997f6188"
+}

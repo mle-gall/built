@@ -1,0 +1,77 @@
+{
+  "uid": "5fda307f85db0015",
+  "name": "C12 × 25",
+  "rev": 3,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/c12x25",
+      "family": "channel",
+      "params": {
+        "height": 304.8,
+        "width": 77.47,
+        "web": 9.83,
+        "flange": 12.725,
+        "radius": 10.34,
+        "slope": 16.67
+      },
+      "catalogue": {
+        "name": "C12 × 25",
+        "series": [
+          [
+            "aisc/c10x25",
+            254.0
+          ],
+          [
+            "aisc/c12x25",
+            304.8
+          ]
+        ],
+        "aliases": [
+          "C12X25"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "C"
+  },
+  "section": {
+    "area_cm2": 47.485,
+    "mass_kg_m": 37.276,
+    "iy_cm4": 6027.36,
+    "iz_cm4": 188.31,
+    "iu_cm4": 6027.36,
+    "iv_cm4": 188.31,
+    "wy_cm3": 395.5,
+    "wz_cm3": 31.24,
+    "centroid_mm": [
+      17.19,
+      152.4
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 47.355,
+      "mass_kg_m": 37.204
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/c12x25",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:6036a1e5007aa4336aedc0df1305d87911db415a46d210281b4c563c7edeb0d8"
+}

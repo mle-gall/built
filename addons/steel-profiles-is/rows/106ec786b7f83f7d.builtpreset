@@ -1,0 +1,72 @@
+{
+  "uid": "106ec786b7f83f7d",
+  "name": "ISA 130 × 130 × 8",
+  "rev": 2,
+  "pack": "Steel profiles · IS",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "is/isa130x130x8",
+      "family": "angle",
+      "params": {
+        "height": 130.0,
+        "width": 130.0,
+        "web": 8.0,
+        "radius": 10.0,
+        "toe": 4.8
+      },
+      "catalogue": {
+        "name": "ISA 130 × 130 × 8",
+        "series": [
+          [
+            "is/isa130x130x8",
+            130.0
+          ]
+        ],
+        "aliases": [
+          "A 130 x 130 x 8"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "is808-1989",
+    "source": "https://law.resource.org/pub/in/bis/S03/is.808.1989.pdf",
+    "standard": "IS 808",
+    "series": "ISA equal"
+  },
+  "section": {
+    "area_cm2": 20.276,
+    "mass_kg_m": 15.916,
+    "iy_cm4": 330.95,
+    "iz_cm4": 330.95,
+    "iu_cm4": 526.62,
+    "iv_cm4": 135.28,
+    "wy_cm3": 34.85,
+    "wz_cm3": 34.85,
+    "centroid_mm": [
+      35.04,
+      35.04
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 20.3,
+      "mass_kg_m": 15.9
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "is/isa130x130x8",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:fe37898c1121efa83ad2a98aa2a5f39ea4a35fd3738d3545036036b4244e3ee3"
+}

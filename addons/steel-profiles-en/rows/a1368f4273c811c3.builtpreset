@@ -1,0 +1,81 @@
+{
+  "uid": "a1368f4273c811c3",
+  "name": "RHS 70 × 40 × 3 (cold-formed)",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/rhs70x40x3-cf",
+      "family": "rhs",
+      "params": {
+        "height": 70.0,
+        "width": 40.0,
+        "web": 3.0,
+        "radius": 6.0,
+        "inner": 3.0
+      },
+      "catalogue": {
+        "name": "RHS 70 × 40 × 3 (cold-formed)",
+        "series": [
+          [
+            "en/rhs60x40x3-cf",
+            60.0
+          ],
+          [
+            "en/rhs70x40x3-cf",
+            70.0
+          ],
+          [
+            "en/rhs80x40x3-cf",
+            80.0
+          ],
+          [
+            "en/rhs100x40x3-cf",
+            100.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-cfrhs",
+    "source": "https://www.steelforlifebluebook.co.uk/cfrhs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10219-2",
+    "series": "RHS cold-formed"
+  },
+  "section": {
+    "area_cm2": 6.008,
+    "mass_kg_m": 4.716,
+    "iy_cm4": 37.31,
+    "iz_cm4": 15.5,
+    "iu_cm4": 37.31,
+    "iv_cm4": 15.5,
+    "wy_cm3": 10.66,
+    "wz_cm3": 7.75,
+    "centroid_mm": [
+      20.0,
+      35.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 6.01,
+      "mass_kg_m": 4.72
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/rhs70x40x3-cf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:6fbaa3233bbf1b81a4861a29fc7dee21bdbc781bb23af033f3ce11c82a1a3cb7"
+}

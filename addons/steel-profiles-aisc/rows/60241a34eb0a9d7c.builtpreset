@@ -1,0 +1,76 @@
+{
+  "uid": "60241a34eb0a9d7c",
+  "name": "W44 × 230",
+  "rev": 3,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/w44x230",
+      "family": "i",
+      "params": {
+        "height": 1089.66,
+        "width": 401.32,
+        "web": 18.034,
+        "flange": 30.988,
+        "radius": 20.07
+      },
+      "catalogue": {
+        "name": "W44 × 230",
+        "series": [
+          [
+            "aisc/w12x230",
+            383.54
+          ],
+          [
+            "aisc/w44x230",
+            1089.66
+          ]
+        ],
+        "aliases": [
+          "W44X230"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "W"
+  },
+  "section": {
+    "area_cm2": 437.513,
+    "mass_kg_m": 343.447,
+    "iy_cm4": 869195.45,
+    "iz_cm4": 33439.2,
+    "iu_cm4": 869195.45,
+    "iv_cm4": 33439.2,
+    "wy_cm3": 15953.52,
+    "wz_cm3": 1666.46,
+    "centroid_mm": [
+      200.66,
+      544.83
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 437.418,
+      "mass_kg_m": 342.278
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/w44x230",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:165e49088ac00a02ebc9257c4ccac6bd06a4611e96c6bdeb563e0ab9130b0201"
+}

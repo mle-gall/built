@@ -174,6 +174,13 @@ impl SweepTool {
             .or_else(|| self.profile.name())
             .unwrap_or(if self.profile.drawing.is_some() { "Drawn profile" } else { "Sweep" })
     }
+    /// *preset · profile · attachment · rotation*; a profile size picked
+    /// from the Library is its own preset, so its name shows once.
+    fn chip(&self) -> String {
+        let (preset, profile) = (self.preset(), self.profile_name());
+        let named = if preset == profile { preset.to_owned() } else { format!("{preset} · {profile}") };
+        format!("{named} · {} · {}°{}", self.attachment_name(), self.rotation, if self.mirror { " · ↔" } else { "" })
+    }
     fn preset(&self) -> &str {
         if let Some(name) = self.chosen.as_ref().and_then(|p| p["name"].as_str()) {
             return name;
@@ -268,7 +275,7 @@ impl Tool for SweepTool {
         } else {
             None
         };
-        json!({"section_inset":inset,"length":self.start.zip(self.hover).map(|(a,b)|DVec3::from(a).distance(b.into())),"start_point":self.start,"hover_point":self.hover,"profile":self.profile.library,"chip":format!("{} · {} · {} · {}°{}",self.preset(),self.profile_name(),self.attachment_name(),self.rotation,if self.mirror{" · ↔"}else{""}),"attachment":self.attachment_name(),"rotation":self.rotation,"mirror":self.mirror})
+        json!({"section_inset":inset,"length":self.start.zip(self.hover).map(|(a,b)|DVec3::from(a).distance(b.into())),"start_point":self.start,"hover_point":self.hover,"profile":self.profile.library,"chip":self.chip(),"attachment":self.attachment_name(),"rotation":self.rotation,"mirror":self.mirror})
     }
     fn set(&mut self, key: &str, value: &Json) -> bool {
         match key {

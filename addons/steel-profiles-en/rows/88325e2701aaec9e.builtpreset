@@ -1,0 +1,69 @@
+{
+  "uid": "88325e2701aaec9e",
+  "name": "L 60 × 60 × 5",
+  "rev": 4,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/l60x60x5",
+      "family": "angle",
+      "params": {
+        "height": 60.0,
+        "width": 60.0,
+        "web": 5.0,
+        "radius": 8.0,
+        "toe": 4.0
+      },
+      "catalogue": {
+        "name": "L 60 × 60 × 5",
+        "series": [
+          [
+            "en/l60x60x5",
+            60.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-l-equal",
+    "source": "https://orangebook.arcelormittal.com/node/220",
+    "standard": "EN 10056-1",
+    "series": "L equal"
+  },
+  "section": {
+    "area_cm2": 5.819,
+    "mass_kg_m": 4.568,
+    "iy_cm4": 19.37,
+    "iz_cm4": 19.37,
+    "iu_cm4": 30.71,
+    "iv_cm4": 8.03,
+    "wy_cm3": 4.45,
+    "wz_cm3": 4.45,
+    "centroid_mm": [
+      16.44,
+      16.44
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 5.82,
+      "mass_kg_m": 4.57
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/l60x60x5",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:67c3c9b0680cce57dc8b7dfa6828d7896d8361549bdd8bc0c99666d961938a03"
+}

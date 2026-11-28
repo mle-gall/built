@@ -1,0 +1,72 @@
+{
+  "uid": "69a305141c07d8f2",
+  "name": "W21 × 122",
+  "rev": 3,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/w21x122",
+      "family": "i",
+      "params": {
+        "height": 551.18,
+        "width": 314.96,
+        "web": 15.24,
+        "flange": 24.384,
+        "radius": 12.7
+      },
+      "catalogue": {
+        "name": "W21 × 122",
+        "series": [
+          [
+            "aisc/w21x122",
+            551.18
+          ]
+        ],
+        "aliases": [
+          "W21X122"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "W"
+  },
+  "section": {
+    "area_cm2": 231.552,
+    "mass_kg_m": 181.768,
+    "iy_cm4": 123601.36,
+    "iz_cm4": 12713.96,
+    "iu_cm4": 123601.36,
+    "iv_cm4": 12713.96,
+    "wy_cm3": 4484.97,
+    "wz_cm3": 807.34,
+    "centroid_mm": [
+      157.48,
+      275.59
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 231.612,
+      "mass_kg_m": 181.556
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/w21x122",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:7582439b117486402de6ab6320b20c20f311a1cd0468d797b6b84c68c29dabbf"
+}

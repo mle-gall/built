@@ -1,0 +1,90 @@
+{
+  "uid": "4860eb7db9810296",
+  "name": "ISMB 500",
+  "rev": 2,
+  "pack": "Steel profiles · IS",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "is/ismb500",
+      "family": "i",
+      "params": {
+        "height": 500.0,
+        "width": 180.0,
+        "web": 10.2,
+        "flange": 17.2,
+        "radius": 17.0,
+        "toe": 8.5,
+        "slope": 14.05
+      },
+      "catalogue": {
+        "name": "ISMB 500",
+        "series": [
+          [
+            "is/ismb400",
+            400.0
+          ],
+          [
+            "is/ismb450",
+            450.0
+          ],
+          [
+            "is/ismb500",
+            500.0
+          ],
+          [
+            "is/ismb550",
+            550.0
+          ],
+          [
+            "is/ismb600",
+            600.0
+          ]
+        ],
+        "aliases": [
+          "MB 500"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "is808-1989",
+    "source": "https://law.resource.org/pub/in/bis/S03/is.808.1989.pdf",
+    "standard": "IS 808",
+    "series": "ISMB"
+  },
+  "section": {
+    "area_cm2": 110.744,
+    "mass_kg_m": 86.934,
+    "iy_cm4": 45220.18,
+    "iz_cm4": 1370.03,
+    "iu_cm4": 45220.18,
+    "iv_cm4": 1370.03,
+    "wy_cm3": 1808.81,
+    "wz_cm3": 152.23,
+    "centroid_mm": [
+      90.0,
+      250.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 111.0,
+      "mass_kg_m": 86.9
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "is/ismb500",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:4f7704fe33e404e368ef0a0962f297888a5342399410061d368770568497636f"
+}

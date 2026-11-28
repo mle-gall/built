@@ -1,0 +1,77 @@
+{
+  "uid": "7ee4cda523716d16",
+  "name": "RHS 350 × 150 × 10 (hot-finished)",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/rhs350x150x10-hf",
+      "family": "rhs",
+      "params": {
+        "height": 350.0,
+        "width": 150.0,
+        "web": 10.0,
+        "radius": 15.0,
+        "inner": 10.0
+      },
+      "catalogue": {
+        "name": "RHS 350 × 150 × 10 (hot-finished)",
+        "series": [
+          [
+            "en/rhs200x150x10-hf",
+            200.0
+          ],
+          [
+            "en/rhs250x150x10-hf",
+            250.0
+          ],
+          [
+            "en/rhs350x150x10-hf",
+            350.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-hfrhs",
+    "source": "https://www.steelforlifebluebook.co.uk/hfrhs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10210-2",
+    "series": "RHS hot-finished"
+  },
+  "section": {
+    "area_cm2": 94.927,
+    "mass_kg_m": 74.518,
+    "iy_cm4": 14320.2,
+    "iz_cm4": 3736.54,
+    "iu_cm4": 14320.2,
+    "iv_cm4": 3736.54,
+    "wy_cm3": 818.3,
+    "wz_cm3": 498.21,
+    "centroid_mm": [
+      75.0,
+      175.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 94.9,
+      "mass_kg_m": 74.5
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/rhs350x150x10-hf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:88a1cebf0aaf5f8ef61ff47232270a084f58a6794e8b54cfd38b65d0267c6555"
+}

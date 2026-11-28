@@ -1,0 +1,90 @@
+{
+  "uid": "cbc0c3811460942d",
+  "name": "ISMC 250",
+  "rev": 2,
+  "pack": "Steel profiles · IS",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "is/ismc250",
+      "family": "channel",
+      "params": {
+        "height": 250.0,
+        "width": 80.0,
+        "web": 7.2,
+        "flange": 14.1,
+        "radius": 12.0,
+        "toe": 3.2,
+        "slope": 10.51
+      },
+      "catalogue": {
+        "name": "ISMC 250",
+        "series": [
+          [
+            "is/ismc200",
+            200.0
+          ],
+          [
+            "is/ismc225",
+            225.0
+          ],
+          [
+            "is/ismc250",
+            250.0
+          ],
+          [
+            "is/ismc300",
+            300.0
+          ],
+          [
+            "is/ismc350",
+            350.0
+          ]
+        ],
+        "aliases": [
+          "MC 250"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "is808-1989",
+    "source": "https://law.resource.org/pub/in/bis/S03/is.808.1989.pdf",
+    "standard": "IS 808",
+    "series": "ISMC"
+  },
+  "section": {
+    "area_cm2": 38.977,
+    "mass_kg_m": 30.597,
+    "iy_cm4": 3837.7,
+    "iz_cm4": 218.27,
+    "iu_cm4": 3837.7,
+    "iv_cm4": 218.27,
+    "wy_cm3": 307.02,
+    "wz_cm3": 38.25,
+    "centroid_mm": [
+      22.94,
+      125.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 39.0,
+      "mass_kg_m": 30.6
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "is/ismc250",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:3e249952f0df766fb3a94444ce6d9ecfa8fe89eb9154230025b9f3eeb77b404e"
+}

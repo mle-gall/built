@@ -1,0 +1,76 @@
+{
+  "uid": "8533a680660118cb",
+  "name": "WT4 × 29",
+  "rev": 3,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/wt4x29",
+      "family": "tee",
+      "params": {
+        "height": 111.252,
+        "width": 208.788,
+        "web": 12.954,
+        "flange": 20.574,
+        "radius": 9.91
+      },
+      "catalogue": {
+        "name": "WT4 × 29",
+        "series": [
+          [
+            "aisc/wt4x29",
+            111.252
+          ],
+          [
+            "aisc/wt6x29",
+            154.94
+          ]
+        ],
+        "aliases": [
+          "WT4X29"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "WT"
+  },
+  "section": {
+    "area_cm2": 55.124,
+    "mass_kg_m": 43.272,
+    "iy_cm4": 381.07,
+    "iz_cm4": 1562.44,
+    "iu_cm4": 1562.44,
+    "iv_cm4": 381.07,
+    "wy_cm3": 42.81,
+    "wz_cm3": 149.67,
+    "centroid_mm": [
+      104.39,
+      89.02
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 55.097,
+      "mass_kg_m": 43.157
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/wt4x29",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:4f50ef40cdf1fda2e9ef62d9a79ce9481f194d8628396d5fa9afe0981c9b77a7"
+}

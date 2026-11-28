@@ -1,0 +1,69 @@
+{
+  "uid": "81f5dd7270cf588a",
+  "name": "100 UC 14.8",
+  "rev": 4,
+  "pack": "Steel profiles · AS/NZS",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "as-nzs/100uc14.8",
+      "family": "i",
+      "params": {
+        "height": 97.0,
+        "width": 99.0,
+        "web": 5.0,
+        "flange": 7.0,
+        "radius": 10.0
+      },
+      "catalogue": {
+        "name": "100 UC 14.8",
+        "series": [
+          [
+            "as-nzs/100uc14.8",
+            97.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ib-hrssp9",
+    "source": "https://www.infrabuild.com/wp-content/uploads/sites/8/2022/02/Hot20Rolled20Cat_Edition9_2019.pdf",
+    "standard": "AS/NZS 3679.1",
+    "series": "UC"
+  },
+  "section": {
+    "area_cm2": 18.868,
+    "mass_kg_m": 14.812,
+    "iy_cm4": 318.32,
+    "iz_cm4": 113.51,
+    "iu_cm4": 318.32,
+    "iv_cm4": 113.51,
+    "wy_cm3": 65.63,
+    "wz_cm3": 22.93,
+    "centroid_mm": [
+      49.5,
+      48.5
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 18.9,
+      "mass_kg_m": 14.8
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "as-nzs/100uc14.8",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:8ac7111e01853cb0a6a4178d4c33d3f73a0eeb8d221e3b096af8c1321ffee2f0"
+}

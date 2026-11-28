@@ -1,0 +1,76 @@
+{
+  "uid": "97cc18f2a5822b1d",
+  "name": "W14 × 90",
+  "rev": 3,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/w14x90",
+      "family": "i",
+      "params": {
+        "height": 355.6,
+        "width": 368.3,
+        "web": 11.176,
+        "flange": 18.034,
+        "radius": 15.24
+      },
+      "catalogue": {
+        "name": "W14 × 90",
+        "series": [
+          [
+            "aisc/w14x90",
+            355.6
+          ],
+          [
+            "aisc/w30x90",
+            749.3
+          ]
+        ],
+        "aliases": [
+          "W14X90"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "W"
+  },
+  "section": {
+    "area_cm2": 170.543,
+    "mass_kg_m": 133.876,
+    "iy_cm4": 41404.69,
+    "iz_cm4": 15021.21,
+    "iu_cm4": 41404.69,
+    "iv_cm4": 15021.21,
+    "wy_cm3": 2328.72,
+    "wz_cm3": 815.7,
+    "centroid_mm": [
+      184.15,
+      177.8
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 170.967,
+      "mass_kg_m": 133.935
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/w14x90",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:03ee4b826ac264e32372660231a4ccc30753f903d36018979ff45660f236175e"
+}

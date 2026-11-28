@@ -1,0 +1,46 @@
+{
+  "title": "Steel profiles · BR",
+  "prefix": "br",
+  "status": "provisional",
+  "note": "Provisional: transcribed from the Gerdau catalogue until checked against ABNT NBR 15980.",
+  "families": [
+    {
+      "file": "w.csv",
+      "shape": "i",
+      "series": "W",
+      "standard": "ABNT NBR 15980",
+      "mass": "nominal",
+      "replaced_by": "ABNT NBR 15980 tables"
+    },
+    {
+      "file": "hp.csv",
+      "shape": "i",
+      "series": "HP",
+      "standard": "ABNT NBR 15980",
+      "mass": "nominal",
+      "replaced_by": "ABNT NBR 15980 tables"
+    }
+  ],
+  "keys": {},
+  "sources": {
+    "gerdau-perfis": {
+      "url": "https://api.aecweb.com.br/cls/catalogos/28792/22314/catalogo-gerdau-perfis-estruturais.pdf",
+      "title": "Gerdau, Perfis Estruturais Gerdau: Tabela de Bitolas",
+      "edition": "catalogue citing ABNT NBR 15980:2011 and ASTM A6/A6M",
+      "accessed": "2026-11-28",
+      "kind": "mill catalogue (hosted by the AECweb product portal)",
+      "columns": "bitola, mass, d, bf, tw, tf, h, d' (R = (h - d') / 2, derived), area, imperial equivalent",
+      "sha256": "sha256:f8f748c05a24c32b536684893cc74bd7107e00d8070057dc7baf502dd224457c"
+    }
+  },
+  "checks": {
+    "aisc-v16 (same imperial size)": {
+      "url": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+      "title": "AISC Shapes Database v16.0",
+      "accessed": "2026-11-28",
+      "kind": "standards body"
+    }
+  },
+  "notes": {},
+  "missing": []
+}

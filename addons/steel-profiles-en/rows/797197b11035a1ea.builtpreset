@@ -1,0 +1,75 @@
+{
+  "uid": "797197b11035a1ea",
+  "name": "CHS 42.4 × 3.2 (hot-finished)",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/chs42.4x3.2-hf",
+      "family": "chs",
+      "params": {
+        "height": 42.4,
+        "width": 42.4,
+        "web": 3.2
+      },
+      "catalogue": {
+        "name": "CHS 42.4 × 3.2 (hot-finished)",
+        "series": [
+          [
+            "en/chs42.4x3.2-hf",
+            42.4
+          ],
+          [
+            "en/chs48.3x3.2-hf",
+            48.3
+          ],
+          [
+            "en/chs60.3x3.2-hf",
+            60.3
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-hfchs",
+    "source": "https://www.steelforlifebluebook.co.uk/hfchs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10210-2",
+    "series": "CHS hot-finished"
+  },
+  "section": {
+    "area_cm2": 3.941,
+    "mass_kg_m": 3.093,
+    "iy_cm4": 7.62,
+    "iz_cm4": 7.62,
+    "iu_cm4": 7.62,
+    "iv_cm4": 7.62,
+    "wy_cm3": 3.59,
+    "wz_cm3": 3.59,
+    "centroid_mm": [
+      21.2,
+      21.2
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 3.94,
+      "mass_kg_m": 3.09
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/chs42.4x3.2-hf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:02d51a60bffa4260c8c7a45001eccbf7a5a36bb09226df197d5cd6f07e2bde0f"
+}

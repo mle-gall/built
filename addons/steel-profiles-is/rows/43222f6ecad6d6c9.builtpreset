@@ -1,0 +1,86 @@
+{
+  "uid": "43222f6ecad6d6c9",
+  "name": "ISLC(P) 200",
+  "rev": 2,
+  "pack": "Steel profiles · IS",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "is/islcp200",
+      "family": "channel",
+      "params": {
+        "height": 200.0,
+        "width": 75.0,
+        "web": 5.7,
+        "flange": 11.4,
+        "radius": 8.5,
+        "toe": 3.2,
+        "slope": 10.51
+      },
+      "catalogue": {
+        "name": "ISLC(P) 200",
+        "series": [
+          [
+            "is/islcp125",
+            125.0
+          ],
+          [
+            "is/islcp150",
+            150.0
+          ],
+          [
+            "is/islcp200",
+            200.0
+          ],
+          [
+            "is/islcp300",
+            300.0
+          ]
+        ],
+        "aliases": [
+          "LC(P) 200"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "is808-1989",
+    "source": "https://law.resource.org/pub/in/bis/S03/is.808.1989.pdf",
+    "standard": "IS 808",
+    "series": "ISLC"
+  },
+  "section": {
+    "area_cm2": 27.408,
+    "mass_kg_m": 21.515,
+    "iy_cm4": 1795.23,
+    "iz_cm4": 136.72,
+    "iu_cm4": 1795.23,
+    "iv_cm4": 136.72,
+    "wy_cm3": 179.52,
+    "wz_cm3": 25.94,
+    "centroid_mm": [
+      22.29,
+      100.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 27.4,
+      "mass_kg_m": 21.5
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "is/islcp200",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:6a06e5d4f5a87e0010d240ab1e7fbe243c271a564776ec6a09f213552476865c"
+}

@@ -1,0 +1,73 @@
+{
+  "uid": "a11f993ba5447bf4",
+  "name": "S10 × 25.4",
+  "rev": 3,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {
+    "class": "IfcBeam"
+  },
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/s10x25.4",
+      "family": "i",
+      "params": {
+        "height": 254.0,
+        "width": 118.364,
+        "web": 7.899,
+        "flange": 12.471,
+        "radius": 11.63,
+        "slope": 16.67
+      },
+      "catalogue": {
+        "name": "S10 × 25.4",
+        "series": [
+          [
+            "aisc/s10x25.4",
+            254.0
+          ]
+        ],
+        "aliases": [
+          "S10X25.4"
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "S"
+  },
+  "section": {
+    "area_cm2": 48.396,
+    "mass_kg_m": 37.991,
+    "iy_cm4": 5173.92,
+    "iz_cm4": 286.82,
+    "iu_cm4": 5173.92,
+    "iv_cm4": 286.82,
+    "wy_cm3": 407.4,
+    "wz_cm3": 48.46,
+    "centroid_mm": [
+      59.18,
+      127.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 48.064,
+      "mass_kg_m": 37.799
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/s10x25.4",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:5116e2e51d3b67492f66889d6f13ef6ff2b8cd0549c5fa25854312c228a11d6e"
+}
