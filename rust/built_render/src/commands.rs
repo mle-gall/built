@@ -756,6 +756,7 @@ pub fn command_description(label: &str, key: &str) -> Option<&'static str> {
             "menu:import:photomesh" => "Bring in a WebODM drone survey in its true place, as a mesh to trace over.",
             "menu:import:stl" => "Import triangles from an STL mesh.",
             "menu:import:sketch" => "Open a DXF, SVG or DWG drawing in the Sketch workspace, clean it up and keep it as a profile or a section.",
+            "menu:view_template:save" => "Keep this view's camera kind, style, hidden tags and section planes in the Library, to apply to other views and models.",
             "menu:sketch:new" => "Draw a new profile in the Sketch workspace, to sweep along a path or save to the Library.",
             "menu:sketch:new:section" => "Draw a new cutter section in the Sketch workspace, for notches, copes and openings.",
             "menu:import:survey_points" => "Bring in surveyed points from a CSV file with UTM coordinates.",

@@ -131,7 +131,8 @@ def test_a_scope_shows_its_items_sorted_and_a_search_shows_every_match():
 
 def test_providers_are_data_shaped_and_profiles_have_sweep_actions():
     ids = [p.id for p in L.PROVIDERS]
-    assert ids == ["materials", "components", "families", "profiles", "sections", "presets", "styles"]
+    assert ids == ["materials", "components", "families", "profiles", "sections", "presets", "styles",
+                   "scenes", "title_blocks"]
     assert L.provider("profiles").ready
     assert any(p["key"] == "basic/i" and "apply" in p["verbs"]
                for p in L.provider("profiles").items(None))

@@ -360,6 +360,10 @@ pub(crate) fn items(py: Python<'_>, scene: Option<&Bound<'_, PyAny>>, kinds: &[&
             "profiles" | "sections" => {
                 let mut sketch = e.data["sketch"].clone();
                 sketch["name"] = json!(e.name);
+                // The tile shows the drawing itself, as saved (sketch_thumbs.rs).
+                if thumb.is_none() {
+                    row["thumb"] = json!(crate::sketch_thumbs::key(&sketch));
+                }
                 row["sketch"] = sketch;
                 let mut v = verbs.clone();
                 if e.kind == "sections" {
@@ -736,6 +740,12 @@ fn apply(ctx: &Bound<'_, PyAny>, item: &Bound<'_, PyAny>, kind: &str, entry: &st
             let style = py.import("built_core.style")?.getattr("Style")?.call_method1("from_dict", (to_py(py, &entry.data)?,))?;
             style.setattr("name", &entry.name)?;
             win.call_method1("set_active_style", (style,))?;
+        }
+        "scenes" => super::views::use_view(&win, &entry.name, &entry.data)?,
+        "title_blocks" => {
+            // The sheet is under the Library: leave it to see the block land.
+            cs(py)?.call_method1("close", (&win,))?;
+            super::views::use_block(&win, &entry.name, &entry.data)?;
         }
         _ => flash(ctx, "This kind is used from its own tool")?,
     }

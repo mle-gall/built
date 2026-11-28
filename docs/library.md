@@ -15,8 +15,10 @@ profile families, built-in styles) is a fifth *source* in the browser, never a
 destination, and is read-only.
 
 The code: `rust/built_render/src/library_store.rs` (the folders, plain Rust,
-unit-tested) and `rust/built_render/src/library_host/destinations.rs` (the
-preferences, the model's entries, the drawer, the browser rows and verbs).
+unit-tested), `rust/built_render/src/library_host/destinations.rs` (the
+preferences, the model's entries, the drawer, the browser rows and verbs)
+and `rust/built_render/src/library_host/views.rs` (view templates and
+title blocks).
 
 ## Kinds
 
@@ -28,9 +30,28 @@ preferences, the model's entries, the drawer, the browser rows and verbs).
 | `sections` | Sketch workspace › Save to Library… (a section) | The `built.profile` file | Open the drawing (the Cut tool takes presets); listed in Library › Sections |
 | `presets` | A live member › Save as preset | The preset row (`uid` is the item's id) | Use in Sweep or Cut |
 | `styles` | Display panel › Save style… | The style's dictionary | Use this style (also listed in the Display panel's Style choice) |
-| `scenes`, `title_blocks` | Not yet wired to a Save button | — | The layout and destinations accept them |
+| `scenes` (View templates) | View ▸ Scenes ▸ Save View as Template…, or Library › View templates › Save current view… | `{"format": "built.view_template", "v": 1, "camera", "style", "hidden_tags", "hidden_folders", "section"}` (below) | Apply to this view |
+| `title_blocks` | On a sheet: right-click the title block › Save to Library…, or Library › Title blocks › Save title block… | `{"format": "built.title_block", "v": 1, "fields": {…}}`: the title block's rows, columns, layout, lines and colours, never its place on the sheet | Use on this sheet |
 
 A drawn sketch is saved as a profile or a section, by its use.
+
+**View templates.** A view template is a view's setup without its place:
+
+| Part | Saved | Applied |
+|---|---|---|
+| `camera` | `perspective`, `two_point`, `fov_deg`, `lens` | The camera's kind and lens; where it stands and looks stays |
+| `style` | The display style's dictionary | Becomes the active style |
+| `hidden_tags`, `hidden_folders` | Each hidden tag as `{"key", "name"}`, hidden tag folders | Tags are matched by key, then by name; the others are shown. Tags of the template that this model lacks are counted in the toast |
+| `section` | The active plane's dictionary (name, point, normal, fill), `planes_shown`, `cuts_shown` | The model's plane with that id or name becomes active; a model without it gets the plane (one History step) |
+
+Applying is not a History step (as recalling a scene is not), except for a
+section plane it has to add. Add Scene afterwards keeps the result as a
+scene of the model.
+
+**Title blocks.** Use on this sheet writes the fields onto the title block
+of the sheet in front in one History step and keeps it docked in its
+corner whatever its new size; a sheet without a title block gets one. With
+no sheet in front the Library says so.
 
 Junction details are presets too. Import pack… (Presets) reads a pack
 folder, a `pack.json` or a `.builtpack`. It checks every file's hash and
@@ -151,6 +172,12 @@ Components tab has the same sources as Source facets. A saved item's menu and
 details offer Use, Edit name and tags…, Copy to…, Move to…, Update, Reveal in
 Finder (folder destinations) and Delete… (writable ones).
 
+**Thumbnails of drawings.** A section's tile (and a drawn profile's) shows
+the drawing itself: outline, closed regions filled. It is rendered from
+the sketch (`sketch_thumbs.rs`), under a key made from the drawing's
+curves, so the same drawing is rendered once and reused, in every
+destination and in the model, and an edited drawing is rendered again the
+next time the tab lists it. No picture file is stored for it.
 
 ## Trade add-ons
 

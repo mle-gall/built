@@ -49,7 +49,7 @@ pub const KINDS: &[Kind] = &[
     Kind { id: "sections", label: "Sections", model_first: false },
     Kind { id: "presets", label: "Presets", model_first: false },
     Kind { id: "styles", label: "Styles", model_first: false },
-    Kind { id: "scenes", label: "Scene templates", model_first: true },
+    Kind { id: "scenes", label: "View templates", model_first: true },
     Kind { id: "title_blocks", label: "Title blocks", model_first: false },
 ];
 

@@ -15,7 +15,9 @@ mod bulk;
 pub(crate) mod destinations;
 mod packs;
 mod presets;
+pub(crate) mod views;
 use presets::PresetsProvider;
+use views::{TitleBlocksProvider, ViewTemplatesProvider};
 pub(crate) use presets::capture_preset;
 use std::path::PathBuf;
 use crate::library_collections as collections;
@@ -1596,7 +1598,8 @@ impl ProfilesProvider {
                 let mut sketch=data["sketch"].clone();
                 sketch["name"]=serde_json::json!(name);
                 if saved.contains(&crate::library_store::legacy_profile_id(&file)) {continue;}
-                items.push(serde_json::json!({"key":format!("local:{}",file.file_name().unwrap_or_default().to_string_lossy()),"name":name,"category":"My profiles","source":"local","sketch":sketch,"verbs":["apply","edit"]}));
+                let thumb=crate::sketch_thumbs::key(&sketch);
+                items.push(serde_json::json!({"key":format!("local:{}",file.file_name().unwrap_or_default().to_string_lossy()),"name":name,"category":"My profiles","source":"local","sketch":sketch,"thumb":thumb,"verbs":["apply","edit"]}));
             }
         }
         if let Some(scene)=ctx.getattr_opt("scene")?.filter(|s|!s.is_none() && s.hasattr("_root").unwrap_or(false)){
@@ -1604,7 +1607,7 @@ impl ProfilesProvider {
             let rows:Vec<serde_json::Value>=serde_json::from_str(&json(py)?.call_method1("dumps",(rows,))?.extract::<String>()?).unwrap_or_default();
             // A member's frozen copy of a released sketch is its own, not a choice.
             for row in rows.iter().filter(|r|r["kind"]=="sketch" && r["use"]!="section" && r["state"]=="ok" && r["frozen"]!=true){
-                items.push(serde_json::json!({"key":format!("sketch:{}",row["uid"].as_str().unwrap_or_default()),"name":row["name"].as_str().unwrap_or("Drawn profile"),"category":"Sketches","source":"model","sketch":row,"verbs":["apply","edit"]}));
+                items.push(serde_json::json!({"key":format!("sketch:{}",row["uid"].as_str().unwrap_or_default()),"name":row["name"].as_str().unwrap_or("Drawn profile"),"category":"Sketches","source":"model","sketch":row,"thumb":crate::sketch_thumbs::key(row),"verbs":["apply","edit"]}));
             }
         }
         let mut catalog = presets::listed(ctx)?;
@@ -1840,7 +1843,7 @@ impl SectionsProvider {
                 }
                 let name = data["name"].as_str().unwrap_or("Drawn section");
                 items.push(serde_json::json!({"key": format!("local:{}", file.file_name().unwrap_or_default().to_string_lossy()), "name": name,
-                    "category": "", "source": "mine", "defaults": section_rows(&data["sketch"]), "verbs": ["edit"]}));
+                    "category": "", "source": "mine", "defaults": section_rows(&data["sketch"]), "thumb": crate::sketch_thumbs::key(&data["sketch"]), "verbs": ["edit"]}));
             }
         }
         // This model's section sketches (a member's frozen copy included:
@@ -1850,7 +1853,7 @@ impl SectionsProvider {
             let rows: Vec<serde_json::Value> = serde_json::from_str(&json(py)?.call_method1("dumps", (rows,))?.extract::<String>()?).unwrap_or_default();
             for row in rows.iter().filter(|r| r["kind"] == "sketch" && r["use"] == "section") {
                 items.push(serde_json::json!({"key": format!("sketch:{}", row["uid"].as_str().unwrap_or_default()), "name": row["name"].as_str().unwrap_or("Drawn section"),
-                    "category": "Sketches", "source": "model", "defaults": section_rows(row), "verbs": ["edit"]}));
+                    "category": "Sketches", "source": "model", "defaults": section_rows(row), "thumb": crate::sketch_thumbs::key(row), "verbs": ["edit"]}));
             }
         }
         json(py)?.call_method1("loads", (serde_json::Value::Array(items).to_string(),))
@@ -2108,6 +2111,12 @@ fn thumb(view: &Bound<'_, PyAny>, path: &Bound<'_, PyAny>) -> PyResult<String> {
         let name=path.str()?;
         let rgba=if let Some(profile)=name.to_str()?.strip_prefix("profile:"){
             py.import("built_core.command_protocol")?.call_method1("sweep_thumbnail",(profile,px))?
+        }else if name.to_str()?.starts_with("sketch:"){
+            // A drawn section or profile: rendered from its drawing (sketch_thumbs.rs).
+            match crate::sketch_thumbs::pixels(name.to_str()?,px as usize){
+                Some(rgba)=>pyo3::types::PyBytes::new(py,&rgba).into_any(),
+                None=>py.None().into_bound(py),
+            }
         }else if name.to_str()?.starts_with("junction:"){
             py.import("built_core.command_protocol")?.call_method1("junction_thumbnail",(name.to_str()?,px))?
         }else{render(py)?.call_method1("swatch_pixels", (path, px, true))?};
@@ -2451,7 +2460,7 @@ impl LibrarySheet {
         } else {
             loads(py, &render(py)?.call_method1("library_sheet", (dumps(py, spec.as_any())?,))?)?
         };
-        if !native || matches!(prov_id.as_str(),"profiles"|"presets"|"sections") {
+        if !native || matches!(prov_id.as_str(),"profiles"|"presets"|"sections"|"scenes"|"title_blocks") {
             if prov_id != "families" {
                 for path in out.get_item("thumbs")?.try_iter()? { thumb(&view, &path?)?; }
             } else if let Some(key) = out.get_item("cursor")?.extract::<Option<String>>()? {
@@ -2486,6 +2495,10 @@ impl LibrarySheet {
             sheet.call_method1("verb",("typeact:pack","Import pack…"))?;
         }else if prov_id=="sections" {
             sheet.call_method1("verb",("typeact:new","New section…"))?;
+        }else if prov_id=="scenes" {
+            sheet.call_method1("verb",("typeact:save","Save current view…"))?;
+        }else if prov_id=="title_blocks" {
+            sheet.call_method1("verb",("typeact:save","Save title block…"))?;
         }else if !has_target {
             sheet.call_method1("verb", ("import-collection", "Import collection…"))?;
         }
@@ -2822,7 +2835,7 @@ impl LibrarySheet {
                 }
                 if ok {
                     st.set_item("type", &arg)?;
-                    st.set_item("scope", if matches!(arg.as_str(), "styles") {"s:bundled"} else if matches!(arg.as_str(), "families" | "sections" | "presets" | "profiles") { "s:all" } else { "s:model" })?;
+                    st.set_item("scope", if matches!(arg.as_str(), "styles") {"s:bundled"} else if matches!(arg.as_str(), "families" | "sections" | "presets" | "profiles" | "scenes" | "title_blocks") { "s:all" } else { "s:model" })?;
                     st.set_item("cursor", py.None())?;
                     _save_state(&st)?;
                 }
@@ -3031,7 +3044,7 @@ fn open_library(py: Python<'_>, win: &Bound<'_, PyAny>, type_id: Option<String>,
     let st = _state(&view)?;
     _land(&view, win)?;
     if let Some(t) = type_id.filter(|t| !t.is_empty()) {
-        if matches!(t.as_str(), "families" | "sections" | "profiles" | "presets") && !st.get_item("type")?.eq(&t)? { st.set_item("scope", "s:all")?; }
+        if matches!(t.as_str(), "families" | "sections" | "profiles" | "presets" | "scenes" | "title_blocks") && !st.get_item("type")?.eq(&t)? { st.set_item("scope", "s:all")?; }
         st.set_item("type", t)?;
     }
     if let Some(sc) = scope.filter(|s| !s.is_empty()) {
@@ -3449,7 +3462,10 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
         Bound::new(py, SectionsProvider::new())?.into_any(),
         Bound::new(py, PresetsProvider::new())?.into_any(),
         Bound::new(py, StylesProvider::new())?.into_any(),
+        Bound::new(py, ViewTemplatesProvider::new())?.into_any(),
+        Bound::new(py, TitleBlocksProvider::new())?.into_any(),
     ])?;
+    views::register(&sub)?;
     for f in [
         wrap_pyfunction!(_hex, &sub)?,
         wrap_pyfunction!(material_uses, &sub)?,

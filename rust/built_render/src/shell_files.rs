@@ -231,6 +231,11 @@ fn command<'py>(py: Python<'py>, win: &Any<'py>, name: &str, args: &Bound<'py, P
             let (how, rest) = arg.split_once(':').unwrap_or((arg, ""));
             return Ok(b(py, crate::sketch_workspace::enter(win, how, rest)?));
         }
+        // View ▸ Scenes ▸ Save View as Template… (library_host/views.rs).
+        "view_template" => {
+            crate::library_host::views::save_view_template(win)?;
+            return Ok(b(py, true));
+        }
         "ctx_demo" => return r.call_method1("context_menu_demo", (win, arg)),
         "close_doc" => {
             let doc = if arg.is_empty() { nil(py) } else { docs()?.get_item(py.import("builtins")?.getattr("int")?.call1((arg,))?)? };

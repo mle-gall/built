@@ -360,6 +360,7 @@ Generated from the fixture (`(system …)` rows are AppKit's own).
 | View ▸ Scenes | Previous Scene | `scene_previous` |  |
 | View ▸ Scenes | Next Scene | `scene_next` |  |
 | View ▸ Scenes | Organise Scenes | `organise-scenes` |  |
+| View ▸ Scenes | Save View as Template… | `view_template:save` |  |
 | View | Animation ▸ |  |  |
 | View ▸ Animation | Scene Transitions | `scene_transitions` |  |
 | View ▸ Animation | Play / Stop | `scene_play` |  |
