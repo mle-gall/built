@@ -304,6 +304,20 @@ pub fn action(win: &Obj<'_>, text: &str) -> PyResult<()> {
     Ok(())
 }
 
+/// The document a view shows (a shell view reaches it through its viewport).
+fn scene_of<'p>(view: &Obj<'p>) -> PyResult<Option<Obj<'p>>> {
+    if let Some(scene) = view.getattr_opt("scene")?.filter(|s| !s.is_none()) {
+        return Ok(Some(scene));
+    }
+    Ok(view
+        .getattr_opt("source_viewport")?
+        .filter(|v| !v.is_none())
+        .map(|v| v.getattr_opt("scene"))
+        .transpose()?
+        .flatten()
+        .filter(|s| !s.is_none()))
+}
+
 fn badge_at(view: &Obj<'_>, at: [f64; 3]) -> PyResult<Option<(f64, f64)>> {
     let py = view.py();
     let p = py.import("built_core")?.getattr("Vec3")?.call1((at[0], at[1], at[2]))?;
@@ -314,7 +328,7 @@ fn badge_at(view: &Obj<'_>, at: [f64; 3]) -> PyResult<Option<(f64, f64)>> {
 /// A click on a badge ticks or unticks it; with Alt it skips the meeting
 /// (or un-skips it). True when the click was the review's.
 pub fn press(view: &Obj<'_>, x: f64, y: f64, alt: bool) -> PyResult<bool> {
-    let scene = view.getattr("scene")?;
+    let Some(scene) = scene_of(view)? else { return Ok(false) };
     let Some(review) = current(&scene)? else { return Ok(false) };
     let hit = {
         let r = review.borrow();
@@ -344,7 +358,7 @@ pub fn press(view: &Obj<'_>, x: f64, y: f64, alt: bool) -> PyResult<bool> {
 
 /// Enter applies, Esc leaves. True when the key was the review's.
 pub fn key(view: &Obj<'_>, enter: bool, escape: bool) -> PyResult<bool> {
-    let scene = view.getattr("scene")?;
+    let Some(scene) = scene_of(view)? else { return Ok(false) };
     if current(&scene)?.is_none() || !(enter || escape) {
         return Ok(false);
     }
