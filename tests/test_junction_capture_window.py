@@ -62,7 +62,7 @@ def capture_plugin(app):
 @pytest.mark.window
 @pytest.mark.skipif(os.environ.get("BUILT_WINDOW_TESTS") != "1", reason="requires a native window")
 def test_chip_popover_save_review_and_apply_in_a_native_window(tmp_path):
-    from built_core import command_protocol as live, links
+    from built_core import Vec3, command_protocol as live, links
     from built_core.scene import Scene
     from scripts.isolated_launch import run
     from tests.test_junction_capture import facing_face, handmade_knee
@@ -71,6 +71,18 @@ def test_chip_popover_save_review_and_apply_in_a_native_window(tmp_path):
     scene, history = garage(purlins=False)
     source, column, rafter, pl, cut_uid, _ = handmade_knee(scene, history, bolts=False)
     spec = live.live_sweep(scene, pl.uid)
+    # A member's path is stored in its own frame; the Sweep tool commits it
+    # in the model's, so the window adds the plate from world points.
+    frame = pl.xform
+    def world(p):
+        return list(frame.map(Vec3(*p)).toTuple())
+    path = dict(spec["path"])
+    path["points"] = [world(p) for p in path["points"]]
+    if path.get("ends"):
+        path["ends"] = [world(e) if isinstance(e, list) else e for e in path["ends"]]
+    path.pop("definition_space", None)
+    path.pop("rests_on", None)
+    spec["path"] = path
     history.undo()  # the plate is added again in the window, as the tool does
     plate = {k: spec[k] for k in ("preset_uid", "profile", "attachment", "path") if k in spec}
     (tmp_path / "plate.json").write_text(json.dumps(plate))
