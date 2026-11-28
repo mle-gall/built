@@ -206,6 +206,9 @@ impl SelectTool {
         self.cycle = None;
         let Some(pick) = pick(host, p.px, true) else { return self.click(p, host) };
         match pick.kind {
+            // A swept member's section face opens its profile in the
+            // Sketch workspace; elsewhere a group opens for editing.
+            PickKind::Group if host.call("sweep_cap_profile", serde_json::json!({"px": p.px})) == serde_json::json!(true) => {}
             PickKind::Group => host.open_placement(pick.id),
             PickKind::SectionPlane => host.host_verb("toggle_section", pick.id),
             PickKind::TextLabel => host.host_verb("edit_text", pick.id),

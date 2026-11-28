@@ -169,6 +169,9 @@ pub const GROUPS: &[(&str, &[Row])] = &[
             Row::Entry("tool:circle"),
             Row::Entry("tool:polygon"),
             Row::Sub("Arcs"),
+            Row::Separator,
+            Row::Entry("sketch:new"),
+            Row::Entry("sketch:new:section"),
         ],
     ),
     (

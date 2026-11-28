@@ -83,6 +83,24 @@ pub fn clicked_back_side(
     Ok(n.dot(xyz(&ray.get_item(1)?)?) > 0.)
 }
 
+/// Whether a face (its outer loop, definition coordinates) is a section
+/// face of a sweep along `path`: it faces along the first or last span and
+/// sits at that end (square and mitred ends alike, never a side face).
+pub(crate) fn is_cap(path: &[[f64; 3]], ring: &[DVec3]) -> bool {
+    if path.len() < 2 || ring.len() < 3 {
+        return false;
+    }
+    let Some((_, n)) = crate::snap_planes::face_plane(ring.iter().map(|p| p.to_array()).collect()) else { return false };
+    let n = DVec3::from(n);
+    let centre = ring.iter().copied().sum::<DVec3>() / ring.len() as f64;
+    let last = path.len() - 1;
+    [(path[0], path[1]), (path[last], path[last - 1])].into_iter().any(|(end, next)| {
+        let span = DVec3::from(next) - DVec3::from(end);
+        let Some(d) = span.try_normalize() else { return false };
+        n.dot(d).abs() > 0.3 && (centre - DVec3::from(end)).dot(d).abs() < 0.25 * span.length()
+    })
+}
+
 impl ViewportToolHost {
     /// None delegates to the extension or the UI callback supplied by the host.
     pub(super) fn service(
@@ -310,6 +328,40 @@ impl ViewportToolHost {
                 canvas.getattr("renderer")?.call_method1("ui_open_commands",("", "Cut presets"))?;
                 canvas.call_method0("update")?;
                 Value::Null
+            }
+            // Sweep › D: draw the profile in the Sketch workspace; Done
+            // comes back to the Sweep tool with it (sketch_workspace.rs).
+            "sweep_draw" => {
+                let win = view.call_method0("window")?;
+                json!(py.import("built_render.sketch_workspace")?.call_method1("enter", (win, "sweep", ""))?.is_truthy()?)
+            }
+            // A double-click on a swept member's section face (an end cap)
+            // opens its profile in the Sketch workspace; true when it did.
+            "sweep_cap_profile" => {
+                let px: (f64, f64) = args(&arg["px"])?;
+                let Some(pair) = hit(view, "pick_face_placement", px)? else { return Ok(Some(json!(false))) };
+                let (face, placement) = (pair.get_item(0)?, pair.get_item(1)?);
+                if face.is_none() || placement.is_none() {
+                    return Ok(Some(json!(false)));
+                }
+                let owner = placement.getattr_opt("source_occurrence")?.filter(|o| !o.is_none()).unwrap_or(placement);
+                let uid = owner.getattr("uid")?;
+                let scene = view.getattr("scene")?;
+                let row = py.import("built_core.command_protocol")?.call_method1("live_sweep", (&scene, &uid))?;
+                let Some(path) = row.getattr_opt("get")?.map(|g| g.call1(("resolved_points",))).transpose()?.filter(|p| !p.is_none()) else {
+                    return Ok(Some(json!(false)));
+                };
+                let path: Vec<[f64; 3]> = path.extract()?;
+                let ring: Vec<DVec3> = face
+                    .getattr("loop")?
+                    .try_iter()?
+                    .map(|v| Ok(DVec3::from(v?.call_method0("position_tuple")?.extract::<[f64; 3]>()?)))
+                    .collect::<PyResult<_>>()?;
+                if !is_cap(&path, &ring) {
+                    return Ok(Some(json!(false)));
+                }
+                let win = view.call_method0("window")?;
+                json!(py.import("built_render.sketch_workspace")?.call_method1("enter", (win, "member", uid))?.is_truthy()?)
             }
             "sweep_picker" => {
                 let canvas=view.call_method0("window")?.getattr("_host")?.getattr("view")?;
@@ -569,5 +621,32 @@ mod cut_pick_tests {
         assert_eq!(nearest_span_end(&path, 4, DVec3::new(0., 1.8, 0.)), (3, true));
         assert_eq!(nearest_span_end(&path, 4, DVec3::new(0., 0.2, 0.)), (3, false));
         assert_eq!(nearest_span_end(&path, 3, DVec3::new(0., 0.2, 0.)), (0, true));
+    }
+}
+
+#[cfg(test)]
+mod cap_tests {
+    use super::is_cap;
+    use glam::DVec3;
+
+    fn square(at: f64, normal_along_x: bool) -> Vec<DVec3> {
+        if normal_along_x {
+            vec![DVec3::new(at, -0.1, -0.1), DVec3::new(at, 0.1, -0.1), DVec3::new(at, 0.1, 0.1), DVec3::new(at, -0.1, 0.1)]
+        } else {
+            vec![DVec3::new(0., 0.1, -0.1), DVec3::new(3., 0.1, -0.1), DVec3::new(3., 0.1, 0.1), DVec3::new(0., 0.1, 0.1)]
+        }
+    }
+
+    #[test]
+    fn end_faces_are_section_faces_and_sides_are_not() {
+        let path = [[0., 0., 0.], [3., 0., 0.]];
+        assert!(is_cap(&path, &square(0., true)));
+        assert!(is_cap(&path, &square(3., true)));
+        assert!(!is_cap(&path, &square(0., false)));
+        // A cross face in the middle of the member is no end.
+        assert!(!is_cap(&path, &square(1.5, true)));
+        // A mitred end still faces along the member at its end.
+        let mitre = vec![DVec3::new(3., -0.1, -0.1), DVec3::new(3.2, 0.1, -0.1), DVec3::new(3.2, 0.1, 0.1), DVec3::new(3., -0.1, 0.1)];
+        assert!(is_cap(&path, &mitre));
     }
 }

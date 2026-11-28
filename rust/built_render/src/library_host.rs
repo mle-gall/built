@@ -1599,21 +1599,20 @@ impl ProfilesProvider {
         if let Some(scene)=ctx.getattr_opt("scene")?.filter(|s|!s.is_none() && s.hasattr("_root").unwrap_or(false)){
             let rows=py.import("built_core.command_protocol")?.call_method1("live_rows",(scene,))?;
             let rows:Vec<serde_json::Value>=serde_json::from_str(&json(py)?.call_method1("dumps",(rows,))?.extract::<String>()?).unwrap_or_default();
-            for row in rows.iter().filter(|r|r["kind"]=="sketch" && r["use"]!="section" && r["state"]=="ok"){
+            // A member's frozen copy of a released sketch is its own, not a choice.
+            for row in rows.iter().filter(|r|r["kind"]=="sketch" && r["use"]!="section" && r["state"]=="ok" && r["frozen"]!=true){
                 items.push(serde_json::json!({"key":format!("sketch:{}",row["uid"].as_str().unwrap_or_default()),"name":row["name"].as_str().unwrap_or("Drawn profile"),"category":"Sketches","source":"model","sketch":row,"verbs":["apply","edit"]}));
             }
         }
-        // Saved profiles; sections (the Cut tool's) only on the Library sheet,
-        // not in the Sweep pickers, which ask with the scene alone.
-        let kinds:&[&str]=if ctx.hasattr("win")? {&["profiles","sections"]} else {&["profiles"]};
-        for row in destinations::items(py,scene.as_ref(),kinds)? {
-            let mut row=row;
-            if row["lib"]["kind"]=="sections" {
-                row["category"]=serde_json::json!("Sections");
-            }
+        // Saved profiles; saved sections are Library › Sections (SectionsProvider).
+        for row in destinations::items(py,scene.as_ref(),&["profiles"])? {
             items.push(row);
         }
         json(py)?.call_method1("loads",(serde_json::to_string(&items).unwrap(),))
+    }
+    /// The header's New profile… and Import drawing… (sketch_workspace.rs).
+    fn type_action(&self, ctx: &Bound<'_, PyAny>, action: &str) -> PyResult<()> {
+        sketch_entry(ctx, action, false)
     }
     #[pyo3(signature=(ctx,verb,item,_arg=""))]
     fn run(&self,ctx:&Bound<'_,PyAny>,verb:&str,item:&Bound<'_,PyAny>,_arg:&str)->PyResult<()> {
@@ -1628,6 +1627,7 @@ impl ProfilesProvider {
             // Drawn profiles open in the Sketch workspace (sketch_workspace.rs).
             let key:String=item.get_item("key")?.extract()?;
             let win=ctx.getattr("win")?;
+            cs(ctx.py())?.call_method1("close",(&win,))?;
             if key.starts_with("saved:") {
                 let (Some((dest,kind,id)),scene)=(destinations::parse_key(&key),ctx.getattr("scene")?) else {return Ok(())};
                 if let Some(l)=destinations::entries(ctx.py(),Some(&scene),&[kind.as_str()])?.into_iter().find(|l|l.dest.key==dest && l.entry.id==id) {
@@ -1643,6 +1643,142 @@ impl ProfilesProvider {
         }
         Ok(())
     }
+}
+
+/// New and Import from the Profiles and Sections tabs: the sheet goes and
+/// the Sketch workspace comes (Import asks for the file first).
+fn sketch_entry(ctx: &Bound<'_, PyAny>, action: &str, section: bool) -> PyResult<()> {
+    let py = ctx.py();
+    let win = ctx.getattr("win")?;
+    match action {
+        "new" => {
+            cs(py)?.call_method1("close", (&win,))?;
+            crate::sketch_workspace::enter(&win, "new", if section { "section" } else { "" })?;
+        }
+        "import" => {
+            cs(py)?.call_method1("close", (&win,))?;
+            render(py)?.getattr("shell_files")?.call_method1("command", (&win, "import:sketch"))?;
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+/// Drawn cutter sections (a sketch with `use: section`): the Library's
+/// own files and this model's sketch rows. Cut uses them; here they are
+/// drawn, imported and edited.
+#[pyclass(module = "built_render.wgpu_library", extends = LibraryProvider, dict)]
+pub struct SectionsProvider;
+
+#[pymethods]
+impl SectionsProvider {
+    #[new]
+    fn new() -> PyClassInitializer<Self> {
+        PyClassInitializer::from(LibraryProvider).add_subclass(SectionsProvider)
+    }
+
+    #[classattr]
+    fn id() -> &'static str {
+        "sections"
+    }
+
+    #[classattr]
+    fn label() -> &'static str {
+        "Sections"
+    }
+
+    fn items<'p>(&self, py: Python<'p>, ctx: &Bound<'p, PyAny>) -> PyResult<Bound<'p, PyAny>> {
+        let scene = ctx.getattr_opt("scene")?.filter(|s| !s.is_none() && s.hasattr("_root").unwrap_or(false));
+        // Saved sections, in every destination (docs/library.md).
+        let mut items = destinations::items(py, scene.as_ref(), &["sections"])?;
+        for row in &mut items {
+            if let Some(sketch) = row.get("sketch").filter(|s| s["curves"].is_array()).cloned() {
+                let mut details: Vec<serde_json::Value> = row["defaults"].as_array().cloned().unwrap_or_default();
+                details.extend(section_rows(&sketch).into_iter().map(|r| serde_json::json!(r)));
+                row["defaults"] = serde_json::json!(details);
+            }
+        }
+        // Older loose files not yet in the store.
+        let saved = destinations::saved_ids(py, scene.as_ref(), "sections")?;
+        if let Ok(files) = std::fs::read_dir(ProfilesProvider::saved_directory()?) {
+            let mut files: Vec<_> = files.flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|s| s == "builtprofile")).collect();
+            files.sort();
+            for file in files {
+                let Some(data) = std::fs::read_to_string(&file).ok().and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok()) else { continue };
+                if data["format"] != "built.profile" || data["v"] != 1 || data["use"] != "section" || !data["sketch"]["curves"].is_array() {
+                    continue;
+                }
+                if saved.contains(&crate::library_store::legacy_profile_id(&file)) {
+                    continue;
+                }
+                let name = data["name"].as_str().unwrap_or("Drawn section");
+                items.push(serde_json::json!({"key": format!("local:{}", file.file_name().unwrap_or_default().to_string_lossy()), "name": name,
+                    "category": "", "source": "mine", "defaults": section_rows(&data["sketch"]), "verbs": ["edit"]}));
+            }
+        }
+        // This model's section sketches (a member's frozen copy included:
+        // a section is edited here, never picked for a sweep).
+        if let Some(scene) = scene {
+            let rows = py.import("built_core.command_protocol")?.call_method1("live_rows", (scene,))?;
+            let rows: Vec<serde_json::Value> = serde_json::from_str(&json(py)?.call_method1("dumps", (rows,))?.extract::<String>()?).unwrap_or_default();
+            for row in rows.iter().filter(|r| r["kind"] == "sketch" && r["use"] == "section") {
+                items.push(serde_json::json!({"key": format!("sketch:{}", row["uid"].as_str().unwrap_or_default()), "name": row["name"].as_str().unwrap_or("Drawn section"),
+                    "category": "Sketches", "source": "model", "defaults": section_rows(row), "verbs": ["edit"]}));
+            }
+        }
+        json(py)?.call_method1("loads", (serde_json::Value::Array(items).to_string(),))
+    }
+
+    /// The header's New section… (sketch_workspace.rs).
+    fn type_action(&self, ctx: &Bound<'_, PyAny>, action: &str) -> PyResult<()> {
+        sketch_entry(ctx, action, true)
+    }
+
+    #[pyo3(signature=(ctx, verb, item, _arg=""))]
+    fn run(&self, ctx: &Bound<'_, PyAny>, verb: &str, item: &Bound<'_, PyAny>, _arg: &str) -> PyResult<()> {
+        // Enter or a double-click edits: a section has no place in the model
+        // of its own (Cut places it).
+        if !matches!(verb, "apply" | "edit") {
+            return Ok(());
+        }
+        let py = ctx.py();
+        let key: String = item.get_item("key")?.extract()?;
+        let win = ctx.getattr("win")?;
+        cs(py)?.call_method1("close", (&win,))?;
+        if key.starts_with("saved:") {
+            let (Some((dest, kind, id)), scene) = (destinations::parse_key(&key), ctx.getattr("scene")?) else { return Ok(()) };
+            if let Some(l) = destinations::entries(py, Some(&scene), &[kind.as_str()])?.into_iter().find(|l| l.dest.key == dest && l.entry.id == id) {
+                let arg = serde_json::json!({"id": l.entry.id, "rev": l.entry.rev, "data": l.entry.data}).to_string();
+                crate::sketch_workspace::enter(&win, "library", &arg)?;
+            }
+        } else if let Some(file) = key.strip_prefix("local:") {
+            let path = ProfilesProvider::saved_directory()?.join(file);
+            crate::sketch_workspace::enter(&win, "open", &path.to_string_lossy())?;
+        } else if let Some(uid) = key.strip_prefix("sketch:") {
+            crate::sketch_workspace::enter(&win, "edit", uid)?;
+        }
+        Ok(())
+    }
+}
+
+/// A section's facts for the detail pane: extent and size.
+fn section_rows(sketch: &serde_json::Value) -> Vec<(String, String, String)> {
+    let mut rows = Vec::new();
+    if let Ok(s) = built_draft2d::Sketch::from_json(sketch) {
+        if let Some((lo, hi)) = s.bounds() {
+            let size = hi - lo;
+            rows.push(("Size".to_owned(), format!("{} × {} mm", trim_mm(size.x), trim_mm(size.y)), String::new()));
+        }
+        if let Some(e) = &s.extrude {
+            rows.push(("Extent".to_owned(), serde_json::to_value(e).ok().and_then(|v| v["extent"].as_str().map(str::to_owned)).unwrap_or_default().replace('_', " "), String::new()));
+        }
+    }
+    rows
+}
+
+fn trim_mm(v: f64) -> String {
+    let t = format!("{v:.1}");
+    t.trim_end_matches('0').trim_end_matches('.').to_owned()
 }
 
 /// The bundled catalogue by key, built once per resources folder and
@@ -2186,7 +2322,7 @@ impl LibrarySheet {
         } else {
             loads(py, &render(py)?.call_method1("library_sheet", (dumps(py, spec.as_any())?,))?)?
         };
-        if !native || matches!(prov_id.as_str(),"profiles"|"presets") {
+        if !native || matches!(prov_id.as_str(),"profiles"|"presets"|"sections") {
             if prov_id != "families" {
                 for path in out.get_item("thumbs")?.try_iter()? { thumb(&view, &path?)?; }
             } else if let Some(key) = out.get_item("cursor")?.extract::<Option<String>>()? {
@@ -2217,6 +2353,11 @@ impl LibrarySheet {
         let collections = manifests.as_ref().map_or(&[][..], |m| m.0.as_slice());
         if prov_id=="presets" {
             sheet.call_method1("verb",("typeact:import","Import pack…"))?;
+        }else if prov_id=="profiles" {
+            sheet.call_method1("verb",("typeact:new","New profile…"))?;
+            sheet.call_method1("verb",("typeact:import","Import drawing…"))?;
+        }else if prov_id=="sections" {
+            sheet.call_method1("verb",("typeact:new","New section…"))?;
         }else if !has_target {
             sheet.call_method1("verb", ("import-collection", "Import collection…"))?;
         }
@@ -2561,7 +2702,7 @@ impl LibrarySheet {
                 }
                 if ok {
                     st.set_item("type", &arg)?;
-                    st.set_item("scope", if matches!(arg.as_str(), "presets" | "profiles" | "styles") {"s:bundled"} else if arg == "families" { "s:all" } else { "s:model" })?;
+                    st.set_item("scope", if matches!(arg.as_str(), "presets" | "profiles" | "styles") {"s:bundled"} else if matches!(arg.as_str(), "families" | "sections") { "s:all" } else { "s:model" })?;
                     st.set_item("cursor", py.None())?;
                     _save_state(&st)?;
                 }
@@ -2771,7 +2912,7 @@ fn open_library(py: Python<'_>, win: &Bound<'_, PyAny>, type_id: Option<String>,
     _land(&view, win)?;
     if let Some(t) = type_id.filter(|t| !t.is_empty()) {
         if matches!(t.as_str(),"profiles"|"presets") && !st.get_item("type")?.eq(&t)?{st.set_item("scope","s:bundled")?;}
-        if t == "families" && !st.get_item("type")?.eq("families")? { st.set_item("scope", "s:all")?; }
+        if matches!(t.as_str(), "families" | "sections") && !st.get_item("type")?.eq(&t)? { st.set_item("scope", "s:all")?; }
         st.set_item("type", t)?;
     }
     if let Some(sc) = scope.filter(|s| !s.is_empty()) {
@@ -3177,6 +3318,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     sub.add_function(wrap_pyfunction!(collections::import_collection, &sub)?)?;
     sub.add_class::<FamiliesProvider>()?;
     sub.add_class::<ProfilesProvider>()?;
+    sub.add_class::<SectionsProvider>()?;
     sub.add_class::<PresetsProvider>()?;
     sub.add_class::<StylesProvider>()?;
     sub.add_class::<LibrarySheet>()?;
@@ -3185,6 +3327,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
         Bound::new(py, ComponentsProvider::new())?.into_any(),
         Bound::new(py, FamiliesProvider::new())?.into_any(),
         Bound::new(py, ProfilesProvider::new())?.into_any(),
+        Bound::new(py, SectionsProvider::new())?.into_any(),
         Bound::new(py, PresetsProvider::new())?.into_any(),
         Bound::new(py, StylesProvider::new())?.into_any(),
     ])?;

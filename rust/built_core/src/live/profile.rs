@@ -246,3 +246,84 @@ pub fn label(key: &str) -> Option<&'static str> {
         .find(|s| s.key == key)
         .map(|s| s.label.as_str())
 }
+
+/// A catalogue size as an exact drawing (lines, arcs, circles in mm), so a
+/// member's size can be opened in the Sketch workspace. Runs of facets
+/// about one centre become one arc; a ring about one centre is a circle.
+pub fn catalogue_sketch(key: &str) -> Option<serde_json::Value> {
+    use built_draft2d::{geom, Shape, Sketch, Use};
+    let outline = Profile { sketch: None, drawing: None, library: key.into(), params: Default::default() }.outline(24).ok()?;
+    let mut sketch = Sketch::new(Use::Profile);
+    sketch.name = label(key)?.to_owned();
+    for ring in &outline.rings {
+        let n = ring.len();
+        if n >= 3 && ring.iter().all(|node| node.arc.is_some_and(|c| c.distance(ring[0].arc.unwrap()) < 1e-9)) {
+            let c = ring[0].arc.unwrap();
+            sketch.add(Shape::Circle { c, r: ring[0].p.distance(c) });
+            continue;
+        }
+        // Start on a node that begins a run (its edge differs from the one before).
+        let same = |a: Option<DVec2>, b: Option<DVec2>| match (a, b) {
+            (Some(a), Some(b)) => a.distance(b) < 1e-9,
+            (None, None) => false,
+            _ => false,
+        };
+        let Some(start) = (0..n).find(|&i| !same(ring[(i + n - 1) % n].arc, ring[i].arc)) else { return None };
+        let mut i = 0;
+        while i < n {
+            let k = (start + i) % n;
+            let node = &ring[k];
+            match node.arc {
+                None => {
+                    let b = ring[(k + 1) % n].p;
+                    if node.p.distance(b) > 1e-9 {
+                        sketch.add(Shape::Line { a: node.p, b });
+                    }
+                    i += 1;
+                }
+                Some(c) => {
+                    let mut j = i + 1;
+                    while j < n && same(ring[(start + j) % n].arc, Some(c)) {
+                        j += 1;
+                    }
+                    let (p, q) = (node.p, ring[(start + j) % n].p);
+                    let m = ring[(k + 1) % n].p;
+                    let r = p.distance(c);
+                    // The ring runs p → q; an arc is counter-clockwise from a0 to a1.
+                    let ccw = (m - c).perp_dot(p - c) < 0.;
+                    let (from, to) = if ccw { (p, q) } else { (q, p) };
+                    let a0 = geom::angle_from(c, from, 0.);
+                    sketch.add(geom::arc(c, r, a0, geom::angle_from(c, to, a0)));
+                    i = j;
+                }
+            }
+        }
+    }
+    Some(sketch.to_json())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn area(key: &str) -> (f64, f64) {
+        let drawn = catalogue_sketch(key).unwrap();
+        let s = built_draft2d::Sketch::from_json(&drawn).unwrap();
+        let p = built_draft2d::profile(&s);
+        assert!(p.ok(), "{key}: {:?}", p.problems);
+        let table = Profile { sketch: None, drawing: None, library: key.into(), params: Default::default() }.outline(512).unwrap();
+        let ring_area = |ring: &Vec<Node>| {
+            ring.iter().enumerate().map(|(i, n)| n.p.perp_dot(ring[(i + 1) % ring.len()].p) / 2.).sum::<f64>().abs()
+        };
+        let a = ring_area(&table.rings[0]) - table.rings[1..].iter().map(ring_area).sum::<f64>();
+        (p.area, a)
+    }
+
+    #[test]
+    fn catalogue_sizes_open_as_exact_closed_drawings() {
+        for size in &SIZES.table.sizes {
+            let (drawn, faceted) = area(&size.key);
+            assert!((drawn - faceted).abs() / faceted < 1e-3, "{}: {drawn} vs {faceted}", size.key);
+        }
+    }
+}

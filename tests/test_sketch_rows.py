@@ -170,13 +170,16 @@ def test_release_removes_the_sketch_and_its_members_keep_their_geometry():
     apply(h, "sketch_commit", row=s)
     apply(h, "create_sweeps", sweeps=[member(dict(sketch=s["uid"]))])
     (g,) = scene.groups
-    kept = g.mesh
+    kept = positions(g)
     apply(h, "live_release", uid=s["uid"])
-    assert rows_of(scene, "sketch") == []
-    assert g.mesh is kept
-    assert rows_of(scene, "sweep")[0]["state"] == "profile_missing"
+    # The member keeps the profile as its own frozen copy (general-base §4.4).
+    (copy,) = rows_of(scene, "sketch")
+    assert copy["uid"] != s["uid"] and copy["frozen"] is True
+    assert positions(g) == kept
+    assert rows_of(scene, "sweep")[0]["state"] == "ok"
     apply(h, "undo")
-    assert rows_of(scene, "sketch")[0]["state"] == "ok"
+    (row,) = rows_of(scene, "sketch")
+    assert row["uid"] == s["uid"] and row["state"] == "ok"
 
 
 def test_a_drawn_profile_sweeps_exactly_like_the_library_one(tmp_path, monkeypatch):

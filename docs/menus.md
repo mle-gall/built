@@ -253,6 +253,7 @@ Generated from the fixture (`(system …)` rows are AppKit's own).
 | File ▸ Import | Built Model as a Group (.built, .igz)… | `import:igz` |  |
 | File ▸ Import | Wavefront OBJ (.obj)… | `import:obj` |  |
 | File ▸ Import | STL (.stl)… | `import:stl` |  |
+| File ▸ Import | Drawing into a Sketch (.dxf, .svg, .dwg)… | `import:sketch` |  |
 | File ▸ Import | Photogrammetric Mesh (WebODM)… | `import:photomesh` |  |
 | File ▸ Import | Georeference (KML / GeoJSON)… | `import:alignment` |  |
 | File ▸ Import | Survey Points (UTM CSV)… | `import:survey_points` |  |
@@ -395,6 +396,8 @@ Generated from the fixture (`(system …)` rows are AppKit's own).
 | Draw ▸ Arcs | 3-Point Arc | `tool:arc3` |  |
 | Draw ▸ Arcs | Center Arc | `tool:center_arc` |  |
 | Draw ▸ Arcs | Pie | `tool:pie` |  |
+| Draw | New Profile… | `sketch:new` |  |
+| Draw | New Section… | `sketch:new:section` |  |
 | Tools | Select | `tool:select` |  |
 | Tools | Eraser | `tool:eraser` |  |
 | Tools | Paint | `tool:paint` |  |

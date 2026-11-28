@@ -250,6 +250,18 @@ impl SketchWs {
             .collect()
     }
 
+    /// The rectangle the tool draws now, (first corner, opposite corner):
+    /// while typing, the typed `w; h` (one value: a square) towards the
+    /// cursor's quadrant, as Enter will draw it; otherwise the cursor.
+    fn rect_corners(&self, cursor: DVec2) -> Option<(DVec2, DVec2)> {
+        let a = *self.pts.first()?;
+        let v = self.parse_typed();
+        let Some(&w) = v.first().filter(|_| self.typing) else { return Some((a, cursor)) };
+        let (sx, sy) = (if cursor.x >= a.x { 1.0 } else { -1.0 }, if cursor.y >= a.y { 1.0 } else { -1.0 });
+        let h = v.get(1).copied().unwrap_or(w);
+        Some((a, a + DVec2::new(w * sx, h * sy)))
+    }
+
     /// Start: the record, the plane's context, the inset, maybe an import.
     pub(super) fn enter(&mut self, spec: &serde_json::Value) -> Result<(), String> {
         let mut doc = match spec.get("sketch") {
@@ -443,7 +455,9 @@ impl SketchWs {
     /// The point under the pointer, with inference.
     fn snapped(&self, at: DVec2, shift: bool) -> Snap {
         let radius = 9.0 / self.zoom as f64;
-        let reference = self.pts.last().copied();
+        // A rectangle's opposite corner on its first corner's axis would be
+        // a line: the rectangle infers no axis from it.
+        let reference = self.pts.last().copied().filter(|_| self.tool != "rectangle");
         let s = snap::snap(at, radius, &self.curves(), self.context(), self.doc.origin, reference);
         if shift {
             // Shift keeps the axis: no snapping off it.
@@ -811,10 +825,9 @@ impl SketchWs {
             "circle" if !self.pts.is_empty() => self.add_circle(first),
             "rectangle" if !self.pts.is_empty() => {
                 let a = self.pts[0];
-                let c = cursor.unwrap_or(a + DVec2::ONE);
-                let (sx, sy) = (if c.x >= a.x { 1.0 } else { -1.0 }, if c.y >= a.y { 1.0 } else { -1.0 });
-                let h = v.get(1).copied().unwrap_or(first);
-                self.add_rect(a, a + DVec2::new(first * sx, h * sy));
+                if let Some((a, b)) = self.rect_corners(cursor.unwrap_or(a + DVec2::ONE)) {
+                    self.add_rect(a, b);
+                }
             }
             "arc" if self.pts.len() == 2 => {
                 let (a, b) = (self.pts[0], self.pts[1]);
@@ -1600,9 +1613,12 @@ fn sketch_paint(painter: &egui::Painter, s: &mut SketchWs, rect: Rect, cursor: O
                 let r = (c - *p).length();
                 painter.add(egui::Shape::line(shape_points(s, &Shape::Circle { c: *p, r }), preview));
             }
-            ("rectangle", [p]) => {
-                let q = [*p, DVec2::new(c.x, p.y), c, DVec2::new(p.x, c.y), *p];
-                painter.add(egui::Shape::line(q.iter().map(|x| s.w2s(*x)).collect(), preview));
+            ("rectangle", [_]) => {
+                // While typing, the outline the typed values make.
+                if let Some((p, c)) = s.rect_corners(c) {
+                    let q = [p, DVec2::new(c.x, p.y), c, DVec2::new(p.x, c.y), p];
+                    painter.add(egui::Shape::line(q.iter().map(|x| s.w2s(*x)).collect(), preview));
+                }
             }
             ("arc", [a]) => {
                 painter.line_segment([s.w2s(*a), s.w2s(c)], Stroke::new(1.0_f32, ACCENT_LINE));
@@ -2136,6 +2152,25 @@ mod tests {
         assert_eq!(t.doc.curves.len(), 4);
         assert!(t.profile().ok() && (t.profile().area - 5000.0).abs() < 1e-9);
         assert!(t.pts.is_empty(), "closing on the first point ends the chain");
+    }
+
+    #[test]
+    fn a_rectangle_previews_its_typed_size_and_never_snaps_flat() {
+        let mut s = ws();
+        s.arm("rectangle");
+        s.click(DVec2::ZERO, free(DVec2::ZERO), false, false, false);
+        // The cursor level with the first corner: no red-axis inference.
+        let flat = s.snapped(DVec2::new(40.0, 0.5), false);
+        assert_ne!(flat.kind, SnapKind::AxisX);
+        // Typing 60;20 with the cursor up and left previews that rectangle.
+        s.typed = "60;20".into();
+        s.typing = true;
+        assert_eq!(s.rect_corners(DVec2::new(-5.0, 3.0)), Some((DVec2::ZERO, DVec2::new(-60.0, 20.0))));
+        s.typed = "60".into();
+        assert_eq!(s.rect_corners(DVec2::new(5.0, -3.0)), Some((DVec2::ZERO, DVec2::new(60.0, -60.0))));
+        // Not typing: the cursor is the corner.
+        s.typing = false;
+        assert_eq!(s.rect_corners(DVec2::new(5.0, 3.0)), Some((DVec2::ZERO, DVec2::new(5.0, 3.0))));
     }
 
     #[test]

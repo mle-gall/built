@@ -28,7 +28,7 @@ create_exception!(shell_files, Abort, PyException, "An open the user cancelled."
 const IMPORTS: [&str; 7] = [".skp", ".dae", ".dxf", ".dwg", ".rfa", ".glb", ".gltf"];
 
 /// kind → (panel title, filter).
-const IMPORT_FILTERS: [(&str, &str, &str); 7] = [
+const IMPORT_FILTERS: [(&str, &str, &str); 9] = [
     ("skp", "Import .skp", ".skp files (*.skp)"),
     ("dae", "Import COLLADA", "COLLADA (*.dae)"),
     ("dxf", "Import .dxf", ".dxf files (*.dxf)"),
@@ -36,6 +36,9 @@ const IMPORT_FILTERS: [(&str, &str, &str); 7] = [
     ("rfa", "Import .rfa family", ".rfa family (*.rfa)"),
     ("glb", "Import glTF/GLB", "glTF (*.glb *.gltf)"),
     ("igz", "Import a model as a group", "Built models (*.built *.igz)"),
+    ("sketch", "Import a drawing into a sketch", "Drawings (*.dxf *.svg *.dwg)"),
+    // From the Sweep picker: Done returns to Sweep with the profile.
+    ("sweep_sketch", "Import a drawing as a profile", "Drawings (*.dxf *.svg *.dwg)"),
 ];
 
 /// This submodule, through its attributes.
@@ -840,6 +843,12 @@ fn import_dialog<'py>(py: Python<'py>, win: &Any<'py>, kind: &str) -> PyResult<A
     let path = file_dialogs(py)?.call_method1("getOpenFileName", (win, tr(py, title)?, "", filter))?.get_item(0)?;
     if !truthy(&path) {
         return Ok(b(py, false));
+    }
+    if kind == "sketch" || kind == "sweep_sketch" {
+        // The Sketch workspace reads it (DWG through the LibreDWG bridge).
+        let path: String = path.str()?.extract()?;
+        let how = if kind == "sketch" { "import" } else { "import_sweep" };
+        return Ok(b(py, crate::sketch_workspace::enter(win, how, &path)?));
     }
     let path = path_of(py, &path)?;
     if kind == "igz" {
