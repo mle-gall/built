@@ -1849,6 +1849,7 @@ pub(super) fn junction_markers<'p>(scene: &Obj<'p>) -> PyResult<Obj<'p>> {
                             .transform_point3(m.w_axis.truncate())
                             .to_array(),
                         j.state == "ok",
+                        j.owner.clone(),
                     ));
                 }
             }

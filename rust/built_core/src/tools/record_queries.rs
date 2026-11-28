@@ -356,6 +356,33 @@ impl ViewportToolHost {
                 }).collect();
                 json!({"outline":outline,"open_edges":open_edges,"repeat":repeat,"placement":group.getattr("uid")?.extract::<String>()?,"ring":ring,"face":{"path":path,"id":crate::element_ids::to_text('f',id)},"span":span,"end":if start {"start"}else{"end"}})
             }
+            "marker_junction" => {
+                // The marker within 8 px of the pointer, nearest first.
+                let scene = view.getattr("scene")?;
+                let (x, y) = (arg["px"][0].as_f64().unwrap_or(f64::NAN), arg["px"][1].as_f64().unwrap_or(f64::NAN));
+                let vec3 = py.import("built_core")?.getattr("Vec3")?;
+                let mut best: Option<(f64, String)> = None;
+                for m in py.import("built_core.command_protocol")?.call_method1("junction_markers", (&scene,))?.try_iter()? {
+                    let m = m?;
+                    let [a, b, c]: [f64; 3] = m.get_item(0)?.extract()?;
+                    let Ok((px, py_)) = view.call_method1("_world_to_pixel", (vec3.call1((a, b, c))?,))?.extract::<(f64, f64)>() else { continue };
+                    let d = ((px - x).powi(2) + (py_ - y).powi(2)).sqrt();
+                    if d <= 8. && best.as_ref().is_none_or(|(e, _)| d < *e) {
+                        best = Some((d, m.get_item(2)?.extract()?));
+                    }
+                }
+                let Some((_, owner)) = best else { return Ok(Some(json!(false))) };
+                let Ok(g) = scene.call_method0("groups_by_uid")?.get_item(&owner) else { return Ok(Some(json!(false))) };
+                if arg["open"] == true {
+                    let parents = py.import("built_core.outliner")?.call_method1("path_to", (scene.getattr("groups")?, &g))?;
+                    let path = if parents.is_none() { pyo3::types::PyList::empty(py) } else { pyo3::types::PyList::new(py, parents.try_iter()?.collect::<PyResult<Vec<_>>>()?)? };
+                    path.append(&g)?;
+                    py.import("built_render.tree_navigation")?.call_method1("open_to", (view, path))?;
+                } else {
+                    scene.call_method1("select", (vec![g],))?;
+                }
+                json!(true)
+            }
             "cut_context" => {
                 let scene = view.getattr("scene")?;
                 let open = scene.getattr("edit_group")?;
@@ -364,7 +391,12 @@ impl ViewportToolHost {
                 match py.import("built_core.command_protocol")?.call_method1("junction_record", (&scene, uid)) {
                     Ok(record) => {
                         let j: String = record.get_item("uid")?.extract()?;
-                        json!({"junction": j, "key": format!("cut_{}", &crate::element_ids::new_uid()[..6])})
+                        let record: Value = serde_json::from_str(&py.import("json")?.call_method1("dumps", (&record,))?.extract::<String>()?).unwrap_or_default();
+                        // What a cut made here may belong to: the junction's
+                        // members and its own parts.
+                        let mut members: Vec<Value> = record["roles"].as_array().into_iter().flatten().map(|r| r["member"].clone()).filter(|m| m.is_string()).collect();
+                        members.extend(record["contents"].as_array().into_iter().flatten().map(|c| c["placement"].clone()).filter(|m| m.is_string()));
+                        json!({"junction": j, "key": format!("cut_{}", &crate::element_ids::new_uid()[..6]), "members": members})
                     }
                     Err(_) => Value::Null,
                 }

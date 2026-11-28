@@ -464,8 +464,14 @@ impl Tool for CutTool {
                             json!([{"sweep":self.fitting["target_row"],"at":self.fitting["end"]}]);
                         rows.push(partner);
                     }
-                    // Inside a junction (edit context), its cuts are this use's.
-                    if let Some(junction) = inside["junction"].as_str() {
+                    // Inside a junction (edit context), its cuts on its own
+                    // members and parts are this use's; a cut on anything else
+                    // stays an ordinary cut on that member.
+                    let mine = |row: &Json| inside["members"].as_array().is_none_or(|m| m.iter().any(|u| *u == row["owner"]));
+                    if inside["junction"].is_string() && !rows.iter().all(&mine) {
+                        host.call("cut_error", json!("Not a member of this junction: the cut stays on its own"));
+                    }
+                    if let Some(junction) = inside["junction"].as_str().filter(|_| rows.iter().all(&mine)) {
                         for (i, row) in rows.iter_mut().enumerate() {
                             row["junction"] = json!(junction);
                             row["key"] = json!(format!("{}_{i}", inside["key"].as_str().unwrap_or("cut")));

@@ -829,7 +829,11 @@ pub(crate) fn filing_rows<'py>(
     // The project Junctions view (docs/junctions.md §11).
     if !filtering {
         for (key, name, label, kind, depth, count, expandable) in crate::live::junction::view_rows(&c.scene, &c.expanded)? {
-            let mut r = row(key.clone(), name, kind, "", depth, 0, count, 0);
+            // A junction's own row points at its assembly: a click selects
+            // it, a double-click opens it to edit inside (docs/junctions.md
+            // §6.3), as a placement row does; it has no item count.
+            let role = if key.starts_with("g:") { 3 } else { 0 };
+            let mut r = row(key.clone(), name, kind, "", depth, role, count, 0);
             r.0[2] = label;
             r.1[7] = i64::from(expandable);
             r.1[8] = i64::from(c.expanded.contains(&key));

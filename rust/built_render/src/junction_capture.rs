@@ -298,7 +298,9 @@ fn track_inside(scene: &Obj<'_>) -> PyResult<()> {
     if current == entered {
         return Ok(());
     }
-    if let Some((junction, assembly, before, local)) = s.borrow_mut().inside.take() {
+    // Taken first: the borrow must end before the Done chip is set below.
+    let left = s.borrow_mut().inside.take();
+    if let Some((junction, assembly, before, local)) = left {
         if let (Ok(record), Some(g)) = (
             api(py)?.call_method1("junction_record", (scene, &junction)).and_then(|r| to_json(&r)),
             scene.call_method0("groups_by_uid")?.get_item(&assembly).ok(),

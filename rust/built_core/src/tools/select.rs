@@ -180,6 +180,12 @@ impl SelectTool {
         if host.has_extension_pick() {
             host.set_extension_pick(None);
         }
+        // A junction's marker (drawn for the selection's junctions) is over
+        // the members it joins: a click on it selects the junction.
+        if mode == SelectMode::Replace && host.call("marker_junction", serde_json::json!({"px": p.px, "open": false})) == serde_json::json!(true) {
+            self.cycle = None;
+            return Reply::redraw();
+        }
         let (pick, cycle) = self.cycled_pick(p.px, mode, host);
         match pick {
             None => {
@@ -204,6 +210,11 @@ impl SelectTool {
 
     fn double(&mut self, p: &Pointer, host: &mut dyn ToolHost) -> Reply {
         self.cycle = None;
+        // Double-clicking a junction's marker opens the junction to edit
+        // inside it (docs/junctions.md §6.3).
+        if host.call("marker_junction", serde_json::json!({"px": p.px, "open": true})) == serde_json::json!(true) {
+            return Reply::redraw();
+        }
         let Some(pick) = pick(host, p.px, true) else { return self.click(p, host) };
         match pick.kind {
             // A swept member's section face opens its profile in the
