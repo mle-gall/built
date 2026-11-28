@@ -2509,9 +2509,10 @@ impl LibrarySheet {
                 content.call_method("buttons", (acts,), Some(&[("align", "left")].into_py_dict(py)?))?;
             }
         }
-        // A search or scope that hides the cursor moves it to the first row
-        // shown; the sheet's focus follows so Enter uses the row on screen.
-        let moved = !st.call_method1("get", ("cursor",))?.eq(out.get_item("cursor")?)?;
+        // A search that hides the cursor moves it to the first row shown;
+        // the sheet's focus follows so Enter uses the row on screen.
+        let previous = st.call_method1("get", ("cursor",))?;
+        let moved = previous.is_truthy()? && !previous.eq(out.get_item("cursor")?)?;
         st.set_item("cursor", out.get_item("cursor")?)?;
         let detail = sheet.call_method("detail", (), Some(&[("width", (if faceted {260i32} else {340}).into_pyobject(py)?.into_any()), ("empty", s(py, "Pick an item to see it here."))].into_py_dict(py)?))?;
         let cursor = st.call_method1("get", ("cursor",))?;

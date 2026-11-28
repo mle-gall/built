@@ -148,7 +148,7 @@ def test_newer_pack_revision_is_offered_never_applied(win, tmp_path):
     assert j["params"]["plate_width"] == 120 + 160 and j["state"] == "ok"
 
 
-@pytest.mark.parametrize("pack", sorted(p.name for p in addon_cases.ADDONS.iterdir()))
+@pytest.mark.parametrize("pack", sorted(p.parent.name for p in addon_cases.ADDONS.glob("*/pack.json")))
 def test_portable_addon_installs_into_my_library(win, tmp_path, pack):
     scene = win.viewport.scene
     assert not any(r.get("profile_preset") for r in L.ProfilesProvider().items(None))
