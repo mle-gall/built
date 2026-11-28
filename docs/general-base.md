@@ -424,7 +424,11 @@ definition's content (ids and positions) written at evaluation. A format-2
 reader keeps `ext` verbatim (built-format.md, Stability) but may edit the
 generated geometry. On open, a mismatching stamp marks the row `stale` and
 the geometry is left as found. The user chooses Re-evaluate (the recipe
-wins) or Release (the geometry wins).
+wins) or Release (the geometry wins). A Repeat's or junction's stamp covers
+its whole assembly: those are checked after the open, a few milliseconds
+between frames, and in full before row queries, the Problems view and a
+save (a row's own record checks that row first), so an open never loads
+every part's geometry. Nothing about the check is journalled.
 
 That makes recipe data non-critical: no `requires` entry, and a file stays
 readable by every format-2 reader (open question Q1). Exact bindings on
@@ -522,7 +526,7 @@ pass-5 ones.
 | Keys while armed | Tab cycles attachment (nine plus named points; in the field Tab keeps its field meaning, the chip's Tab acts when the field is empty), R rotate 90° (typed angle in the field), F mirror, L picker, D draw a profile (Sketch workspace), Alt-click a face: profile from face |
 | Selection on arm | edges selected: Enter sweeps each (members from lines); a connected chain under the cursor is offered as one path |
 | Anchored ends | snapping an end to a face of another element records an anchored end (`to` that face), shown by an anchor glyph at the end; Alt while snapping keeps a plain point |
-| Commit | one step: the placement, its record from the preset, the sweep row, filed under the active node |
+| Commit | one step: the placement, its record from the preset, the sweep row, filed under the active node. The placement's origin is the path start and its axes follow the profile (X along the first span, Y and Z the section's width and height axes); the path is written in that frame, so the member's box, axes and grips sit on it. A recipe's part or assembly (plate, fastener, building-element part, assembly) keeps its own class: it files under the node of that class, or stays unfiled, never under the active node's class. Copies made in one step that include a member and the member its end is anchored to keep that anchor between the copies |
 | After | end grips (stretch with inference; on an anchored end the grip moves the offset), path grips on chain vertices, context menu: swap profile, edit profile (Sketch workspace), reverse, cut, repeat, save as preset, Release; record in the inspector with Preset, Profile, Section pad, Path, Material, IFC class, Mass |
 
 ### 5.2 Live cut

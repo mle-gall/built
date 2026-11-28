@@ -53,6 +53,21 @@ fn missing_status<'py>(py: Python<'py>, groups: &Obj<'py>) -> PyResult<usize> {
     }
     Ok(missing)
 }
+/// "Junction · 8 uses of its detail", "Junction · custom", "Bolt group in
+/// a junction": what a junction assembly is, for the inspector's header.
+fn junction_subtitle(record: &Obj<'_>) -> PyResult<String> {
+    let parent = record.get_item("parent")?;
+    if !parent.is_none() {
+        let name = text_or(parent.get_item("name")?, "a junction")?;
+        return Ok(format!("Junction · part of {name}"));
+    }
+    let detail = record.get_item("detail")?;
+    if detail.is_none() || !detail.is_truthy()? {
+        return Ok("Junction · custom".into());
+    }
+    let uses: usize = record.get_item("uses")?.extract().unwrap_or(1);
+    Ok(if uses <= 1 { "Junction · the only use of its detail".into() } else { format!("Junction · {uses} uses of its detail") })
+}
 fn show<'py>(view: &Obj<'py>, title: impl IntoPyObject<'py>, sections: impl IntoPyObject<'py>) -> PyResult<()> {
     view.getattr("renderer")?.call_method1("ui_set_inspector", (title, sections)).map(drop)
 }
@@ -310,8 +325,29 @@ fn inspector<'py>(a: &Args<'py>) -> Reply<'py> {
         } else {
             ("Status", text_or(direct(py, status_text, (&record,))?, "Missing")?)
         };
+        // A junction's assembly is a component of its own, but what the
+        // user selected is the junction: say so, and offer no copy verbs.
+        let record_of = |g: &Obj<'py>| -> PyResult<Option<Obj<'py>>> {
+            Ok(match g.getattr("ext")? {
+                ext if ext.is_truthy()? && ext.contains("built.live")? => py
+                    .import("built_core.command_protocol")?
+                    .call_method1("junction_record", (&scene, g.getattr("uid")?))
+                    .ok(),
+                _ => None,
+            })
+        };
+        let junction = record_of(&group)?;
+        // A part a junction placed (its plate, a bolt): it belongs to that
+        // junction, it is not a component to copy or make unique.
+        let part_of = match &junction {
+            Some(_) => None,
+            None => match group.getattr("_parent")? {
+                parent if !parent.is_none() && parent.hasattr("ext")? => record_of(&parent)?,
+                _ => None,
+            },
+        };
         let sections = empty(py);
-        if definition.is_some() && offered("unique")? {
+        if definition.is_some() && junction.is_none() && part_of.is_none() && offered("unique")? {
             sections.append(("Actions", [("definition", "Open definition in Library")]))?;
             sections.append(("Component actions", [("copies", "Select copies"), ("unique", "Make unique")]))?;
         }
@@ -418,7 +454,15 @@ fn inspector<'py>(a: &Args<'py>) -> Reply<'py> {
         ))?;
         if let Some((_, definition)) = definition {
             let n = definition.get_item(2)?.len()?;
-            let subtitle = format!("Component · {n} {}", if n == 1 { "copy" } else { "copies" });
+            let subtitle = match (&junction, &part_of) {
+                (Some(j), _) => junction_subtitle(j)?,
+                (None, Some(j)) => {
+                    let detail = j.get_item("detail")?;
+                    let name = if detail.is_truthy()? { text_or(detail.get_item("name")?, "a junction")? } else { "a custom junction".into() };
+                    format!("Part of {name}")
+                }
+                _ => format!("Component · {n} {}", if n == 1 { "copy" } else { "copies" }),
+            };
             renderer.call_method1("ui_set_inspector", (definition.get_item(0)?, sections, subtitle))?;
         } else {
             show(&view, identity.get_item(0)?.get_item(1)?, sections)?;

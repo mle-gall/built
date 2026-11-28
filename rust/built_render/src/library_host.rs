@@ -1580,6 +1580,7 @@ impl ProfilesProvider {
             }
             serde_json::json!({"key":size["key"],"name":size["label"],"category":size["family"],
                 "thumb":format!("profile:{}",size["key"].as_str().unwrap()),"defaults":details,
+                "aliases":size.get("aliases").cloned().unwrap_or_else(||serde_json::json!([])),
                 "source":"bundled","dimensions":size["params"],"verbs":["apply","size"]})
         }).collect();
         let scene=ctx.getattr_opt("scene")?.filter(|s|!s.is_none() && s.hasattr("_root").unwrap_or(false));
@@ -1614,6 +1615,7 @@ impl ProfilesProvider {
                 let profile = &preset["values"]["profile"];
                 items.push(serde_json::json!({"key":format!("size:{source}:{}",preset["uid"]),
                     "name":preset["name"],"category":profile["family"],"source":source,
+                    "aliases":profile["catalogue"].get("aliases").cloned().unwrap_or_else(||serde_json::json!([])),
                     "profile_preset":preset,"thumb":presets::profile_thumb(profile),"verbs":["apply"]}));
             }
         }

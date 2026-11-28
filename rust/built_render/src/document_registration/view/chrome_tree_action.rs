@@ -697,7 +697,15 @@ impl<'a, 'py> Row<'a, 'py> {
                         let kw = fields!(py; "junction" => record.get_item("uid")?, "rows" => vec![rk.clone()]);
                         let reply = py.import("built_core.protocol.commands")?.call_method("run", (viewport.getattr("history")?, "junction_adopt"), Some(&kw))?;
                         if !reply.get_item("ok")?.is_truthy()? {
-                            win.call_method1("notify", ("warning", reply.get_item("error")?.str()?))?;
+                            // A refused adoption says why ("it cuts something
+                            // outside this meeting"), not "None".
+                            let why = [reply.call_method1("get", ("error",))?, reply.call_method1("get", ("rejected",))?]
+                                .into_iter()
+                                .find(|v| !v.is_none())
+                                .map(|v| v.str().map(|s| s.to_string()))
+                                .transpose()?
+                                .unwrap_or_else(|| "The cut could not join this junction".into());
+                            win.call_method1("notify", ("warning", why))?;
                         }
                     }
                     Err(_) => {

@@ -63,7 +63,11 @@ def test_corner_follows_members_and_keeps_identity(tmp_path):
     igz.save_scene(scene, path)
     back = Scene()
     igz.load_into(back, path)
-    assert junction(back) == junction(scene)
+    # The file keeps the frames read before the next evaluation (`meet`, and
+    # those rows reference); evaluation recomputes the others.
+    reopened, saved = junction(back), junction(scene)
+    assert reopened.pop("frames")["meet"] == saved.pop("frames")["meet"]
+    assert reopened == saved
     apply(History(back), "junction_release", uid=uid)
     cuts = [r for r in live.live_rows(back) if r["kind"] == "cut"]
     assert len(cuts) == 2 and all("junction" not in r and "anchor" not in r for r in cuts)

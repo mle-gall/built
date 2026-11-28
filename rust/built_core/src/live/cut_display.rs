@@ -172,12 +172,19 @@ fn cut_edges(
     let mut dimensions = Dimensions::new();
     if let (Some(frame), Some(first)) = (frame, lines.first()) {
         for (axis, label) in frame.axes.into_iter().zip(["Length", "Depth"]) {
+            // Points level along the axis tie; the smallest coordinates win,
+            // so the dimension sits in one place whatever the face order
+            // (a reopened file lists its faces in another order).
+            let before = |a: DVec3, b: DVec3| {
+                let d = a.dot(axis) - b.dot(axis);
+                if d.abs() > 1e-9 { d < 0. } else { a.to_array() < b.to_array() }
+            };
             let (mut low, mut high) = (first[0], first[0]);
             for &point in lines.iter().flatten() {
-                if point.dot(axis) < low.dot(axis) {
+                if before(point, low) {
                     low = point;
                 }
-                if point.dot(axis) > high.dot(axis) {
+                if before(high, point) && (point.dot(axis) - high.dot(axis)).abs() > 1e-9 {
                     high = point;
                 }
             }

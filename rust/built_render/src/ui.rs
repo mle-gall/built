@@ -995,15 +995,18 @@ impl Ui {
                     });
                     ui.add_space(SPACE_S);
                     ui.horizontal(|ui| {
+                        // Three equal buttons across the list's width: each
+                        // keeps its key hint and none runs past the edge.
                         ui.spacing_mut().item_spacing = vec2(SPACE_S, 0.0);
+                        let w = ((ui.available_width() - 2.0 * SPACE_S) / 3.0).floor();
                         let apply = tr("Apply {n}").replace("{n}", &ticked.to_string());
-                        if sheet_button(ui, &apply, "↩", 1) {
+                        if kit::panel_button(ui, &apply, "↩", 1, Some(w)).clicked() {
                             out.push("jreview:apply".into());
                         }
-                        if sheet_button(ui, &tr("Skip all"), "", 0) {
+                        if kit::panel_button(ui, &tr("Skip all"), "", 0, Some(w)).clicked() {
                             out.push("jreview:skip_all".into());
                         }
-                        if sheet_button(ui, &tr("Close"), "esc", 3) {
+                        if kit::panel_button(ui, &tr("Close"), "esc", 3, Some(w)).clicked() {
                             out.push("jreview:close".into());
                         }
                     });
@@ -1220,7 +1223,7 @@ impl Ui {
         if self.fillet_key(name) { return true; }
         let filing = self.column.as_ref().is_some_and(|c| c.filing.is_some() || c.row_menu.is_some()
             || c.kind_menu.is_some() || c.head_menu.is_some() || c.prompt.is_some() || c.edits.contains_key("\u{1d}pick"));
-        self.column.as_ref().is_some_and(|c| !self.review && c.claims_row_key(name, mods)) || self.sheet.is_some() || self.dialog.is_some() || self.cmd_open || (name == "Escape" && (self.view_open || self.menu.is_some() || self.form.is_some() || filing
+        self.column.as_ref().is_some_and(|c| !self.review && !self.cmd_open && !self.ctx.wants_keyboard_input() && c.claims_row_key(name, mods)) || self.sheet.is_some() || self.dialog.is_some() || self.cmd_open || (name == "Escape" && (self.view_open || self.menu.is_some() || self.form.is_some() || filing
             || self.ctx_menu.is_some() || self.strip.menus_open()))
             || self.ctx.wants_keyboard_input()
     }
@@ -1386,7 +1389,11 @@ impl Ui {
                 }
             }
         }
-        if self.form.is_none() && self.menu.is_none() && !self.review {
+        // A focused tree row's keys (Space shows/hides it) never take a key
+        // while a text field has the keyboard: typing "Bolt group" in the
+        // details picker hid the plate selected in the tree.
+        let typing = self.cmd_open || self.sheet.is_some() || self.dialog.is_some() || self.ctx.wants_keyboard_input();
+        if self.form.is_none() && self.menu.is_none() && !self.review && !typing {
             if let Some(col) = self.column.as_mut().filter(|c| c.claims_row_key(name, mods)) {
                 if pressed {
                     if let Some(action) = col.row_key(name, mods) { self.actions.push(action); }
@@ -2615,7 +2622,10 @@ impl Ui {
                                 let n = &col.nodes[index];
                                 let editable = n.row == 0 && n.key.starts_with("n:") && n.key.len() > 2 && !n.key.starts_with("n:link:");
                                 let tag_row = n.key.starts_with("preview-folder:") || n.key.starts_with("preview-tag:");
-                                let sense = if editable || n.local_placement || tag_row { Sense::click_and_drag() } else { Sense::click() };
+                                // A cut row drags onto a junction's row to join it
+                                // (docs/junctions.md §6.3); with a click-only sense the
+                                // list scrolled under the pointer instead.
+                                let sense = if editable || n.local_placement || tag_row || n.key.starts_with("cut:") { Sense::click_and_drag() } else { Sense::click() };
                                 let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), ROW_H), sense);
                                 let cols = lens::RowLayout::plan(columns, rect.min.x, rect.max.x, col.cells_scroll);
                                 // The model's content, then a divider, then its scenes and sheets.

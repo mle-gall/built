@@ -51,7 +51,9 @@ def test_corner_marker_in_native_window(tmp_path):
                   "--size", "1600x1000", "--script", script, "--shots", tmp_path, before],
                  settings=profile, capture_output=True, text=True, timeout=90)
     assert result.returncode == 0, result.stderr
-    assert json.loads(plugin.with_suffix(".json").read_text()) == [[[2., 0., 0.], True]]
+    # Each marker: where, whether it fits, and the junction's assembly (a
+    # click on the marker selects it, a double-click opens it).
+    assert [m[:2] for m in json.loads(plugin.with_suffix(".json").read_text())] == [[[2., 0., 0.], True]]
     for frame in ("members.png", "mitred-corner.png", "member-tree.png"):
         assert (tmp_path / frame).stat().st_size > 1000
 

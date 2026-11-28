@@ -3,6 +3,9 @@
 use super::*;
 pub(crate) fn save(scene: &Obj<'_>, out: &Bound<'_, PyDict>) -> PyResult<()> {
     let py = scene.py();
+    // A stamp not checked since the open is checked before the file is
+    // written again, so a stale row is never saved as fresh.
+    verify(scene, None, None)?;
     let Some(t) = current(py, root(scene)?) else {
         return Ok(());
     };
@@ -12,7 +15,7 @@ pub(crate) fn save(scene: &Obj<'_>, out: &Bound<'_, PyDict>) -> PyResult<()> {
     };
     let data = PyDict::new(py);
     data.set_item("v", 1)?;
-    data.set_item("rows", to_py(py, &t.by_creation())?)?;
+    data.set_item("rows", to_py(py, &saved_rows(&t))?)?;
     ext.set_item(EXT, data)?;
     if let Some(prefs) = meetings::save_prefs(&t) {
         ext.set_item(meetings::PREFS_EXT, to_py(py, &prefs)?)?;
@@ -27,6 +30,42 @@ pub(crate) fn save(scene: &Obj<'_>, out: &Bound<'_, PyDict>) -> PyResult<()> {
         )?;
     }
     out.set_item("_doc_ext", ext)
+}
+/// The rows as saved. A junction keeps only the frames read before its next
+/// evaluation recomputes them all: `meet` (its marker), the frames its
+/// contents are placed at, and those other rows reference (anchors, and the
+/// last good frames Release falls back on). The datum frames of every role
+/// would otherwise be most of the file's recipe data.
+fn saved_rows(t: &LiveTable) -> Vec<std::borrow::Cow<'_, Row>> {
+    let mut wanted: HashMap<&str, HashSet<String>> = HashMap::new();
+    for r in t.rows.values() {
+        for reference in r.references() {
+            if let Reference::Frame { junction, frame } = reference {
+                wanted.entry(junction.as_str()).or_default().insert(frame.clone());
+            }
+        }
+        if r.kind == "junction" {
+            let keep = wanted.entry(r.uid.as_str()).or_default();
+            keep.insert("meet".into());
+            for item in r.joint.contents.as_array().into_iter().flatten() {
+                if let Some(frame) = item["at"]["frame"].as_str() {
+                    keep.insert(frame.trim_start_matches('@').to_string());
+                }
+            }
+        }
+    }
+    t.by_creation()
+        .into_iter()
+        .map(|r| {
+            let keep = wanted.get(r.uid.as_str());
+            if r.kind != "junction" || r.frames.keys().all(|k| keep.is_some_and(|w| w.contains(k))) {
+                return std::borrow::Cow::Borrowed(r);
+            }
+            let mut r = r.clone();
+            r.frames.retain(|k, _| keep.is_some_and(|w| w.contains(k)));
+            std::borrow::Cow::Owned(r)
+        })
+        .collect()
 }
 // Read placement extension data from the arena. Building ten thousand
 // tracked Python dictionaries just to compare their stamps dominates open.
@@ -126,9 +165,14 @@ fn recover_size(profile: &mut profile::Profile, scene: &Obj<'_>, sizes: &mut Opt
 
 fn load_rows(scene: &Obj<'_>, ext: &Bound<'_, PyDict>, rows: Vec<Row>) -> PyResult<bool> {
     let py = scene.py();
+
     let mut t = LiveTable::default();
     t.groups = Arc::new(index(root(scene)?));
-    let mut stamps = HashMap::new();
+    // One digest per mesh for the whole open: a junction's stamp covers its
+    // assembly, nested junctions' assemblies and shared fastener definitions,
+    // which other rows' stamps cover again.
+    let mut stamps = repeat::MeshStamps::new();
+    let mut unverified = Vec::new();
     let attr = doc::attr_id("ext").map_err(PyValueError::new_err)?;
     let mut sizes = None;
     for mut row in rows {
@@ -153,11 +197,17 @@ fn load_rows(scene: &Obj<'_>, ext: &Bound<'_, PyDict>, rows: Vec<Row>) -> PyResu
         } else if matches!(row.kind.as_str(), "repeat" | "junction") {
             if let Some(g) = group(py, &t, &row.owner) {
                 if row.state == "ok" {
+                    // A junction's or Repeat's stamp covers its whole assembly:
+                    // checking it would load every part's deferred geometry
+                    // during the open. It is checked after the open instead
+                    // (`verify`), before anything reads the row's state.
                     let saved = metadata(&g)?
                         .get_item(EXT)?
                         .and_then(|v| v.get_item("stamp").ok())
                         .and_then(|v| v.extract::<String>().ok());
-                    if saved.as_deref() != Some(&repeat::stamp(&g)?) {
+                    if saved.is_some() {
+                        unverified.push(id.clone());
+                    } else {
                         row.state = "stale".into();
                     }
                 }
@@ -173,11 +223,11 @@ fn load_rows(scene: &Obj<'_>, ext: &Bound<'_, PyDict>, rows: Vec<Row>) -> PyResu
             if let Some((stamp, mesh)) = marker(py, *k, attr, &id) {
                 let mesh = mesh.bind(py);
                 let actual = match stamps.entry(mesh.as_ptr() as usize) {
-                    std::collections::hash_map::Entry::Occupied(entry) => entry.into_mut(),
+                    std::collections::hash_map::Entry::Occupied(entry) => &entry.into_mut().1,
                     std::collections::hash_map::Entry::Vacant(entry) => {
                         let store = mesh.getattr("_store")?.cast_into::<PyMeshStore>()?;
                         let digest = geometry::stamp(&store.try_borrow()?.inner);
-                        entry.insert(digest)
+                        &entry.insert((mesh.clone().unbind(), digest)).1
                     }
                 };
                 if &stamp != actual {
@@ -197,6 +247,7 @@ fn load_rows(scene: &Obj<'_>, ext: &Bound<'_, PyDict>, rows: Vec<Row>) -> PyResu
             t.set_state(&id, "cycle");
         }
     }
+    t.verify = Arc::new(std::sync::Mutex::new(super::table::Verify { pending: unverified, stale: Vec::new() }));
     for uid in t.rows.keys().cloned().collect::<Vec<_>>() {
         if t.rows[&uid].kind == "cut" {
             cut::bind_placements(scene, &t, &t.rows[&uid])?;
@@ -267,4 +318,49 @@ fn load_rows(scene: &Obj<'_>, ext: &Bound<'_, PyDict>, rows: Vec<Row>) -> PyResu
     put(scene, t)?;
     ext.del_item(EXT)?;
     Ok(true)
+}
+
+/// Check the stamps an open left for later (`LiveTable::verify`), one
+/// row at a time, until `budget` runs out (`None`: all of them). Returns how many are
+/// left and whether a row was found stale. Checking writes nothing to the
+/// document: the rows found stale read stale from then on (`current`).
+pub(crate) fn verify(scene: &Obj<'_>, budget: Option<std::time::Duration>, only: Option<&str>) -> PyResult<(usize, bool)> {
+    let py = scene.py();
+    let Some(t) = current(py, root(scene)?) else { return Ok((0, false)) };
+    let started = std::time::Instant::now();
+    let mut stamps = repeat::MeshStamps::new();
+    let mut found = false;
+    loop {
+        let next = {
+            let v = t.verify.lock().map_err(|_| PyValueError::new_err("verify lock"))?;
+            match only {
+                Some(uid) => v.pending.iter().find(|u| *u == uid).cloned(),
+                None => v.pending.last().cloned(),
+            }
+        };
+        let Some(uid) = next else { return Ok((0, found)) };
+        if budget.is_some_and(|b| started.elapsed() >= b) {
+            let left = t.verify.lock().map(|v| v.pending.len()).unwrap_or(0);
+            return Ok((left, found));
+        }
+        let stale = match t.rows.get(&uid).filter(|r| r.state == "ok").and_then(|r| group(py, &t, &r.owner)) {
+            Some(g) => {
+                let saved = metadata(&g)?
+                    .get_item(EXT)?
+                    .and_then(|v| v.get_item("stamp").ok())
+                    .and_then(|v| v.extract::<String>().ok());
+                match saved {
+                    Some(s) if s != repeat::stamp_shared(&g, &mut stamps)? => Some(s),
+                    _ => None,
+                }
+            }
+            None => None,
+        };
+        let mut v = t.verify.lock().map_err(|_| PyValueError::new_err("verify lock"))?;
+        v.pending.retain(|u| u != &uid);
+        if let Some(stamp) = stale {
+            v.stale.push((uid, stamp));
+            found = true;
+        }
+    }
 }

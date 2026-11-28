@@ -56,7 +56,18 @@ fn current(py: Python<'_>, root: doc::Key) -> Option<LiveTable> {
         };
         obj.0.clone_ref(py)
     };
-    Some(value.bind(py).cast::<LiveTable>().ok()?.get().clone())
+    let mut t = value.bind(py).cast::<LiveTable>().ok()?.get().clone();
+    // Rows an after-open check found stale read stale from every snapshot.
+    let stale = t.verify.lock().map(|v| v.stale.clone()).unwrap_or_default();
+    for (uid, stamp) in stale {
+        let Some(owner) = t.rows.get(&uid).filter(|r| r.state == "ok").map(|r| r.owner.clone()) else { continue };
+        let marked = group(py, &t, &owner)
+            .and_then(|g| metadata(&g).ok()?.get_item(EXT).ok()??.get_item("stamp").ok()?.extract::<String>().ok());
+        if marked.as_deref() == Some(stamp.as_str()) {
+            t.set_state(&uid, "stale");
+        }
+    }
+    Some(t)
 }
 fn put(scene: &Obj<'_>, table: LiveTable) -> PyResult<()> {
     let py = scene.py();
@@ -569,6 +580,24 @@ pub(crate) fn finish(
             junction::forget_removed_parts(py, &mut t, &removed, &mut seeds)?;
         }
         t.groups = Arc::new(next);
+        // Copies made in one step that copied a member together with the
+        // member it is anchored to (a frame copied as column and beam): each
+        // copy follows its own copied partner, not the original. Partners are
+        // paired by the same move (the copy's frame relative to its source).
+        let mut copied: HashMap<String, Vec<(String, DMat4)>> = HashMap::new();
+        for uid in &added {
+            let g = group(py, &t, uid).expect("indexed placement");
+            if let Some(source) = metadata(&g)?
+                .get_item(EXT)?
+                .and_then(|m| m.get_item("row").ok())
+                .and_then(|id| id.extract::<String>().ok())
+                .and_then(|id| t.rows.get(&id).map(|r| r.owner.clone()))
+                .filter(|owner| owner != uid && t.groups.contains_key(owner))
+            {
+                let delta = reference::frame(t.groups[uid]) * reference::frame(t.groups[&source]).inverse();
+                copied.entry(source).or_default().push((uid.clone(), delta));
+            }
+        }
         for uid in added {
             let g = group(py, &t, &uid).expect("indexed placement");
             let ext = metadata(&g)?;
@@ -582,6 +611,15 @@ pub(crate) fn finish(
                     let mut copy = (*source).clone();
                     copy.uid = eid::new_uid();
                     copy.owner = uid.clone();
+                    let delta = reference::frame(t.groups[&uid]) * reference::frame(t.groups[&source.owner]).inverse();
+                    let partners: HashMap<String, String> = copied
+                        .iter()
+                        .filter(|(from, _)| **from != source.owner)
+                        .filter_map(|(from, copies)| {
+                            copies.iter().find(|(_, d)| d.abs_diff_eq(delta, 1e-9)).map(|(to, _)| (from.clone(), to.clone()))
+                        })
+                        .collect();
+                    remap_copy(&mut copy, &partners)?;
                     for cut_id in &mut copy.cuts {
                         let mut cut = (*t
                             .rows
@@ -591,6 +629,7 @@ pub(crate) fn finish(
                         .clone();
                         cut.uid = eid::new_uid();
                         cut.owner = uid.clone();
+                        remap_copy(&mut cut, &partners)?;
                         cut.junction = None;
                         cut.key = None;
                         *cut_id = cut.uid.clone();
@@ -860,6 +899,38 @@ fn bind_drawing(t: &mut LiveTable, profile: &mut profile::Profile) -> PyResult<(
     }
     Ok(())
 }
+/// Point a copied row's references at the copies of the placements they
+/// named (`partners`: original uid → its copy made in the same step).
+fn remap_copy(row: &mut Row, partners: &HashMap<String, String>) -> PyResult<()> {
+    if partners.is_empty() {
+        return Ok(());
+    }
+    fn walk(v: &mut serde_json::Value, partners: &HashMap<String, String>) {
+        match v {
+            serde_json::Value::Object(m) => {
+                for (k, x) in m.iter_mut() {
+                    if let (true, serde_json::Value::Array(path)) = (k == "path" || k == "rests_on", &mut *x) {
+                        for e in path.iter_mut() {
+                            if let Some(to) = e.as_str().and_then(|s| partners.get(s)) {
+                                *e = serde_json::json!(to);
+                            }
+                        }
+                    } else if let (true, Some(to)) = (k == "rests_on", x.as_str().and_then(|s| partners.get(s))) {
+                        *x = serde_json::json!(to);
+                    } else {
+                        walk(x, partners);
+                    }
+                }
+            }
+            serde_json::Value::Array(a) => a.iter_mut().for_each(|x| walk(x, partners)),
+            _ => {}
+        }
+    }
+    let mut v = serde_json::to_value(&*row).map_err(|e| PyValueError::new_err(e.to_string()))?;
+    walk(&mut v, partners);
+    *row = serde_json::from_value(v).map_err(|e| PyValueError::new_err(e.to_string()))?;
+    Ok(())
+}
 impl Mutation {
     fn apply_edit(&self, scene: &Obj<'_>) -> PyResult<()> {
         let py = scene.py();
@@ -982,6 +1053,23 @@ impl Mutation {
                             }
                         }
                         parent.getattr("children")?.call_method1("append", (&g,))?;
+                    }
+                    // The member's origin and axes follow its profile, so its
+                    // box, axes and Move/Rotate grips sit on the member.
+                    if !spec.path.definition_space && spec.path.chain.is_empty() {
+                        if let Some(frame) = sweep::member_frame(&spec.path.points) {
+                            let inverse = frame.inverse();
+                            for point in &mut spec.path.points {
+                                *point = inverse.transform_point3((*point).into()).to_array();
+                            }
+                            for end in spec.path.ends.iter_mut().flatten() {
+                                if let sweep::End::Point(p) = end {
+                                    *p = inverse.transform_point3((*p).into()).to_array();
+                                }
+                            }
+                            spec.path.definition_space = true;
+                            g.setattr("xform", Py::new(py, crate::math::Matrix4::from(frame))?)?;
+                        }
                     }
                     crate::structure::file_sweep(scene, &g, &destination)?;
                     let owner: String = g.getattr("uid")?.extract()?;
@@ -1547,13 +1635,15 @@ fn live_sweep<'p>(scene: &Obj<'p>, owner: &str) -> PyResult<Obj<'p>> {
     value.set_item("cut_rows", to_py(scene.py(), &cuts)?)?;
     let k = t.groups[owner];
     let parent = doc::lock().node(k).and_then(|n| n.owners.first().copied());
-    value.set_item(
-        "parent_frame",
-        parent
-            .map(reference::frame)
-            .unwrap_or(DMat4::IDENTITY)
-            .to_cols_array(),
-    )?;
+    // The frame the path's points are written in: the member's own when the
+    // path is in definition space (new members: their axes follow the
+    // profile), else its parent's.
+    let path_frame = if row.sweep.as_ref().is_some_and(|s| s.path.definition_space) {
+        reference::frame(k)
+    } else {
+        parent.map(reference::frame).unwrap_or(DMat4::IDENTITY)
+    };
+    value.set_item("parent_frame", path_frame.to_cols_array())?;
     if let Some(spec) = &row.sweep {
         let name = spec
             .profile
@@ -1848,11 +1938,19 @@ pub(crate) fn cut_feedback(scene: &Obj<'_>, ids: &[String]) -> PyResult<Option<&
 
 #[pyfunction]
 fn live_rows<'p>(scene: &Obj<'p>) -> PyResult<Obj<'p>> {
+    file::verify(scene, None, None)?;
     let t = current(scene.py(), root(scene)?).unwrap_or_default();
     to_py(scene.py(), &t.by_creation())
 }
+/// Check up to `budget_ms` of the stamps an open left for later (the view
+/// calls it between frames). Returns (rows left, whether one read stale).
+#[pyfunction]
+fn live_verify(scene: &Obj<'_>, budget_ms: f64) -> PyResult<(usize, bool)> {
+    file::verify(scene, Some(std::time::Duration::from_secs_f64(budget_ms.max(0.) / 1000.)), None)
+}
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     presets::register(m)?;
+    m.add_function(wrap_pyfunction!(live_verify, m)?)?;
     m.add_function(wrap_pyfunction!(junction::junction_markers, m)?)?;
     m.add_function(wrap_pyfunction!(junction_apply, m)?)?;
     m.add_function(wrap_pyfunction!(junction_skip, m)?)?;
@@ -2176,6 +2274,11 @@ fn junction_capture_offers<'p>(scene: &Obj<'p>) -> PyResult<Obj<'p>> {
 /// The junction record for the inspector (`uid`: the row or its assembly).
 #[pyfunction]
 fn junction_record<'p>(scene: &Obj<'p>, uid: &str) -> PyResult<Obj<'p>> {
+    let row = current(scene.py(), root(scene)?)
+        .and_then(|t| t.rows.get(uid).map(|r| r.uid.clone()).or_else(|| t.owners.get(uid).cloned()));
+    if let Some(row) = row {
+        file::verify(scene, None, Some(&row))?;
+    }
     let t = current(scene.py(), root(scene)?).unwrap_or_default();
     let v = junction::capture::record_of(scene, &t, uid)?;
     to_py(scene.py(), &v)

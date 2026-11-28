@@ -56,6 +56,13 @@ fn tr(py: Python<'_>, text: &str) -> PyResult<String> {
     crate::settings_rows::tr(py, text)
 }
 
+/// Whether the capture popover is open (without creating the state).
+pub fn popover_open(scene: &Obj<'_>) -> PyResult<bool> {
+    if scene.is_none() {
+        return Ok(false);
+    }
+    Ok(scene.getattr_opt(ATTR)?.and_then(|r| r.cast_into::<Capture>().ok()).is_some_and(|s| s.borrow().open))
+}
 fn state<'p>(scene: &Obj<'p>) -> PyResult<Bound<'p, Capture>> {
     if let Some(s) = scene.getattr_opt(ATTR)?.and_then(|r| r.cast_into::<Capture>().ok()) {
         return Ok(s);
@@ -229,6 +236,11 @@ pub fn action(win: &Obj<'_>, text: &str) -> PyResult<()> {
             if reply["ok"] == true {
                 close(&scene)?;
                 s.borrow_mut().revision = history.getattr("revision")?.extract().ok();
+                // The Junction tool next applies the detail just saved, not
+                // the one it was armed with (a bolt group, say).
+                if let Some(uid) = reply["detail"].as_str() {
+                    remember_detail(win, &scene, uid)?;
+                }
             } else {
                 let why = reply["error"]["message"].as_str().or(reply["error"].as_str()).unwrap_or("Could not save the junction").to_string();
                 s.borrow_mut().error = why.clone();
@@ -241,6 +253,21 @@ pub fn action(win: &Obj<'_>, text: &str) -> PyResult<()> {
         vp.call_method1("flash_status", (message,))?;
     }
     win.getattr("view")?.call_method0("update")?;
+    Ok(())
+}
+
+fn remember_detail(win: &Obj<'_>, scene: &Obj<'_>, uid: &str) -> PyResult<()> {
+    let py = win.py();
+    win.getattr("viewport")?.setattr("_junction_detail", uid)?;
+    if let Some(view) = win.getattr_opt("view")? {
+        view.setattr("_junction_detail", uid)?;
+    }
+    let catalog = api(py)?.call_method1("preset_catalog", (scene,))?;
+    let preset = catalog.try_iter()?.filter_map(|e| e.ok()?.get_item(0).ok()).find(|p| p.get_item("uid").is_ok_and(|u| u.eq(uid).unwrap_or(false)));
+    let tool = win.getattr_opt("_tools")?.and_then(|t| t.get_item("junction").ok());
+    if let (Some(preset), Some(tool)) = (preset, tool) {
+        tool.getattr("_machine")?.call_method1("set", ("preset", preset))?;
+    }
     Ok(())
 }
 
@@ -271,7 +298,9 @@ fn track_inside(scene: &Obj<'_>) -> PyResult<()> {
     if current == entered {
         return Ok(());
     }
-    if let Some((junction, assembly, before, local)) = s.borrow_mut().inside.take() {
+    // Taken first: the borrow must end before the Done chip is set below.
+    let left = s.borrow_mut().inside.take();
+    if let Some((junction, assembly, before, local)) = left {
         if let (Ok(record), Some(g)) = (
             api(py)?.call_method1("junction_record", (scene, &junction)).and_then(|r| to_json(&r)),
             scene.call_method0("groups_by_uid")?.get_item(&assembly).ok(),
@@ -394,8 +423,9 @@ fn layer(view: &Obj<'_>, scene: &Obj<'_>) -> PyResult<Value> {
     let rule = &d["detail"]["values"]["rule"];
     let range = |role: &str| {
         let r = &rule["roles"][role];
-        let names: Vec<String> = r["profile"].as_array().into_iter().flatten().filter_map(|p| p["library"].as_str()).map(|k| k.rsplit('/').next().unwrap_or(k).to_uppercase()).collect();
-        let size = r["size"]["height"].as_array().map(|h| format!("{}–{}", fmt(&h[0]), fmt(&h[1]))).unwrap_or_default();
+        let names: Vec<String> = r["profile"].as_array().into_iter().flatten().filter_map(|p| p["library"].as_str()).map(profile_label).collect();
+        // "190" when the range is one size, "200–240" otherwise.
+        let size = r["size"]["height"].as_array().map(|h| if fmt(&h[0]) == fmt(&h[1]) { format!("{} mm", fmt(&h[0])) } else { format!("{}–{} mm", fmt(&h[0]), fmt(&h[1])) }).unwrap_or_default();
         if names.is_empty() { size } else { format!("{} · {size}", names.join(", ")) }
     };
     let how = format!("{} · {}° ± {}°", d["meeting"]["kind"].as_str().unwrap_or("").replace('_', " "), fmt(&rule["angle"]["value"]), fmt(&rule["angle"]["tol"]));
@@ -445,6 +475,11 @@ pub fn before_frame(view: &Obj<'_>, win: &Obj<'_>) -> PyResult<()> {
     }
     follow(&scene, &history)?;
     track_inside(&scene)?;
+    // Stamps an open left for later are checked a few milliseconds a frame.
+    let (left, stale): (usize, bool) = api(py)?.call_method1("live_verify", (&scene, 4.0))?.extract()?;
+    if left > 0 || stale {
+        view.call_method0("update")?;
+    }
     let renderer = view.getattr("renderer")?;
     if !renderer.hasattr("ui_set_junction_capture")? {
         return Ok(());
@@ -650,4 +685,42 @@ pub fn record_action(win: &Obj<'_>, verb: &str, v: &Obj<'_>) -> PyResult<()> {
     vp.call_method0("notify_scene_changed")?;
     win.getattr("view")?.call_method0("update")?;
     Ok(())
+}
+
+/// A catalogue profile's label as the Library shows it ("HE 200 A"), else
+/// the key's last part.
+fn profile_label(key: &str) -> String {
+    static LABELS: std::sync::LazyLock<std::collections::HashMap<String, String>> = std::sync::LazyLock::new(|| {
+        let catalogue: Value = serde_json::from_str(include_str!("../../../resources/profiles/starter.builtprofile")).unwrap_or_default();
+        catalogue["table"]["sizes"].as_array().into_iter().flatten()
+            .filter_map(|s| Some((s["key"].as_str()?.to_owned(), s["label"].as_str()?.to_owned())))
+            .collect()
+    });
+    LABELS.get(key).cloned().unwrap_or_else(|| spaced(key.rsplit('/').next().unwrap_or(key)))
+}
+
+/// A catalogue key's size read as its standard writes it when the Library
+/// does not list it here (an add-on size): "he200a" → "HE 200 A".
+fn spaced(name: &str) -> String {
+    let mut out = String::new();
+    let mut last: Option<bool> = None;
+    for c in name.chars() {
+        let digit = c.is_ascii_digit();
+        if c.is_ascii_alphanumeric() && last.is_some_and(|d| d != digit) {
+            out.push(' ');
+        }
+        out.extend(c.to_uppercase());
+        last = c.is_ascii_alphanumeric().then_some(digit);
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn catalogue_keys_read_as_their_sizes() {
+        assert_eq!(super::spaced("he200a"), "HE 200 A");
+        assert_eq!(super::spaced("ipe240"), "IPE 240");
+        assert_eq!(super::profile_label("en/ipe200"), "IPE 200");
+    }
 }

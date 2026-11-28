@@ -1486,13 +1486,19 @@ fn rest_parts(scene: &Obj<'_>, t: &mut LiveTable, roles: &serde_json::Map<String
             })
             .filter(|m| m != uid && members.contains(m))
             .collect();
-        if on.is_empty() || s.path.definition_space {
+        if on.is_empty() {
             continue;
         }
         let Some(points) = reference::sweep_path(scene, t, &r, &s.path)? else { continue };
-        let k = t.groups[&r.owner];
-        let parent = doc::lock().node(k).and_then(|n| n.owners.first().copied());
-        let local = parent.map(reference::frame).unwrap_or(DMat4::IDENTITY).inverse() * reference::frame(k);
+        // The resolved path is in the part's own frame: kept as it is when the
+        // path is written there, else taken to its parent's space.
+        let local = if s.path.definition_space {
+            DMat4::IDENTITY
+        } else {
+            let k = t.groups[&r.owner];
+            let parent = doc::lock().node(k).and_then(|n| n.owners.first().copied());
+            parent.map(reference::frame).unwrap_or(DMat4::IDENTITY).inverse() * reference::frame(k)
+        };
         let mut row = (*r).clone();
         let spec = row.sweep.as_mut().unwrap();
         let pinned: Vec<[f64; 3]> = points.iter().map(|p| local.transform_point3(DVec3::from(*p)).to_array()).collect();
@@ -1707,6 +1713,9 @@ pub(super) fn along_repeat(scene: &Obj<'_>, t: &LiveTable, roles: &Value) -> Opt
 pub(crate) fn view_rows(scene: &Obj<'_>, expanded: &HashSet<String>) -> PyResult<Vec<(String, String, String, &'static str, usize, usize, bool)>> {
     let py = scene.py();
     let mut out = Vec::new();
+    if scene.getattr_opt("_junction_view")?.is_some_and(|v| v.eq("problems").unwrap_or(false)) {
+        super::file::verify(scene, None, None)?;
+    }
     let Some(t) = root(scene).ok().and_then(|k| current(py, k)) else { return Ok(out) };
     let tops: Vec<&Arc<Row>> = t.junctions.iter().filter_map(|id| t.rows.get(id)).filter(|r| r.joint.parent.is_none()).collect();
     let details = t.presets.values().filter(|p| p.primitive == "junction").count();
@@ -1798,6 +1807,15 @@ pub(crate) fn labels(scene: &Obj<'_>) -> PyResult<HashMap<String, Vec<(String, S
             .call_method1("row_id", (address,))?
             .extract()?;
         let label: String = g.getattr("name")?.extract()?;
+        // Under a member, its own junctions come first, then the ones nested
+        // in them (a knee, its bolt group, the group's bolt), in one order.
+        let mut depth = 0;
+        let mut up = j.joint.parent.as_deref();
+        while let Some(p) = up.and_then(|p| t.rows.get(p)) {
+            depth += 1;
+            up = p.joint.parent.as_deref();
+        }
+        let label = format!("{depth:02}\u{1f}{label}");
         for member in j
             .joint
             .roles
@@ -1811,6 +1829,14 @@ pub(crate) fn labels(scene: &Obj<'_>) -> PyResult<HashMap<String, Vec<(String, S
                 label.clone(),
                 j.state.clone(),
             ));
+        }
+    }
+    for rows in labels.values_mut() {
+        rows.sort_by(|a, b| a.1.cmp(&b.1).then_with(|| a.0.cmp(&b.0)));
+        for row in rows.iter_mut() {
+            if let Some((_, name)) = row.1.split_once('\u{1f}') {
+                row.1 = name.to_string();
+            }
         }
     }
     Ok(labels)
@@ -1840,6 +1866,7 @@ pub(super) fn junction_markers<'p>(scene: &Obj<'p>) -> PyResult<Obj<'p>> {
                             .transform_point3(m.w_axis.truncate())
                             .to_array(),
                         j.state == "ok",
+                        j.owner.clone(),
                     ));
                 }
             }
