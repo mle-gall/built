@@ -128,7 +128,10 @@ fn load_rows(scene: &Obj<'_>, ext: &Bound<'_, PyDict>, rows: Vec<Row>) -> PyResu
     let py = scene.py();
     let mut t = LiveTable::default();
     t.groups = Arc::new(index(root(scene)?));
-    let mut stamps = HashMap::new();
+    // One digest per mesh for the whole open: a junction's stamp covers its
+    // assembly, nested junctions' assemblies and shared fastener definitions,
+    // which other rows' stamps cover again.
+    let mut stamps = repeat::MeshStamps::new();
     let attr = doc::attr_id("ext").map_err(PyValueError::new_err)?;
     let mut sizes = None;
     for mut row in rows {
@@ -157,7 +160,7 @@ fn load_rows(scene: &Obj<'_>, ext: &Bound<'_, PyDict>, rows: Vec<Row>) -> PyResu
                         .get_item(EXT)?
                         .and_then(|v| v.get_item("stamp").ok())
                         .and_then(|v| v.extract::<String>().ok());
-                    if saved.as_deref() != Some(&repeat::stamp(&g)?) {
+                    if saved.as_deref() != Some(&repeat::stamp_shared(&g, &mut stamps)?) {
                         row.state = "stale".into();
                     }
                 }
@@ -173,11 +176,11 @@ fn load_rows(scene: &Obj<'_>, ext: &Bound<'_, PyDict>, rows: Vec<Row>) -> PyResu
             if let Some((stamp, mesh)) = marker(py, *k, attr, &id) {
                 let mesh = mesh.bind(py);
                 let actual = match stamps.entry(mesh.as_ptr() as usize) {
-                    std::collections::hash_map::Entry::Occupied(entry) => entry.into_mut(),
+                    std::collections::hash_map::Entry::Occupied(entry) => &entry.into_mut().1,
                     std::collections::hash_map::Entry::Vacant(entry) => {
                         let store = mesh.getattr("_store")?.cast_into::<PyMeshStore>()?;
                         let digest = geometry::stamp(&store.try_borrow()?.inner);
-                        entry.insert(digest)
+                        &entry.insert((mesh.clone().unbind(), digest)).1
                     }
                 };
                 if &stamp != actual {
