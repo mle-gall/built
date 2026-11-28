@@ -1,0 +1,70 @@
+{
+  "uid": "9d26ee15d24a2809",
+  "name": "UB 686 × 254 × 140",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/ub686x254x140",
+      "family": "i",
+      "params": {
+        "height": 683.5,
+        "width": 253.7,
+        "web": 12.4,
+        "flange": 19.0,
+        "radius": 15.2
+      },
+      "catalogue": {
+        "name": "UB 686 × 254 × 140",
+        "series": [
+          [
+            "en/ub686x254x140",
+            683.5
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-ub;r1=bb-ub",
+    "source": "https://orangebook.arcelormittal.com/node/35",
+    "standard": "EN 10365",
+    "series": "UB",
+    "column_sources": {
+      "r1": "https://www.steelforlifebluebook.co.uk/ub/ec3-ukna/section-properties-dimensions-properties"
+    }
+  },
+  "section": {
+    "area_cm2": 178.431,
+    "mass_kg_m": 140.069,
+    "iy_cm4": 136267.27,
+    "iz_cm4": 5183.11,
+    "iu_cm4": 136267.27,
+    "iv_cm4": 5183.11,
+    "wy_cm3": 3987.34,
+    "wz_cm3": 408.6,
+    "centroid_mm": [
+      126.85,
+      341.75
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 178.0,
+      "mass_kg_m": 140.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/ub686x254x140",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:9376a681238e94cc6021c5cc60883805642718295e408f3cfa87dc1da7225559"
+}

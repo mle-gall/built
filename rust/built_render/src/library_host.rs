@@ -1570,15 +1570,16 @@ impl ProfilesProvider {
 
     fn items<'p>(&self,py:Python<'p>,ctx:&Bound<'p,PyAny>)->PyResult<Bound<'p,PyAny>> {
         let catalogue:serde_json::Value=serde_json::from_str(include_str!("../../../resources/profiles/starter.builtprofile")).expect("bundled profiles");
+        let title=|family:&str| family_title(py,family);
         let mut items:Vec<_>=catalogue["table"]["sizes"].as_array().unwrap().iter().map(|size|{
-            let mut details=vec![("Family".to_owned(),size["family"].as_str().unwrap().to_owned(),"")];
+            let mut details=vec![("Family".to_owned(),title(size["family"].as_str().unwrap()),"")];
             for (key,v) in size["params"].as_object().unwrap(){
                 if v.as_f64()!=Some(0.){details.push((key.to_owned(),format!("{v} mm"),""));}
             }
             for (key,title) in [("standard","Standard"),("source","Source")]{
                 if let Some(v)=size[key].as_str().filter(|s|!s.is_empty()){details.push((title.into(),v.into(),""));}
             }
-            serde_json::json!({"key":size["key"],"name":size["label"],"category":size["family"],
+            serde_json::json!({"key":size["key"],"name":size["label"],"category":title(size["family"].as_str().unwrap_or("")),
                 "thumb":format!("profile:{}",size["key"].as_str().unwrap()),"defaults":details,
                 "aliases":size.get("aliases").cloned().unwrap_or_else(||serde_json::json!([])),
                 "source":"bundled","dimensions":size["params"],"verbs":["apply","size"]})
@@ -1614,7 +1615,7 @@ impl ProfilesProvider {
             if preset["source"]["profile_size"] == true {
                 let profile = &preset["values"]["profile"];
                 items.push(serde_json::json!({"key":format!("size:{source}:{}",preset["uid"]),
-                    "name":preset["name"],"category":profile["family"],"source":source,
+                    "name":preset["name"],"category":title(profile["family"].as_str().unwrap_or("")),"source":source,
                     "aliases":profile["catalogue"].get("aliases").cloned().unwrap_or_else(||serde_json::json!([])),
                     "profile_preset":preset,"thumb":presets::profile_thumb(profile),"verbs":["apply"]}));
             }
@@ -1663,6 +1664,24 @@ impl ProfilesProvider {
         }
         Ok(())
     }
+}
+
+/// The Library's collection name for a parametric profile family (the
+/// sidebar groups Profiles by it); an unknown family keeps its key.
+pub(crate) fn family_title(py: Python<'_>, family: &str) -> String {
+    use crate::settings_rows::tr;
+    match family {
+        "i" => tr(py, "I and H sections"),
+        "channel" => tr(py, "Channels"),
+        "angle" => tr(py, "Angles"),
+        "tee" => tr(py, "Tees"),
+        "zed" => tr(py, "Z sections"),
+        "rhs" => tr(py, "Rectangular and square tubes"),
+        "chs" => tr(py, "Round tubes"),
+        "rectangle" => tr(py, "Rectangles"),
+        other => Ok(other.to_owned()),
+    }
+    .unwrap_or_else(|_| family.to_owned())
 }
 
 /// Arm Sweep with a user-sized family without changing its Library defaults.

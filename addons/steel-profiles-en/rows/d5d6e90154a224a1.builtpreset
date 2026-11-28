@@ -1,0 +1,67 @@
+{
+  "uid": "d5d6e90154a224a1",
+  "name": "RHS 200 × 120 × 10 (cold-formed)",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/rhs200x120x10-cf",
+      "family": "rhs",
+      "params": {
+        "height": 200.0,
+        "width": 120.0,
+        "web": 10.0,
+        "radius": 25.0,
+        "inner": 15.0
+      },
+      "catalogue": {
+        "name": "RHS 200 × 120 × 10 (cold-formed)",
+        "series": [
+          [
+            "en/rhs200x120x10-cf",
+            200.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-cfrhs",
+    "source": "https://www.steelforlifebluebook.co.uk/cfrhs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10219-2",
+    "series": "RHS cold-formed"
+  },
+  "section": {
+    "area_cm2": 56.566,
+    "mass_kg_m": 44.404,
+    "iy_cm4": 2805.7,
+    "iz_cm4": 1262.13,
+    "iu_cm4": 2805.7,
+    "iv_cm4": 1262.13,
+    "wy_cm3": 280.57,
+    "wz_cm3": 210.36,
+    "centroid_mm": [
+      60.0,
+      100.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 56.6,
+      "mass_kg_m": 44.4
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/rhs200x120x10-cf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:831b70492985abc41b2600b038c6f856cdcf7355afa14ffb01c8a41b447658bd"
+}

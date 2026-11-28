@@ -1,0 +1,67 @@
+{
+  "uid": "010253fa14963112",
+  "name": "SHS 40 × 40 × 6.3 (hot-finished)",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/shs40x40x6.3-hf",
+      "family": "rhs",
+      "params": {
+        "height": 40.0,
+        "width": 40.0,
+        "web": 6.3,
+        "radius": 9.45,
+        "inner": 6.3
+      },
+      "catalogue": {
+        "name": "SHS 40 × 40 × 6.3 (hot-finished)",
+        "series": [
+          [
+            "en/shs40x40x6.3-hf",
+            40.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-hfshs",
+    "source": "https://www.steelforlifebluebook.co.uk/hfshs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10210-2",
+    "series": "SHS hot-finished"
+  },
+  "section": {
+    "area_cm2": 8.066,
+    "mass_kg_m": 6.332,
+    "iy_cm4": 14.68,
+    "iz_cm4": 14.68,
+    "iu_cm4": 14.68,
+    "iv_cm4": 14.68,
+    "wy_cm3": 7.34,
+    "wz_cm3": 7.34,
+    "centroid_mm": [
+      20.0,
+      20.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 8.07,
+      "mass_kg_m": 6.33
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/shs40x40x6.3-hf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:fba2c221e4474a5d7c1e9848b133f607d64ada54669d13604d1a77569e4b23eb"
+}

@@ -1,0 +1,71 @@
+{
+  "uid": "0bbdaff8bbe7c594",
+  "name": "W 530 × 74.0",
+  "rev": 2,
+  "pack": "Steel profiles · BR",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "br/w530x74.0",
+      "family": "i",
+      "params": {
+        "height": 529.0,
+        "width": 166.0,
+        "web": 9.7,
+        "flange": 13.6,
+        "radius": 12.0
+      },
+      "catalogue": {
+        "name": "W 530 × 74.0",
+        "series": [
+          [
+            "br/w460x74.0",
+            457.0
+          ],
+          [
+            "br/w530x74.0",
+            529.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "gerdau-perfis",
+    "source": "https://api.aecweb.com.br/cls/catalogos/28792/22314/catalogo-gerdau-perfis-estruturais.pdf",
+    "standard": "ABNT NBR 15980",
+    "series": "W"
+  },
+  "section": {
+    "area_cm2": 95.063,
+    "mass_kg_m": 74.624,
+    "iy_cm4": 40967.5,
+    "iz_cm4": 1041.42,
+    "iu_cm4": 40967.5,
+    "iv_cm4": 1041.42,
+    "wy_cm3": 1548.87,
+    "wz_cm3": 125.47,
+    "centroid_mm": [
+      83.0,
+      264.5
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 95.1,
+      "mass_kg_m": 74.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "br/w530x74.0",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:16aa9ccca75691e069d29857d035915ff122716055b99971201a6e3209973300"
+}

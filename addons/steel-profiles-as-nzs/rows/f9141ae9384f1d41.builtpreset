@@ -1,0 +1,67 @@
+{
+  "uid": "f9141ae9384f1d41",
+  "name": "200 UC 59.5",
+  "rev": 2,
+  "pack": "Steel profiles · AS/NZS",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "as-nzs/200uc59.5",
+      "family": "i",
+      "params": {
+        "height": 209.8,
+        "width": 205.0,
+        "web": 9.3,
+        "flange": 14.2,
+        "radius": 11.4
+      },
+      "catalogue": {
+        "name": "200 UC 59.5",
+        "series": [
+          [
+            "as-nzs/200uc59.5",
+            209.8
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ib-hrssp9",
+    "source": "https://www.infrabuild.com/wp-content/uploads/sites/8/2022/02/Hot20Rolled20Cat_Edition9_2019.pdf",
+    "standard": "AS/NZS 3679.1",
+    "series": "UC"
+  },
+  "section": {
+    "area_cm2": 76.206,
+    "mass_kg_m": 59.822,
+    "iy_cm4": 6127.79,
+    "iz_cm4": 2040.76,
+    "iu_cm4": 6127.79,
+    "iv_cm4": 2040.76,
+    "wy_cm3": 584.16,
+    "wz_cm3": 199.1,
+    "centroid_mm": [
+      102.5,
+      104.9
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 76.2,
+      "mass_kg_m": 59.5
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "as-nzs/200uc59.5",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:434dc5c981fecef0b2e53f5beec8b7f8ed1c11bdd5c1929e1f725f12b08da910"
+}

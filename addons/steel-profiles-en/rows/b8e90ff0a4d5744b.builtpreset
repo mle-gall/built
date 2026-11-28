@@ -1,0 +1,67 @@
+{
+  "uid": "b8e90ff0a4d5744b",
+  "name": "RHS 450 × 250 × 8 (cold-formed)",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/rhs450x250x8-cf",
+      "family": "rhs",
+      "params": {
+        "height": 450.0,
+        "width": 250.0,
+        "web": 8.0,
+        "radius": 20.0,
+        "inner": 12.0
+      },
+      "catalogue": {
+        "name": "RHS 450 × 250 × 8 (cold-formed)",
+        "series": [
+          [
+            "en/rhs450x250x8-cf",
+            450.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-cfrhs",
+    "source": "https://www.steelforlifebluebook.co.uk/cfrhs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10219-2",
+    "series": "RHS cold-formed"
+  },
+  "section": {
+    "area_cm2": 107.242,
+    "mass_kg_m": 84.185,
+    "iy_cm4": 29335.39,
+    "iz_cm4": 11916.0,
+    "iu_cm4": 29335.39,
+    "iv_cm4": 11916.0,
+    "wy_cm3": 1303.8,
+    "wz_cm3": 953.28,
+    "centroid_mm": [
+      125.0,
+      225.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 107.0,
+      "mass_kg_m": 84.2
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/rhs450x250x8-cf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:14917e335c1066cb19062087e9d36039008669156fa7f838bf4417798224b02a"
+}

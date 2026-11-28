@@ -1,29 +1,28 @@
 {
   "uid": "dc77a4a5046c823d",
   "name": "L 50 × 50 × 5",
-  "rev": 1,
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {
-    "class": "IfcBeam"
-  },
+  "record": {},
   "locks": {},
   "values": {
     "profile": {
       "library": "en/l50x5",
       "family": "angle",
       "params": {
-        "width": 50,
-        "height": 50,
-        "web": 5,
-        "radius": 7
+        "height": 50.0,
+        "width": 50.0,
+        "web": 5.0,
+        "radius": 7.0,
+        "toe": 3.5
       },
       "catalogue": {
         "name": "L 50 × 50 × 5",
         "series": [
           [
             "en/l50x5",
-            50
+            50.0
           ]
         ]
       }
@@ -31,8 +30,30 @@
   },
   "provenance": {
     "created_with": "Built",
-    "source": "https://steel.ie/wp-content/uploads/2016/01/Angles-Data-Sheet-Equal-Angles.pdf",
-    "standard": "EN 10056"
+    "status": "provisional",
+    "source_id": "ob-l-equal",
+    "source": "https://orangebook.arcelormittal.com/node/220",
+    "standard": "EN 10056-1",
+    "series": "L equal"
+  },
+  "section": {
+    "area_cm2": 4.803,
+    "mass_kg_m": 3.77,
+    "iy_cm4": 10.96,
+    "iz_cm4": 10.96,
+    "iu_cm4": 17.38,
+    "iv_cm4": 4.55,
+    "wy_cm3": 3.05,
+    "wz_cm3": 3.05,
+    "centroid_mm": [
+      14.04,
+      14.04
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 4.8,
+      "mass_kg_m": 3.77
+    }
   },
   "profile_size": true,
   "depends": [
@@ -42,5 +63,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:6d2c03464980b4fc34109602b1ce138619eb41e19009909c0013ab37b0532416"
+  "hash": "sha256:f604ce74af0444c7015511f9e6307ba218dad53b7a70f1b2d481cfca75e1d33d"
 }

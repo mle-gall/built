@@ -1,0 +1,75 @@
+{
+  "uid": "b624bc6a01c62784",
+  "name": "380 PFC",
+  "rev": 1,
+  "pack": "Steel profiles · AS/NZS",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "as-nzs/380pfc",
+      "family": "channel",
+      "params": {
+        "height": 380.0,
+        "width": 100.0,
+        "web": 10.0,
+        "flange": 17.5,
+        "radius": 14.0
+      },
+      "catalogue": {
+        "name": "380 PFC",
+        "series": [
+          [
+            "as-nzs/250pfc",
+            250.0
+          ],
+          [
+            "as-nzs/300pfc",
+            300.0
+          ],
+          [
+            "as-nzs/380pfc",
+            380.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ib-hrssp9",
+    "source": "https://www.infrabuild.com/wp-content/uploads/sites/8/2022/02/Hot20Rolled20Cat_Edition9_2019.pdf",
+    "standard": "AS/NZS 3679.1",
+    "series": "PFC"
+  },
+  "section": {
+    "area_cm2": 70.341,
+    "mass_kg_m": 55.218,
+    "iy_cm4": 15170.36,
+    "iz_cm4": 648.18,
+    "iu_cm4": 15170.36,
+    "iv_cm4": 648.18,
+    "wy_cm3": 798.44,
+    "wz_cm3": 89.39,
+    "centroid_mm": [
+      27.49,
+      190.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 70.3,
+      "mass_kg_m": 55.2
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "as-nzs/380pfc",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:00549c26728f9f59d6c4e7dd25073903d7e44afb0d305d79a809ce9449a1d0d8"
+}

@@ -1,0 +1,83 @@
+{
+  "uid": "9836456bea42b0d3",
+  "name": "HE 450 M",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/he450m",
+      "family": "i",
+      "params": {
+        "height": 478.0,
+        "width": 307.0,
+        "web": 21.0,
+        "flange": 40.0,
+        "radius": 27.0
+      },
+      "catalogue": {
+        "name": "HE 450 M",
+        "series": [
+          [
+            "en/he360m",
+            395.0
+          ],
+          [
+            "en/he400m",
+            432.0
+          ],
+          [
+            "en/he450m",
+            478.0
+          ],
+          [
+            "en/he500m",
+            524.0
+          ],
+          [
+            "en/he550m",
+            572.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-he",
+    "source": "https://orangebook.arcelormittal.com/node/16",
+    "standard": "EN 10365",
+    "series": "HE"
+  },
+  "section": {
+    "area_cm2": 335.438,
+    "mass_kg_m": 263.319,
+    "iy_cm4": 131484.55,
+    "iz_cm4": 19339.05,
+    "iu_cm4": 131484.55,
+    "iv_cm4": 19339.05,
+    "wy_cm3": 5501.45,
+    "wz_cm3": 1259.87,
+    "centroid_mm": [
+      153.5,
+      239.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 335.0,
+      "mass_kg_m": 263.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/he450m",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:ae6292d64856e38975bebb316ba5afae0d74f7c80143710d09454b3d66d43fe7"
+}

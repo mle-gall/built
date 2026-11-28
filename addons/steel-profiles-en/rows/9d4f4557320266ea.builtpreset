@@ -1,0 +1,79 @@
+{
+  "uid": "9d4f4557320266ea",
+  "name": "L 140 × 90 × 12",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/l140x90x12",
+      "family": "angle",
+      "params": {
+        "height": 140.0,
+        "width": 90.0,
+        "web": 12.0,
+        "radius": 11.0,
+        "toe": 5.5
+      },
+      "catalogue": {
+        "name": "L 140 × 90 × 12",
+        "series": [
+          [
+            "en/l130x90x12",
+            130.0
+          ],
+          [
+            "en/l140x90x12",
+            140.0
+          ],
+          [
+            "en/l150x90x12",
+            150.0
+          ],
+          [
+            "en/l250x90x12",
+            250.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-l-unequal",
+    "source": "https://orangebook.arcelormittal.com/node/225",
+    "standard": "EN 10056-1",
+    "series": "L unequal"
+  },
+  "section": {
+    "area_cm2": 26.29,
+    "mass_kg_m": 20.638,
+    "iy_cm4": 518.14,
+    "iz_cm4": 168.37,
+    "iu_cm4": 587.33,
+    "iv_cm4": 99.19,
+    "wy_cm3": 55.5,
+    "wz_cm3": 24.72,
+    "centroid_mm": [
+      21.89,
+      46.64
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 26.3,
+      "mass_kg_m": 20.6
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/l140x90x12",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:6b7310cfd22e555ed7ea9a487db1890054821d2227de441d78590d3c269cd7ec"
+}

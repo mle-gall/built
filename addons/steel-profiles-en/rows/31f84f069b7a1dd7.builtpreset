@@ -1,0 +1,79 @@
+{
+  "uid": "31f84f069b7a1dd7",
+  "name": "RHS 90 × 50 × 3 (cold-formed)",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/rhs90x50x3-cf",
+      "family": "rhs",
+      "params": {
+        "height": 90.0,
+        "width": 50.0,
+        "web": 3.0,
+        "radius": 6.0,
+        "inner": 3.0
+      },
+      "catalogue": {
+        "name": "RHS 90 × 50 × 3 (cold-formed)",
+        "series": [
+          [
+            "en/rhs70x50x3-cf",
+            70.0
+          ],
+          [
+            "en/rhs80x50x3-cf",
+            80.0
+          ],
+          [
+            "en/rhs90x50x3-cf",
+            90.0
+          ],
+          [
+            "en/rhs100x50x3-cf",
+            100.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-cfrhs",
+    "source": "https://www.steelforlifebluebook.co.uk/cfrhs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10219-2",
+    "series": "RHS cold-formed"
+  },
+  "section": {
+    "area_cm2": 7.808,
+    "mass_kg_m": 6.129,
+    "iy_cm4": 81.85,
+    "iz_cm4": 32.74,
+    "iu_cm4": 81.85,
+    "iv_cm4": 32.74,
+    "wy_cm3": 18.19,
+    "wz_cm3": 13.1,
+    "centroid_mm": [
+      25.0,
+      45.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 7.81,
+      "mass_kg_m": 6.13
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/rhs90x50x3-cf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:6068facd74ed12c7385170ceb0b25a7fe41eb5fbda4151f31e9d921ac0b530f0"
+}

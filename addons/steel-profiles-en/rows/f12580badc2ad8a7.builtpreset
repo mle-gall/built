@@ -1,0 +1,67 @@
+{
+  "uid": "f12580badc2ad8a7",
+  "name": "HP 200 × 43",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/hp200x43",
+      "family": "i",
+      "params": {
+        "height": 200.0,
+        "width": 205.0,
+        "web": 9.0,
+        "flange": 9.0,
+        "radius": 10.0
+      },
+      "catalogue": {
+        "name": "HP 200 × 43",
+        "series": [
+          [
+            "en/hp200x43",
+            200.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-hp",
+    "source": "https://orangebook.arcelormittal.com/node/200",
+    "standard": "EN 10365",
+    "series": "HP"
+  },
+  "section": {
+    "area_cm2": 54.138,
+    "mass_kg_m": 42.499,
+    "iy_cm4": 3887.68,
+    "iz_cm4": 1293.79,
+    "iu_cm4": 3887.68,
+    "iv_cm4": 1293.79,
+    "wy_cm3": 388.77,
+    "wz_cm3": 126.22,
+    "centroid_mm": [
+      102.5,
+      100.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 54.1,
+      "mass_kg_m": 42.5
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/hp200x43",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:6d2f77f6780abac4a96ba054e413b8818e95b74075ea2a33f63fbacd7dfee322"
+}

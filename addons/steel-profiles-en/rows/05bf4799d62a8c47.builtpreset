@@ -1,0 +1,78 @@
+{
+  "uid": "05bf4799d62a8c47",
+  "name": "IPN 600",
+  "rev": 1,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/ipn600",
+      "family": "i",
+      "params": {
+        "height": 600.0,
+        "width": 215.0,
+        "web": 21.6,
+        "flange": 32.4,
+        "radius": 21.6,
+        "toe": 13.0,
+        "slope": 14.0,
+        "flange_at": 53.75
+      },
+      "catalogue": {
+        "name": "IPN 600",
+        "series": [
+          [
+            "en/ipn500",
+            500.0
+          ],
+          [
+            "en/ipn550",
+            550.0
+          ],
+          [
+            "en/ipn600",
+            600.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "am-ipn",
+    "source": "https://sections.arcelormittal.com/repository2/Sections/Sections_MB_ArcelorMittal_FR_EN_DE_IPN.pdf",
+    "standard": "EN 10365",
+    "series": "IPN"
+  },
+  "section": {
+    "area_cm2": 253.831,
+    "mass_kg_m": 199.257,
+    "iy_cm4": 138782.7,
+    "iz_cm4": 4679.21,
+    "iu_cm4": 138782.7,
+    "iv_cm4": 4679.21,
+    "wy_cm3": 4626.09,
+    "wz_cm3": 435.28,
+    "centroid_mm": [
+      107.5,
+      300.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 253.7,
+      "mass_kg_m": 199.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/ipn600",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:228bffa948053ab73b375b3cf17b28524df0d0ac8872eb74d14fad80ddba8b7f"
+}

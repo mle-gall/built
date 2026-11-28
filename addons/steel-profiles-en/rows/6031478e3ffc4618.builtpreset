@@ -1,0 +1,83 @@
+{
+  "uid": "6031478e3ffc4618",
+  "name": "IPE AA 180",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/ipeaa180",
+      "family": "i",
+      "params": {
+        "height": 176.4,
+        "width": 91.0,
+        "web": 4.3,
+        "flange": 6.2,
+        "radius": 9.0
+      },
+      "catalogue": {
+        "name": "IPE AA 180",
+        "series": [
+          [
+            "en/ipeaa140",
+            136.6
+          ],
+          [
+            "en/ipeaa160",
+            156.4
+          ],
+          [
+            "en/ipeaa180",
+            176.4
+          ],
+          [
+            "en/ipeaa200",
+            196.4
+          ],
+          [
+            "en/ipeaa220",
+            216.4
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-ipe",
+    "source": "https://orangebook.arcelormittal.com/node/6",
+    "standard": "EN 10365",
+    "series": "IPE"
+  },
+  "section": {
+    "area_cm2": 19.031,
+    "mass_kg_m": 14.94,
+    "iy_cm4": 1020.12,
+    "iz_cm4": 78.12,
+    "iu_cm4": 1020.12,
+    "iv_cm4": 78.12,
+    "wy_cm3": 115.66,
+    "wz_cm3": 17.17,
+    "centroid_mm": [
+      45.5,
+      88.2
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 19.0,
+      "mass_kg_m": 14.9
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/ipeaa180",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:edf25764925e5ac53631f56c9ba7a5bf05534c51b1f7bb06b30f1d09ae33bc76"
+}

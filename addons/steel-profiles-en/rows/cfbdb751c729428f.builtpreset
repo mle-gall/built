@@ -1,0 +1,71 @@
+{
+  "uid": "cfbdb751c729428f",
+  "name": "RHS 120 × 60 × 6 (cold-formed)",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/rhs120x60x6-cf",
+      "family": "rhs",
+      "params": {
+        "height": 120.0,
+        "width": 60.0,
+        "web": 6.0,
+        "radius": 12.0,
+        "inner": 6.0
+      },
+      "catalogue": {
+        "name": "RHS 120 × 60 × 6 (cold-formed)",
+        "series": [
+          [
+            "en/rhs100x60x6-cf",
+            100.0
+          ],
+          [
+            "en/rhs120x60x6-cf",
+            120.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-cfrhs",
+    "source": "https://www.steelforlifebluebook.co.uk/cfrhs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10219-2",
+    "series": "RHS cold-formed"
+  },
+  "section": {
+    "area_cm2": 19.233,
+    "mass_kg_m": 15.098,
+    "iy_cm4": 328.01,
+    "iz_cm4": 108.77,
+    "iu_cm4": 328.01,
+    "iv_cm4": 108.77,
+    "wy_cm3": 54.67,
+    "wz_cm3": 36.26,
+    "centroid_mm": [
+      30.0,
+      60.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 19.2,
+      "mass_kg_m": 15.1
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/rhs120x60x6-cf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:34e7fdbfe2b0c3666734b61ff4ae49ab818340f33648dc4abb4a5574100c74aa"
+}

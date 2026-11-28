@@ -1,0 +1,68 @@
+{
+  "uid": "0479745e7d1af5f6",
+  "name": "ST4 × 11.5",
+  "rev": 2,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/st4x11.5",
+      "family": "tee",
+      "params": {
+        "height": 101.6,
+        "width": 105.918,
+        "web": 11.201,
+        "flange": 10.795,
+        "radius": 10.66,
+        "slope": 16.67
+      },
+      "catalogue": {
+        "name": "ST4 × 11.5",
+        "series": [
+          [
+            "aisc/st4x11.5",
+            101.6
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "ST"
+  },
+  "section": {
+    "area_cm2": 21.933,
+    "mass_kg_m": 17.217,
+    "iy_cm4": 209.56,
+    "iz_cm4": 90.87,
+    "iu_cm4": 209.56,
+    "iv_cm4": 90.87,
+    "wy_cm3": 28.96,
+    "wz_cm3": 17.16,
+    "centroid_mm": [
+      52.96,
+      72.37
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 21.806,
+      "mass_kg_m": 17.114
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/st4x11.5",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:345c4e1352a15fc06071f780467b18c4dacd4408afa8654157af406954c5bad8"
+}

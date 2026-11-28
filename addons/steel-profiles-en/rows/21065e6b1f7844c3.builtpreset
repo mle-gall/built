@@ -1,0 +1,67 @@
+{
+  "uid": "21065e6b1f7844c3",
+  "name": "RHS 250 × 150 × 6.3 (cold-formed)",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/rhs250x150x6.3-cf",
+      "family": "rhs",
+      "params": {
+        "height": 250.0,
+        "width": 150.0,
+        "web": 6.3,
+        "radius": 15.75,
+        "inner": 9.45
+      },
+      "catalogue": {
+        "name": "RHS 250 × 150 × 6.3 (cold-formed)",
+        "series": [
+          [
+            "en/rhs250x150x6.3-cf",
+            250.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-cfrhs",
+    "source": "https://www.steelforlifebluebook.co.uk/cfrhs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10219-2",
+    "series": "RHS cold-formed"
+  },
+  "section": {
+    "area_cm2": 47.449,
+    "mass_kg_m": 37.248,
+    "iy_cm4": 4001.41,
+    "iz_cm4": 1824.59,
+    "iu_cm4": 4001.41,
+    "iv_cm4": 1824.59,
+    "wy_cm3": 320.11,
+    "wz_cm3": 243.28,
+    "centroid_mm": [
+      75.0,
+      125.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 47.4,
+      "mass_kg_m": 37.2
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/rhs250x150x6.3-cf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:678845d3d767aaa5ca49c3a749efaa03e8373c05373c98a44d1a8cc7ac010cf3"
+}

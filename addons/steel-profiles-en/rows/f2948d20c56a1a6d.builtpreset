@@ -1,0 +1,71 @@
+{
+  "uid": "f2948d20c56a1a6d",
+  "name": "HP 305 × 180",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/hp305x180",
+      "family": "i",
+      "params": {
+        "height": 326.7,
+        "width": 319.7,
+        "web": 24.8,
+        "flange": 24.8,
+        "radius": 15.2
+      },
+      "catalogue": {
+        "name": "HP 305 × 180",
+        "series": [
+          [
+            "en/hp305x180",
+            326.7
+          ],
+          [
+            "en/hp360x180",
+            362.9
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-hp",
+    "source": "https://orangebook.arcelormittal.com/node/200",
+    "standard": "EN 10365",
+    "series": "HP"
+  },
+  "section": {
+    "area_cm2": 229.275,
+    "mass_kg_m": 179.981,
+    "iy_cm4": 40972.86,
+    "iz_cm4": 13546.38,
+    "iu_cm4": 40972.86,
+    "iv_cm4": 13546.38,
+    "wy_cm3": 2508.29,
+    "wz_cm3": 847.44,
+    "centroid_mm": [
+      159.85,
+      163.35
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 229.0,
+      "mass_kg_m": 180.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/hp305x180",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:e7770cc5cbe50590e432f093fb04be016916a73051459dab4290975c3d112ff8"
+}

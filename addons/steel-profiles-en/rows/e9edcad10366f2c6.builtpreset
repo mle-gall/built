@@ -1,0 +1,83 @@
+{
+  "uid": "e9edcad10366f2c6",
+  "name": "UPE 240",
+  "rev": 1,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/upe240",
+      "family": "channel",
+      "params": {
+        "height": 240.0,
+        "width": 90.0,
+        "web": 7.0,
+        "flange": 12.5,
+        "radius": 15.0
+      },
+      "catalogue": {
+        "name": "UPE 240",
+        "series": [
+          [
+            "en/upe200",
+            200.0
+          ],
+          [
+            "en/upe220",
+            220.0
+          ],
+          [
+            "en/upe240",
+            240.0
+          ],
+          [
+            "en/upe270",
+            270.0
+          ],
+          [
+            "en/upe300",
+            300.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-upe",
+    "source": "https://orangebook.arcelormittal.com/node/253",
+    "standard": "EN 10365",
+    "series": "UPE"
+  },
+  "section": {
+    "area_cm2": 38.516,
+    "mass_kg_m": 30.235,
+    "iy_cm4": 3598.79,
+    "iz_cm4": 310.93,
+    "iu_cm4": 3598.79,
+    "iv_cm4": 310.93,
+    "wy_cm3": 299.9,
+    "wz_cm3": 50.08,
+    "centroid_mm": [
+      27.92,
+      120.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 38.5,
+      "mass_kg_m": 30.2
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/upe240",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:db2e1041fd8bfb55a8ffbc8f6dd92703db0e4572163749826a3282da22a6bd30"
+}

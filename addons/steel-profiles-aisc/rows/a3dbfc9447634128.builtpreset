@@ -1,0 +1,68 @@
+{
+  "uid": "a3dbfc9447634128",
+  "name": "ST9 × 35",
+  "rev": 2,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/st9x35",
+      "family": "tee",
+      "params": {
+        "height": 228.6,
+        "width": 158.75,
+        "web": 18.059,
+        "flange": 17.551,
+        "radius": 14.69,
+        "slope": 16.67
+      },
+      "catalogue": {
+        "name": "ST9 × 35",
+        "series": [
+          [
+            "aisc/st9x35",
+            228.6
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "ST"
+  },
+  "section": {
+    "area_cm2": 66.598,
+    "mass_kg_m": 52.28,
+    "iy_cm4": 3530.43,
+    "iz_cm4": 510.89,
+    "iu_cm4": 3530.43,
+    "iv_cm4": 510.89,
+    "wy_cm3": 229.05,
+    "wz_cm3": 64.36,
+    "centroid_mm": [
+      79.38,
+      154.13
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 66.451,
+      "mass_kg_m": 52.086
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/st9x35",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:9014ac59858e68d5a33df371ff5804205fa14d1479494d9bbd67e1359f0375b0"
+}

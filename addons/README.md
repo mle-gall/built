@@ -37,6 +37,26 @@ addons/<pack-id>/
 - A detail that uses another row (a plate, a bolt) ships that row in the
   same pack. Several packs may carry the same row: same uid, same content.
 
+## Generated profile packs
+
+The `steel-profiles-*` packs are generated. Their `source/` folder holds
+one CSV per family with only the published defining dimensions
+(`designation, h, b, tw, tf, r1, r2, slope, mass, area, status, source`;
+mm, %, kg/m, cm²), `sources.json` (where each value came from, how the
+family is drawn), the converter's `crosscheck.md` and the generator's
+`report.md`. `scripts/build_steel_profiles.py` draws every size with the
+parametric families, computes area, mass (7850 kg/m³), second moments and
+elastic moduli, keeps a size only when its area and mass match the listed
+values within 1 % (2 % for sloped flanges), and writes `rows/` and
+`pack.json` (it keeps each key's uid and raises `rev` when a size changes).
+`addons/steel-profiles-PROVENANCE.md` sums up the sources; every size is
+`provisional` until checked against the purchased standard.
+
+```
+.venv/bin/python scripts/build_steel_profiles.py            # all steel profile packs
+.venv/bin/python scripts/build_steel_profiles.py --check    # what would change
+```
+
 ## Commands
 
 ```

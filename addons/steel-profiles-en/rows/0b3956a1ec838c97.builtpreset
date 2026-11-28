@@ -1,0 +1,75 @@
+{
+  "uid": "0b3956a1ec838c97",
+  "name": "RHS 250 × 150 × 16 (hot-finished)",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/rhs250x150x16-hf",
+      "family": "rhs",
+      "params": {
+        "height": 250.0,
+        "width": 150.0,
+        "web": 16.0,
+        "radius": 24.0,
+        "inner": 16.0
+      },
+      "catalogue": {
+        "name": "RHS 250 × 150 × 16 (hot-finished)",
+        "series": [
+          [
+            "en/rhs200x150x16-hf",
+            200.0
+          ],
+          [
+            "en/rhs250x150x16-hf",
+            250.0
+          ],
+          [
+            "en/rhs350x150x16-hf",
+            350.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-hfrhs",
+    "source": "https://www.steelforlifebluebook.co.uk/hfrhs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10210-2",
+    "series": "RHS hot-finished"
+  },
+  "section": {
+    "area_cm2": 115.013,
+    "mass_kg_m": 90.285,
+    "iy_cm4": 8879.37,
+    "iz_cm4": 3873.31,
+    "iu_cm4": 8879.37,
+    "iv_cm4": 3873.31,
+    "wy_cm3": 710.35,
+    "wz_cm3": 516.44,
+    "centroid_mm": [
+      75.0,
+      125.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 115.0,
+      "mass_kg_m": 90.3
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/rhs250x150x16-hf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:e2600cc7167c6ee584de6a43107e1f5da5772e6a367e7b6d2305fe3b171e0521"
+}

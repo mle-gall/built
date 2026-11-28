@@ -1,0 +1,86 @@
+{
+  "uid": "828a2b992406851b",
+  "name": "UPN 160",
+  "rev": 1,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/upn160",
+      "family": "channel",
+      "params": {
+        "height": 160.0,
+        "width": 65.0,
+        "web": 7.5,
+        "flange": 10.5,
+        "radius": 10.5,
+        "toe": 5.5,
+        "slope": 8.0,
+        "flange_at": 32.5
+      },
+      "catalogue": {
+        "name": "UPN 160",
+        "series": [
+          [
+            "en/upn120",
+            120.0
+          ],
+          [
+            "en/upn140",
+            140.0
+          ],
+          [
+            "en/upn160",
+            160.0
+          ],
+          [
+            "en/upn180",
+            180.0
+          ],
+          [
+            "en/upn200",
+            200.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-upn",
+    "source": "https://orangebook.arcelormittal.com/node/265",
+    "standard": "EN 10365",
+    "series": "UPN"
+  },
+  "section": {
+    "area_cm2": 24.014,
+    "mass_kg_m": 18.851,
+    "iy_cm4": 924.75,
+    "iz_cm4": 85.05,
+    "iu_cm4": 924.75,
+    "iv_cm4": 85.05,
+    "wy_cm3": 115.59,
+    "wz_cm3": 18.25,
+    "centroid_mm": [
+      18.4,
+      80.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 24.0,
+      "mass_kg_m": 18.8
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/upn160",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:9c5baa668c0da4f752930edd5a8d31e2ff327b2d28fbea3aa2628e5417fd052c"
+}

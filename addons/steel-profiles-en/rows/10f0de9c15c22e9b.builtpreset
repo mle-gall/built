@@ -1,0 +1,79 @@
+{
+  "uid": "10f0de9c15c22e9b",
+  "name": "RHS 250 × 100 × 8 (hot-finished)",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/rhs250x100x8-hf",
+      "family": "rhs",
+      "params": {
+        "height": 250.0,
+        "width": 100.0,
+        "web": 8.0,
+        "radius": 12.0,
+        "inner": 8.0
+      },
+      "catalogue": {
+        "name": "RHS 250 × 100 × 8 (hot-finished)",
+        "series": [
+          [
+            "en/rhs150x100x8-hf",
+            150.0
+          ],
+          [
+            "en/rhs200x100x8-hf",
+            200.0
+          ],
+          [
+            "en/rhs250x100x8-hf",
+            250.0
+          ],
+          [
+            "en/rhs300x100x8-hf",
+            300.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-hfrhs",
+    "source": "https://www.steelforlifebluebook.co.uk/hfrhs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10210-2",
+    "series": "RHS hot-finished"
+  },
+  "section": {
+    "area_cm2": 52.753,
+    "mass_kg_m": 41.411,
+    "iy_cm4": 3939.72,
+    "iz_cm4": 908.71,
+    "iu_cm4": 3939.72,
+    "iv_cm4": 908.71,
+    "wy_cm3": 315.18,
+    "wz_cm3": 181.74,
+    "centroid_mm": [
+      50.0,
+      125.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 52.8,
+      "mass_kg_m": 41.4
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/rhs250x100x8-hf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:fd0e20bb5585c06c9153800c00805aaf5c1208ca3fbe828b4f08c73d24e5f93a"
+}

@@ -1,0 +1,83 @@
+{
+  "uid": "0923faed61e188b5",
+  "name": "HE 340 AA",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/he340aa",
+      "family": "i",
+      "params": {
+        "height": 320.0,
+        "width": 300.0,
+        "web": 8.5,
+        "flange": 11.5,
+        "radius": 27.0
+      },
+      "catalogue": {
+        "name": "HE 340 AA",
+        "series": [
+          [
+            "en/he300aa",
+            283.0
+          ],
+          [
+            "en/he320aa",
+            301.0
+          ],
+          [
+            "en/he340aa",
+            320.0
+          ],
+          [
+            "en/he360aa",
+            339.0
+          ],
+          [
+            "en/he400aa",
+            378.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-he",
+    "source": "https://orangebook.arcelormittal.com/node/16",
+    "standard": "EN 10365",
+    "series": "HE"
+  },
+  "section": {
+    "area_cm2": 100.503,
+    "mass_kg_m": 78.895,
+    "iy_cm4": 19552.4,
+    "iz_cm4": 5184.74,
+    "iu_cm4": 19552.4,
+    "iv_cm4": 5184.74,
+    "wy_cm3": 1222.02,
+    "wz_cm3": 345.65,
+    "centroid_mm": [
+      150.0,
+      160.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 100.0,
+      "mass_kg_m": 78.9
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/he340aa",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:93d862f4b0b0e41c15c150bfc9421196e769fa40ab949acfd192e2dd0077f0c4"
+}

@@ -1,0 +1,79 @@
+{
+  "uid": "18ee5fdd5154cecb",
+  "name": "RHS 100 × 40 × 5 (cold-formed)",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/rhs100x40x5-cf",
+      "family": "rhs",
+      "params": {
+        "height": 100.0,
+        "width": 40.0,
+        "web": 5.0,
+        "radius": 10.0,
+        "inner": 5.0
+      },
+      "catalogue": {
+        "name": "RHS 100 × 40 × 5 (cold-formed)",
+        "series": [
+          [
+            "en/rhs70x40x5-cf",
+            70.0
+          ],
+          [
+            "en/rhs80x40x5-cf",
+            80.0
+          ],
+          [
+            "en/rhs100x40x5-cf",
+            100.0
+          ],
+          [
+            "en/rhs120x40x5-cf",
+            120.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-cfrhs",
+    "source": "https://www.steelforlifebluebook.co.uk/cfrhs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10219-2",
+    "series": "RHS cold-formed"
+  },
+  "section": {
+    "area_cm2": 12.356,
+    "mass_kg_m": 9.7,
+    "iy_cm4": 135.6,
+    "iz_cm4": 30.76,
+    "iu_cm4": 135.6,
+    "iv_cm4": 30.76,
+    "wy_cm3": 27.12,
+    "wz_cm3": 15.38,
+    "centroid_mm": [
+      20.0,
+      50.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 12.4,
+      "mass_kg_m": 9.7
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/rhs100x40x5-cf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:d9e3b14bdd7e8649cb758fd83bd28a28a64bb0c8bb7295d2e416aa6c740018c0"
+}

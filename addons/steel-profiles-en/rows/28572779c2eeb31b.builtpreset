@@ -1,0 +1,67 @@
+{
+  "uid": "28572779c2eeb31b",
+  "name": "SHS 160 × 160 × 6.3 (hot-finished)",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/shs160x160x6.3-hf",
+      "family": "rhs",
+      "params": {
+        "height": 160.0,
+        "width": 160.0,
+        "web": 6.3,
+        "radius": 9.45,
+        "inner": 6.3
+      },
+      "catalogue": {
+        "name": "SHS 160 × 160 × 6.3 (hot-finished)",
+        "series": [
+          [
+            "en/shs160x160x6.3-hf",
+            160.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-hfshs",
+    "source": "https://www.steelforlifebluebook.co.uk/hfshs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10210-2",
+    "series": "SHS hot-finished"
+  },
+  "section": {
+    "area_cm2": 38.306,
+    "mass_kg_m": 30.071,
+    "iy_cm4": 1498.84,
+    "iz_cm4": 1498.84,
+    "iu_cm4": 1498.84,
+    "iv_cm4": 1498.84,
+    "wy_cm3": 187.36,
+    "wz_cm3": 187.36,
+    "centroid_mm": [
+      80.0,
+      80.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 38.3,
+      "mass_kg_m": 30.1
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/shs160x160x6.3-hf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:36420dfba2e4e5c316e452e038d4e7881c9cd65f6aff190afa232f80b90cd9b4"
+}

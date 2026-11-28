@@ -1,0 +1,75 @@
+{
+  "uid": "20d3d7db1aee3117",
+  "name": "W14 × 48",
+  "rev": 2,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/w14x48",
+      "family": "i",
+      "params": {
+        "height": 350.52,
+        "width": 203.962,
+        "web": 8.636,
+        "flange": 15.113,
+        "radius": 15.11
+      },
+      "catalogue": {
+        "name": "W14 × 48",
+        "series": [
+          [
+            "aisc/w8x48",
+            215.9
+          ],
+          [
+            "aisc/w14x48",
+            350.52
+          ],
+          [
+            "aisc/w21x48",
+            523.24
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "W"
+  },
+  "section": {
+    "area_cm2": 91.27,
+    "mass_kg_m": 71.647,
+    "iy_cm4": 20196.93,
+    "iz_cm4": 2140.25,
+    "iu_cm4": 20196.93,
+    "iv_cm4": 2140.25,
+    "wy_cm3": 1152.4,
+    "wz_cm3": 209.87,
+    "centroid_mm": [
+      101.98,
+      175.26
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 90.968,
+      "mass_kg_m": 71.432
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/w14x48",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:f49dbf94c9449e188f9364fe333120b075311d4ba7fc9d21759908229f2ca98a"
+}

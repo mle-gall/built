@@ -1,0 +1,67 @@
+{
+  "uid": "baf242e0f4801545",
+  "name": "SHS 120 × 120 × 5 (cold-formed)",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/shs120x120x5-cf",
+      "family": "rhs",
+      "params": {
+        "height": 120.0,
+        "width": 120.0,
+        "web": 5.0,
+        "radius": 10.0,
+        "inner": 5.0
+      },
+      "catalogue": {
+        "name": "SHS 120 × 120 × 5 (cold-formed)",
+        "series": [
+          [
+            "en/shs120x120x5-cf",
+            120.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-cfshs",
+    "source": "https://www.steelforlifebluebook.co.uk/cfshs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10219-2",
+    "series": "SHS cold-formed"
+  },
+  "section": {
+    "area_cm2": 22.356,
+    "mass_kg_m": 17.55,
+    "iy_cm4": 485.47,
+    "iz_cm4": 485.47,
+    "iu_cm4": 485.47,
+    "iv_cm4": 485.47,
+    "wy_cm3": 80.91,
+    "wz_cm3": 80.91,
+    "centroid_mm": [
+      60.0,
+      60.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 22.4,
+      "mass_kg_m": 17.5
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/shs120x120x5-cf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:9a600bc8ee66a0489048d275e5db6d936fc5762d5f88770ec3c051e2b13a967e"
+}

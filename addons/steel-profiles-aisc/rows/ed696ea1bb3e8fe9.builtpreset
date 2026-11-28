@@ -1,0 +1,67 @@
+{
+  "uid": "ed696ea1bb3e8fe9",
+  "name": "W30 × 124",
+  "rev": 2,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/w30x124",
+      "family": "i",
+      "params": {
+        "height": 767.08,
+        "width": 266.7,
+        "web": 14.859,
+        "flange": 23.622,
+        "radius": 16.51
+      },
+      "catalogue": {
+        "name": "W30 × 124",
+        "series": [
+          [
+            "aisc/w30x124",
+            767.08
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "W"
+  },
+  "section": {
+    "area_cm2": 235.3,
+    "mass_kg_m": 184.711,
+    "iy_cm4": 223323.75,
+    "iz_cm4": 7491.31,
+    "iu_cm4": 223323.75,
+    "iv_cm4": 7491.31,
+    "wy_cm3": 5822.7,
+    "wz_cm3": 561.78,
+    "centroid_mm": [
+      133.35,
+      383.54
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 235.483,
+      "mass_kg_m": 184.532
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/w30x124",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:cc20878e2b8811cb6e34794728b2c2648c898b516eff9e860ed21680063b4929"
+}

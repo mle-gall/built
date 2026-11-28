@@ -1,0 +1,67 @@
+{
+  "uid": "3a9d2442e07f684a",
+  "name": "HL 1000 × 554",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/hl1000x554",
+      "family": "i",
+      "params": {
+        "height": 1032.0,
+        "width": 408.0,
+        "web": 29.5,
+        "flange": 52.0,
+        "radius": 30.0
+      },
+      "catalogue": {
+        "name": "HL 1000 × 554",
+        "series": [
+          [
+            "en/hl1000x554",
+            1032.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-hl",
+    "source": "https://orangebook.arcelormittal.com/node/26",
+    "standard": "EN 10365",
+    "series": "HL / HLZ"
+  },
+  "section": {
+    "area_cm2": 705.806,
+    "mass_kg_m": 554.058,
+    "iy_cm4": 1232373.23,
+    "iz_cm4": 59098.2,
+    "iu_cm4": 1232373.23,
+    "iv_cm4": 59098.2,
+    "wy_cm3": 23883.2,
+    "wz_cm3": 2896.97,
+    "centroid_mm": [
+      204.0,
+      516.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 706.0,
+      "mass_kg_m": 554.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/hl1000x554",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:acff23d592f3fd8d9d75ef0110d66ed620495012653fd02463e677b60ab5e9e3"
+}

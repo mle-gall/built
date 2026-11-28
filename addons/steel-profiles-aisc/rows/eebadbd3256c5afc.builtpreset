@@ -1,0 +1,72 @@
+{
+  "uid": "eebadbd3256c5afc",
+  "name": "C10 × 20",
+  "rev": 2,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/c10x20",
+      "family": "channel",
+      "params": {
+        "height": 254.0,
+        "width": 69.596,
+        "web": 9.627,
+        "flange": 11.074,
+        "radius": 9.33,
+        "slope": 16.67
+      },
+      "catalogue": {
+        "name": "C10 × 20",
+        "series": [
+          [
+            "aisc/c9x20",
+            228.6
+          ],
+          [
+            "aisc/c10x20",
+            254.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "C"
+  },
+  "section": {
+    "area_cm2": 37.986,
+    "mass_kg_m": 29.819,
+    "iy_cm4": 3294.07,
+    "iz_cm4": 117.99,
+    "iu_cm4": 3294.07,
+    "iv_cm4": 117.99,
+    "wy_cm3": 259.38,
+    "wz_cm3": 21.79,
+    "centroid_mm": [
+      15.45,
+      127.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 37.871,
+      "mass_kg_m": 29.763
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/c10x20",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:26f06f6dddc96ec6aece3ae9a830f04bc23eb3f81d310d8c5b45313bc993ba29"
+}

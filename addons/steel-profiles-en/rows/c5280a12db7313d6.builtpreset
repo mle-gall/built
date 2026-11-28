@@ -1,0 +1,83 @@
+{
+  "uid": "c5280a12db7313d6",
+  "name": "RHS 80 × 40 × 4 (cold-formed)",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/rhs80x40x4-cf",
+      "family": "rhs",
+      "params": {
+        "height": 80.0,
+        "width": 40.0,
+        "web": 4.0,
+        "radius": 8.0,
+        "inner": 4.0
+      },
+      "catalogue": {
+        "name": "RHS 80 × 40 × 4 (cold-formed)",
+        "series": [
+          [
+            "en/rhs60x40x4-cf",
+            60.0
+          ],
+          [
+            "en/rhs70x40x4-cf",
+            70.0
+          ],
+          [
+            "en/rhs80x40x4-cf",
+            80.0
+          ],
+          [
+            "en/rhs100x40x4-cf",
+            100.0
+          ],
+          [
+            "en/rhs120x40x4-cf",
+            120.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-cfrhs",
+    "source": "https://www.steelforlifebluebook.co.uk/cfrhs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10219-2",
+    "series": "RHS cold-formed"
+  },
+  "section": {
+    "area_cm2": 8.548,
+    "mass_kg_m": 6.71,
+    "iy_cm4": 64.79,
+    "iz_cm4": 21.49,
+    "iu_cm4": 64.79,
+    "iv_cm4": 21.49,
+    "wy_cm3": 16.2,
+    "wz_cm3": 10.74,
+    "centroid_mm": [
+      20.0,
+      40.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 8.55,
+      "mass_kg_m": 6.71
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/rhs80x40x4-cf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:ac54977996c9301b7b51e31814e1ace6704c1479d4968c63f6b4a0e38aed0a11"
+}

@@ -1,0 +1,71 @@
+{
+  "uid": "fa74866a2383eb2c",
+  "name": "WT22 × 167.5",
+  "rev": 2,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/wt22x167.5",
+      "family": "tee",
+      "params": {
+        "height": 558.8,
+        "width": 403.86,
+        "web": 26.162,
+        "flange": 44.958,
+        "radius": 20.07
+      },
+      "catalogue": {
+        "name": "WT22 × 167.5",
+        "series": [
+          [
+            "aisc/wt12x167.5",
+            350.52
+          ],
+          [
+            "aisc/wt22x167.5",
+            558.8
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "WT"
+  },
+  "section": {
+    "area_cm2": 317.728,
+    "mass_kg_m": 249.416,
+    "iy_cm4": 90328.36,
+    "iz_cm4": 24760.73,
+    "iu_cm4": 90328.36,
+    "iv_cm4": 24760.73,
+    "wy_cm3": 2161.18,
+    "wz_cm3": 1226.2,
+    "centroid_mm": [
+      201.93,
+      417.96
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 317.419,
+      "mass_kg_m": 249.267
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/wt22x167.5",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:7c4f67c7478bd16b202aa5c0c071ad7db0fe0705c2780104f3f635e3fa0ba5c8"
+}

@@ -1,0 +1,86 @@
+{
+  "uid": "14deaec22c416da9",
+  "name": "IPN 400",
+  "rev": 1,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/ipn400",
+      "family": "i",
+      "params": {
+        "height": 400.0,
+        "width": 155.0,
+        "web": 14.4,
+        "flange": 21.6,
+        "radius": 14.4,
+        "toe": 8.6,
+        "slope": 14.0,
+        "flange_at": 38.75
+      },
+      "catalogue": {
+        "name": "IPN 400",
+        "series": [
+          [
+            "en/ipn360",
+            360.0
+          ],
+          [
+            "en/ipn380",
+            380.0
+          ],
+          [
+            "en/ipn400",
+            400.0
+          ],
+          [
+            "en/ipn450",
+            450.0
+          ],
+          [
+            "en/ipn500",
+            500.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "am-ipn",
+    "source": "https://sections.arcelormittal.com/repository2/Sections/Sections_MB_ArcelorMittal_FR_EN_DE_IPN.pdf",
+    "standard": "EN 10365",
+    "series": "IPN"
+  },
+  "section": {
+    "area_cm2": 117.743,
+    "mass_kg_m": 92.428,
+    "iy_cm4": 29173.11,
+    "iz_cm4": 1155.99,
+    "iu_cm4": 29173.11,
+    "iv_cm4": 1155.99,
+    "wy_cm3": 1458.66,
+    "wz_cm3": 149.16,
+    "centroid_mm": [
+      77.5,
+      200.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 117.7,
+      "mass_kg_m": 92.4
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/ipn400",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:c228a3b6f932b5689a76bb5aaf88c66f9b5392fe18e17dc4683b07a03b06a9b2"
+}

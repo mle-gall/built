@@ -1,0 +1,67 @@
+{
+  "uid": "8ccc6b18304f6718",
+  "name": "SHS 50 × 50 × 6.3 (hot-finished)",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/shs50x50x6.3-hf",
+      "family": "rhs",
+      "params": {
+        "height": 50.0,
+        "width": 50.0,
+        "web": 6.3,
+        "radius": 9.45,
+        "inner": 6.3
+      },
+      "catalogue": {
+        "name": "SHS 50 × 50 × 6.3 (hot-finished)",
+        "series": [
+          [
+            "en/shs50x50x6.3-hf",
+            50.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-hfshs",
+    "source": "https://www.steelforlifebluebook.co.uk/hfshs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10210-2",
+    "series": "SHS hot-finished"
+  },
+  "section": {
+    "area_cm2": 10.586,
+    "mass_kg_m": 8.31,
+    "iy_cm4": 32.76,
+    "iz_cm4": 32.76,
+    "iu_cm4": 32.76,
+    "iv_cm4": 32.76,
+    "wy_cm3": 13.1,
+    "wz_cm3": 13.1,
+    "centroid_mm": [
+      25.0,
+      25.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 10.6,
+      "mass_kg_m": 8.31
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/shs50x50x6.3-hf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:46364bf06b6e33990a063c949da20b0288ce6fda64bcfe63ba82911750409747"
+}

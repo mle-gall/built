@@ -1,0 +1,83 @@
+{
+  "uid": "7295b1b6d29998d7",
+  "name": "HE 200 C",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/he200c",
+      "family": "i",
+      "params": {
+        "height": 210.0,
+        "width": 203.0,
+        "web": 12.0,
+        "flange": 20.0,
+        "radius": 18.0
+      },
+      "catalogue": {
+        "name": "HE 200 C",
+        "series": [
+          [
+            "en/he160c",
+            170.0
+          ],
+          [
+            "en/he180c",
+            190.0
+          ],
+          [
+            "en/he200c",
+            210.0
+          ],
+          [
+            "en/he220c",
+            230.0
+          ],
+          [
+            "en/he240c",
+            255.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-he",
+    "source": "https://orangebook.arcelormittal.com/node/16",
+    "standard": "EN 10365",
+    "series": "HE"
+  },
+  "section": {
+    "area_cm2": 104.381,
+    "mass_kg_m": 81.939,
+    "iy_cm4": 8029.38,
+    "iz_cm4": 2794.03,
+    "iu_cm4": 8029.38,
+    "iv_cm4": 2794.03,
+    "wy_cm3": 764.7,
+    "wz_cm3": 275.27,
+    "centroid_mm": [
+      101.5,
+      105.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 104.0,
+      "mass_kg_m": 81.9
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/he200c",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:9acf3993b8935ada268fbd94c6ceced4d6388000832b0fad136317130a4a69e9"
+}

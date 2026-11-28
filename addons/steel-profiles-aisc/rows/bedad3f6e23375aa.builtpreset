@@ -1,0 +1,67 @@
+{
+  "uid": "bedad3f6e23375aa",
+  "name": "WT7 × 72.5",
+  "rev": 2,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/wt7x72.5",
+      "family": "tee",
+      "params": {
+        "height": 187.706,
+        "width": 393.7,
+        "web": 17.272,
+        "flange": 27.686,
+        "radius": 15.24
+      },
+      "catalogue": {
+        "name": "WT7 × 72.5",
+        "series": [
+          [
+            "aisc/wt7x72.5",
+            187.706
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "WT"
+  },
+  "section": {
+    "area_cm2": 137.635,
+    "mass_kg_m": 108.044,
+    "iy_cm4": 2601.58,
+    "iz_cm4": 14087.51,
+    "iu_cm4": 14087.51,
+    "iv_cm4": 2601.58,
+    "wy_cm3": 167.96,
+    "wz_cm3": 715.65,
+    "centroid_mm": [
+      196.85,
+      154.89
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 137.419,
+      "mass_kg_m": 107.892
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/wt7x72.5",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:773c55af6a8bb116e53462e28e68f757957064683a049ab7e54b8efc9cda9bff"
+}

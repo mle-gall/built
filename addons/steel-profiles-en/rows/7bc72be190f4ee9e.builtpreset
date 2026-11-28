@@ -1,0 +1,86 @@
+{
+  "uid": "7bc72be190f4ee9e",
+  "name": "UPN 280",
+  "rev": 1,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/upn280",
+      "family": "channel",
+      "params": {
+        "height": 280.0,
+        "width": 95.0,
+        "web": 10.0,
+        "flange": 15.0,
+        "radius": 15.0,
+        "toe": 7.5,
+        "slope": 8.0,
+        "flange_at": 47.5
+      },
+      "catalogue": {
+        "name": "UPN 280",
+        "series": [
+          [
+            "en/upn240",
+            240.0
+          ],
+          [
+            "en/upn260",
+            260.0
+          ],
+          [
+            "en/upn280",
+            280.0
+          ],
+          [
+            "en/upn300",
+            300.0
+          ],
+          [
+            "en/upn320",
+            320.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-upn",
+    "source": "https://orangebook.arcelormittal.com/node/265",
+    "standard": "EN 10365",
+    "series": "UPN"
+  },
+  "section": {
+    "area_cm2": 53.42,
+    "mass_kg_m": 41.935,
+    "iy_cm4": 6275.92,
+    "iz_cm4": 398.2,
+    "iu_cm4": 6275.92,
+    "iv_cm4": 398.2,
+    "wy_cm3": 448.28,
+    "wz_cm3": 57.15,
+    "centroid_mm": [
+      25.33,
+      140.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 53.3,
+      "mass_kg_m": 41.8
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/upn280",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:86b1e0aa44895aeb7e75d80ed46efb71e4f403532e8a5486323e1a4f7019ee9a"
+}

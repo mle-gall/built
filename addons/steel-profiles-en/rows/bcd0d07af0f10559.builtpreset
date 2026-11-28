@@ -1,0 +1,71 @@
+{
+  "uid": "bcd0d07af0f10559",
+  "name": "RHS 80 × 40 × 6.3 (hot-finished)",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/rhs80x40x6.3-hf",
+      "family": "rhs",
+      "params": {
+        "height": 80.0,
+        "width": 40.0,
+        "web": 6.3,
+        "radius": 9.45,
+        "inner": 6.3
+      },
+      "catalogue": {
+        "name": "RHS 80 × 40 × 6.3 (hot-finished)",
+        "series": [
+          [
+            "en/rhs60x40x6.3-hf",
+            60.0
+          ],
+          [
+            "en/rhs80x40x6.3-hf",
+            80.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-hfrhs",
+    "source": "https://www.steelforlifebluebook.co.uk/hfrhs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10210-2",
+    "series": "RHS hot-finished"
+  },
+  "section": {
+    "area_cm2": 13.106,
+    "mass_kg_m": 10.289,
+    "iy_cm4": 93.28,
+    "iz_cm4": 29.15,
+    "iu_cm4": 93.28,
+    "iv_cm4": 29.15,
+    "wy_cm3": 23.32,
+    "wz_cm3": 14.58,
+    "centroid_mm": [
+      20.0,
+      40.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 13.1,
+      "mass_kg_m": 10.3
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/rhs80x40x6.3-hf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:aafa4f82d5992db492893f3054f17e90819354c63bbfb99fb19c3e749aab598b"
+}

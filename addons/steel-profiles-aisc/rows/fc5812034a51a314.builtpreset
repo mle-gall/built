@@ -1,0 +1,67 @@
+{
+  "uid": "fc5812034a51a314",
+  "name": "HP16 × 101",
+  "rev": 2,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/hp16x101",
+      "family": "i",
+      "params": {
+        "height": 393.7,
+        "width": 401.32,
+        "web": 15.875,
+        "flange": 15.875,
+        "radius": 30.1
+      },
+      "catalogue": {
+        "name": "HP16 × 101",
+        "series": [
+          [
+            "aisc/hp16x101",
+            393.7
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "HP"
+  },
+  "section": {
+    "area_cm2": 192.657,
+    "mass_kg_m": 151.235,
+    "iy_cm4": 54137.19,
+    "iz_cm4": 17132.79,
+    "iu_cm4": 54137.19,
+    "iv_cm4": 17132.79,
+    "wy_cm3": 2750.17,
+    "wz_cm3": 853.82,
+    "centroid_mm": [
+      200.66,
+      196.85
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 192.903,
+      "mass_kg_m": 150.305
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/hp16x101",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:ec100b3d1a2201f51742706ecae7cba25a8cc7882bfa6670c7d20599a31d3eb9"
+}

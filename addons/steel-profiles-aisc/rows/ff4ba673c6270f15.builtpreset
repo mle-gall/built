@@ -1,0 +1,67 @@
+{
+  "uid": "ff4ba673c6270f15",
+  "name": "W14 × 82",
+  "rev": 2,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/w14x82",
+      "family": "i",
+      "params": {
+        "height": 363.22,
+        "width": 256.54,
+        "web": 12.954,
+        "flange": 21.717,
+        "radius": 15.11
+      },
+      "catalogue": {
+        "name": "W14 × 82",
+        "series": [
+          [
+            "aisc/w14x82",
+            363.22
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "W"
+  },
+  "section": {
+    "area_cm2": 154.811,
+    "mass_kg_m": 121.526,
+    "iy_cm4": 36541.65,
+    "iz_cm4": 6118.87,
+    "iu_cm4": 36541.65,
+    "iv_cm4": 6118.87,
+    "wy_cm3": 2012.09,
+    "wz_cm3": 477.03,
+    "centroid_mm": [
+      128.27,
+      181.61
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 154.838,
+      "mass_kg_m": 122.029
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/w14x82",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:c5d3237b744a78381676fdbc4513c93c04a017c3c2d8cc851ba10f65ebd4e56f"
+}

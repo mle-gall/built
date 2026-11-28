@@ -1,0 +1,83 @@
+{
+  "uid": "2371f66d3884e36b",
+  "name": "HE 300 M",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/he300m",
+      "family": "i",
+      "params": {
+        "height": 340.0,
+        "width": 310.0,
+        "web": 21.0,
+        "flange": 39.0,
+        "radius": 27.0
+      },
+      "catalogue": {
+        "name": "HE 300 M",
+        "series": [
+          [
+            "en/he260m",
+            290.0
+          ],
+          [
+            "en/he280m",
+            310.0
+          ],
+          [
+            "en/he300m",
+            340.0
+          ],
+          [
+            "en/he320m",
+            359.0
+          ],
+          [
+            "en/he340m",
+            377.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-he",
+    "source": "https://orangebook.arcelormittal.com/node/16",
+    "standard": "EN 10365",
+    "series": "HE"
+  },
+  "section": {
+    "area_cm2": 303.078,
+    "mass_kg_m": 237.917,
+    "iy_cm4": 59201.1,
+    "iz_cm4": 19403.08,
+    "iu_cm4": 59201.1,
+    "iv_cm4": 19403.08,
+    "wy_cm3": 3482.42,
+    "wz_cm3": 1251.81,
+    "centroid_mm": [
+      155.0,
+      170.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 303.0,
+      "mass_kg_m": 238.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/he300m",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:aee4e9cea98587ecf1ce65b2c7a0b769d0020e64478ef2772bc64258dd2c4be4"
+}

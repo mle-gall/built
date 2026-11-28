@@ -1,0 +1,67 @@
+{
+  "uid": "9ba277bd9089b497",
+  "name": "SHS 80 × 80 × 5 (hot-finished)",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/shs80x80x5-hf",
+      "family": "rhs",
+      "params": {
+        "height": 80.0,
+        "width": 80.0,
+        "web": 5.0,
+        "radius": 7.5,
+        "inner": 5.0
+      },
+      "catalogue": {
+        "name": "SHS 80 × 80 × 5 (hot-finished)",
+        "series": [
+          [
+            "en/shs80x80x5-hf",
+            80.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-hfshs",
+    "source": "https://www.steelforlifebluebook.co.uk/hfshs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10210-2",
+    "series": "SHS hot-finished"
+  },
+  "section": {
+    "area_cm2": 14.732,
+    "mass_kg_m": 11.564,
+    "iy_cm4": 136.61,
+    "iz_cm4": 136.61,
+    "iu_cm4": 136.61,
+    "iv_cm4": 136.61,
+    "wy_cm3": 34.15,
+    "wz_cm3": 34.15,
+    "centroid_mm": [
+      40.0,
+      40.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 14.7,
+      "mass_kg_m": 11.6
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/shs80x80x5-hf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:a13b89ec088512d001cbd339308dce25f5435f7b8ef995b252600199c85f4222"
+}

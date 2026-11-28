@@ -1,0 +1,67 @@
+{
+  "uid": "580283ee37691604",
+  "name": "SHS 70 × 70 × 3.6 (hot-finished)",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/shs70x70x3.6-hf",
+      "family": "rhs",
+      "params": {
+        "height": 70.0,
+        "width": 70.0,
+        "web": 3.6,
+        "radius": 5.4,
+        "inner": 3.6
+      },
+      "catalogue": {
+        "name": "SHS 70 × 70 × 3.6 (hot-finished)",
+        "series": [
+          [
+            "en/shs70x70x3.6-hf",
+            70.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-hfshs",
+    "source": "https://www.steelforlifebluebook.co.uk/hfshs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10210-2",
+    "series": "SHS hot-finished"
+  },
+  "section": {
+    "area_cm2": 9.423,
+    "mass_kg_m": 7.397,
+    "iy_cm4": 68.65,
+    "iz_cm4": 68.65,
+    "iu_cm4": 68.65,
+    "iv_cm4": 68.65,
+    "wy_cm3": 19.61,
+    "wz_cm3": 19.61,
+    "centroid_mm": [
+      35.0,
+      35.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 9.42,
+      "mass_kg_m": 7.4
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/shs70x70x3.6-hf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:c27d0c69f44b4bc5b12573e860d0131c69fb246b4bb20eacd80f8b6592180680"
+}

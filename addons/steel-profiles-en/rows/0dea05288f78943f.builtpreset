@@ -1,0 +1,79 @@
+{
+  "uid": "0dea05288f78943f",
+  "name": "RHS 180 × 100 × 10 (cold-formed)",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/rhs180x100x10-cf",
+      "family": "rhs",
+      "params": {
+        "height": 180.0,
+        "width": 100.0,
+        "web": 10.0,
+        "radius": 25.0,
+        "inner": 15.0
+      },
+      "catalogue": {
+        "name": "RHS 180 × 100 × 10 (cold-formed)",
+        "series": [
+          [
+            "en/rhs150x100x10-cf",
+            150.0
+          ],
+          [
+            "en/rhs180x100x10-cf",
+            180.0
+          ],
+          [
+            "en/rhs200x100x10-cf",
+            200.0
+          ],
+          [
+            "en/rhs300x100x10-cf",
+            300.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-cfrhs",
+    "source": "https://www.steelforlifebluebook.co.uk/cfrhs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10219-2",
+    "series": "RHS cold-formed"
+  },
+  "section": {
+    "area_cm2": 48.566,
+    "mass_kg_m": 38.124,
+    "iy_cm4": 1859.44,
+    "iz_cm4": 736.4,
+    "iu_cm4": 1859.44,
+    "iv_cm4": 736.4,
+    "wy_cm3": 206.6,
+    "wz_cm3": 147.28,
+    "centroid_mm": [
+      50.0,
+      90.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 48.6,
+      "mass_kg_m": 38.1
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/rhs180x100x10-cf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:bcbc7bfa81d8c5acd60e1f2879e1ac488e6303d78cbbbadca06cfa67babad7a2"
+}

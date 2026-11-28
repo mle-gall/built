@@ -1,0 +1,86 @@
+{
+  "uid": "603b5069b7c1dbaa",
+  "name": "IPN 220",
+  "rev": 1,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/ipn220",
+      "family": "i",
+      "params": {
+        "height": 220.0,
+        "width": 98.0,
+        "web": 8.1,
+        "flange": 12.2,
+        "radius": 8.1,
+        "toe": 4.9,
+        "slope": 14.0,
+        "flange_at": 24.5
+      },
+      "catalogue": {
+        "name": "IPN 220",
+        "series": [
+          [
+            "en/ipn180",
+            180.0
+          ],
+          [
+            "en/ipn200",
+            200.0
+          ],
+          [
+            "en/ipn220",
+            220.0
+          ],
+          [
+            "en/ipn240",
+            240.0
+          ],
+          [
+            "en/ipn260",
+            260.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "am-ipn",
+    "source": "https://sections.arcelormittal.com/repository2/Sections/Sections_MB_ArcelorMittal_FR_EN_DE_IPN.pdf",
+    "standard": "EN 10365",
+    "series": "IPN"
+  },
+  "section": {
+    "area_cm2": 39.502,
+    "mass_kg_m": 31.009,
+    "iy_cm4": 3054.75,
+    "iz_cm4": 162.03,
+    "iu_cm4": 3054.75,
+    "iv_cm4": 162.03,
+    "wy_cm3": 277.7,
+    "wz_cm3": 33.07,
+    "centroid_mm": [
+      49.0,
+      110.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 39.5,
+      "mass_kg_m": 31.1
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/ipn220",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:3b029fcde325a7915ac26af84b0253e5da62b7002d6449f1ed7d5a8b56f0cc9b"
+}

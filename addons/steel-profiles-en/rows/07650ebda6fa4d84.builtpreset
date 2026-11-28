@@ -1,0 +1,67 @@
+{
+  "uid": "07650ebda6fa4d84",
+  "name": "SHS 120 × 120 × 6.3 (hot-finished)",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/shs120x120x6.3-hf",
+      "family": "rhs",
+      "params": {
+        "height": 120.0,
+        "width": 120.0,
+        "web": 6.3,
+        "radius": 9.45,
+        "inner": 6.3
+      },
+      "catalogue": {
+        "name": "SHS 120 × 120 × 6.3 (hot-finished)",
+        "series": [
+          [
+            "en/shs120x120x6.3-hf",
+            120.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-hfshs",
+    "source": "https://www.steelforlifebluebook.co.uk/hfshs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10210-2",
+    "series": "SHS hot-finished"
+  },
+  "section": {
+    "area_cm2": 28.226,
+    "mass_kg_m": 22.158,
+    "iy_cm4": 602.85,
+    "iz_cm4": 602.85,
+    "iu_cm4": 602.85,
+    "iv_cm4": 602.85,
+    "wy_cm3": 100.48,
+    "wz_cm3": 100.48,
+    "centroid_mm": [
+      60.0,
+      60.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 28.2,
+      "mass_kg_m": 22.2
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/shs120x120x6.3-hf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:17c647868a5800673368bcbc28ab43093d442689e21927ed5ef0a62c7c318c8e"
+}

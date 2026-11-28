@@ -1,0 +1,71 @@
+{
+  "uid": "180246069e4dc6dd",
+  "name": "WT9 × 30",
+  "rev": 2,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/wt9x30",
+      "family": "tee",
+      "params": {
+        "height": 231.648,
+        "width": 192.024,
+        "web": 10.541,
+        "flange": 17.653,
+        "radius": 10.29
+      },
+      "catalogue": {
+        "name": "WT9 × 30",
+        "series": [
+          [
+            "aisc/wt5x30",
+            129.794
+          ],
+          [
+            "aisc/wt9x30",
+            231.648
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "WT"
+  },
+  "section": {
+    "area_cm2": 56.91,
+    "mass_kg_m": 44.674,
+    "iy_cm4": 2692.2,
+    "iz_cm4": 1043.97,
+    "iu_cm4": 2692.2,
+    "iv_cm4": 1043.97,
+    "wy_cm3": 152.25,
+    "wz_cm3": 108.73,
+    "centroid_mm": [
+      96.01,
+      176.82
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 56.903,
+      "mass_kg_m": 44.645
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/wt9x30",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:5fe22b0de518a91568cce8fd7efa33510c43a2e19a540ea3b59b0d157afed00b"
+}

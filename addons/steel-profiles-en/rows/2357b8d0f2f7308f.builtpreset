@@ -1,0 +1,67 @@
+{
+  "uid": "2357b8d0f2f7308f",
+  "name": "PFC 260 × 90 × 35",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/pfc260x90x35",
+      "family": "channel",
+      "params": {
+        "height": 260.0,
+        "width": 90.0,
+        "web": 8.0,
+        "flange": 14.0,
+        "radius": 12.0
+      },
+      "catalogue": {
+        "name": "PFC 260 × 90 × 35",
+        "series": [
+          [
+            "en/pfc260x90x35",
+            260.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-pfc",
+    "source": "https://orangebook.arcelormittal.com/node/259",
+    "standard": "EN 10365",
+    "series": "PFC"
+  },
+  "section": {
+    "area_cm2": 44.378,
+    "mass_kg_m": 34.837,
+    "iy_cm4": 4728.51,
+    "iz_cm4": 352.54,
+    "iu_cm4": 4728.51,
+    "iv_cm4": 352.54,
+    "wy_cm3": 363.73,
+    "wz_cm3": 56.29,
+    "centroid_mm": [
+      27.37,
+      130.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 44.4,
+      "mass_kg_m": 34.8
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/pfc260x90x35",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:29ef82b61dd21c77aaa8b097dcc9190af18da581beebb24b52cd8b2725b19362"
+}

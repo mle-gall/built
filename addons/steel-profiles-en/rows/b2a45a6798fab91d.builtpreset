@@ -1,0 +1,67 @@
+{
+  "uid": "b2a45a6798fab91d",
+  "name": "SHS 25 × 25 × 2.5 (cold-formed)",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/shs25x25x2.5-cf",
+      "family": "rhs",
+      "params": {
+        "height": 25.0,
+        "width": 25.0,
+        "web": 2.5,
+        "radius": 5.0,
+        "inner": 2.5
+      },
+      "catalogue": {
+        "name": "SHS 25 × 25 × 2.5 (cold-formed)",
+        "series": [
+          [
+            "en/shs25x25x2.5-cf",
+            25.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-cfshs",
+    "source": "https://www.steelforlifebluebook.co.uk/cfshs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10219-2",
+    "series": "SHS cold-formed"
+  },
+  "section": {
+    "area_cm2": 2.089,
+    "mass_kg_m": 1.64,
+    "iy_cm4": 1.69,
+    "iz_cm4": 1.69,
+    "iu_cm4": 1.69,
+    "iv_cm4": 1.69,
+    "wy_cm3": 1.35,
+    "wz_cm3": 1.35,
+    "centroid_mm": [
+      12.5,
+      12.5
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 2.09,
+      "mass_kg_m": 1.64
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/shs25x25x2.5-cf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:4f3eb5bc3b358bfcb0fc77d6e1ea3f701ed8cde79721121f0451aedff4a804b9"
+}

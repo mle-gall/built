@@ -1,0 +1,75 @@
+{
+  "uid": "c6b75295ddccc6e2",
+  "name": "RHS 150 × 100 × 8 (hot-finished)",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/rhs150x100x8-hf",
+      "family": "rhs",
+      "params": {
+        "height": 150.0,
+        "width": 100.0,
+        "web": 8.0,
+        "radius": 12.0,
+        "inner": 8.0
+      },
+      "catalogue": {
+        "name": "RHS 150 × 100 × 8 (hot-finished)",
+        "series": [
+          [
+            "en/rhs150x100x8-hf",
+            150.0
+          ],
+          [
+            "en/rhs200x100x8-hf",
+            200.0
+          ],
+          [
+            "en/rhs250x100x8-hf",
+            250.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-hfrhs",
+    "source": "https://www.steelforlifebluebook.co.uk/hfrhs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10210-2",
+    "series": "RHS hot-finished"
+  },
+  "section": {
+    "area_cm2": 36.753,
+    "mass_kg_m": 28.851,
+    "iy_cm4": 1086.89,
+    "iz_cm4": 569.3,
+    "iu_cm4": 1086.89,
+    "iv_cm4": 569.3,
+    "wy_cm3": 144.92,
+    "wz_cm3": 113.86,
+    "centroid_mm": [
+      50.0,
+      75.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 36.8,
+      "mass_kg_m": 28.9
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/rhs150x100x8-hf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:89c6db6648223666436cd88bd35cb7c81beb9a28dd2d0ddd4ca7deef148e1fae"
+}

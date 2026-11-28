@@ -1,0 +1,68 @@
+{
+  "uid": "493d46daa015dfb6",
+  "name": "C7 × 12.25",
+  "rev": 2,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/c7x12.25",
+      "family": "channel",
+      "params": {
+        "height": 177.8,
+        "width": 55.626,
+        "web": 7.976,
+        "flange": 9.296,
+        "radius": 8.96,
+        "slope": 16.67
+      },
+      "catalogue": {
+        "name": "C7 × 12.25",
+        "series": [
+          [
+            "aisc/c7x12.25",
+            177.8
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "C"
+  },
+  "section": {
+    "area_cm2": 23.272,
+    "mass_kg_m": 18.269,
+    "iy_cm4": 1011.87,
+    "iz_cm4": 49.05,
+    "iu_cm4": 1011.87,
+    "iv_cm4": 49.05,
+    "wy_cm3": 113.82,
+    "wz_cm3": 11.6,
+    "centroid_mm": [
+      13.34,
+      88.9
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 23.161,
+      "mass_kg_m": 18.23
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/c7x12.25",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:bd7a7a6f8f0021485ba763e6109b9e93ea0ef043ffcb5eef2619a92f723426f9"
+}

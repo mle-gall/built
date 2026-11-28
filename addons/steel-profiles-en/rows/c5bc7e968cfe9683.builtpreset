@@ -1,0 +1,67 @@
+{
+  "uid": "c5bc7e968cfe9683",
+  "name": "SHS 180 × 180 × 6.3 (cold-formed)",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/shs180x180x6.3-cf",
+      "family": "rhs",
+      "params": {
+        "height": 180.0,
+        "width": 180.0,
+        "web": 6.3,
+        "radius": 15.75,
+        "inner": 9.45
+      },
+      "catalogue": {
+        "name": "SHS 180 × 180 × 6.3 (cold-formed)",
+        "series": [
+          [
+            "en/shs180x180x6.3-cf",
+            180.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-cfshs",
+    "source": "https://www.steelforlifebluebook.co.uk/cfshs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10219-2",
+    "series": "SHS cold-formed"
+  },
+  "section": {
+    "area_cm2": 42.409,
+    "mass_kg_m": 33.291,
+    "iy_cm4": 2095.64,
+    "iz_cm4": 2095.64,
+    "iu_cm4": 2095.64,
+    "iv_cm4": 2095.64,
+    "wy_cm3": 232.85,
+    "wz_cm3": 232.85,
+    "centroid_mm": [
+      90.0,
+      90.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 42.4,
+      "mass_kg_m": 33.3
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/shs180x180x6.3-cf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:5398595217a0983259d89fe30ca83590aef131eef78661712d85f4d08d2c5f3c"
+}

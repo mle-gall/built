@@ -1,0 +1,67 @@
+{
+  "uid": "6ecfdc155d17ec55",
+  "name": "SHS 400 × 400 × 8 (hot-finished)",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/shs400x400x8-hf",
+      "family": "rhs",
+      "params": {
+        "height": 400.0,
+        "width": 400.0,
+        "web": 8.0,
+        "radius": 12.0,
+        "inner": 8.0
+      },
+      "catalogue": {
+        "name": "SHS 400 × 400 × 8 (hot-finished)",
+        "series": [
+          [
+            "en/shs400x400x8-hf",
+            400.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-hfshs",
+    "source": "https://www.steelforlifebluebook.co.uk/hfshs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10210-2",
+    "series": "SHS hot-finished"
+  },
+  "section": {
+    "area_cm2": 124.753,
+    "mass_kg_m": 97.931,
+    "iy_cm4": 31856.82,
+    "iz_cm4": 31856.82,
+    "iu_cm4": 31856.82,
+    "iv_cm4": 31856.82,
+    "wy_cm3": 1592.84,
+    "wz_cm3": 1592.84,
+    "centroid_mm": [
+      200.0,
+      200.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 125.0,
+      "mass_kg_m": 97.9
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/shs400x400x8-hf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:249222b1f6859d2135186ea24d7289bfe4e4c018c344802ccaf96549de8275dc"
+}

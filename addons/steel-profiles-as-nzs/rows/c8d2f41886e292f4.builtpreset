@@ -1,0 +1,67 @@
+{
+  "uid": "c8d2f41886e292f4",
+  "name": "530 UB 82.0",
+  "rev": 2,
+  "pack": "Steel profiles · AS/NZS",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "as-nzs/530ub82.0",
+      "family": "i",
+      "params": {
+        "height": 528.2,
+        "width": 209.0,
+        "web": 9.6,
+        "flange": 13.2,
+        "radius": 14.0
+      },
+      "catalogue": {
+        "name": "530 UB 82.0",
+        "series": [
+          [
+            "as-nzs/530ub82.0",
+            528.2
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ib-hrssp9",
+    "source": "https://www.infrabuild.com/wp-content/uploads/sites/8/2022/02/Hot20Rolled20Cat_Edition9_2019.pdf",
+    "standard": "AS/NZS 3679.1",
+    "series": "UB"
+  },
+  "section": {
+    "area_cm2": 105.031,
+    "mass_kg_m": 82.45,
+    "iy_cm4": 47734.64,
+    "iz_cm4": 2013.33,
+    "iu_cm4": 47734.64,
+    "iv_cm4": 2013.33,
+    "wy_cm3": 1807.45,
+    "wz_cm3": 192.66,
+    "centroid_mm": [
+      104.5,
+      264.1
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 105.0,
+      "mass_kg_m": 82.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "as-nzs/530ub82.0",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:c637210d2a90446d8a64009dbf2042a9c4462e390a72a2f26ad042e821d503a9"
+}

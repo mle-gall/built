@@ -1,0 +1,82 @@
+{
+  "uid": "51fd996bd13497d0",
+  "name": "UPN 380",
+  "rev": 1,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/upn380",
+      "family": "channel",
+      "params": {
+        "height": 380.0,
+        "width": 102.0,
+        "web": 13.5,
+        "flange": 16.0,
+        "radius": 16.0,
+        "toe": 8.0,
+        "slope": 5.0,
+        "flange_at": 51.0
+      },
+      "catalogue": {
+        "name": "UPN 380",
+        "series": [
+          [
+            "en/upn320",
+            320.0
+          ],
+          [
+            "en/upn350",
+            350.0
+          ],
+          [
+            "en/upn380",
+            380.0
+          ],
+          [
+            "en/upn400",
+            400.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-upn",
+    "source": "https://orangebook.arcelormittal.com/node/265",
+    "standard": "EN 10365",
+    "series": "UPN"
+  },
+  "section": {
+    "area_cm2": 79.755,
+    "mass_kg_m": 62.608,
+    "iy_cm4": 15574.97,
+    "iz_cm4": 604.38,
+    "iu_cm4": 15574.97,
+    "iv_cm4": 604.38,
+    "wy_cm3": 819.74,
+    "wz_cm3": 77.08,
+    "centroid_mm": [
+      23.59,
+      190.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 80.4,
+      "mass_kg_m": 63.1
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/upn380",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:7e6b340ebeb543d5f97d243dd4b8f5c4b7b8e857b5a65945471d4c3e231c0dfa"
+}

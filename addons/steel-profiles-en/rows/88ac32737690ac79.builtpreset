@@ -1,0 +1,83 @@
+{
+  "uid": "88ac32737690ac79",
+  "name": "HE 550 AA",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/he550aa",
+      "family": "i",
+      "params": {
+        "height": 522.0,
+        "width": 300.0,
+        "web": 11.5,
+        "flange": 15.0,
+        "radius": 27.0
+      },
+      "catalogue": {
+        "name": "HE 550 AA",
+        "series": [
+          [
+            "en/he450aa",
+            425.0
+          ],
+          [
+            "en/he500aa",
+            472.0
+          ],
+          [
+            "en/he550aa",
+            522.0
+          ],
+          [
+            "en/he600aa",
+            571.0
+          ],
+          [
+            "en/he650aa",
+            620.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-he",
+    "source": "https://orangebook.arcelormittal.com/node/16",
+    "standard": "EN 10365",
+    "series": "HE"
+  },
+  "section": {
+    "area_cm2": 152.838,
+    "mass_kg_m": 119.978,
+    "iy_cm4": 72871.7,
+    "iz_cm4": 6766.53,
+    "iu_cm4": 72871.7,
+    "iv_cm4": 6766.53,
+    "wy_cm3": 2792.02,
+    "wz_cm3": 451.1,
+    "centroid_mm": [
+      150.0,
+      261.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 153.0,
+      "mass_kg_m": 120.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/he550aa",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:97ecbf619360568fe6f735f8474f9d36363c818c8a080e4fabd75c651c9b750f"
+}

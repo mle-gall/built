@@ -1,0 +1,83 @@
+{
+  "uid": "ed03a1d369bb5e8a",
+  "name": "HE 600 B",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/he600b",
+      "family": "i",
+      "params": {
+        "height": 600.0,
+        "width": 300.0,
+        "web": 15.5,
+        "flange": 30.0,
+        "radius": 27.0
+      },
+      "catalogue": {
+        "name": "HE 600 B",
+        "series": [
+          [
+            "en/he500b",
+            500.0
+          ],
+          [
+            "en/he550b",
+            550.0
+          ],
+          [
+            "en/he600b",
+            600.0
+          ],
+          [
+            "en/he650b",
+            650.0
+          ],
+          [
+            "en/he700b",
+            700.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-he",
+    "source": "https://orangebook.arcelormittal.com/node/16",
+    "standard": "EN 10365",
+    "series": "HE"
+  },
+  "section": {
+    "area_cm2": 269.958,
+    "mass_kg_m": 211.917,
+    "iy_cm4": 171041.5,
+    "iz_cm4": 13530.25,
+    "iu_cm4": 171041.5,
+    "iv_cm4": 13530.25,
+    "wy_cm3": 5701.38,
+    "wz_cm3": 902.02,
+    "centroid_mm": [
+      150.0,
+      300.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 270.0,
+      "mass_kg_m": 212.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/he600b",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:32fc2982490d14a76425a30e251efd355efd4a13a16eaaec2d9b0de652b8e04a"
+}

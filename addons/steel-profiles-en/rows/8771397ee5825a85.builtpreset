@@ -1,0 +1,83 @@
+{
+  "uid": "8771397ee5825a85",
+  "name": "HE 550 B",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/he550b",
+      "family": "i",
+      "params": {
+        "height": 550.0,
+        "width": 300.0,
+        "web": 15.0,
+        "flange": 29.0,
+        "radius": 27.0
+      },
+      "catalogue": {
+        "name": "HE 550 B",
+        "series": [
+          [
+            "en/he450b",
+            450.0
+          ],
+          [
+            "en/he500b",
+            500.0
+          ],
+          [
+            "en/he550b",
+            550.0
+          ],
+          [
+            "en/he600b",
+            600.0
+          ],
+          [
+            "en/he650b",
+            650.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-he",
+    "source": "https://orangebook.arcelormittal.com/node/16",
+    "standard": "EN 10365",
+    "series": "HE"
+  },
+  "section": {
+    "area_cm2": 254.058,
+    "mass_kg_m": 199.436,
+    "iy_cm4": 136691.2,
+    "iz_cm4": 13076.9,
+    "iu_cm4": 136691.2,
+    "iv_cm4": 13076.9,
+    "wy_cm3": 4970.59,
+    "wz_cm3": 871.79,
+    "centroid_mm": [
+      150.0,
+      275.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 254.0,
+      "mass_kg_m": 199.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/he550b",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:586d93494ff4c4110257a55cab8413d5c99694f0e5f69256bc7e98dc9fc72c84"
+}

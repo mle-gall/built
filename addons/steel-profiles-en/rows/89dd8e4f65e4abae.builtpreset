@@ -1,0 +1,67 @@
+{
+  "uid": "89dd8e4f65e4abae",
+  "name": "UC 305 × 305 × 313",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/uc305x305x313",
+      "family": "i",
+      "params": {
+        "height": 374.0,
+        "width": 325.0,
+        "web": 30.0,
+        "flange": 48.3,
+        "radius": 20.0
+      },
+      "catalogue": {
+        "name": "UC 305 × 305 × 313",
+        "series": [
+          [
+            "en/uc305x305x313",
+            374.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-uc",
+    "source": "https://orangebook.arcelormittal.com/node/246",
+    "standard": "EN 10365",
+    "series": "UC"
+  },
+  "section": {
+    "area_cm2": 400.604,
+    "mass_kg_m": 314.474,
+    "iy_cm4": 89826.02,
+    "iz_cm4": 27710.05,
+    "iu_cm4": 89826.02,
+    "iv_cm4": 27710.05,
+    "wy_cm3": 4803.53,
+    "wz_cm3": 1705.23,
+    "centroid_mm": [
+      162.5,
+      187.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 399.0,
+      "mass_kg_m": 313.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/uc305x305x313",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:cc3f30fde17ce85b2a77bee1952b49f4106217f03aa366811a055fd009e7797e"
+}

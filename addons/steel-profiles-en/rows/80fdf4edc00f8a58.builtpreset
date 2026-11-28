@@ -1,0 +1,86 @@
+{
+  "uid": "80fdf4edc00f8a58",
+  "name": "IPN 140",
+  "rev": 1,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/ipn140",
+      "family": "i",
+      "params": {
+        "height": 140.0,
+        "width": 66.0,
+        "web": 5.7,
+        "flange": 8.6,
+        "radius": 5.7,
+        "toe": 3.4,
+        "slope": 14.0,
+        "flange_at": 16.5
+      },
+      "catalogue": {
+        "name": "IPN 140",
+        "series": [
+          [
+            "en/ipn100",
+            100.0
+          ],
+          [
+            "en/ipn120",
+            120.0
+          ],
+          [
+            "en/ipn140",
+            140.0
+          ],
+          [
+            "en/ipn160",
+            160.0
+          ],
+          [
+            "en/ipn180",
+            180.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "am-ipn",
+    "source": "https://sections.arcelormittal.com/repository2/Sections/Sections_MB_ArcelorMittal_FR_EN_DE_IPN.pdf",
+    "standard": "EN 10365",
+    "series": "IPN"
+  },
+  "section": {
+    "area_cm2": 18.24,
+    "mass_kg_m": 14.318,
+    "iy_cm4": 572.39,
+    "iz_cm4": 35.14,
+    "iu_cm4": 572.39,
+    "iv_cm4": 35.14,
+    "wy_cm3": 81.77,
+    "wz_cm3": 10.65,
+    "centroid_mm": [
+      33.0,
+      70.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 18.2,
+      "mass_kg_m": 14.3
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/ipn140",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:55341973a83d24f07d4dee3f9bf44733d1cb4bdb28bdc6f9b517784d57bc98ab"
+}

@@ -1,0 +1,67 @@
+{
+  "uid": "b3e58035fac284a4",
+  "name": "SHS 200 × 200 × 6 (cold-formed)",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/shs200x200x6-cf",
+      "family": "rhs",
+      "params": {
+        "height": 200.0,
+        "width": 200.0,
+        "web": 6.0,
+        "radius": 12.0,
+        "inner": 6.0
+      },
+      "catalogue": {
+        "name": "SHS 200 × 200 × 6 (cold-formed)",
+        "series": [
+          [
+            "en/shs200x200x6-cf",
+            200.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-cfshs",
+    "source": "https://www.steelforlifebluebook.co.uk/cfshs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10219-2",
+    "series": "SHS cold-formed"
+  },
+  "section": {
+    "area_cm2": 45.633,
+    "mass_kg_m": 35.822,
+    "iy_cm4": 2832.74,
+    "iz_cm4": 2832.74,
+    "iu_cm4": 2832.74,
+    "iv_cm4": 2832.74,
+    "wy_cm3": 283.27,
+    "wz_cm3": 283.27,
+    "centroid_mm": [
+      100.0,
+      100.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 45.6,
+      "mass_kg_m": 35.8
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/shs200x200x6-cf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:151503b4317dbbf981b95471d612152f8e56c44508f894212888f6c437958fbd"
+}

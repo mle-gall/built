@@ -1,0 +1,67 @@
+{
+  "uid": "345de26891d03e9a",
+  "name": "SHS 60 × 60 × 3.2 (hot-finished)",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/shs60x60x3.2-hf",
+      "family": "rhs",
+      "params": {
+        "height": 60.0,
+        "width": 60.0,
+        "web": 3.2,
+        "radius": 4.8,
+        "inner": 3.2
+      },
+      "catalogue": {
+        "name": "SHS 60 × 60 × 3.2 (hot-finished)",
+        "series": [
+          [
+            "en/shs60x60x3.2-hf",
+            60.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-hfshs",
+    "source": "https://www.steelforlifebluebook.co.uk/hfshs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10210-2",
+    "series": "SHS hot-finished"
+  },
+  "section": {
+    "area_cm2": 7.161,
+    "mass_kg_m": 5.621,
+    "iy_cm4": 38.16,
+    "iz_cm4": 38.16,
+    "iu_cm4": 38.16,
+    "iv_cm4": 38.16,
+    "wy_cm3": 12.72,
+    "wz_cm3": 12.72,
+    "centroid_mm": [
+      30.0,
+      30.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 7.16,
+      "mass_kg_m": 5.62
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/shs60x60x3.2-hf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:c31ffd928f1759814c2169cf2504a0bbb66bc4baa841255899a6832954dd07d4"
+}

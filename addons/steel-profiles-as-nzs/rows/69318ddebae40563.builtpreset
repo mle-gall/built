@@ -1,0 +1,67 @@
+{
+  "uid": "69318ddebae40563",
+  "name": "180 UB 18.1",
+  "rev": 2,
+  "pack": "Steel profiles · AS/NZS",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "as-nzs/180ub18.1",
+      "family": "i",
+      "params": {
+        "height": 175.0,
+        "width": 90.0,
+        "web": 5.0,
+        "flange": 8.0,
+        "radius": 8.9
+      },
+      "catalogue": {
+        "name": "180 UB 18.1",
+        "series": [
+          [
+            "as-nzs/180ub18.1",
+            175.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ib-hrssp9",
+    "source": "https://www.infrabuild.com/wp-content/uploads/sites/8/2022/02/Hot20Rolled20Cat_Edition9_2019.pdf",
+    "standard": "AS/NZS 3679.1",
+    "series": "UB"
+  },
+  "section": {
+    "area_cm2": 23.03,
+    "mass_kg_m": 18.079,
+    "iy_cm4": 1213.13,
+    "iz_cm4": 97.52,
+    "iu_cm4": 1213.13,
+    "iv_cm4": 97.52,
+    "wy_cm3": 138.64,
+    "wz_cm3": 21.67,
+    "centroid_mm": [
+      45.0,
+      87.5
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 23.0,
+      "mass_kg_m": 18.1
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "as-nzs/180ub18.1",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:f917981f2347992b87ea01e6de411441021372519730193c990777127c1bd550"
+}

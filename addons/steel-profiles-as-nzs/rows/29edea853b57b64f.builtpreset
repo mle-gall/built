@@ -1,0 +1,67 @@
+{
+  "uid": "29edea853b57b64f",
+  "name": "410 UB 53.7",
+  "rev": 2,
+  "pack": "Steel profiles · AS/NZS",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "as-nzs/410ub53.7",
+      "family": "i",
+      "params": {
+        "height": 402.6,
+        "width": 178.0,
+        "web": 7.6,
+        "flange": 10.9,
+        "radius": 11.4
+      },
+      "catalogue": {
+        "name": "410 UB 53.7",
+        "series": [
+          [
+            "as-nzs/410ub53.7",
+            402.6
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ib-hrssp9",
+    "source": "https://www.infrabuild.com/wp-content/uploads/sites/8/2022/02/Hot20Rolled20Cat_Edition9_2019.pdf",
+    "standard": "AS/NZS 3679.1",
+    "series": "UB"
+  },
+  "section": {
+    "area_cm2": 68.86,
+    "mass_kg_m": 54.055,
+    "iy_cm4": 18778.97,
+    "iz_cm4": 1026.45,
+    "iu_cm4": 18778.97,
+    "iv_cm4": 1026.45,
+    "wy_cm3": 932.88,
+    "wz_cm3": 115.33,
+    "centroid_mm": [
+      89.0,
+      201.3
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 68.9,
+      "mass_kg_m": 53.7
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "as-nzs/410ub53.7",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:3941caf20cc84ede5125cb99ff6362bca88b0dd57208e4884ec859df4932eb5e"
+}

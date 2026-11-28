@@ -1,0 +1,67 @@
+{
+  "uid": "82e44ee953f73e44",
+  "name": "310 UBP 110",
+  "rev": 2,
+  "pack": "Steel profiles · AS/NZS",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "as-nzs/310ubp110",
+      "family": "i",
+      "params": {
+        "height": 308.0,
+        "width": 311.0,
+        "web": 15.3,
+        "flange": 15.4,
+        "radius": 16.5
+      },
+      "catalogue": {
+        "name": "310 UBP 110",
+        "series": [
+          [
+            "as-nzs/310ubp110",
+            308.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ib-hrssp9",
+    "source": "https://www.infrabuild.com/wp-content/uploads/sites/8/2022/02/Hot20Rolled20Cat_Edition9_2019.pdf",
+    "standard": "AS/NZS 3679.1",
+    "series": "UBP"
+  },
+  "section": {
+    "area_cm2": 140.537,
+    "mass_kg_m": 110.321,
+    "iy_cm4": 23662.49,
+    "iz_cm4": 7732.09,
+    "iu_cm4": 23662.49,
+    "iv_cm4": 7732.09,
+    "wy_cm3": 1536.53,
+    "wz_cm3": 497.24,
+    "centroid_mm": [
+      155.5,
+      154.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 140.0,
+      "mass_kg_m": 110.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "as-nzs/310ubp110",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:493defbb8952ed2f2862129ce692ca2f5ed1c087995265dd821e47c30140e07e"
+}

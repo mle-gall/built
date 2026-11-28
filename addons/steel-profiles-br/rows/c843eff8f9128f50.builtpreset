@@ -1,0 +1,67 @@
+{
+  "uid": "c843eff8f9128f50",
+  "name": "HP 310 × 79.0",
+  "rev": 2,
+  "pack": "Steel profiles · BR",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "br/hp310x79.0",
+      "family": "i",
+      "params": {
+        "height": 299.0,
+        "width": 306.0,
+        "web": 11.0,
+        "flange": 11.0,
+        "radius": 16.0
+      },
+      "catalogue": {
+        "name": "HP 310 × 79.0",
+        "series": [
+          [
+            "br/hp310x79.0",
+            299.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "gerdau-perfis",
+    "source": "https://api.aecweb.com.br/cls/catalogos/28792/22314/catalogo-gerdau-perfis-estruturais.pdf",
+    "standard": "ABNT NBR 15980",
+    "series": "HP"
+  },
+  "section": {
+    "area_cm2": 99.988,
+    "mass_kg_m": 78.49,
+    "iy_cm4": 16314.83,
+    "iz_cm4": 5258.06,
+    "iu_cm4": 16314.83,
+    "iv_cm4": 5258.06,
+    "wy_cm3": 1091.29,
+    "wz_cm3": 343.66,
+    "centroid_mm": [
+      153.0,
+      149.5
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 100.0,
+      "mass_kg_m": 79.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "br/hp310x79.0",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:fcf079999498732e6cb341dbf65c2bdf29c1e9cc69128da4ec0a71e5f87bd943"
+}

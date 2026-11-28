@@ -1,0 +1,67 @@
+{
+  "uid": "82ec73917691d35c",
+  "name": "W 200 × 71.0",
+  "rev": 3,
+  "pack": "Steel profiles · BR",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "br/w200x71.0",
+      "family": "i",
+      "params": {
+        "height": 216.0,
+        "width": 206.0,
+        "web": 10.2,
+        "flange": 17.4,
+        "radius": 10.0
+      },
+      "catalogue": {
+        "name": "W 200 × 71.0",
+        "series": [
+          [
+            "br/w200x71.0",
+            216.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "gerdau-perfis",
+    "source": "https://api.aecweb.com.br/cls/catalogos/28792/22314/catalogo-gerdau-perfis-estruturais.pdf",
+    "standard": "ABNT NBR 15980",
+    "series": "W"
+  },
+  "section": {
+    "area_cm2": 91.029,
+    "mass_kg_m": 71.458,
+    "iy_cm4": 7659.64,
+    "iz_cm4": 2537.22,
+    "iu_cm4": 7659.64,
+    "iv_cm4": 2537.22,
+    "wy_cm3": 709.23,
+    "wz_cm3": 246.33,
+    "centroid_mm": [
+      103.0,
+      108.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 91.0,
+      "mass_kg_m": 71.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "br/w200x71.0",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:1ce35c05bab20e65ec8d508a3d4dc526f1237f249aa674c6352c3c16652e5b19"
+}

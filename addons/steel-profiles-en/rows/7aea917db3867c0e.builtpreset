@@ -1,0 +1,67 @@
+{
+  "uid": "7aea917db3867c0e",
+  "name": "SHS 80 × 80 × 5 (cold-formed)",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/shs80x80x5-cf",
+      "family": "rhs",
+      "params": {
+        "height": 80.0,
+        "width": 80.0,
+        "web": 5.0,
+        "radius": 10.0,
+        "inner": 5.0
+      },
+      "catalogue": {
+        "name": "SHS 80 × 80 × 5 (cold-formed)",
+        "series": [
+          [
+            "en/shs80x80x5-cf",
+            80.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-cfshs",
+    "source": "https://www.steelforlifebluebook.co.uk/cfshs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10219-2",
+    "series": "SHS cold-formed"
+  },
+  "section": {
+    "area_cm2": 14.356,
+    "mass_kg_m": 11.27,
+    "iy_cm4": 131.44,
+    "iz_cm4": 131.44,
+    "iu_cm4": 131.44,
+    "iv_cm4": 131.44,
+    "wy_cm3": 32.86,
+    "wz_cm3": 32.86,
+    "centroid_mm": [
+      40.0,
+      40.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 14.4,
+      "mass_kg_m": 11.3
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/shs80x80x5-cf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:f9e00af2abb4dd1bfa162428d7cbd60ff5109b18d3c5df2a8d87cf9c6c5a18f1"
+}

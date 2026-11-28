@@ -1,0 +1,73 @@
+{
+  "uid": "bb83592e8da0f440",
+  "name": "CHS 508 × 6 (cold-formed)",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/chs508x6-cf",
+      "family": "chs",
+      "params": {
+        "height": 508.0,
+        "width": 508.0,
+        "web": 6.0
+      },
+      "catalogue": {
+        "name": "CHS 508 × 6 (cold-formed)",
+        "series": [
+          [
+            "en/chs406.4x6-cf",
+            406.4
+          ],
+          [
+            "en/chs457x6-cf",
+            457.0
+          ],
+          [
+            "en/chs508x6-cf",
+            508.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-cfchs",
+    "source": "https://www.steelforlifebluebook.co.uk/cfchs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10219-2",
+    "series": "CHS cold-formed"
+  },
+  "section": {
+    "area_cm2": 94.622,
+    "mass_kg_m": 74.279,
+    "iy_cm4": 29810.04,
+    "iz_cm4": 29810.04,
+    "iu_cm4": 29810.04,
+    "iv_cm4": 29810.04,
+    "wy_cm3": 1173.62,
+    "wz_cm3": 1173.62,
+    "centroid_mm": [
+      254.0,
+      254.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 94.6,
+      "mass_kg_m": 74.3
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/chs508x6-cf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:8371f2e650986e715afdc66c4ec33208bb4c3fc508ea539e19a253c058447da5"
+}

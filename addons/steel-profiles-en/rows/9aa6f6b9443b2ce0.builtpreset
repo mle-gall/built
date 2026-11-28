@@ -1,0 +1,83 @@
+{
+  "uid": "9aa6f6b9443b2ce0",
+  "name": "IPE 500",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/ipe500",
+      "family": "i",
+      "params": {
+        "height": 500.0,
+        "width": 200.0,
+        "web": 10.2,
+        "flange": 16.0,
+        "radius": 21.0
+      },
+      "catalogue": {
+        "name": "IPE 500",
+        "series": [
+          [
+            "en/ipe400",
+            400.0
+          ],
+          [
+            "en/ipe450",
+            450.0
+          ],
+          [
+            "en/ipe500",
+            500.0
+          ],
+          [
+            "en/ipe550",
+            550.0
+          ],
+          [
+            "en/ipe600",
+            600.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-ipe",
+    "source": "https://orangebook.arcelormittal.com/node/6",
+    "standard": "EN 10365",
+    "series": "IPE"
+  },
+  "section": {
+    "area_cm2": 115.522,
+    "mass_kg_m": 90.685,
+    "iy_cm4": 48198.71,
+    "iz_cm4": 2141.69,
+    "iu_cm4": 48198.71,
+    "iv_cm4": 2141.69,
+    "wy_cm3": 1927.95,
+    "wz_cm3": 214.17,
+    "centroid_mm": [
+      100.0,
+      250.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 116.0,
+      "mass_kg_m": 90.7
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/ipe500",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:b8f7a1190c1f8b6e5cfe8a957513d6a704bba324add7b32f0b7d0c24ce5187c3"
+}

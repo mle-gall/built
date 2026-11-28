@@ -1,0 +1,67 @@
+{
+  "uid": "ee24a8edc21ec3cb",
+  "name": "SHS 60 × 60 × 4 (cold-formed)",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/shs60x60x4-cf",
+      "family": "rhs",
+      "params": {
+        "height": 60.0,
+        "width": 60.0,
+        "web": 4.0,
+        "radius": 8.0,
+        "inner": 4.0
+      },
+      "catalogue": {
+        "name": "SHS 60 × 60 × 4 (cold-formed)",
+        "series": [
+          [
+            "en/shs60x60x4-cf",
+            60.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-cfshs",
+    "source": "https://www.steelforlifebluebook.co.uk/cfshs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10219-2",
+    "series": "SHS cold-formed"
+  },
+  "section": {
+    "area_cm2": 8.548,
+    "mass_kg_m": 6.71,
+    "iy_cm4": 43.55,
+    "iz_cm4": 43.55,
+    "iu_cm4": 43.55,
+    "iv_cm4": 43.55,
+    "wy_cm3": 14.52,
+    "wz_cm3": 14.52,
+    "centroid_mm": [
+      30.0,
+      30.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 8.55,
+      "mass_kg_m": 6.71
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/shs60x60x4-cf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:8aefc006a333c4215df58c06489f4285f4ec53cdc191296d0b1af47e20dc13d8"
+}

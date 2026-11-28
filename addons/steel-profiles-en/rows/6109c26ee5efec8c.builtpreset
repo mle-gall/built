@@ -1,0 +1,70 @@
+{
+  "uid": "6109c26ee5efec8c",
+  "name": "UC 152 × 152 × 23",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/uc152x152x23",
+      "family": "i",
+      "params": {
+        "height": 152.4,
+        "width": 152.2,
+        "web": 5.8,
+        "flange": 6.8,
+        "radius": 7.6
+      },
+      "catalogue": {
+        "name": "UC 152 × 152 × 23",
+        "series": [
+          [
+            "en/uc152x152x23",
+            152.4
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-uc;r1=bb-uc",
+    "source": "https://orangebook.arcelormittal.com/node/246",
+    "standard": "EN 10365",
+    "series": "UC",
+    "column_sources": {
+      "r1": "https://www.steelforlifebluebook.co.uk/uc/ec3-ukna/section-properties-dimensions-properties"
+    }
+  },
+  "section": {
+    "area_cm2": 29.245,
+    "mass_kg_m": 22.958,
+    "iy_cm4": 1249.81,
+    "iz_cm4": 399.92,
+    "iu_cm4": 1249.81,
+    "iv_cm4": 399.92,
+    "wy_cm3": 164.02,
+    "wz_cm3": 52.55,
+    "centroid_mm": [
+      76.1,
+      76.2
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 29.2,
+      "mass_kg_m": 23.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/uc152x152x23",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:7f6f1ab54cf375327521f1f1dd025c40da2633bd73cc66c1f939358d3de8f7f2"
+}

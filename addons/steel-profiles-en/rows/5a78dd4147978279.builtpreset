@@ -1,0 +1,71 @@
+{
+  "uid": "5a78dd4147978279",
+  "name": "RHS 500 × 300 × 12.5 (hot-finished)",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/rhs500x300x12.5-hf",
+      "family": "rhs",
+      "params": {
+        "height": 500.0,
+        "width": 300.0,
+        "web": 12.5,
+        "radius": 18.75,
+        "inner": 12.5
+      },
+      "catalogue": {
+        "name": "RHS 500 × 300 × 12.5 (hot-finished)",
+        "series": [
+          [
+            "en/rhs400x300x12.5-hf",
+            400.0
+          ],
+          [
+            "en/rhs500x300x12.5-hf",
+            500.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-hfrhs",
+    "source": "https://www.steelforlifebluebook.co.uk/hfrhs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10210-2",
+    "series": "RHS hot-finished"
+  },
+  "section": {
+    "area_cm2": 192.073,
+    "mass_kg_m": 150.778,
+    "iy_cm4": 65812.78,
+    "iz_cm4": 29780.46,
+    "iu_cm4": 65812.78,
+    "iv_cm4": 29780.46,
+    "wy_cm3": 2632.51,
+    "wz_cm3": 1985.36,
+    "centroid_mm": [
+      150.0,
+      250.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 192.0,
+      "mass_kg_m": 151.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/rhs500x300x12.5-hf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:e00378f9794fdf19a2e5441b4dd715a23f49f115216676addb8efa8c3fb2486c"
+}

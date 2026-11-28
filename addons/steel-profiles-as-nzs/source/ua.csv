@@ -1,0 +1,20 @@
+designation,h,b,tw,tf,r1,r2,slope,mass,area,status,source
+150 x 100 x 12 UA,150,100,12,12,10,5,0,22.5,28.7,provisional,ib-hrssp9
+150 x 100 x 10 UA,150,100,9.5,9.5,10,5,0,18,23,provisional,ib-hrssp9
+150 x 90 x 16 UA,150,90,15.8,15.8,10,5,0,27.9,35.5,provisional,ib-hrssp9
+150 x 90 x 12 UA,150,90,12,12,10,5,0,21.6,27.5,provisional,ib-hrssp9
+150 x 90 x 10 UA,150,90,9.5,9.5,10,5,0,17.3,22,provisional,ib-hrssp9
+150 x 90 x 8 UA,150,90,7.8,7.8,10,5,0,14.3,18.2,provisional,ib-hrssp9
+125 x 75 x 12 UA,125,75,12,12,8,5,0,17.7,22.6,provisional,ib-hrssp9
+125 x 75 x 10 UA,125,75,9.5,9.5,8,5,0,14.2,18.1,provisional,ib-hrssp9
+125 x 75 x 8 UA,125,75,7.8,7.8,8,5,0,11.8,15,provisional,ib-hrssp9
+125 x 75 x 6 UA,125,75,6,6,8,5,0,9.16,11.7,provisional,ib-hrssp9
+100 x 75 x 10 UA,100,75,9.5,9.5,8,5,0,12.4,15.8,provisional,ib-hrssp9
+100 x 75 x 8 UA,100,75,7.8,7.8,8,5,0,10.3,13.1,provisional,ib-hrssp9
+100 x 75 x 6 UA,100,75,6,6,8,5,0,7.98,10.2,provisional,ib-hrssp9
+75 x 50 x 8 UA,75,50,7.8,7.8,7,3,0,7.23,9.21,provisional,ib-hrssp9
+75 x 50 x 6 UA,75,50,6,6,7,3,0,5.66,7.21,provisional,ib-hrssp9
+75 x 50 x 5 UA,75,50,4.6,4.6,7,3,0,4.4,5.6,provisional,ib-hrssp9
+65 x 50 x 8 UA,65,50,7.8,7.8,6,3,0,6.59,8.4,provisional,ib-hrssp9
+65 x 50 x 6 UA,65,50,6,6,6,3,0,5.16,6.58,provisional,ib-hrssp9
+65 x 50 x 5 UA,65,50,4.6,4.6,6,3,0,4.02,5.12,provisional,ib-hrssp9

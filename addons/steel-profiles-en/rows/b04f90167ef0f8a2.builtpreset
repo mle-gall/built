@@ -1,0 +1,73 @@
+{
+  "uid": "b04f90167ef0f8a2",
+  "name": "CHS 355.6 × 5 (cold-formed)",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/chs355.6x5-cf",
+      "family": "chs",
+      "params": {
+        "height": 355.6,
+        "width": 355.6,
+        "web": 5.0
+      },
+      "catalogue": {
+        "name": "CHS 355.6 × 5 (cold-formed)",
+        "series": [
+          [
+            "en/chs273x5-cf",
+            273.0
+          ],
+          [
+            "en/chs323.9x5-cf",
+            323.9
+          ],
+          [
+            "en/chs355.6x5-cf",
+            355.6
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-cfchs",
+    "source": "https://www.steelforlifebluebook.co.uk/cfchs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10219-2",
+    "series": "CHS cold-formed"
+  },
+  "section": {
+    "area_cm2": 55.071,
+    "mass_kg_m": 43.231,
+    "iy_cm4": 8463.15,
+    "iz_cm4": 8463.15,
+    "iu_cm4": 8463.15,
+    "iv_cm4": 8463.15,
+    "wy_cm3": 475.99,
+    "wz_cm3": 475.99,
+    "centroid_mm": [
+      177.8,
+      177.8
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 55.1,
+      "mass_kg_m": 43.2
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/chs355.6x5-cf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:13ed69954e5542d8776b112dd137f91edc2b02844d65af04021d92ce3e67d967"
+}

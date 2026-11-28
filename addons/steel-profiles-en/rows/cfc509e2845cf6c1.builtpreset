@@ -1,0 +1,67 @@
+{
+  "uid": "cfc509e2845cf6c1",
+  "name": "HP 400 × 194",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/hp400x194",
+      "family": "i",
+      "params": {
+        "height": 364.0,
+        "width": 398.0,
+        "web": 22.0,
+        "flange": 22.0,
+        "radius": 15.0
+      },
+      "catalogue": {
+        "name": "HP 400 × 194",
+        "series": [
+          [
+            "en/hp400x194",
+            364.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-hp",
+    "source": "https://orangebook.arcelormittal.com/node/200",
+    "standard": "EN 10365",
+    "series": "HP"
+  },
+  "section": {
+    "area_cm2": 247.452,
+    "mass_kg_m": 194.25,
+    "iy_cm4": 57759.08,
+    "iz_cm4": 23148.95,
+    "iu_cm4": 57759.08,
+    "iv_cm4": 23148.95,
+    "wy_cm3": 3173.58,
+    "wz_cm3": 1163.26,
+    "centroid_mm": [
+      199.0,
+      182.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 248.0,
+      "mass_kg_m": 194.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/hp400x194",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:274bbe4e2887aa1b8b31cada23ba34170cf866f8fbbf895eb7a73964353f3775"
+}

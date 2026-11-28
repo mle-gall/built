@@ -1,0 +1,67 @@
+{
+  "uid": "fadbe9bd40513134",
+  "name": "SHS 160 × 160 × 8 (cold-formed)",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/shs160x160x8-cf",
+      "family": "rhs",
+      "params": {
+        "height": 160.0,
+        "width": 160.0,
+        "web": 8.0,
+        "radius": 20.0,
+        "inner": 12.0
+      },
+      "catalogue": {
+        "name": "SHS 160 × 160 × 8 (cold-formed)",
+        "series": [
+          [
+            "en/shs160x160x8-cf",
+            160.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-cfshs",
+    "source": "https://www.steelforlifebluebook.co.uk/cfshs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10219-2",
+    "series": "SHS cold-formed"
+  },
+  "section": {
+    "area_cm2": 46.442,
+    "mass_kg_m": 36.457,
+    "iy_cm4": 1741.22,
+    "iz_cm4": 1741.22,
+    "iu_cm4": 1741.22,
+    "iv_cm4": 1741.22,
+    "wy_cm3": 217.65,
+    "wz_cm3": 217.65,
+    "centroid_mm": [
+      80.0,
+      80.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 46.4,
+      "mass_kg_m": 36.5
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/shs160x160x8-cf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:e8be3e9ad46d3c994fc94cfa514b3f3668283a4e98e62d9aa8c51ddeaa416a6f"
+}

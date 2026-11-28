@@ -1,0 +1,83 @@
+{
+  "uid": "0df8d4f94ab73296",
+  "name": "200 PFC",
+  "rev": 1,
+  "pack": "Steel profiles · AS/NZS",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "as-nzs/200pfc",
+      "family": "channel",
+      "params": {
+        "height": 200.0,
+        "width": 75.0,
+        "web": 6.0,
+        "flange": 12.0,
+        "radius": 12.0
+      },
+      "catalogue": {
+        "name": "200 PFC",
+        "series": [
+          [
+            "as-nzs/150pfc",
+            150.0
+          ],
+          [
+            "as-nzs/180pfc",
+            180.0
+          ],
+          [
+            "as-nzs/200pfc",
+            200.0
+          ],
+          [
+            "as-nzs/230pfc",
+            230.0
+          ],
+          [
+            "as-nzs/250pfc",
+            250.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ib-hrssp9",
+    "source": "https://www.infrabuild.com/wp-content/uploads/sites/8/2022/02/Hot20Rolled20Cat_Edition9_2019.pdf",
+    "standard": "AS/NZS 3679.1",
+    "series": "PFC"
+  },
+  "section": {
+    "area_cm2": 29.178,
+    "mass_kg_m": 22.905,
+    "iy_cm4": 1910.25,
+    "iz_cm4": 165.5,
+    "iu_cm4": 1910.25,
+    "iv_cm4": 165.5,
+    "wy_cm3": 191.03,
+    "wz_cm3": 32.71,
+    "centroid_mm": [
+      24.4,
+      100.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 29.2,
+      "mass_kg_m": 22.9
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "as-nzs/200pfc",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:87a97f5d123a5bb1d8ee84f7ff06288e6fa3fc6e698da8f84d3d41375499ded1"
+}

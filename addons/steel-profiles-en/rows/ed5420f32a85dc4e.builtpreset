@@ -1,0 +1,67 @@
+{
+  "uid": "ed5420f32a85dc4e",
+  "name": "SHS 250 × 250 × 16 (hot-finished)",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/shs250x250x16-hf",
+      "family": "rhs",
+      "params": {
+        "height": 250.0,
+        "width": 250.0,
+        "web": 16.0,
+        "radius": 24.0,
+        "inner": 16.0
+      },
+      "catalogue": {
+        "name": "SHS 250 × 250 × 16 (hot-finished)",
+        "series": [
+          [
+            "en/shs250x250x16-hf",
+            250.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-hfshs",
+    "source": "https://www.steelforlifebluebook.co.uk/hfshs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10210-2",
+    "series": "SHS hot-finished"
+  },
+  "section": {
+    "area_cm2": 147.013,
+    "mass_kg_m": 115.405,
+    "iy_cm4": 13266.68,
+    "iz_cm4": 13266.68,
+    "iu_cm4": 13266.68,
+    "iv_cm4": 13266.68,
+    "wy_cm3": 1061.33,
+    "wz_cm3": 1061.33,
+    "centroid_mm": [
+      125.0,
+      125.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 147.0,
+      "mass_kg_m": 115.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/shs250x250x16-hf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:2d1f7b5a2fa592c9ec50c4f3973ccfa23ee4c0addfe1f754548b635929dbe9ec"
+}

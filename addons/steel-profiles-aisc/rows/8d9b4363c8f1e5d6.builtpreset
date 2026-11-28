@@ -1,0 +1,67 @@
+{
+  "uid": "8d9b4363c8f1e5d6",
+  "name": "W14 × 426",
+  "rev": 2,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/w14x426",
+      "family": "i",
+      "params": {
+        "height": 474.98,
+        "width": 424.18,
+        "web": 47.752,
+        "flange": 77.216,
+        "radius": 14.99
+      },
+      "catalogue": {
+        "name": "W14 × 426",
+        "series": [
+          [
+            "aisc/w14x426",
+            474.98
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "W"
+  },
+  "section": {
+    "area_cm2": 810.067,
+    "mass_kg_m": 635.902,
+    "iy_cm4": 275943.12,
+    "iz_cm4": 98526.82,
+    "iu_cm4": 275943.12,
+    "iv_cm4": 98526.82,
+    "wy_cm3": 11619.15,
+    "wz_cm3": 4645.52,
+    "centroid_mm": [
+      212.09,
+      237.49
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 806.45,
+      "mass_kg_m": 633.958
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/w14x426",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:8927cee049880ebea9435b2603239dff53e8f79270e50f78e2f3cd8e95df058d"
+}

@@ -1,0 +1,67 @@
+{
+  "uid": "80018af1a4cbbe3c",
+  "name": "SHS 250 × 250 × 12 (cold-formed)",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/shs250x250x12-cf",
+      "family": "rhs",
+      "params": {
+        "height": 250.0,
+        "width": 250.0,
+        "web": 12.0,
+        "radius": 36.0,
+        "inner": 24.0
+      },
+      "catalogue": {
+        "name": "SHS 250 × 250 × 12 (cold-formed)",
+        "series": [
+          [
+            "en/shs250x250x12-cf",
+            250.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-cfshs",
+    "source": "https://www.steelforlifebluebook.co.uk/cfshs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10219-2",
+    "series": "SHS cold-formed"
+  },
+  "section": {
+    "area_cm2": 108.059,
+    "mass_kg_m": 84.826,
+    "iy_cm4": 9859.34,
+    "iz_cm4": 9859.34,
+    "iu_cm4": 9859.34,
+    "iv_cm4": 9859.34,
+    "wy_cm3": 788.75,
+    "wz_cm3": 788.75,
+    "centroid_mm": [
+      125.0,
+      125.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 108.0,
+      "mass_kg_m": 84.8
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/shs250x250x12-cf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:9c429f18c357b98584a64199cbc419b63157a383b96d4205229a10600b6d0903"
+}

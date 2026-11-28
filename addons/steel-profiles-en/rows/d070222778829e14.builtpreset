@@ -1,0 +1,67 @@
+{
+  "uid": "d070222778829e14",
+  "name": "SHS 140 × 140 × 12.5 (hot-finished)",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/shs140x140x12.5-hf",
+      "family": "rhs",
+      "params": {
+        "height": 140.0,
+        "width": 140.0,
+        "web": 12.5,
+        "radius": 18.75,
+        "inner": 12.5
+      },
+      "catalogue": {
+        "name": "SHS 140 × 140 × 12.5 (hot-finished)",
+        "series": [
+          [
+            "en/shs140x140x12.5-hf",
+            140.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-hfshs",
+    "source": "https://www.steelforlifebluebook.co.uk/hfshs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10210-2",
+    "series": "SHS hot-finished"
+  },
+  "section": {
+    "area_cm2": 62.073,
+    "mass_kg_m": 48.728,
+    "iy_cm4": 1652.96,
+    "iz_cm4": 1652.96,
+    "iu_cm4": 1652.96,
+    "iv_cm4": 1652.96,
+    "wy_cm3": 236.14,
+    "wz_cm3": 236.14,
+    "centroid_mm": [
+      70.0,
+      70.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 62.1,
+      "mass_kg_m": 48.7
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/shs140x140x12.5-hf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:d0bf6717be711d9f26206e2beeecad977b617857b68a1010948c2e13ce81f6b5"
+}

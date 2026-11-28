@@ -1,0 +1,67 @@
+{
+  "uid": "4f74f21549db6ddc",
+  "name": "RHS 90 × 50 × 5 (hot-finished)",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/rhs90x50x5-hf",
+      "family": "rhs",
+      "params": {
+        "height": 90.0,
+        "width": 50.0,
+        "web": 5.0,
+        "radius": 7.5,
+        "inner": 5.0
+      },
+      "catalogue": {
+        "name": "RHS 90 × 50 × 5 (hot-finished)",
+        "series": [
+          [
+            "en/rhs90x50x5-hf",
+            90.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-hfrhs",
+    "source": "https://www.steelforlifebluebook.co.uk/hfrhs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10210-2",
+    "series": "RHS hot-finished"
+  },
+  "section": {
+    "area_cm2": 12.732,
+    "mass_kg_m": 9.994,
+    "iy_cm4": 127.26,
+    "iz_cm4": 49.21,
+    "iu_cm4": 127.26,
+    "iv_cm4": 49.21,
+    "wy_cm3": 28.28,
+    "wz_cm3": 19.69,
+    "centroid_mm": [
+      25.0,
+      45.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 12.7,
+      "mass_kg_m": 9.99
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/rhs90x50x5-hf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:473b460ac8526b1ad6813bbfc7dd495ba373acf7290b179fa5b14953676e4e22"
+}

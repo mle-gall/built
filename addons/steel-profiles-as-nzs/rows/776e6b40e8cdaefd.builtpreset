@@ -1,0 +1,73 @@
+{
+  "uid": "776e6b40e8cdaefd",
+  "name": "125 TFB",
+  "rev": 1,
+  "pack": "Steel profiles · AS/NZS",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "as-nzs/125tfb",
+      "family": "i",
+      "params": {
+        "height": 125.0,
+        "width": 65.0,
+        "web": 5.0,
+        "flange": 8.5,
+        "radius": 8.0,
+        "toe": 4.0,
+        "slope": 14.05
+      },
+      "catalogue": {
+        "name": "125 TFB",
+        "series": [
+          [
+            "as-nzs/100tfb",
+            100.0
+          ],
+          [
+            "as-nzs/125tfb",
+            125.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ib-hrssp9",
+    "source": "https://www.infrabuild.com/wp-content/uploads/sites/8/2022/02/Hot20Rolled20Cat_Edition9_2019.pdf",
+    "standard": "AS/NZS 3679.1",
+    "series": "TFB"
+  },
+  "section": {
+    "area_cm2": 16.745,
+    "mass_kg_m": 13.145,
+    "iy_cm4": 434.03,
+    "iz_cm4": 33.67,
+    "iu_cm4": 434.03,
+    "iv_cm4": 33.67,
+    "wy_cm3": 69.45,
+    "wz_cm3": 10.36,
+    "centroid_mm": [
+      32.5,
+      62.5
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 16.7,
+      "mass_kg_m": 13.1
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "as-nzs/125tfb",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:2d914494895b6a7d897afa690bea2b6e2b76dc56f09d56f62ba947f194a09611"
+}

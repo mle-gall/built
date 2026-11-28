@@ -1,0 +1,75 @@
+{
+  "uid": "d89bf06a016a7940",
+  "name": "W24 × 68",
+  "rev": 2,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/w24x68",
+      "family": "i",
+      "params": {
+        "height": 601.98,
+        "width": 227.838,
+        "web": 10.541,
+        "flange": 14.859,
+        "radius": 12.83
+      },
+      "catalogue": {
+        "name": "W24 × 68",
+        "series": [
+          [
+            "aisc/w14x68",
+            355.6
+          ],
+          [
+            "aisc/w21x68",
+            535.94
+          ],
+          [
+            "aisc/w24x68",
+            601.98
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "W"
+  },
+  "section": {
+    "area_cm2": 129.444,
+    "mass_kg_m": 101.614,
+    "iy_cm4": 75958.55,
+    "iz_cm4": 2935.59,
+    "iu_cm4": 75958.55,
+    "iv_cm4": 2935.59,
+    "wy_cm3": 2523.62,
+    "wz_cm3": 257.69,
+    "centroid_mm": [
+      113.92,
+      300.99
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 129.677,
+      "mass_kg_m": 101.195
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/w24x68",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:3f53bac0560ce7343d03b0a8d48579c8eea5df66a780a63ef8bdd1c2634a9a49"
+}

@@ -1,0 +1,75 @@
+{
+  "uid": "6bf2d44344f4573b",
+  "name": "UPE 80",
+  "rev": 1,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/upe80",
+      "family": "channel",
+      "params": {
+        "height": 80.0,
+        "width": 50.0,
+        "web": 4.0,
+        "flange": 7.0,
+        "radius": 10.0
+      },
+      "catalogue": {
+        "name": "UPE 80",
+        "series": [
+          [
+            "en/upe80",
+            80.0
+          ],
+          [
+            "en/upe100",
+            100.0
+          ],
+          [
+            "en/upe120",
+            120.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-upe",
+    "source": "https://orangebook.arcelormittal.com/node/253",
+    "standard": "EN 10365",
+    "series": "UPE"
+  },
+  "section": {
+    "area_cm2": 10.069,
+    "mass_kg_m": 7.904,
+    "iy_cm4": 107.2,
+    "iz_cm4": 25.41,
+    "iu_cm4": 107.2,
+    "iv_cm4": 25.41,
+    "wy_cm3": 26.8,
+    "wz_cm3": 7.98,
+    "centroid_mm": [
+      18.17,
+      40.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 10.1,
+      "mass_kg_m": 7.9
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/upe80",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:e541dd7e8774d5658ee2cfea3874942d2af6864ed5c7cedb32d4b8828c159683"
+}

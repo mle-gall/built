@@ -1,30 +1,44 @@
 {
   "uid": "10b9a84ae7e2d54c",
   "name": "UPE 200",
-  "rev": 1,
+  "rev": 2,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {
-    "class": "IfcBeam"
-  },
+  "record": {},
   "locks": {},
   "values": {
     "profile": {
       "library": "en/upe200",
       "family": "channel",
       "params": {
-        "height": 200,
-        "width": 80,
-        "web": 6,
-        "flange": 11,
-        "radius": 13
+        "height": 200.0,
+        "width": 80.0,
+        "web": 6.0,
+        "flange": 11.0,
+        "radius": 13.0
       },
       "catalogue": {
         "name": "UPE 200",
         "series": [
           [
+            "en/upe160",
+            160.0
+          ],
+          [
+            "en/upe180",
+            180.0
+          ],
+          [
             "en/upe200",
-            200
+            200.0
+          ],
+          [
+            "en/upe220",
+            220.0
+          ],
+          [
+            "en/upe240",
+            240.0
           ]
         ]
       }
@@ -32,8 +46,30 @@
   },
   "provenance": {
     "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-upe",
     "source": "https://orangebook.arcelormittal.com/node/253",
-    "standard": "EN 10365"
+    "standard": "EN 10365",
+    "series": "UPE"
+  },
+  "section": {
+    "area_cm2": 29.005,
+    "mass_kg_m": 22.769,
+    "iy_cm4": 1909.3,
+    "iz_cm4": 187.3,
+    "iu_cm4": 1909.3,
+    "iv_cm4": 187.3,
+    "wy_cm3": 190.93,
+    "wz_cm3": 34.43,
+    "centroid_mm": [
+      25.6,
+      100.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 29.0,
+      "mass_kg_m": 22.8
+    }
   },
   "profile_size": true,
   "depends": [
@@ -43,5 +79,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:a04b685bcdd358b7d21b71675b2c66eb8f6e49f4b0ca04953ddad3d3a15e22ce"
+  "hash": "sha256:84d62f74cf2d1020a659c54cd5fe133dc400703ed13c17e8a7cfedbca23954ee"
 }

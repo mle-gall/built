@@ -1,0 +1,67 @@
+{
+  "uid": "a842b2b7cdc67b97",
+  "name": "W 360 × 39.0",
+  "rev": 2,
+  "pack": "Steel profiles · BR",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "br/w360x39.0",
+      "family": "i",
+      "params": {
+        "height": 353.0,
+        "width": 128.0,
+        "web": 6.5,
+        "flange": 10.7,
+        "radius": 12.0
+      },
+      "catalogue": {
+        "name": "W 360 × 39.0",
+        "series": [
+          [
+            "br/w360x39.0",
+            353.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "gerdau-perfis",
+    "source": "https://api.aecweb.com.br/cls/catalogos/28792/22314/catalogo-gerdau-perfis-estruturais.pdf",
+    "standard": "ABNT NBR 15980",
+    "series": "W"
+  },
+  "section": {
+    "area_cm2": 50.182,
+    "mass_kg_m": 39.393,
+    "iy_cm4": 10330.4,
+    "iz_cm4": 375.25,
+    "iu_cm4": 10330.4,
+    "iv_cm4": 375.25,
+    "wy_cm3": 585.29,
+    "wz_cm3": 58.63,
+    "centroid_mm": [
+      64.0,
+      176.5
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 50.2,
+      "mass_kg_m": 39.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "br/w360x39.0",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:5ba10e89edadb21ba495ff25a98d923d984032886ae88dc49d7bc81bcf7dead0"
+}

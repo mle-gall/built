@@ -1,0 +1,75 @@
+{
+  "uid": "b82dcb406538c981",
+  "name": "W18 × 55",
+  "rev": 2,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/w18x55",
+      "family": "i",
+      "params": {
+        "height": 459.74,
+        "width": 191.262,
+        "web": 9.906,
+        "flange": 16.002,
+        "radius": 10.16
+      },
+      "catalogue": {
+        "name": "W18 × 55",
+        "series": [
+          [
+            "aisc/w18x55",
+            459.74
+          ],
+          [
+            "aisc/w21x55",
+            528.32
+          ],
+          [
+            "aisc/w24x55",
+            599.44
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "W"
+  },
+  "section": {
+    "area_cm2": 104.469,
+    "mass_kg_m": 82.008,
+    "iy_cm4": 37001.93,
+    "iz_cm4": 1869.95,
+    "iu_cm4": 37001.93,
+    "iv_cm4": 1869.95,
+    "wy_cm3": 1609.69,
+    "wz_cm3": 195.54,
+    "centroid_mm": [
+      95.63,
+      229.87
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 104.516,
+      "mass_kg_m": 81.849
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/w18x55",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:24ed8a336d2b9d2b5d40076d8e1016d9ea700a55d3cabeef32d323de80347b1a"
+}

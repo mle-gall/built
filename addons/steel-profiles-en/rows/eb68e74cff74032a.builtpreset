@@ -1,0 +1,67 @@
+{
+  "uid": "eb68e74cff74032a",
+  "name": "SHS 180 × 180 × 6.3 (hot-finished)",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/shs180x180x6.3-hf",
+      "family": "rhs",
+      "params": {
+        "height": 180.0,
+        "width": 180.0,
+        "web": 6.3,
+        "radius": 9.45,
+        "inner": 6.3
+      },
+      "catalogue": {
+        "name": "SHS 180 × 180 × 6.3 (hot-finished)",
+        "series": [
+          [
+            "en/shs180x180x6.3-hf",
+            180.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-hfshs",
+    "source": "https://www.steelforlifebluebook.co.uk/hfshs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10210-2",
+    "series": "SHS hot-finished"
+  },
+  "section": {
+    "area_cm2": 43.346,
+    "mass_kg_m": 34.027,
+    "iy_cm4": 2167.88,
+    "iz_cm4": 2167.88,
+    "iu_cm4": 2167.88,
+    "iv_cm4": 2167.88,
+    "wy_cm3": 240.88,
+    "wz_cm3": 240.88,
+    "centroid_mm": [
+      90.0,
+      90.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 43.3,
+      "mass_kg_m": 34.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/shs180x180x6.3-hf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:1ab3055136aa68e099f7dd02cd7d9365391998b2f6c7602518fe1baabd1f8803"
+}

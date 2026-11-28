@@ -1,0 +1,67 @@
+{
+  "uid": "b1ae76fc6c0c845c",
+  "name": "W14 × 665",
+  "rev": 2,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/w14x665",
+      "family": "i",
+      "params": {
+        "height": 548.64,
+        "width": 449.58,
+        "web": 71.882,
+        "flange": 114.808,
+        "radius": 15.24
+      },
+      "catalogue": {
+        "name": "W14 × 665",
+        "series": [
+          [
+            "aisc/w14x665",
+            548.64
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "W"
+  },
+  "section": {
+    "area_cm2": 1263.622,
+    "mass_kg_m": 991.944,
+    "iy_cm4": 517001.59,
+    "iz_cm4": 174895.34,
+    "iu_cm4": 517001.59,
+    "iv_cm4": 174895.34,
+    "wy_cm3": 18846.66,
+    "wz_cm3": 7780.39,
+    "centroid_mm": [
+      224.79,
+      274.32
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 1264.51,
+      "mass_kg_m": 989.629
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/w14x665",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:14530a2207d9e85249e82fee19e388fe96bf4b9b56eae80400019c2e8fa5a844"
+}

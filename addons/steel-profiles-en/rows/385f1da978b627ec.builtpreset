@@ -1,0 +1,83 @@
+{
+  "uid": "385f1da978b627ec",
+  "name": "IPE O 450",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/ipeo450",
+      "family": "i",
+      "params": {
+        "height": 456.0,
+        "width": 192.0,
+        "web": 11.0,
+        "flange": 17.6,
+        "radius": 21.0
+      },
+      "catalogue": {
+        "name": "IPE O 450",
+        "series": [
+          [
+            "en/ipeo360",
+            364.0
+          ],
+          [
+            "en/ipeo400",
+            404.0
+          ],
+          [
+            "en/ipeo450",
+            456.0
+          ],
+          [
+            "en/ipeo500",
+            506.0
+          ],
+          [
+            "en/ipeo550",
+            556.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-ipe",
+    "source": "https://orangebook.arcelormittal.com/node/6",
+    "standard": "EN 10365",
+    "series": "IPE"
+  },
+  "section": {
+    "area_cm2": 117.658,
+    "mass_kg_m": 92.361,
+    "iy_cm4": 40923.57,
+    "iz_cm4": 2085.37,
+    "iu_cm4": 40923.57,
+    "iv_cm4": 2085.37,
+    "wy_cm3": 1794.89,
+    "wz_cm3": 217.23,
+    "centroid_mm": [
+      96.0,
+      228.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 118.0,
+      "mass_kg_m": 92.4
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/ipeo450",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:5852ca373e61787e50b492ed73aa8b6addb6033548936c07deb8fb9c56f30d9a"
+}

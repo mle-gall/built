@@ -1,0 +1,83 @@
+{
+  "uid": "4b5de7e4b4ef6263",
+  "name": "HE 700 A",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/he700a",
+      "family": "i",
+      "params": {
+        "height": 690.0,
+        "width": 300.0,
+        "web": 14.5,
+        "flange": 27.0,
+        "radius": 27.0
+      },
+      "catalogue": {
+        "name": "HE 700 A",
+        "series": [
+          [
+            "en/he600a",
+            590.0
+          ],
+          [
+            "en/he650a",
+            640.0
+          ],
+          [
+            "en/he700a",
+            690.0
+          ],
+          [
+            "en/he800a",
+            790.0
+          ],
+          [
+            "en/he900a",
+            890.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-he",
+    "source": "https://orangebook.arcelormittal.com/node/16",
+    "standard": "EN 10365",
+    "series": "HE"
+  },
+  "section": {
+    "area_cm2": 260.478,
+    "mass_kg_m": 204.476,
+    "iy_cm4": 215301.9,
+    "iz_cm4": 12178.8,
+    "iu_cm4": 215301.9,
+    "iv_cm4": 12178.8,
+    "wy_cm3": 6240.63,
+    "wz_cm3": 811.92,
+    "centroid_mm": [
+      150.0,
+      345.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 260.0,
+      "mass_kg_m": 204.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/he700a",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:260d4b049c39c52ca14571b254468224d81de28c5fda9621649dcbec3fdf921d"
+}

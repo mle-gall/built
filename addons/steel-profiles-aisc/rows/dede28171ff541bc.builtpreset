@@ -1,0 +1,67 @@
+{
+  "uid": "dede28171ff541bc",
+  "name": "WT18 × 243.5",
+  "rev": 2,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/wt18x243.5",
+      "family": "tee",
+      "params": {
+        "height": 500.38,
+        "width": 434.34,
+        "web": 38.1,
+        "flange": 68.072,
+        "radius": 24.13
+      },
+      "catalogue": {
+        "name": "WT18 × 243.5",
+        "series": [
+          [
+            "aisc/wt18x243.5",
+            500.38
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "WT"
+  },
+  "section": {
+    "area_cm2": 462.873,
+    "mass_kg_m": 363.355,
+    "iy_cm4": 93070.19,
+    "iz_cm4": 46695.82,
+    "iu_cm4": 93070.19,
+    "iv_cm4": 46695.82,
+    "wy_cm3": 2468.03,
+    "wz_cm3": 2150.2,
+    "centroid_mm": [
+      217.17,
+      377.1
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 462.58,
+      "mass_kg_m": 362.368
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/wt18x243.5",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:e7235b2fa413b0d88eccfcf5cd53e53f6a45fd7cc0289e8939a6297a7306e2a6"
+}

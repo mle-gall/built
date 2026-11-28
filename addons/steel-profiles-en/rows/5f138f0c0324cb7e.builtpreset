@@ -1,0 +1,67 @@
+{
+  "uid": "5f138f0c0324cb7e",
+  "name": "SHS 350 × 350 × 16 (hot-finished)",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/shs350x350x16-hf",
+      "family": "rhs",
+      "params": {
+        "height": 350.0,
+        "width": 350.0,
+        "web": 16.0,
+        "radius": 24.0,
+        "inner": 16.0
+      },
+      "catalogue": {
+        "name": "SHS 350 × 350 × 16 (hot-finished)",
+        "series": [
+          [
+            "en/shs350x350x16-hf",
+            350.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-hfshs",
+    "source": "https://www.steelforlifebluebook.co.uk/hfshs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10210-2",
+    "series": "SHS hot-finished"
+  },
+  "section": {
+    "area_cm2": 211.013,
+    "mass_kg_m": 165.645,
+    "iy_cm4": 38941.99,
+    "iz_cm4": 38941.99,
+    "iu_cm4": 38941.99,
+    "iv_cm4": 38941.99,
+    "wy_cm3": 2225.26,
+    "wz_cm3": 2225.26,
+    "centroid_mm": [
+      175.0,
+      175.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 211.0,
+      "mass_kg_m": 166.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/shs350x350x16-hf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:cdf92092be4a6fd6d64bd184da52dd4be20d406798382f78bdc40de2c5007779"
+}

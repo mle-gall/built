@@ -1,0 +1,83 @@
+{
+  "uid": "0fdab154d7223c44",
+  "name": "IPE 220",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/ipe220",
+      "family": "i",
+      "params": {
+        "height": 220.0,
+        "width": 110.0,
+        "web": 5.9,
+        "flange": 9.2,
+        "radius": 12.0
+      },
+      "catalogue": {
+        "name": "IPE 220",
+        "series": [
+          [
+            "en/ipe180",
+            180.0
+          ],
+          [
+            "en/ipe200",
+            200.0
+          ],
+          [
+            "en/ipe220",
+            220.0
+          ],
+          [
+            "en/ipe240",
+            240.0
+          ],
+          [
+            "en/ipe270",
+            270.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-ipe",
+    "source": "https://orangebook.arcelormittal.com/node/6",
+    "standard": "EN 10365",
+    "series": "IPE"
+  },
+  "section": {
+    "area_cm2": 33.371,
+    "mass_kg_m": 26.196,
+    "iy_cm4": 2771.85,
+    "iz_cm4": 204.89,
+    "iu_cm4": 2771.85,
+    "iv_cm4": 204.89,
+    "wy_cm3": 251.99,
+    "wz_cm3": 37.25,
+    "centroid_mm": [
+      55.0,
+      110.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 33.4,
+      "mass_kg_m": 26.2
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/ipe220",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:3ce6a0e178d070c8eec6a224b80038d975bfcfa1f6576b264fc0d02d0ab15236"
+}

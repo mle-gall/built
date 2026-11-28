@@ -1,0 +1,75 @@
+{
+  "uid": "9877d441b15ca6ae",
+  "name": "RHS 150 × 100 × 5 (cold-formed)",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/rhs150x100x5-cf",
+      "family": "rhs",
+      "params": {
+        "height": 150.0,
+        "width": 100.0,
+        "web": 5.0,
+        "radius": 10.0,
+        "inner": 5.0
+      },
+      "catalogue": {
+        "name": "RHS 150 × 100 × 5 (cold-formed)",
+        "series": [
+          [
+            "en/rhs150x100x5-cf",
+            150.0
+          ],
+          [
+            "en/rhs180x100x5-cf",
+            180.0
+          ],
+          [
+            "en/rhs200x100x5-cf",
+            200.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-cfrhs",
+    "source": "https://www.steelforlifebluebook.co.uk/cfrhs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10219-2",
+    "series": "RHS cold-formed"
+  },
+  "section": {
+    "area_cm2": 23.356,
+    "mass_kg_m": 18.335,
+    "iy_cm4": 719.2,
+    "iz_cm4": 384.02,
+    "iu_cm4": 719.2,
+    "iv_cm4": 384.02,
+    "wy_cm3": 95.89,
+    "wz_cm3": 76.8,
+    "centroid_mm": [
+      50.0,
+      75.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 23.4,
+      "mass_kg_m": 18.3
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/rhs150x100x5-cf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:90c994af35fe8d0cd040fad1b114aa51e690bf041accbd29d51a6a656f0c4410"
+}

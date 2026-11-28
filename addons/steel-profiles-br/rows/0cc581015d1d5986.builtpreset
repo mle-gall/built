@@ -1,0 +1,67 @@
+{
+  "uid": "0cc581015d1d5986",
+  "name": "W 150 × 13.0",
+  "rev": 3,
+  "pack": "Steel profiles · BR",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "br/w150x13.0",
+      "family": "i",
+      "params": {
+        "height": 148.0,
+        "width": 100.0,
+        "web": 4.3,
+        "flange": 4.9,
+        "radius": 10.0
+      },
+      "catalogue": {
+        "name": "W 150 × 13.0",
+        "series": [
+          [
+            "br/w150x13.0",
+            148.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "gerdau-perfis",
+    "source": "https://api.aecweb.com.br/cls/catalogos/28792/22314/catalogo-gerdau-perfis-estruturais.pdf",
+    "standard": "ABNT NBR 15980",
+    "series": "W"
+  },
+  "section": {
+    "area_cm2": 16.601,
+    "mass_kg_m": 13.032,
+    "iy_cm4": 634.89,
+    "iz_cm4": 81.95,
+    "iu_cm4": 634.89,
+    "iv_cm4": 81.95,
+    "wy_cm3": 85.8,
+    "wz_cm3": 16.39,
+    "centroid_mm": [
+      50.0,
+      74.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 16.6,
+      "mass_kg_m": 13.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "br/w150x13.0",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:9d5356aaf4fd571564840dcfd327e649a283c8b19212520c09321b68bed91f84"
+}

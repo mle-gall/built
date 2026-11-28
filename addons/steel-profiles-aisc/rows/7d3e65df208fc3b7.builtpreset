@@ -1,0 +1,71 @@
+{
+  "uid": "7d3e65df208fc3b7",
+  "name": "W12 × 230",
+  "rev": 2,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/w12x230",
+      "family": "i",
+      "params": {
+        "height": 383.54,
+        "width": 327.66,
+        "web": 32.766,
+        "flange": 52.578,
+        "radius": 15.24
+      },
+      "catalogue": {
+        "name": "W12 × 230",
+        "series": [
+          [
+            "aisc/w12x230",
+            383.54
+          ],
+          [
+            "aisc/w44x230",
+            1089.66
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "W"
+  },
+  "section": {
+    "area_cm2": 437.763,
+    "mass_kg_m": 343.644,
+    "iy_cm4": 101404.94,
+    "iz_cm4": 30916.0,
+    "iu_cm4": 101404.94,
+    "iv_cm4": 30916.0,
+    "wy_cm3": 5287.84,
+    "wz_cm3": 1887.08,
+    "centroid_mm": [
+      163.83,
+      191.77
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 436.773,
+      "mass_kg_m": 342.278
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/w12x230",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:748b819f8cd8bd454e569b5dd38ce4836a606860aabe15ebc1ac7279f9203cb5"
+}

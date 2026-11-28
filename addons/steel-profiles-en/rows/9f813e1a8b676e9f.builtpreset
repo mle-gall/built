@@ -1,0 +1,67 @@
+{
+  "uid": "9f813e1a8b676e9f",
+  "name": "PFC 125 × 65 × 15",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/pfc125x65x15",
+      "family": "channel",
+      "params": {
+        "height": 125.0,
+        "width": 65.0,
+        "web": 5.5,
+        "flange": 9.5,
+        "radius": 12.0
+      },
+      "catalogue": {
+        "name": "PFC 125 × 65 × 15",
+        "series": [
+          [
+            "en/pfc125x65x15",
+            125.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-pfc",
+    "source": "https://orangebook.arcelormittal.com/node/259",
+    "standard": "EN 10365",
+    "series": "PFC"
+  },
+  "section": {
+    "area_cm2": 18.798,
+    "mass_kg_m": 14.757,
+    "iy_cm4": 483.08,
+    "iz_cm4": 80.02,
+    "iu_cm4": 483.08,
+    "iv_cm4": 80.02,
+    "wy_cm3": 77.29,
+    "wz_cm3": 18.82,
+    "centroid_mm": [
+      22.47,
+      62.5
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 18.8,
+      "mass_kg_m": 14.8
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/pfc125x65x15",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:ed898c23ce7b806cd9205442bd640f20d572899aa9a42c5e3434b7f55972a20e"
+}

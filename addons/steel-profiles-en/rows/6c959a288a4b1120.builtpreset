@@ -1,0 +1,81 @@
+{
+  "uid": "6c959a288a4b1120",
+  "name": "CHS 88.9 × 3.6 (hot-finished)",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/chs88.9x3.6-hf",
+      "family": "chs",
+      "params": {
+        "height": 88.9,
+        "width": 88.9,
+        "web": 3.6
+      },
+      "catalogue": {
+        "name": "CHS 88.9 × 3.6 (hot-finished)",
+        "series": [
+          [
+            "en/chs60.3x3.6-hf",
+            60.3
+          ],
+          [
+            "en/chs76.1x3.6-hf",
+            76.1
+          ],
+          [
+            "en/chs88.9x3.6-hf",
+            88.9
+          ],
+          [
+            "en/chs114.3x3.6-hf",
+            114.3
+          ],
+          [
+            "en/chs139.7x3.6-hf",
+            139.7
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-hfchs",
+    "source": "https://www.steelforlifebluebook.co.uk/hfchs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10210-2",
+    "series": "CHS hot-finished"
+  },
+  "section": {
+    "area_cm2": 9.647,
+    "mass_kg_m": 7.573,
+    "iy_cm4": 87.89,
+    "iz_cm4": 87.89,
+    "iu_cm4": 87.89,
+    "iv_cm4": 87.89,
+    "wy_cm3": 19.77,
+    "wz_cm3": 19.77,
+    "centroid_mm": [
+      44.45,
+      44.45
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 9.65,
+      "mass_kg_m": 7.57
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/chs88.9x3.6-hf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:9ec775fcf6bf9772325981b941aa51c1149556da790290bcaab10b793b3929d9"
+}

@@ -1,0 +1,22 @@
+designation,h,b,tw,tf,r1,r2,slope,mass,area,status,source
+IPN 80,80,42,3.9,5.9,3.9,2.3,14,5.9,7.6,provisional,am-ipn
+IPN 100,100,50,4.5,6.8,4.5,2.7,14,8.3,10.6,provisional,am-ipn
+IPN 120,120,58,5.1,7.7,5.1,3.1,14,11.1,14.2,provisional,am-ipn
+IPN 140,140,66,5.7,8.6,5.7,3.4,14,14.3,18.2,provisional,am-ipn
+IPN 160,160,74,6.3,9.5,6.3,3.8,14,17.9,22.8,provisional,am-ipn
+IPN 180,180,82,6.9,10.4,6.9,4.1,14,21.9,27.9,provisional,am-ipn
+IPN 200,200,90,7.5,11.3,7.5,4.5,14,26.2,33.4,provisional,am-ipn
+IPN 220,220,98,8.1,12.2,8.1,4.9,14,31.1,39.5,provisional,am-ipn
+IPN 240,240,106,8.7,13.1,8.7,5.2,14,36.2,46.1,provisional,am-ipn
+IPN 260,260,113,9.4,14.1,9.4,5.6,14,41.9,53.3,provisional,am-ipn
+IPN 280,280,119,10.1,15.2,10.1,6.1,14,47.9,61,provisional,am-ipn
+IPN 300,300,125,10.8,16.2,10.8,6.5,14,54.2,69,provisional,am-ipn
+IPN 320,320,131,11.5,17.3,11.5,6.9,14,61,77.7,provisional,am-ipn
+IPN 340,340,137,12.2,18.3,12.2,7.3,14,68,86.7,provisional,am-ipn
+IPN 360,360,143,13,19.5,13,7.8,14,76.1,97,provisional,am-ipn
+IPN 380,380,149,13.7,20.5,13.7,8.2,14,84,107,provisional,am-ipn
+IPN 400,400,155,14.4,21.6,14.4,8.6,14,92.4,117.7,provisional,am-ipn
+IPN 450,450,170,16.2,24.3,16.2,9.7,14,115,146.9,provisional,am-ipn
+IPN 500,500,185,18,27,18,10.8,14,141,179.4,provisional,am-ipn
+IPN 550,550,200,19,30,19,11.9,14,166,212,provisional,am-ipn
+IPN 600,600,215,21.6,32.4,21.6,13,14,199,253.7,provisional,am-ipn

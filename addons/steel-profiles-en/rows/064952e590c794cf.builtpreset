@@ -1,0 +1,73 @@
+{
+  "uid": "064952e590c794cf",
+  "name": "CHS 219.1 × 12 (cold-formed)",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/chs219.1x12-cf",
+      "family": "chs",
+      "params": {
+        "height": 219.1,
+        "width": 219.1,
+        "web": 12.0
+      },
+      "catalogue": {
+        "name": "CHS 219.1 × 12 (cold-formed)",
+        "series": [
+          [
+            "en/chs219.1x12-cf",
+            219.1
+          ],
+          [
+            "en/chs244.5x12-cf",
+            244.5
+          ],
+          [
+            "en/chs273x12-cf",
+            273.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-cfchs",
+    "source": "https://www.steelforlifebluebook.co.uk/cfchs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10219-2",
+    "series": "CHS cold-formed"
+  },
+  "section": {
+    "area_cm2": 78.073,
+    "mass_kg_m": 61.287,
+    "iy_cm4": 4199.67,
+    "iz_cm4": 4199.67,
+    "iu_cm4": 4199.67,
+    "iv_cm4": 4199.67,
+    "wy_cm3": 383.36,
+    "wz_cm3": 383.36,
+    "centroid_mm": [
+      109.55,
+      109.55
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 78.1,
+      "mass_kg_m": 61.3
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/chs219.1x12-cf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:f98ce610eab18932cba8d37921abc9967db146bf998ff03bf26bb49edd5ea809"
+}

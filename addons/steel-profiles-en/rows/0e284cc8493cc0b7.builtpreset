@@ -1,0 +1,70 @@
+{
+  "uid": "0e284cc8493cc0b7",
+  "name": "UB 305 × 127 × 48",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/ub305x127x48",
+      "family": "i",
+      "params": {
+        "height": 311.0,
+        "width": 125.3,
+        "web": 9.0,
+        "flange": 14.0,
+        "radius": 8.9
+      },
+      "catalogue": {
+        "name": "UB 305 × 127 × 48",
+        "series": [
+          [
+            "en/ub305x127x48",
+            311.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-ub;r1=bb-ub",
+    "source": "https://orangebook.arcelormittal.com/node/35",
+    "standard": "EN 10365",
+    "series": "UB",
+    "column_sources": {
+      "r1": "https://www.steelforlifebluebook.co.uk/ub/ec3-ukna/section-properties-dimensions-properties"
+    }
+  },
+  "section": {
+    "area_cm2": 61.234,
+    "mass_kg_m": 48.069,
+    "iy_cm4": 9574.8,
+    "iz_cm4": 461.04,
+    "iu_cm4": 9574.8,
+    "iv_cm4": 461.04,
+    "wy_cm3": 615.74,
+    "wz_cm3": 73.59,
+    "centroid_mm": [
+      62.65,
+      155.5
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 61.2,
+      "mass_kg_m": 48.1
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/ub305x127x48",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:df499253ce779e34fb843e2a87695d98a48ab792e33bb99c9da270f586487aea"
+}

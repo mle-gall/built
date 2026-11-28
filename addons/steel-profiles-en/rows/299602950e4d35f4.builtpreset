@@ -1,0 +1,78 @@
+{
+  "uid": "299602950e4d35f4",
+  "name": "UPN 400",
+  "rev": 1,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/upn400",
+      "family": "channel",
+      "params": {
+        "height": 400.0,
+        "width": 110.0,
+        "web": 14.0,
+        "flange": 18.0,
+        "radius": 18.0,
+        "toe": 9.0,
+        "slope": 5.0,
+        "flange_at": 55.0
+      },
+      "catalogue": {
+        "name": "UPN 400",
+        "series": [
+          [
+            "en/upn350",
+            350.0
+          ],
+          [
+            "en/upn380",
+            380.0
+          ],
+          [
+            "en/upn400",
+            400.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-upn",
+    "source": "https://orangebook.arcelormittal.com/node/265",
+    "standard": "EN 10365",
+    "series": "UPN"
+  },
+  "section": {
+    "area_cm2": 90.816,
+    "mass_kg_m": 71.29,
+    "iy_cm4": 20131.19,
+    "iz_cm4": 837.54,
+    "iu_cm4": 20131.19,
+    "iv_cm4": 837.54,
+    "wy_cm3": 1006.56,
+    "wz_cm3": 100.32,
+    "centroid_mm": [
+      26.51,
+      200.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 91.5,
+      "mass_kg_m": 71.8
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/upn400",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:0baec85001ac798b55f04ea8325b0a62c7b0471ecc1e6bf48cd0833342d6ed49"
+}

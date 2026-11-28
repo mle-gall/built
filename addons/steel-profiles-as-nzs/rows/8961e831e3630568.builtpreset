@@ -1,0 +1,67 @@
+{
+  "uid": "8961e831e3630568",
+  "name": "250 UB 25.7",
+  "rev": 2,
+  "pack": "Steel profiles · AS/NZS",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "as-nzs/250ub25.7",
+      "family": "i",
+      "params": {
+        "height": 248.0,
+        "width": 124.0,
+        "web": 5.0,
+        "flange": 8.0,
+        "radius": 12.0
+      },
+      "catalogue": {
+        "name": "250 UB 25.7",
+        "series": [
+          [
+            "as-nzs/250ub25.7",
+            248.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ib-hrssp9",
+    "source": "https://www.infrabuild.com/wp-content/uploads/sites/8/2022/02/Hot20Rolled20Cat_Edition9_2019.pdf",
+    "standard": "AS/NZS 3679.1",
+    "series": "UB"
+  },
+  "section": {
+    "area_cm2": 32.676,
+    "mass_kg_m": 25.651,
+    "iy_cm4": 3537.13,
+    "iz_cm4": 254.85,
+    "iu_cm4": 3537.13,
+    "iv_cm4": 254.85,
+    "wy_cm3": 285.25,
+    "wz_cm3": 41.11,
+    "centroid_mm": [
+      62.0,
+      124.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 32.7,
+      "mass_kg_m": 25.7
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "as-nzs/250ub25.7",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:c17161db93db55105af8cf2aa1332054debd1d924364df61cb280ddb4480521d"
+}

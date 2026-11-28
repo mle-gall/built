@@ -1,0 +1,67 @@
+{
+  "uid": "f4700e2f10e4c140",
+  "name": "PFC 300 × 100 × 46",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/pfc300x100x46",
+      "family": "channel",
+      "params": {
+        "height": 300.0,
+        "width": 100.0,
+        "web": 9.0,
+        "flange": 16.5,
+        "radius": 15.0
+      },
+      "catalogue": {
+        "name": "PFC 300 × 100 × 46",
+        "series": [
+          [
+            "en/pfc300x100x46",
+            300.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-pfc",
+    "source": "https://orangebook.arcelormittal.com/node/259",
+    "standard": "EN 10365",
+    "series": "PFC"
+  },
+  "section": {
+    "area_cm2": 57.996,
+    "mass_kg_m": 45.527,
+    "iy_cm4": 8229.43,
+    "iz_cm4": 567.8,
+    "iu_cm4": 8229.43,
+    "iv_cm4": 567.8,
+    "wy_cm3": 548.63,
+    "wz_cm3": 81.72,
+    "centroid_mm": [
+      30.52,
+      150.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 58.0,
+      "mass_kg_m": 45.5
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/pfc300x100x46",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:67dbb755bcc159d9e7b789dd718569d4b7d43ac367037bb121c2cb05293d3ac9"
+}

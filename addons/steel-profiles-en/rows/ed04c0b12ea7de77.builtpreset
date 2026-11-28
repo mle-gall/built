@@ -1,0 +1,83 @@
+{
+  "uid": "ed04c0b12ea7de77",
+  "name": "UPE 160",
+  "rev": 1,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/upe160",
+      "family": "channel",
+      "params": {
+        "height": 160.0,
+        "width": 70.0,
+        "web": 5.5,
+        "flange": 9.5,
+        "radius": 12.0
+      },
+      "catalogue": {
+        "name": "UPE 160",
+        "series": [
+          [
+            "en/upe120",
+            120.0
+          ],
+          [
+            "en/upe140",
+            140.0
+          ],
+          [
+            "en/upe160",
+            160.0
+          ],
+          [
+            "en/upe180",
+            180.0
+          ],
+          [
+            "en/upe200",
+            200.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-upe",
+    "source": "https://orangebook.arcelormittal.com/node/253",
+    "standard": "EN 10365",
+    "series": "UPE"
+  },
+  "section": {
+    "area_cm2": 21.673,
+    "mass_kg_m": 17.013,
+    "iy_cm4": 911.06,
+    "iz_cm4": 106.82,
+    "iu_cm4": 911.06,
+    "iv_cm4": 106.82,
+    "wy_cm3": 113.88,
+    "wz_cm3": 22.58,
+    "centroid_mm": [
+      22.7,
+      80.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 21.7,
+      "mass_kg_m": 17.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/upe160",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:113b263093a10b698f43394196d23fafccf6db502675b6e929bd1ff63c373690"
+}

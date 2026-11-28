@@ -1,0 +1,67 @@
+{
+  "uid": "d6c801228f3d2a3d",
+  "name": "SHS 400 × 400 × 12.5 (cold-formed)",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/shs400x400x12.5-cf",
+      "family": "rhs",
+      "params": {
+        "height": 400.0,
+        "width": 400.0,
+        "web": 12.5,
+        "radius": 37.5,
+        "inner": 25.0
+      },
+      "catalogue": {
+        "name": "SHS 400 × 400 × 12.5 (cold-formed)",
+        "series": [
+          [
+            "en/shs400x400x12.5-cf",
+            400.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-cfshs",
+    "source": "https://www.steelforlifebluebook.co.uk/cfshs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10219-2",
+    "series": "SHS cold-formed"
+  },
+  "section": {
+    "area_cm2": 187.043,
+    "mass_kg_m": 146.829,
+    "iy_cm4": 45876.31,
+    "iz_cm4": 45876.31,
+    "iu_cm4": 45876.31,
+    "iv_cm4": 45876.31,
+    "wy_cm3": 2293.82,
+    "wz_cm3": 2293.82,
+    "centroid_mm": [
+      200.0,
+      200.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 187.0,
+      "mass_kg_m": 147.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/shs400x400x12.5-cf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:56bea56a6481c07edf0dbefdb8e08be668c9ef711df6b904a47620ed0bbaa23d"
+}

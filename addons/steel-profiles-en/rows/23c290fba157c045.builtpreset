@@ -1,0 +1,81 @@
+{
+  "uid": "23c290fba157c045",
+  "name": "CHS 114.3 × 4 (cold-formed)",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/chs114.3x4-cf",
+      "family": "chs",
+      "params": {
+        "height": 114.3,
+        "width": 114.3,
+        "web": 4.0
+      },
+      "catalogue": {
+        "name": "CHS 114.3 × 4 (cold-formed)",
+        "series": [
+          [
+            "en/chs76.1x4-cf",
+            76.1
+          ],
+          [
+            "en/chs88.9x4-cf",
+            88.9
+          ],
+          [
+            "en/chs114.3x4-cf",
+            114.3
+          ],
+          [
+            "en/chs139.7x4-cf",
+            139.7
+          ],
+          [
+            "en/chs168.3x4-cf",
+            168.3
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-cfchs",
+    "source": "https://www.steelforlifebluebook.co.uk/cfchs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10219-2",
+    "series": "CHS cold-formed"
+  },
+  "section": {
+    "area_cm2": 13.86,
+    "mass_kg_m": 10.88,
+    "iy_cm4": 211.05,
+    "iz_cm4": 211.05,
+    "iu_cm4": 211.05,
+    "iv_cm4": 211.05,
+    "wy_cm3": 36.93,
+    "wz_cm3": 36.93,
+    "centroid_mm": [
+      57.15,
+      57.15
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 13.9,
+      "mass_kg_m": 10.9
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/chs114.3x4-cf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:deca6bc4e525b3e35761b7a59335628171c6adebcfb1947312c8ead058c7acc7"
+}

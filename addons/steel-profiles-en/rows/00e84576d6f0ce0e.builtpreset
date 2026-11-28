@@ -1,0 +1,75 @@
+{
+  "uid": "00e84576d6f0ce0e",
+  "name": "RHS 180 × 80 × 6 (cold-formed)",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/rhs180x80x6-cf",
+      "family": "rhs",
+      "params": {
+        "height": 180.0,
+        "width": 80.0,
+        "web": 6.0,
+        "radius": 12.0,
+        "inner": 6.0
+      },
+      "catalogue": {
+        "name": "RHS 180 × 80 × 6 (cold-formed)",
+        "series": [
+          [
+            "en/rhs140x80x6-cf",
+            140.0
+          ],
+          [
+            "en/rhs160x80x6-cf",
+            160.0
+          ],
+          [
+            "en/rhs180x80x6-cf",
+            180.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-cfrhs",
+    "source": "https://www.steelforlifebluebook.co.uk/cfrhs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10219-2",
+    "series": "RHS cold-formed"
+  },
+  "section": {
+    "area_cm2": 28.833,
+    "mass_kg_m": 22.634,
+    "iy_cm4": 1127.88,
+    "iz_cm4": 313.82,
+    "iu_cm4": 1127.88,
+    "iv_cm4": 313.82,
+    "wy_cm3": 125.32,
+    "wz_cm3": 78.45,
+    "centroid_mm": [
+      40.0,
+      90.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 28.8,
+      "mass_kg_m": 22.6
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/rhs180x80x6-cf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:e7fc091a78bee6cc06b0212d6c00cbaea8bf9b3920df88b26b659d80912796df"
+}

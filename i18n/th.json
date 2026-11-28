@@ -1,4 +1,12 @@
 {
+ "I and H sections": "หน้าตัด I และ H",
+ "Channels": "เหล็กรางน้ำ",
+ "Angles": "เหล็กฉาก",
+ "Tees": "หน้าตัด T",
+ "Z sections": "หน้าตัด Z",
+ "Rectangular and square tubes": "ท่อสี่เหลี่ยม",
+ "Round tubes": "ท่อกลม",
+ "Rectangles": "สี่เหลี่ยมผืนผ้า",
  "More profiles and details come as packs: Import pack…": "โปรไฟล์และรายละเอียดเพิ่มเติมมีให้ในรูปแบบแพ็ก: นำเข้าแพ็ก…",
  "Show All Cutters": "แสดงตัวตัดทั้งหมด",
  "Pick targets (Shift-click for more), then a cutter. Tab cycles operations, L presets, A anchor, D draw section.": "เลือกเป้าหมาย (กด Shift แล้วคลิกเพื่อเพิ่ม) แล้วเลือกตัวตัด Tab เปลี่ยนการทำงาน L ค่าที่ตั้งไว้ A จุดยึด D วาดหน้าตัด",

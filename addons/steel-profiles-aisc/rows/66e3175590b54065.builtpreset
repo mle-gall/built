@@ -1,0 +1,67 @@
+{
+  "uid": "66e3175590b54065",
+  "name": "W12 × 305",
+  "rev": 2,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/w12x305",
+      "family": "i",
+      "params": {
+        "height": 414.02,
+        "width": 335.28,
+        "web": 41.402,
+        "flange": 68.834,
+        "radius": 14.99
+      },
+      "catalogue": {
+        "name": "W12 × 305",
+        "series": [
+          [
+            "aisc/w12x305",
+            414.02
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "W"
+  },
+  "section": {
+    "area_cm2": 577.918,
+    "mass_kg_m": 453.665,
+    "iy_cm4": 146949.96,
+    "iz_cm4": 43413.65,
+    "iu_cm4": 146949.96,
+    "iv_cm4": 43413.65,
+    "wy_cm3": 7098.69,
+    "wz_cm3": 2589.7,
+    "centroid_mm": [
+      167.64,
+      207.01
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 577.418,
+      "mass_kg_m": 453.89
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/w12x305",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:2373f9f26b5691881f31edc44e83476a2444e763692acc0d9525e62aeb4d0ae1"
+}

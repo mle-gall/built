@@ -1,0 +1,83 @@
+{
+  "uid": "34140c1c3b84991d",
+  "name": "HE 140 C",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/he140c",
+      "family": "i",
+      "params": {
+        "height": 150.0,
+        "width": 143.0,
+        "web": 10.0,
+        "flange": 17.0,
+        "radius": 12.0
+      },
+      "catalogue": {
+        "name": "HE 140 C",
+        "series": [
+          [
+            "en/he100c",
+            110.0
+          ],
+          [
+            "en/he120c",
+            130.0
+          ],
+          [
+            "en/he140c",
+            150.0
+          ],
+          [
+            "en/he160c",
+            170.0
+          ],
+          [
+            "en/he180c",
+            190.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-he",
+    "source": "https://orangebook.arcelormittal.com/node/16",
+    "standard": "EN 10365",
+    "series": "HE"
+  },
+  "section": {
+    "area_cm2": 61.456,
+    "mass_kg_m": 48.243,
+    "iy_cm4": 2329.78,
+    "iz_cm4": 830.28,
+    "iu_cm4": 2329.78,
+    "iv_cm4": 830.28,
+    "wy_cm3": 310.64,
+    "wz_cm3": 116.12,
+    "centroid_mm": [
+      71.5,
+      75.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 61.5,
+      "mass_kg_m": 48.2
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/he140c",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:bdfd3d661817b8962e6da0601769d9dfb8fb8eb1c7db0ff3c518515bacdc0d7f"
+}

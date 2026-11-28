@@ -1,0 +1,67 @@
+{
+  "uid": "9136c1a450ca83d3",
+  "name": "SHS 180 × 180 × 10 (hot-finished)",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/shs180x180x10-hf",
+      "family": "rhs",
+      "params": {
+        "height": 180.0,
+        "width": 180.0,
+        "web": 10.0,
+        "radius": 15.0,
+        "inner": 10.0
+      },
+      "catalogue": {
+        "name": "SHS 180 × 180 × 10 (hot-finished)",
+        "series": [
+          [
+            "en/shs180x180x10-hf",
+            180.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-hfshs",
+    "source": "https://www.steelforlifebluebook.co.uk/hfshs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10210-2",
+    "series": "SHS hot-finished"
+  },
+  "section": {
+    "area_cm2": 66.927,
+    "mass_kg_m": 52.538,
+    "iy_cm4": 3193.44,
+    "iz_cm4": 3193.44,
+    "iu_cm4": 3193.44,
+    "iv_cm4": 3193.44,
+    "wy_cm3": 354.83,
+    "wz_cm3": 354.83,
+    "centroid_mm": [
+      90.0,
+      90.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 66.9,
+      "mass_kg_m": 52.5
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/shs180x180x10-hf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:0ad73fc9ee2cf5f6bb1d07cc3a7cdff6b38e4f9e188b78fd870cab3cd5fb4589"
+}

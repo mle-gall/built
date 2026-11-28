@@ -1,0 +1,67 @@
+{
+  "uid": "7c657f4df72a705f",
+  "name": "SHS 70 × 70 × 4 (cold-formed)",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/shs70x70x4-cf",
+      "family": "rhs",
+      "params": {
+        "height": 70.0,
+        "width": 70.0,
+        "web": 4.0,
+        "radius": 8.0,
+        "inner": 4.0
+      },
+      "catalogue": {
+        "name": "SHS 70 × 70 × 4 (cold-formed)",
+        "series": [
+          [
+            "en/shs70x70x4-cf",
+            70.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-cfshs",
+    "source": "https://www.steelforlifebluebook.co.uk/cfshs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10219-2",
+    "series": "SHS cold-formed"
+  },
+  "section": {
+    "area_cm2": 10.148,
+    "mass_kg_m": 7.966,
+    "iy_cm4": 72.12,
+    "iz_cm4": 72.12,
+    "iu_cm4": 72.12,
+    "iv_cm4": 72.12,
+    "wy_cm3": 20.61,
+    "wz_cm3": 20.61,
+    "centroid_mm": [
+      35.0,
+      35.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 10.1,
+      "mass_kg_m": 7.97
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/shs70x70x4-cf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:60474719147ac8c17d095dace944c8af7956d11b5aa89f0f15130335355de545"
+}

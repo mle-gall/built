@@ -1,0 +1,67 @@
+{
+  "uid": "7d65e1f7af8d2ac4",
+  "name": "HP18 × 204",
+  "rev": 2,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/hp18x204",
+      "family": "i",
+      "params": {
+        "height": 464.82,
+        "width": 459.74,
+        "web": 28.702,
+        "flange": 28.702,
+        "radius": 29.97
+      },
+      "catalogue": {
+        "name": "HP18 × 204",
+        "series": [
+          [
+            "aisc/hp18x204",
+            464.82
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "HP"
+  },
+  "section": {
+    "area_cm2": 388.557,
+    "mass_kg_m": 305.017,
+    "iy_cm4": 144839.66,
+    "iz_cm4": 46600.26,
+    "iu_cm4": 144839.66,
+    "iv_cm4": 46600.26,
+    "wy_cm3": 6232.08,
+    "wz_cm3": 2027.24,
+    "centroid_mm": [
+      229.87,
+      232.41
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 388.386,
+      "mass_kg_m": 303.585
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/hp18x204",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:55b8fb377e31dd678e734b58b73a6fa238ea547a84cb9b4d4e81dd99ceb56583"
+}

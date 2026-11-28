@@ -1,0 +1,86 @@
+{
+  "uid": "8478b77721295383",
+  "name": "IPN 380",
+  "rev": 1,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/ipn380",
+      "family": "i",
+      "params": {
+        "height": 380.0,
+        "width": 149.0,
+        "web": 13.7,
+        "flange": 20.5,
+        "radius": 13.7,
+        "toe": 8.2,
+        "slope": 14.0,
+        "flange_at": 37.25
+      },
+      "catalogue": {
+        "name": "IPN 380",
+        "series": [
+          [
+            "en/ipn340",
+            340.0
+          ],
+          [
+            "en/ipn360",
+            360.0
+          ],
+          [
+            "en/ipn380",
+            380.0
+          ],
+          [
+            "en/ipn400",
+            400.0
+          ],
+          [
+            "en/ipn450",
+            450.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "am-ipn",
+    "source": "https://sections.arcelormittal.com/repository2/Sections/Sections_MB_ArcelorMittal_FR_EN_DE_IPN.pdf",
+    "standard": "EN 10365",
+    "series": "IPN"
+  },
+  "section": {
+    "area_cm2": 106.977,
+    "mass_kg_m": 83.977,
+    "iy_cm4": 23977.86,
+    "iz_cm4": 972.57,
+    "iu_cm4": 23977.86,
+    "iv_cm4": 972.57,
+    "wy_cm3": 1261.99,
+    "wz_cm3": 130.55,
+    "centroid_mm": [
+      74.5,
+      190.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 107.0,
+      "mass_kg_m": 84.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/ipn380",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:39b2062bc5493631c210b2edf6ae2c92d7529a5029789cbb36e68f24ea8475c5"
+}

@@ -1,0 +1,86 @@
+{
+  "uid": "96eeaf2c49ebbc7f",
+  "name": "IPN 160",
+  "rev": 1,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/ipn160",
+      "family": "i",
+      "params": {
+        "height": 160.0,
+        "width": 74.0,
+        "web": 6.3,
+        "flange": 9.5,
+        "radius": 6.3,
+        "toe": 3.8,
+        "slope": 14.0,
+        "flange_at": 18.5
+      },
+      "catalogue": {
+        "name": "IPN 160",
+        "series": [
+          [
+            "en/ipn120",
+            120.0
+          ],
+          [
+            "en/ipn140",
+            140.0
+          ],
+          [
+            "en/ipn160",
+            160.0
+          ],
+          [
+            "en/ipn180",
+            180.0
+          ],
+          [
+            "en/ipn200",
+            200.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "am-ipn",
+    "source": "https://sections.arcelormittal.com/repository2/Sections/Sections_MB_ArcelorMittal_FR_EN_DE_IPN.pdf",
+    "standard": "EN 10365",
+    "series": "IPN"
+  },
+  "section": {
+    "area_cm2": 22.8,
+    "mass_kg_m": 17.898,
+    "iy_cm4": 933.95,
+    "iz_cm4": 54.58,
+    "iu_cm4": 933.95,
+    "iv_cm4": 54.58,
+    "wy_cm3": 116.74,
+    "wz_cm3": 14.75,
+    "centroid_mm": [
+      37.0,
+      80.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 22.8,
+      "mass_kg_m": 17.9
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/ipn160",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:b65b39f761efde1f6623bf3ba7496b590f468e8d1e0dd38c30c1979960b2e310"
+}

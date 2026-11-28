@@ -1,0 +1,67 @@
+{
+  "uid": "4e6308628e53a035",
+  "name": "W10 × 112",
+  "rev": 2,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/w10x112",
+      "family": "i",
+      "params": {
+        "height": 289.56,
+        "width": 264.16,
+        "web": 19.177,
+        "flange": 31.75,
+        "radius": 12.7
+      },
+      "catalogue": {
+        "name": "W10 × 112",
+        "series": [
+          [
+            "aisc/w10x112",
+            289.56
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "W"
+  },
+  "section": {
+    "area_cm2": 212.478,
+    "mass_kg_m": 166.795,
+    "iy_cm4": 30028.07,
+    "iz_cm4": 9769.75,
+    "iu_cm4": 30028.07,
+    "iv_cm4": 9769.75,
+    "wy_cm3": 2074.05,
+    "wz_cm3": 739.68,
+    "centroid_mm": [
+      132.08,
+      144.78
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 212.258,
+      "mass_kg_m": 166.674
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/w10x112",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:420aa5e3125a6b3c351d7aa65462667c1bbadf02cda3f199d88c5588052b03d9"
+}

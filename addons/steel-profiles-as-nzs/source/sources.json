@@ -1,0 +1,80 @@
+{
+  "title": "Steel profiles · AS/NZS",
+  "prefix": "as-nzs",
+  "status": "provisional",
+  "note": "Provisional: transcribed from a mill catalogue until checked against the purchased AS/NZS 3679.1.",
+  "families": [
+    {
+      "file": "ub.csv",
+      "shape": "i",
+      "series": "UB",
+      "standard": "AS/NZS 3679.1",
+      "replaced_by": "AS/NZS 3679.1:2016 dimension tables",
+      "mass": "nominal"
+    },
+    {
+      "file": "uc.csv",
+      "shape": "i",
+      "series": "UC",
+      "standard": "AS/NZS 3679.1",
+      "replaced_by": "AS/NZS 3679.1:2016 dimension tables",
+      "mass": "nominal"
+    },
+    {
+      "file": "ubp.csv",
+      "shape": "i",
+      "series": "UBP",
+      "standard": "AS/NZS 3679.1",
+      "replaced_by": "AS/NZS 3679.1:2016 dimension tables",
+      "mass": "nominal"
+    },
+    {
+      "file": "tfb.csv",
+      "shape": "i",
+      "series": "TFB",
+      "standard": "AS/NZS 3679.1",
+      "replaced_by": "AS/NZS 3679.1:2016 dimension tables",
+      "sloped": true,
+      "slope_note": "flange slope not stated in the source: assumed 8 degrees (14.05 %), thickness at the outstand middle; confirm against AS/NZS 3679.1"
+    },
+    {
+      "file": "pfc.csv",
+      "shape": "channel",
+      "series": "PFC",
+      "standard": "AS/NZS 3679.1",
+      "replaced_by": "AS/NZS 3679.1:2016 dimension tables"
+    },
+    {
+      "file": "ea.csv",
+      "shape": "angle",
+      "series": "EA",
+      "standard": "AS/NZS 3679.1",
+      "replaced_by": "AS/NZS 3679.1:2016 dimension tables"
+    },
+    {
+      "file": "ua.csv",
+      "shape": "angle",
+      "series": "UA",
+      "standard": "AS/NZS 3679.1",
+      "replaced_by": "AS/NZS 3679.1:2016 dimension tables"
+    }
+  ],
+  "keys": {},
+  "sources": {
+    "ib-hrssp9": {
+      "url": "https://www.infrabuild.com/wp-content/uploads/sites/8/2022/02/Hot20Rolled20Cat_Edition9_2019.pdf",
+      "title": "InfraBuild (Liberty OneSteel) Hot Rolled and Structural Steel Products, 9th edition",
+      "edition": "October 2019 (dimensions to AS/NZS 3679.1)",
+      "accessed": "2026-11-28",
+      "kind": "mill catalogue",
+      "columns": "designation, d, bf, tf, tw, r1 (r2 for TFB and angles), actual angle thickness, mass, Ag (Tables 9, 11, 13, 15, 17, 19, 22)",
+      "sha256": "sha256:5a9cc48d92561f6e7c14526b6f8fda9340bba13eb34f818204ab497c3907fa83"
+    }
+  },
+  "checks": {},
+  "notes": {},
+  "missing": [
+    "SHS, RHS and CHS (AS/NZS 1163): the tube mill catalogue could not be downloaded (site refused automated access)",
+    "WB and WC welded sections (AS/NZS 3679.2): welded, not rolled"
+  ]
+}

@@ -1,0 +1,75 @@
+{
+  "uid": "f51953cb48a7c675",
+  "name": "W14 × 132",
+  "rev": 2,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/w14x132",
+      "family": "i",
+      "params": {
+        "height": 373.38,
+        "width": 373.38,
+        "web": 16.383,
+        "flange": 26.162,
+        "radius": 15.24
+      },
+      "catalogue": {
+        "name": "W14 × 132",
+        "series": [
+          [
+            "aisc/w14x132",
+            373.38
+          ],
+          [
+            "aisc/w21x132",
+            553.72
+          ],
+          [
+            "aisc/w30x132",
+            769.62
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "W"
+  },
+  "section": {
+    "area_cm2": 249.96,
+    "mass_kg_m": 196.218,
+    "iy_cm4": 64005.82,
+    "iz_cm4": 22711.84,
+    "iu_cm4": 64005.82,
+    "iv_cm4": 22711.84,
+    "wy_cm3": 3428.45,
+    "wz_cm3": 1216.55,
+    "centroid_mm": [
+      186.69,
+      186.69
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 250.322,
+      "mass_kg_m": 196.438
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/w14x132",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:dfabb2d472fef02b635c2dfb46291b730e5fd72c53882e7b2399823cf54d645b"
+}

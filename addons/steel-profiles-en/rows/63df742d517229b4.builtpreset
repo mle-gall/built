@@ -1,0 +1,83 @@
+{
+  "uid": "63df742d517229b4",
+  "name": "IPE O 360",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/ipeo360",
+      "family": "i",
+      "params": {
+        "height": 364.0,
+        "width": 172.0,
+        "web": 9.2,
+        "flange": 14.7,
+        "radius": 18.0
+      },
+      "catalogue": {
+        "name": "IPE O 360",
+        "series": [
+          [
+            "en/ipeo300",
+            304.0
+          ],
+          [
+            "en/ipeo330",
+            334.0
+          ],
+          [
+            "en/ipeo360",
+            364.0
+          ],
+          [
+            "en/ipeo400",
+            404.0
+          ],
+          [
+            "en/ipeo450",
+            456.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-ipe",
+    "source": "https://orangebook.arcelormittal.com/node/6",
+    "standard": "EN 10365",
+    "series": "IPE"
+  },
+  "section": {
+    "area_cm2": 84.133,
+    "mass_kg_m": 66.044,
+    "iy_cm4": 19047.54,
+    "iz_cm4": 1251.23,
+    "iu_cm4": 19047.54,
+    "iv_cm4": 1251.23,
+    "wy_cm3": 1046.57,
+    "wz_cm3": 145.49,
+    "centroid_mm": [
+      86.0,
+      182.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 84.1,
+      "mass_kg_m": 66.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/ipeo360",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:b33e79b94fba5eec9402adc1d836d1c7795f66a4b6ff01b4a9372c474fb9fc4a"
+}

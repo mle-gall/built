@@ -1,33 +1,28 @@
 {
   "uid": "75676207356b2ed1",
-  "name": "RHS 100 × 50 × 4",
-  "rev": 1,
+  "name": "RHS 100 × 50 × 4 (cold-formed)",
+  "rev": 3,
   "pack": "Steel profiles · EN",
   "primitive": "sweep",
-  "record": {
-    "class": "IfcBeam"
-  },
+  "record": {},
   "locks": {},
   "values": {
     "profile": {
       "library": "en/rhs100x4",
       "family": "rhs",
       "params": {
-        "width": 50,
-        "height": 100,
-        "web": 4,
-        "radius": 8
+        "height": 100.0,
+        "width": 50.0,
+        "web": 4.0,
+        "radius": 8.0,
+        "inner": 4.0
       },
       "catalogue": {
-        "name": "RHS 100 × 50 × 4",
+        "name": "RHS 100 × 50 × 4 (cold-formed)",
         "series": [
           [
-            "en/rhs100x5",
-            100
-          ],
-          [
             "en/rhs100x4",
-            100
+            100.0
           ]
         ]
       }
@@ -35,8 +30,30 @@
   },
   "provenance": {
     "created_with": "Built",
-    "source": "https://www.tatasteeluk.com/sites/default/files/pimcore_doc/tata-steel-uk-hybox-technical-guide-en.pdf",
-    "standard": "EN 10219"
+    "status": "provisional",
+    "source_id": "bb-cfrhs",
+    "source": "https://www.steelforlifebluebook.co.uk/cfrhs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10219-2",
+    "series": "RHS cold-formed"
+  },
+  "section": {
+    "area_cm2": 10.948,
+    "mass_kg_m": 8.594,
+    "iy_cm4": 134.14,
+    "iz_cm4": 44.95,
+    "iu_cm4": 134.14,
+    "iv_cm4": 44.95,
+    "wy_cm3": 26.83,
+    "wz_cm3": 17.98,
+    "centroid_mm": [
+      25.0,
+      50.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 10.9,
+      "mass_kg_m": 8.59
+    }
   },
   "profile_size": true,
   "depends": [
@@ -46,5 +63,5 @@
       "bundled": null
     }
   ],
-  "hash": "sha256:a1b35efc1c5d83baa6126e8747526edf43bea43be564731e4c13789d181dad04"
+  "hash": "sha256:581c03446291f468ab05f6a3c24417d407babfcf575e61fac2fff047db8bba4b"
 }

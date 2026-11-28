@@ -1,0 +1,83 @@
+{
+  "uid": "59962a4261b054a1",
+  "name": "IPE A 140",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/ipea140",
+      "family": "i",
+      "params": {
+        "height": 137.4,
+        "width": 73.0,
+        "web": 3.8,
+        "flange": 5.6,
+        "radius": 7.0
+      },
+      "catalogue": {
+        "name": "IPE A 140",
+        "series": [
+          [
+            "en/ipea100",
+            98.0
+          ],
+          [
+            "en/ipea120",
+            117.6
+          ],
+          [
+            "en/ipea140",
+            137.4
+          ],
+          [
+            "en/ipea160",
+            157.0
+          ],
+          [
+            "en/ipea180",
+            177.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-ipe",
+    "source": "https://orangebook.arcelormittal.com/node/6",
+    "standard": "EN 10365",
+    "series": "IPE"
+  },
+  "section": {
+    "area_cm2": 13.392,
+    "mass_kg_m": 10.513,
+    "iy_cm4": 434.87,
+    "iz_cm4": 36.42,
+    "iu_cm4": 434.87,
+    "iv_cm4": 36.42,
+    "wy_cm3": 63.3,
+    "wz_cm3": 9.98,
+    "centroid_mm": [
+      36.5,
+      68.7
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 13.4,
+      "mass_kg_m": 10.5
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/ipea140",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:ab7466962a5cbc4ab627e2470fb4f5560a15efb6532c65e49a5b969099405bea"
+}

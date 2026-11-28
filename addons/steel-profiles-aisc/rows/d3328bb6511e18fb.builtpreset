@@ -1,0 +1,67 @@
+{
+  "uid": "d3328bb6511e18fb",
+  "name": "W24 × 250",
+  "rev": 2,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/w24x250",
+      "family": "i",
+      "params": {
+        "height": 668.02,
+        "width": 335.28,
+        "web": 26.416,
+        "flange": 48.006,
+        "radius": 12.7
+      },
+      "catalogue": {
+        "name": "W24 × 250",
+        "series": [
+          [
+            "aisc/w24x250",
+            668.02
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "W"
+  },
+  "section": {
+    "area_cm2": 474.395,
+    "mass_kg_m": 372.4,
+    "iy_cm4": 352296.63,
+    "iz_cm4": 30247.06,
+    "iu_cm4": 352296.63,
+    "iv_cm4": 30247.06,
+    "wy_cm3": 10547.49,
+    "wz_cm3": 1804.29,
+    "centroid_mm": [
+      167.64,
+      334.01
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 474.193,
+      "mass_kg_m": 372.041
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/w24x250",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:22c308e1dd0b3eec17d263bfb7b8105c38aa481037984fd76e81cf94621258fb"
+}

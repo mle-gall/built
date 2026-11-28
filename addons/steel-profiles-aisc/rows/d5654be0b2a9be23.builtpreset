@@ -1,0 +1,66 @@
+{
+  "uid": "d5654be0b2a9be23",
+  "name": "L5 × 5 × 5/8",
+  "rev": 2,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/l5x5x5_8",
+      "family": "angle",
+      "params": {
+        "height": 127.0,
+        "width": 127.0,
+        "web": 15.875,
+        "radius": 12.83
+      },
+      "catalogue": {
+        "name": "L5 × 5 × 5/8",
+        "series": [
+          [
+            "aisc/l5x5x5_8",
+            127.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "L"
+  },
+  "section": {
+    "area_cm2": 38.156,
+    "mass_kg_m": 29.952,
+    "iy_cm4": 566.41,
+    "iz_cm4": 566.41,
+    "iu_cm4": 897.14,
+    "iv_cm4": 235.68,
+    "wy_cm3": 63.21,
+    "wz_cm3": 63.21,
+    "centroid_mm": [
+      37.4,
+      37.4
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 38.064,
+      "mass_kg_m": 29.763
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/l5x5x5_8",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:6aaafb504fc456f381a1ac84b1fcf4ca05d68aef34b5c66d1172d626baea3b6a"
+}

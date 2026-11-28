@@ -1,0 +1,68 @@
+{
+  "uid": "30aba957eca2691e",
+  "name": "ST10 × 37.5",
+  "rev": 2,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/st10x37.5",
+      "family": "tee",
+      "params": {
+        "height": 254.0,
+        "width": 162.306,
+        "web": 16.129,
+        "flange": 20.193,
+        "radius": 15.12,
+        "slope": 16.67
+      },
+      "catalogue": {
+        "name": "ST10 × 37.5",
+        "series": [
+          [
+            "aisc/st10x37.5",
+            254.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "ST"
+  },
+  "section": {
+    "area_cm2": 71.145,
+    "mass_kg_m": 55.849,
+    "iy_cm4": 4562.86,
+    "iz_cm4": 631.69,
+    "iu_cm4": 4562.86,
+    "iv_cm4": 631.69,
+    "wy_cm3": 258.83,
+    "wz_cm3": 77.84,
+    "centroid_mm": [
+      81.15,
+      176.29
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 70.968,
+      "mass_kg_m": 55.806
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/st10x37.5",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:91b8d761772382da6fcd626bc6bd92ba891c2f2f25b683826db216bcc3156331"
+}

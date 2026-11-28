@@ -1,0 +1,67 @@
+{
+  "uid": "0127e529926e0c17",
+  "name": "UBP 305 × 305 × 95",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/ubp305x305x95",
+      "family": "i",
+      "params": {
+        "height": 303.7,
+        "width": 308.7,
+        "web": 13.3,
+        "flange": 13.3,
+        "radius": 15.2
+      },
+      "catalogue": {
+        "name": "UBP 305 × 305 × 95",
+        "series": [
+          [
+            "en/ubp305x305x95",
+            303.7
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-ubp",
+    "source": "https://orangebook.arcelormittal.com/node/210",
+    "standard": "EN 10365",
+    "series": "UBP"
+  },
+  "section": {
+    "area_cm2": 120.952,
+    "mass_kg_m": 94.947,
+    "iy_cm4": 20044.94,
+    "iz_cm4": 6528.54,
+    "iu_cm4": 20044.94,
+    "iv_cm4": 6528.54,
+    "wy_cm3": 1320.05,
+    "wz_cm3": 422.97,
+    "centroid_mm": [
+      154.35,
+      151.85
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 121.0,
+      "mass_kg_m": 94.9
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/ubp305x305x95",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:a023b28087aaf31f25d578f667ac54fd1a2d564f4e515adfabf946daa07f77ec"
+}

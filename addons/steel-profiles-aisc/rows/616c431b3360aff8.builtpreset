@@ -1,0 +1,67 @@
+{
+  "uid": "616c431b3360aff8",
+  "name": "W40 × 215",
+  "rev": 2,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/w40x215",
+      "family": "i",
+      "params": {
+        "height": 990.6,
+        "width": 401.32,
+        "web": 16.51,
+        "flange": 30.988,
+        "radius": 29.97
+      },
+      "catalogue": {
+        "name": "W40 × 215",
+        "series": [
+          [
+            "aisc/w40x215",
+            990.6
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "W"
+  },
+  "section": {
+    "area_cm2": 409.749,
+    "mass_kg_m": 321.653,
+    "iy_cm4": 699117.38,
+    "iz_cm4": 33436.68,
+    "iu_cm4": 699117.38,
+    "iv_cm4": 33436.68,
+    "wy_cm3": 14115.03,
+    "wz_cm3": 1666.33,
+    "centroid_mm": [
+      200.66,
+      495.3
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 409.677,
+      "mass_kg_m": 319.955
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/w40x215",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:84a254669a73849b201610367b31d3579d371c040e7eb3b31a5dd0cd91651cfb"
+}

@@ -1,0 +1,74 @@
+{
+  "uid": "8661ce12083ad892",
+  "name": "UB 254 × 102 × 28",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/ub254x102x28",
+      "family": "i",
+      "params": {
+        "height": 260.4,
+        "width": 102.2,
+        "web": 6.3,
+        "flange": 10.0,
+        "radius": 7.6
+      },
+      "catalogue": {
+        "name": "UB 254 × 102 × 28",
+        "series": [
+          [
+            "en/ub254x102x28",
+            260.4
+          ],
+          [
+            "en/ub305x102x28",
+            308.7
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-ub;r1=bb-ub",
+    "source": "https://orangebook.arcelormittal.com/node/35",
+    "standard": "EN 10365",
+    "series": "UB",
+    "column_sources": {
+      "r1": "https://www.steelforlifebluebook.co.uk/ub/ec3-ukna/section-properties-dimensions-properties"
+    }
+  },
+  "section": {
+    "area_cm2": 36.081,
+    "mass_kg_m": 28.324,
+    "iy_cm4": 4004.72,
+    "iz_cm4": 178.54,
+    "iu_cm4": 4004.72,
+    "iv_cm4": 178.54,
+    "wy_cm3": 307.58,
+    "wz_cm3": 34.94,
+    "centroid_mm": [
+      51.1,
+      130.2
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 36.1,
+      "mass_kg_m": 28.3
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/ub254x102x28",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:6fd14db5ec0ef0b0224d8d6aacea99b87c68eed16bf119135d84d7b3238e3990"
+}

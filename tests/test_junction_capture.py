@@ -115,7 +115,7 @@ def test_capture_preview_gathers_cut_plate_and_bolts_with_relations():
     assert params["gap"]["expr"] == "plate_t", params["gap"]
     rule = draft["detail"]["values"]["rule"]
     assert rule["angle"] == {"value": 75.0, "tol": 2.0} and rule["meeting"] == "end_face"
-    assert {p["library"] for p in rule["roles"]["joining"]["profile"]} == {"en/ipe200", "en/ipe240"}
+    assert {p["library"] for p in rule["roles"]["joining"]["profile"]} == {"en/ipe220", "en/ipe240", "en/ipe270"}
     assert rule["roles"]["main"]["face"] == ["flange_outer"]
     assert draft["similar"] == 7 and draft["names"][0] == column.name
     # Seeds from the plate, the bolt group and the two members agree.

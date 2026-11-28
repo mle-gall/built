@@ -1,0 +1,67 @@
+{
+  "uid": "b625ef20b2779ea8",
+  "name": "HP 305 × 110",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/hp305x110",
+      "family": "i",
+      "params": {
+        "height": 307.9,
+        "width": 310.7,
+        "web": 15.3,
+        "flange": 15.4,
+        "radius": 15.2
+      },
+      "catalogue": {
+        "name": "HP 305 × 110",
+        "series": [
+          [
+            "en/hp305x110",
+            307.9
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-hp",
+    "source": "https://orangebook.arcelormittal.com/node/200",
+    "standard": "EN 10365",
+    "series": "HP"
+  },
+  "section": {
+    "area_cm2": 140.075,
+    "mass_kg_m": 109.959,
+    "iy_cm4": 23562.59,
+    "iz_cm4": 7709.12,
+    "iu_cm4": 23562.59,
+    "iv_cm4": 7709.12,
+    "wy_cm3": 1530.54,
+    "wz_cm3": 496.24,
+    "centroid_mm": [
+      155.35,
+      153.95
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 140.0,
+      "mass_kg_m": 110.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/hp305x110",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:57a9c5a88f100846ad1c2939286eeedfb307114f2151ec7d5ceb6caa8fe3f69a"
+}

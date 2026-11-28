@@ -1,0 +1,67 @@
+{
+  "uid": "1a23b9487a5d1266",
+  "name": "SHS 350 × 350 × 10 (cold-formed)",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/shs350x350x10-cf",
+      "family": "rhs",
+      "params": {
+        "height": 350.0,
+        "width": 350.0,
+        "web": 10.0,
+        "radius": 25.0,
+        "inner": 15.0
+      },
+      "catalogue": {
+        "name": "SHS 350 × 350 × 10 (cold-formed)",
+        "series": [
+          [
+            "en/shs350x350x10-cf",
+            350.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-cfshs",
+    "source": "https://www.steelforlifebluebook.co.uk/cfshs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10219-2",
+    "series": "SHS cold-formed"
+  },
+  "section": {
+    "area_cm2": 132.566,
+    "mass_kg_m": 104.064,
+    "iy_cm4": 25189.05,
+    "iz_cm4": 25189.05,
+    "iu_cm4": 25189.05,
+    "iv_cm4": 25189.05,
+    "wy_cm3": 1439.37,
+    "wz_cm3": 1439.37,
+    "centroid_mm": [
+      175.0,
+      175.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 133.0,
+      "mass_kg_m": 104.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/shs350x350x10-cf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:9c826760ffaef279d93c3ae6e27c9f7998ada8be35981254c6aad0d5c1170931"
+}

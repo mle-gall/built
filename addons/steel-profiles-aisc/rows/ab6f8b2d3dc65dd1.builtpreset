@@ -1,0 +1,67 @@
+{
+  "uid": "ab6f8b2d3dc65dd1",
+  "name": "W21 × 83",
+  "rev": 2,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/w21x83",
+      "family": "i",
+      "params": {
+        "height": 543.56,
+        "width": 212.344,
+        "web": 13.081,
+        "flange": 21.209,
+        "radius": 12.83
+      },
+      "catalogue": {
+        "name": "W21 × 83",
+        "series": [
+          [
+            "aisc/w21x83",
+            543.56
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "W"
+  },
+  "section": {
+    "area_cm2": 157.04,
+    "mass_kg_m": 123.276,
+    "iy_cm4": 76061.08,
+    "iz_cm4": 3395.14,
+    "iu_cm4": 76061.08,
+    "iv_cm4": 3395.14,
+    "wy_cm3": 2798.63,
+    "wz_cm3": 319.78,
+    "centroid_mm": [
+      106.17,
+      271.78
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 157.419,
+      "mass_kg_m": 123.518
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/w21x83",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:e2a363ff32aac51dd4acc97ed3a83b04e37e0a7eeab9fc3e36dd801a61e36340"
+}

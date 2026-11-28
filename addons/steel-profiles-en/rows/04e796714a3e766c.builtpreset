@@ -1,0 +1,67 @@
+{
+  "uid": "04e796714a3e766c",
+  "name": "HE 1000 × 393",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/he1000x393",
+      "family": "i",
+      "params": {
+        "height": 1016.0,
+        "width": 303.0,
+        "web": 24.4,
+        "flange": 43.9,
+        "radius": 30.0
+      },
+      "catalogue": {
+        "name": "HE 1000 × 393",
+        "series": [
+          [
+            "en/he1000x393",
+            1016.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-he",
+    "source": "https://orangebook.arcelormittal.com/node/16",
+    "standard": "EN 10365",
+    "series": "HE"
+  },
+  "section": {
+    "area_cm2": 500.241,
+    "mass_kg_m": 392.689,
+    "iy_cm4": 807690.05,
+    "iz_cm4": 20496.01,
+    "iu_cm4": 807690.05,
+    "iv_cm4": 20496.01,
+    "wy_cm3": 15899.41,
+    "wz_cm3": 1352.87,
+    "centroid_mm": [
+      151.5,
+      508.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 500.0,
+      "mass_kg_m": 393.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/he1000x393",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:7f1ed3810ac2abbf3a7a530ea3b87ec0eb8d545715a002b7cc7b22b44f5c47ef"
+}

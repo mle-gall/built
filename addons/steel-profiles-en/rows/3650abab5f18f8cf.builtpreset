@@ -1,0 +1,67 @@
+{
+  "uid": "3650abab5f18f8cf",
+  "name": "RHS 50 × 30 × 2.5 (cold-formed)",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/rhs50x30x2.5-cf",
+      "family": "rhs",
+      "params": {
+        "height": 50.0,
+        "width": 30.0,
+        "web": 2.5,
+        "radius": 5.0,
+        "inner": 2.5
+      },
+      "catalogue": {
+        "name": "RHS 50 × 30 × 2.5 (cold-formed)",
+        "series": [
+          [
+            "en/rhs50x30x2.5-cf",
+            50.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-cfrhs",
+    "source": "https://www.steelforlifebluebook.co.uk/cfrhs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10219-2",
+    "series": "RHS cold-formed"
+  },
+  "section": {
+    "area_cm2": 3.589,
+    "mass_kg_m": 2.817,
+    "iy_cm4": 11.3,
+    "iz_cm4": 5.05,
+    "iu_cm4": 11.3,
+    "iv_cm4": 5.05,
+    "wy_cm3": 4.52,
+    "wz_cm3": 3.37,
+    "centroid_mm": [
+      15.0,
+      25.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 3.59,
+      "mass_kg_m": 2.82
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/rhs50x30x2.5-cf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:49cd3a1e50d833d0a64146ffaa7b891f9ec6fd890fcad6b847a441354725e393"
+}

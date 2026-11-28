@@ -1,0 +1,67 @@
+{
+  "uid": "42354bfefeca9f51",
+  "name": "460 UB 82.1",
+  "rev": 2,
+  "pack": "Steel profiles · AS/NZS",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "as-nzs/460ub82.1",
+      "family": "i",
+      "params": {
+        "height": 460.4,
+        "width": 191.0,
+        "web": 9.9,
+        "flange": 16.0,
+        "radius": 11.4
+      },
+      "catalogue": {
+        "name": "460 UB 82.1",
+        "series": [
+          [
+            "as-nzs/460ub82.1",
+            460.4
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ib-hrssp9",
+    "source": "https://www.infrabuild.com/wp-content/uploads/sites/8/2022/02/Hot20Rolled20Cat_Edition9_2019.pdf",
+    "standard": "AS/NZS 3679.1",
+    "series": "UB"
+  },
+  "section": {
+    "area_cm2": 104.647,
+    "mass_kg_m": 82.148,
+    "iy_cm4": 37175.95,
+    "iz_cm4": 1862.24,
+    "iu_cm4": 37175.95,
+    "iv_cm4": 1862.24,
+    "wy_cm3": 1614.94,
+    "wz_cm3": 195.0,
+    "centroid_mm": [
+      95.5,
+      230.2
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 105.0,
+      "mass_kg_m": 82.1
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "as-nzs/460ub82.1",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:72917a1533aa34af37333a5c9e8cef2008f219d7ae36c96da95fb9be3955c6df"
+}

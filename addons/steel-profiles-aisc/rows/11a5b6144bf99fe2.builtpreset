@@ -1,0 +1,75 @@
+{
+  "uid": "11a5b6144bf99fe2",
+  "name": "W27 × 235",
+  "rev": 2,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/w27x235",
+      "family": "i",
+      "params": {
+        "height": 728.98,
+        "width": 360.68,
+        "web": 23.114,
+        "flange": 40.894,
+        "radius": 20.07
+      },
+      "catalogue": {
+        "name": "W27 × 235",
+        "series": [
+          [
+            "aisc/w27x235",
+            728.98
+          ],
+          [
+            "aisc/w30x235",
+            795.02
+          ],
+          [
+            "aisc/w40x235",
+            1008.38
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "W"
+  },
+  "section": {
+    "area_cm2": 448.043,
+    "mass_kg_m": 351.714,
+    "iy_cm4": 405317.9,
+    "iz_cm4": 32055.7,
+    "iu_cm4": 405317.9,
+    "iv_cm4": 32055.7,
+    "wy_cm3": 11120.14,
+    "wz_cm3": 1777.51,
+    "centroid_mm": [
+      180.34,
+      364.49
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 447.741,
+      "mass_kg_m": 349.719
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/w27x235",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:6911b9137a105e27140c9274008a73010a6af16553acf15b4b5c342a3ca88b7e"
+}

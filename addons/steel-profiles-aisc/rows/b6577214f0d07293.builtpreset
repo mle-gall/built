@@ -1,0 +1,79 @@
+{
+  "uid": "b6577214f0d07293",
+  "name": "WT8 × 20",
+  "rev": 2,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/wt8x20",
+      "family": "tee",
+      "params": {
+        "height": 203.454,
+        "width": 177.8,
+        "web": 7.747,
+        "flange": 12.827,
+        "radius": 10.21
+      },
+      "catalogue": {
+        "name": "WT8 × 20",
+        "series": [
+          [
+            "aisc/wt4x20",
+            104.902
+          ],
+          [
+            "aisc/wt6x20",
+            151.638
+          ],
+          [
+            "aisc/wt8x20",
+            203.454
+          ],
+          [
+            "aisc/wt9x20",
+            227.33
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "WT"
+  },
+  "section": {
+    "area_cm2": 38.022,
+    "mass_kg_m": 29.847,
+    "iy_cm4": 1382.27,
+    "iz_cm4": 601.74,
+    "iu_cm4": 1382.27,
+    "iv_cm4": 601.74,
+    "wy_cm3": 87.8,
+    "wz_cm3": 67.69,
+    "centroid_mm": [
+      88.9,
+      157.43
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 38.0,
+      "mass_kg_m": 29.763
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/wt8x20",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:8c144eac3042210c1091de7075cabc6a153e32a8d5c52ed0735494700f1ac9f7"
+}

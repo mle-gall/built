@@ -1,0 +1,75 @@
+{
+  "uid": "b81946455f8c87d2",
+  "name": "W 310 × 52.0",
+  "rev": 2,
+  "pack": "Steel profiles · BR",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "br/w310x52.0",
+      "family": "i",
+      "params": {
+        "height": 317.0,
+        "width": 167.0,
+        "web": 7.6,
+        "flange": 13.2,
+        "radius": 10.0
+      },
+      "catalogue": {
+        "name": "W 310 × 52.0",
+        "series": [
+          [
+            "br/w200x52.0",
+            206.0
+          ],
+          [
+            "br/w310x52.0",
+            317.0
+          ],
+          [
+            "br/w460x52.0",
+            450.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "gerdau-perfis",
+    "source": "https://api.aecweb.com.br/cls/catalogos/28792/22314/catalogo-gerdau-perfis-estruturais.pdf",
+    "standard": "ABNT NBR 15980",
+    "series": "W"
+  },
+  "section": {
+    "area_cm2": 67.032,
+    "mass_kg_m": 52.62,
+    "iy_cm4": 11909.08,
+    "iz_cm4": 1026.05,
+    "iu_cm4": 11909.08,
+    "iv_cm4": 1026.05,
+    "wy_cm3": 751.36,
+    "wz_cm3": 122.88,
+    "centroid_mm": [
+      83.5,
+      158.5
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 67.0,
+      "mass_kg_m": 52.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "br/w310x52.0",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:9771901c470c236dd346fefeb658088cb5174fb995aaf26d84517906bd153e32"
+}

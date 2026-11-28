@@ -1,0 +1,67 @@
+{
+  "uid": "68046b6f4f39870d",
+  "name": "L 100 × 100 × 9",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/l100x100x9",
+      "family": "angle",
+      "params": {
+        "height": 100.0,
+        "width": 100.0,
+        "web": 9.0,
+        "radius": 12.0,
+        "toe": 6.0
+      },
+      "catalogue": {
+        "name": "L 100 × 100 × 9",
+        "series": [
+          [
+            "en/l100x100x9",
+            100.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-l-equal",
+    "source": "https://orangebook.arcelormittal.com/node/220",
+    "standard": "EN 10056-1",
+    "series": "L equal"
+  },
+  "section": {
+    "area_cm2": 17.345,
+    "mass_kg_m": 13.615,
+    "iy_cm4": 160.99,
+    "iz_cm4": 160.99,
+    "iu_cm4": 255.5,
+    "iv_cm4": 66.49,
+    "wy_cm3": 22.3,
+    "wz_cm3": 22.3,
+    "centroid_mm": [
+      27.8,
+      27.8
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 17.3,
+      "mass_kg_m": 13.6
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/l100x100x9",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:aac3ba5c25d40fe5320631eb1e21a031c9579e626cd86f64712d1ce4ca2e1fbe"
+}

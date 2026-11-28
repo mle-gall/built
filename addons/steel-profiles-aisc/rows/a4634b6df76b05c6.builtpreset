@@ -1,0 +1,71 @@
+{
+  "uid": "a4634b6df76b05c6",
+  "name": "W18 × 65",
+  "rev": 2,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/w18x65",
+      "family": "i",
+      "params": {
+        "height": 467.36,
+        "width": 192.786,
+        "web": 11.43,
+        "flange": 19.05,
+        "radius": 10.16
+      },
+      "catalogue": {
+        "name": "W18 × 65",
+        "series": [
+          [
+            "aisc/w12x65",
+            307.34
+          ],
+          [
+            "aisc/w18x65",
+            467.36
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "W"
+  },
+  "section": {
+    "area_cm2": 123.402,
+    "mass_kg_m": 96.871,
+    "iy_cm4": 44861.93,
+    "iz_cm4": 2280.88,
+    "iu_cm4": 44861.93,
+    "iv_cm4": 2280.88,
+    "wy_cm3": 1919.8,
+    "wz_cm3": 236.62,
+    "centroid_mm": [
+      96.39,
+      233.68
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 123.226,
+      "mass_kg_m": 96.731
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/w18x65",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:9bd76872e29a3f23919f48bf20df908ff44edb4245818bceb03bae4888470c1e"
+}

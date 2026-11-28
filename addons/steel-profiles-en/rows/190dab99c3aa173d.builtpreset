@@ -1,0 +1,67 @@
+{
+  "uid": "190dab99c3aa173d",
+  "name": "RHS 350 × 250 × 6.3 (hot-finished)",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/rhs350x250x6.3-hf",
+      "family": "rhs",
+      "params": {
+        "height": 350.0,
+        "width": 250.0,
+        "web": 6.3,
+        "radius": 9.45,
+        "inner": 6.3
+      },
+      "catalogue": {
+        "name": "RHS 350 × 250 × 6.3 (hot-finished)",
+        "series": [
+          [
+            "en/rhs350x250x6.3-hf",
+            350.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-hfrhs",
+    "source": "https://www.steelforlifebluebook.co.uk/hfrhs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10210-2",
+    "series": "RHS hot-finished"
+  },
+  "section": {
+    "area_cm2": 73.586,
+    "mass_kg_m": 57.765,
+    "iy_cm4": 13202.91,
+    "iz_cm4": 7885.11,
+    "iu_cm4": 13202.91,
+    "iv_cm4": 7885.11,
+    "wy_cm3": 754.45,
+    "wz_cm3": 630.81,
+    "centroid_mm": [
+      125.0,
+      175.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 73.6,
+      "mass_kg_m": 57.8
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/rhs350x250x6.3-hf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:52e8a8a14bdf9ad72ac6cd8ebf57016283dece9994f8843d8ebb2ba41de3dd64"
+}

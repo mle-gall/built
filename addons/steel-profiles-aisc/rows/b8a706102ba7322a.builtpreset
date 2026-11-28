@@ -1,0 +1,67 @@
+{
+  "uid": "b8a706102ba7322a",
+  "name": "W18 × 143",
+  "rev": 2,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/w18x143",
+      "family": "i",
+      "params": {
+        "height": 495.3,
+        "width": 284.48,
+        "web": 18.542,
+        "flange": 33.528,
+        "radius": 10.16
+      },
+      "catalogue": {
+        "name": "W18 × 143",
+        "series": [
+          [
+            "aisc/w18x143",
+            495.3
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "W"
+  },
+  "section": {
+    "area_cm2": 271.052,
+    "mass_kg_m": 212.776,
+    "iy_cm4": 114403.21,
+    "iz_cm4": 12889.02,
+    "iu_cm4": 114403.21,
+    "iv_cm4": 12889.02,
+    "wy_cm3": 4619.55,
+    "wz_cm3": 906.15,
+    "centroid_mm": [
+      142.24,
+      247.65
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 270.967,
+      "mass_kg_m": 212.807
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/w18x143",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:487a3c3e2c0346d68eb9733b73de8af2c99aafdf0ba3a94b3efe0efa71ed6899"
+}

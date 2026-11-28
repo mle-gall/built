@@ -1,0 +1,66 @@
+{
+  "uid": "1aae29e264a0985c",
+  "name": "L10 × 10 × 7/8",
+  "rev": 2,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/l10x10x7_8",
+      "family": "angle",
+      "params": {
+        "height": 254.0,
+        "width": 254.0,
+        "web": 22.225,
+        "radius": 20.45
+      },
+      "catalogue": {
+        "name": "L10 × 10 × 7/8",
+        "series": [
+          [
+            "aisc/l10x10x7_8",
+            254.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "L"
+  },
+  "section": {
+    "area_cm2": 108.861,
+    "mass_kg_m": 85.456,
+    "iy_cm4": 6691.58,
+    "iz_cm4": 6691.58,
+    "iu_cm4": 10637.82,
+    "iv_cm4": 2745.33,
+    "wy_cm3": 366.33,
+    "wz_cm3": 366.33,
+    "centroid_mm": [
+      71.34,
+      71.34
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 108.387,
+      "mass_kg_m": 84.677
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/l10x10x7_8",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:5d03057c15790655c95c2e4ca7ac50d0ffdb17a293b8e9321d7b1ebe250abe24"
+}

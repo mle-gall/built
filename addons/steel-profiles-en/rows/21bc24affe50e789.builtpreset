@@ -1,0 +1,67 @@
+{
+  "uid": "21bc24affe50e789",
+  "name": "HD 260 × 225",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/hd260x225",
+      "family": "i",
+      "params": {
+        "height": 309.0,
+        "width": 271.0,
+        "web": 24.0,
+        "flange": 42.0,
+        "radius": 24.0
+      },
+      "catalogue": {
+        "name": "HD 260 × 225",
+        "series": [
+          [
+            "en/hd260x225",
+            309.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-hd",
+    "source": "https://orangebook.arcelormittal.com/node/136",
+    "standard": "EN 10365",
+    "series": "HD"
+  },
+  "section": {
+    "area_cm2": 286.585,
+    "mass_kg_m": 224.969,
+    "iy_cm4": 43751.94,
+    "iz_cm4": 13973.58,
+    "iu_cm4": 43751.94,
+    "iv_cm4": 13973.58,
+    "wy_cm3": 2831.84,
+    "wz_cm3": 1031.26,
+    "centroid_mm": [
+      135.5,
+      154.5
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 287.0,
+      "mass_kg_m": 225.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/hd260x225",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:ec73b94a3eeae6939e66f00a37618c66e41d2604ecf4b1fed29e86afc17e4386"
+}

@@ -1,0 +1,81 @@
+{
+  "uid": "e1492c8f3316fbf1",
+  "name": "CHS 244.5 × 12.5 (hot-finished)",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/chs244.5x12.5-hf",
+      "family": "chs",
+      "params": {
+        "height": 244.5,
+        "width": 244.5,
+        "web": 12.5
+      },
+      "catalogue": {
+        "name": "CHS 244.5 × 12.5 (hot-finished)",
+        "series": [
+          [
+            "en/chs193.7x12.5-hf",
+            193.7
+          ],
+          [
+            "en/chs219.1x12.5-hf",
+            219.1
+          ],
+          [
+            "en/chs244.5x12.5-hf",
+            244.5
+          ],
+          [
+            "en/chs273x12.5-hf",
+            273.0
+          ],
+          [
+            "en/chs323.9x12.5-hf",
+            323.9
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-hfchs",
+    "source": "https://www.steelforlifebluebook.co.uk/hfchs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10210-2",
+    "series": "CHS hot-finished"
+  },
+  "section": {
+    "area_cm2": 91.104,
+    "mass_kg_m": 71.517,
+    "iy_cm4": 6147.11,
+    "iz_cm4": 6147.11,
+    "iu_cm4": 6147.11,
+    "iv_cm4": 6147.11,
+    "wy_cm3": 502.83,
+    "wz_cm3": 502.83,
+    "centroid_mm": [
+      122.25,
+      122.25
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 91.1,
+      "mass_kg_m": 71.5
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/chs244.5x12.5-hf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:9904007cdfacc6345f476ce242d75ea829ef3fdc7ecc0d7e84d327408db13fc1"
+}

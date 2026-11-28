@@ -1,0 +1,83 @@
+{
+  "uid": "a968616dfe2cedb1",
+  "name": "IPE O 240",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/ipeo240",
+      "family": "i",
+      "params": {
+        "height": 242.0,
+        "width": 122.0,
+        "web": 7.0,
+        "flange": 10.8,
+        "radius": 15.0
+      },
+      "catalogue": {
+        "name": "IPE O 240",
+        "series": [
+          [
+            "en/ipeo200",
+            202.0
+          ],
+          [
+            "en/ipeo220",
+            222.0
+          ],
+          [
+            "en/ipeo240",
+            242.0
+          ],
+          [
+            "en/ipeo270",
+            274.0
+          ],
+          [
+            "en/ipeo300",
+            304.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-ipe",
+    "source": "https://orangebook.arcelormittal.com/node/6",
+    "standard": "EN 10365",
+    "series": "IPE"
+  },
+  "section": {
+    "area_cm2": 43.712,
+    "mass_kg_m": 34.314,
+    "iy_cm4": 4369.28,
+    "iz_cm4": 328.54,
+    "iu_cm4": 4369.28,
+    "iv_cm4": 328.54,
+    "wy_cm3": 361.1,
+    "wz_cm3": 53.86,
+    "centroid_mm": [
+      61.0,
+      121.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 43.7,
+      "mass_kg_m": 34.3
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/ipeo240",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:e2fe868099e282dc805a2f777a04d7bb8df47555ec6cee924f736d240ce10783"
+}

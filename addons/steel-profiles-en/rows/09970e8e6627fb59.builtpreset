@@ -1,0 +1,70 @@
+{
+  "uid": "09970e8e6627fb59",
+  "name": "UB 406 × 140 × 53",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/ub406x140x53",
+      "family": "i",
+      "params": {
+        "height": 406.6,
+        "width": 143.3,
+        "web": 7.9,
+        "flange": 12.9,
+        "radius": 10.2
+      },
+      "catalogue": {
+        "name": "UB 406 × 140 × 53",
+        "series": [
+          [
+            "en/ub406x140x53",
+            406.6
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-ub;r1=bb-ub",
+    "source": "https://orangebook.arcelormittal.com/node/35",
+    "standard": "EN 10365",
+    "series": "UB",
+    "column_sources": {
+      "r1": "https://www.steelforlifebluebook.co.uk/ub/ec3-ukna/section-properties-dimensions-properties"
+    }
+  },
+  "section": {
+    "area_cm2": 67.948,
+    "mass_kg_m": 53.339,
+    "iy_cm4": 18282.91,
+    "iz_cm4": 634.61,
+    "iu_cm4": 18282.91,
+    "iv_cm4": 634.61,
+    "wy_cm3": 899.31,
+    "wz_cm3": 88.57,
+    "centroid_mm": [
+      71.65,
+      203.3
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 68.0,
+      "mass_kg_m": 53.3
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/ub406x140x53",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:1d63737f13f69f624459d664832ee2940467f75218447290b667649d3a4e47af"
+}

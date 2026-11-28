@@ -1,0 +1,67 @@
+{
+  "uid": "53b639a8738e334f",
+  "name": "SHS 260 × 260 × 12.5 (hot-finished)",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/shs260x260x12.5-hf",
+      "family": "rhs",
+      "params": {
+        "height": 260.0,
+        "width": 260.0,
+        "web": 12.5,
+        "radius": 18.75,
+        "inner": 12.5
+      },
+      "catalogue": {
+        "name": "SHS 260 × 260 × 12.5 (hot-finished)",
+        "series": [
+          [
+            "en/shs260x260x12.5-hf",
+            260.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-hfshs",
+    "source": "https://www.steelforlifebluebook.co.uk/hfshs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10210-2",
+    "series": "SHS hot-finished"
+  },
+  "section": {
+    "area_cm2": 122.073,
+    "mass_kg_m": 95.828,
+    "iy_cm4": 12364.8,
+    "iz_cm4": 12364.8,
+    "iu_cm4": 12364.8,
+    "iv_cm4": 12364.8,
+    "wy_cm3": 951.14,
+    "wz_cm3": 951.14,
+    "centroid_mm": [
+      130.0,
+      130.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 122.0,
+      "mass_kg_m": 95.8
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/shs260x260x12.5-hf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:4eaf7241eba8f87b08f4a31de0a95db7c4f1700f3adbd1cf48036dddf20ea7f8"
+}

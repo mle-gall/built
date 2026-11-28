@@ -1,0 +1,68 @@
+{
+  "uid": "9225c8f14e3784a3",
+  "name": "ST12 × 53",
+  "rev": 2,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/st12x53",
+      "family": "tee",
+      "params": {
+        "height": 312.42,
+        "width": 199.898,
+        "web": 15.748,
+        "flange": 27.686,
+        "radius": 15.44,
+        "slope": 16.67
+      },
+      "catalogue": {
+        "name": "ST12 × 53",
+        "series": [
+          [
+            "aisc/st12x53",
+            312.42
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "ST"
+  },
+  "section": {
+    "area_cm2": 100.872,
+    "mass_kg_m": 79.184,
+    "iy_cm4": 9103.53,
+    "iz_cm4": 1619.16,
+    "iu_cm4": 9103.53,
+    "iv_cm4": 1619.16,
+    "wy_cm3": 397.89,
+    "wz_cm3": 162.0,
+    "centroid_mm": [
+      99.95,
+      228.8
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 100.645,
+      "mass_kg_m": 78.873
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/st12x53",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:31e35fefc1a8dce41a4074a6e0bf08dbff1ed2ab3cfb201ed448fcc3b87a662a"
+}

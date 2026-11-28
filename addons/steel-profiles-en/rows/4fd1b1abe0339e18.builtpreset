@@ -1,0 +1,79 @@
+{
+  "uid": "4fd1b1abe0339e18",
+  "name": "RHS 120 × 80 × 3 (cold-formed)",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/rhs120x80x3-cf",
+      "family": "rhs",
+      "params": {
+        "height": 120.0,
+        "width": 80.0,
+        "web": 3.0,
+        "radius": 6.0,
+        "inner": 3.0
+      },
+      "catalogue": {
+        "name": "RHS 120 × 80 × 3 (cold-formed)",
+        "series": [
+          [
+            "en/rhs100x80x3-cf",
+            100.0
+          ],
+          [
+            "en/rhs120x80x3-cf",
+            120.0
+          ],
+          [
+            "en/rhs140x80x3-cf",
+            140.0
+          ],
+          [
+            "en/rhs160x80x3-cf",
+            160.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-cfrhs",
+    "source": "https://www.steelforlifebluebook.co.uk/cfrhs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10219-2",
+    "series": "RHS cold-formed"
+  },
+  "section": {
+    "area_cm2": 11.408,
+    "mass_kg_m": 8.955,
+    "iy_cm4": 230.19,
+    "iz_cm4": 123.43,
+    "iu_cm4": 230.19,
+    "iv_cm4": 123.43,
+    "wy_cm3": 38.37,
+    "wz_cm3": 30.86,
+    "centroid_mm": [
+      40.0,
+      60.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 11.4,
+      "mass_kg_m": 8.96
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/rhs120x80x3-cf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:4633583a2b7232838cd85f2faa5d531aec365e73cd261ec644c1a061dd1d88eb"
+}

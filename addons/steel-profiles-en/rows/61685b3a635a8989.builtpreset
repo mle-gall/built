@@ -1,0 +1,70 @@
+{
+  "uid": "61685b3a635a8989",
+  "name": "UB 203 × 133 × 30",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/ub203x133x30",
+      "family": "i",
+      "params": {
+        "height": 206.8,
+        "width": 133.9,
+        "web": 6.4,
+        "flange": 9.6,
+        "radius": 7.6
+      },
+      "catalogue": {
+        "name": "UB 203 × 133 × 30",
+        "series": [
+          [
+            "en/ub203x133x30",
+            206.8
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-ub;r1=bb-ub",
+    "source": "https://orangebook.arcelormittal.com/node/35",
+    "standard": "EN 10365",
+    "series": "UB",
+    "column_sources": {
+      "r1": "https://www.steelforlifebluebook.co.uk/ub/ec3-ukna/section-properties-dimensions-properties"
+    }
+  },
+  "section": {
+    "area_cm2": 38.211,
+    "mass_kg_m": 29.996,
+    "iy_cm4": 2895.57,
+    "iz_cm4": 384.65,
+    "iu_cm4": 2895.57,
+    "iv_cm4": 384.65,
+    "wy_cm3": 280.04,
+    "wz_cm3": 57.45,
+    "centroid_mm": [
+      66.95,
+      103.4
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 38.2,
+      "mass_kg_m": 30.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/ub203x133x30",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:3d9edfd864053218ac57ef17f793b2efc78a1e1f0aac3b2538f6b75f1fee9837"
+}

@@ -1,0 +1,83 @@
+{
+  "uid": "23d4eabc40b57ce8",
+  "name": "HE 360 AA",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/he360aa",
+      "family": "i",
+      "params": {
+        "height": 339.0,
+        "width": 300.0,
+        "web": 9.0,
+        "flange": 12.0,
+        "radius": 27.0
+      },
+      "catalogue": {
+        "name": "HE 360 AA",
+        "series": [
+          [
+            "en/he320aa",
+            301.0
+          ],
+          [
+            "en/he340aa",
+            320.0
+          ],
+          [
+            "en/he360aa",
+            339.0
+          ],
+          [
+            "en/he400aa",
+            378.0
+          ],
+          [
+            "en/he450aa",
+            425.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-he",
+    "source": "https://orangebook.arcelormittal.com/node/16",
+    "standard": "EN 10365",
+    "series": "HE"
+  },
+  "section": {
+    "area_cm2": 106.608,
+    "mass_kg_m": 83.688,
+    "iy_cm4": 23037.5,
+    "iz_cm4": 5410.46,
+    "iu_cm4": 23037.5,
+    "iv_cm4": 5410.46,
+    "wy_cm3": 1359.14,
+    "wz_cm3": 360.7,
+    "centroid_mm": [
+      150.0,
+      169.5
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 107.0,
+      "mass_kg_m": 83.7
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/he360aa",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:8a2030b430a98992ff5b4cb0396c6f5fd62f61547aee3857e3fcf5dd093f5338"
+}

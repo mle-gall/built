@@ -1,0 +1,67 @@
+{
+  "uid": "7f1030b1ac2d4e97",
+  "name": "SHS 150 × 150 × 6 (cold-formed)",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/shs150x150x6-cf",
+      "family": "rhs",
+      "params": {
+        "height": 150.0,
+        "width": 150.0,
+        "web": 6.0,
+        "radius": 12.0,
+        "inner": 6.0
+      },
+      "catalogue": {
+        "name": "SHS 150 × 150 × 6 (cold-formed)",
+        "series": [
+          [
+            "en/shs150x150x6-cf",
+            150.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-cfshs",
+    "source": "https://www.steelforlifebluebook.co.uk/cfshs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10219-2",
+    "series": "SHS cold-formed"
+  },
+  "section": {
+    "area_cm2": 33.633,
+    "mass_kg_m": 26.402,
+    "iy_cm4": 1145.9,
+    "iz_cm4": 1145.9,
+    "iu_cm4": 1145.9,
+    "iv_cm4": 1145.9,
+    "wy_cm3": 152.79,
+    "wz_cm3": 152.79,
+    "centroid_mm": [
+      75.0,
+      75.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 33.6,
+      "mass_kg_m": 26.4
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/shs150x150x6-cf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:eaf52657129ef648913ed5c6c0a70a84e44419088a67982ebfd8472b4694b2aa"
+}

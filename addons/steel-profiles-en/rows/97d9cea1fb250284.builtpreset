@@ -1,0 +1,67 @@
+{
+  "uid": "97d9cea1fb250284",
+  "name": "RHS 200 × 120 × 6.3 (hot-finished)",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/rhs200x120x6.3-hf",
+      "family": "rhs",
+      "params": {
+        "height": 200.0,
+        "width": 120.0,
+        "web": 6.3,
+        "radius": 9.45,
+        "inner": 6.3
+      },
+      "catalogue": {
+        "name": "RHS 200 × 120 × 6.3 (hot-finished)",
+        "series": [
+          [
+            "en/rhs200x120x6.3-hf",
+            200.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-hfrhs",
+    "source": "https://www.steelforlifebluebook.co.uk/hfrhs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10210-2",
+    "series": "RHS hot-finished"
+  },
+  "section": {
+    "area_cm2": 38.306,
+    "mass_kg_m": 30.071,
+    "iy_cm4": 2065.32,
+    "iz_cm4": 928.96,
+    "iu_cm4": 2065.32,
+    "iv_cm4": 928.96,
+    "wy_cm3": 206.53,
+    "wz_cm3": 154.83,
+    "centroid_mm": [
+      60.0,
+      100.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 38.3,
+      "mass_kg_m": 30.1
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/rhs200x120x6.3-hf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:0958d18b5ed08cbdf7935a9daa2a22bfe52c5b8afcb33706b08a4480a6e65578"
+}

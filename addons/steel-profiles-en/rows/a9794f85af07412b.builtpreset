@@ -1,0 +1,75 @@
+{
+  "uid": "a9794f85af07412b",
+  "name": "RHS 400 × 200 × 16 (hot-finished)",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/rhs400x200x16-hf",
+      "family": "rhs",
+      "params": {
+        "height": 400.0,
+        "width": 200.0,
+        "web": 16.0,
+        "radius": 24.0,
+        "inner": 16.0
+      },
+      "catalogue": {
+        "name": "RHS 400 × 200 × 16 (hot-finished)",
+        "series": [
+          [
+            "en/rhs300x200x16-hf",
+            300.0
+          ],
+          [
+            "en/rhs400x200x16-hf",
+            400.0
+          ],
+          [
+            "en/rhs500x200x16-hf",
+            500.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-hfrhs",
+    "source": "https://www.steelforlifebluebook.co.uk/hfrhs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10210-2",
+    "series": "RHS hot-finished"
+  },
+  "section": {
+    "area_cm2": 179.013,
+    "mass_kg_m": 140.525,
+    "iy_cm4": 35737.52,
+    "iz_cm4": 11824.13,
+    "iu_cm4": 35737.52,
+    "iv_cm4": 11824.13,
+    "wy_cm3": 1786.88,
+    "wz_cm3": 1182.41,
+    "centroid_mm": [
+      100.0,
+      200.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 179.0,
+      "mass_kg_m": 141.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/rhs400x200x16-hf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:237ca85ecfe1de252771ef176e2e317998a1001e80e56e619111d93bb54b96ef"
+}

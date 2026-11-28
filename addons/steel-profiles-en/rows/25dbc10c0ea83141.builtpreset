@@ -1,0 +1,71 @@
+{
+  "uid": "25dbc10c0ea83141",
+  "name": "RHS 300 × 200 × 12 (cold-formed)",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/rhs300x200x12-cf",
+      "family": "rhs",
+      "params": {
+        "height": 300.0,
+        "width": 200.0,
+        "web": 12.0,
+        "radius": 36.0,
+        "inner": 24.0
+      },
+      "catalogue": {
+        "name": "RHS 300 × 200 × 12 (cold-formed)",
+        "series": [
+          [
+            "en/rhs300x200x12-cf",
+            300.0
+          ],
+          [
+            "en/rhs400x200x12-cf",
+            400.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-cfrhs",
+    "source": "https://www.steelforlifebluebook.co.uk/cfrhs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10219-2",
+    "series": "RHS cold-formed"
+  },
+  "section": {
+    "area_cm2": 108.059,
+    "mass_kg_m": 84.826,
+    "iy_cm4": 12787.72,
+    "iz_cm4": 6853.69,
+    "iu_cm4": 12787.72,
+    "iv_cm4": 6853.69,
+    "wy_cm3": 852.51,
+    "wz_cm3": 685.37,
+    "centroid_mm": [
+      100.0,
+      150.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 108.0,
+      "mass_kg_m": 84.8
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/rhs300x200x12-cf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:c65971f863bca6c8d680492328ab26c977422aed5e3552363da6fb51d913cf82"
+}

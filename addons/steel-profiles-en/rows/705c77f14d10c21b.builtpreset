@@ -1,0 +1,67 @@
+{
+  "uid": "705c77f14d10c21b",
+  "name": "UB 610 × 325 × 174",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/ub610x325x174",
+      "family": "i",
+      "params": {
+        "height": 616.0,
+        "width": 325.0,
+        "web": 14.0,
+        "flange": 21.6,
+        "radius": 20.0
+      },
+      "catalogue": {
+        "name": "UB 610 × 325 × 174",
+        "series": [
+          [
+            "en/ub610x325x174",
+            616.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-ub",
+    "source": "https://orangebook.arcelormittal.com/node/35",
+    "standard": "EN 10365",
+    "series": "UB"
+  },
+  "section": {
+    "area_cm2": 224.026,
+    "mass_kg_m": 175.86,
+    "iy_cm4": 148722.68,
+    "iz_cm4": 12376.22,
+    "iu_cm4": 148722.68,
+    "iv_cm4": 12376.22,
+    "wy_cm3": 4828.66,
+    "wz_cm3": 761.61,
+    "centroid_mm": [
+      162.5,
+      308.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 222.0,
+      "mass_kg_m": 174.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/ub610x325x174",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:67b1436d8c40acbf8d146f9d35f11fcff61b6946e90b0788b55ec678006d90c5"
+}

@@ -1,0 +1,67 @@
+{
+  "uid": "06c0d6d2f0f56417",
+  "name": "SHS 50 × 50 × 2.5 (cold-formed)",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/shs50x50x2.5-cf",
+      "family": "rhs",
+      "params": {
+        "height": 50.0,
+        "width": 50.0,
+        "web": 2.5,
+        "radius": 5.0,
+        "inner": 2.5
+      },
+      "catalogue": {
+        "name": "SHS 50 × 50 × 2.5 (cold-formed)",
+        "series": [
+          [
+            "en/shs50x50x2.5-cf",
+            50.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-cfshs",
+    "source": "https://www.steelforlifebluebook.co.uk/cfshs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10219-2",
+    "series": "SHS cold-formed"
+  },
+  "section": {
+    "area_cm2": 4.589,
+    "mass_kg_m": 3.602,
+    "iy_cm4": 16.94,
+    "iz_cm4": 16.94,
+    "iu_cm4": 16.94,
+    "iv_cm4": 16.94,
+    "wy_cm3": 6.78,
+    "wz_cm3": 6.78,
+    "centroid_mm": [
+      25.0,
+      25.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 4.59,
+      "mass_kg_m": 3.6
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/shs50x50x2.5-cf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:99f394a6806581323c31bb7cc299f6c5d4bf36e75c9645362d400fbe674f548c"
+}

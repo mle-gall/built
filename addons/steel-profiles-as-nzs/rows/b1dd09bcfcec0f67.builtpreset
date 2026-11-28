@@ -1,0 +1,67 @@
+{
+  "uid": "b1dd09bcfcec0f67",
+  "name": "250 UC 72.9",
+  "rev": 2,
+  "pack": "Steel profiles · AS/NZS",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "as-nzs/250uc72.9",
+      "family": "i",
+      "params": {
+        "height": 253.8,
+        "width": 254.0,
+        "web": 8.6,
+        "flange": 14.2,
+        "radius": 14.0
+      },
+      "catalogue": {
+        "name": "250 UC 72.9",
+        "series": [
+          [
+            "as-nzs/250uc72.9",
+            253.8
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ib-hrssp9",
+    "source": "https://www.infrabuild.com/wp-content/uploads/sites/8/2022/02/Hot20Rolled20Cat_Edition9_2019.pdf",
+    "standard": "AS/NZS 3679.1",
+    "series": "UC"
+  },
+  "section": {
+    "area_cm2": 93.203,
+    "mass_kg_m": 73.164,
+    "iy_cm4": 11387.93,
+    "iz_cm4": 3880.51,
+    "iu_cm4": 11387.93,
+    "iv_cm4": 3880.51,
+    "wy_cm3": 897.39,
+    "wz_cm3": 305.55,
+    "centroid_mm": [
+      127.0,
+      126.9
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 93.2,
+      "mass_kg_m": 72.9
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "as-nzs/250uc72.9",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:92021e21c5eac79e16bbb4eb0b4ae0e01572c741888c5d38ea923ae1e8bff8d3"
+}

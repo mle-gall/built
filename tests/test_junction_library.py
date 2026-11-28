@@ -262,7 +262,7 @@ def test_a_search_that_hides_the_focused_profile_moves_focus_to_the_first_match(
     act(win, "search", "HE 200")
     sheet = frame(win)
     shown = tiles(sheet)
-    assert [i["label"] for i in shown] == ["HE 200 A"]
+    assert "HE 200 A" in [i["label"] for i in shown] and all("200" in i["label"] for i in shown)
     assert sheet["focus"] == shown[0]["id"] and sheet["force_focus"]
     act(win, "focus", shown[0]["id"])
     assert not frame(win)["force_focus"]

@@ -1,0 +1,71 @@
+{
+  "uid": "9e160cc9c248432e",
+  "name": "RHS 120 × 80 × 4 (hot-finished)",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/rhs120x80x4-hf",
+      "family": "rhs",
+      "params": {
+        "height": 120.0,
+        "width": 80.0,
+        "web": 4.0,
+        "radius": 6.0,
+        "inner": 4.0
+      },
+      "catalogue": {
+        "name": "RHS 120 × 80 × 4 (hot-finished)",
+        "series": [
+          [
+            "en/rhs120x80x4-hf",
+            120.0
+          ],
+          [
+            "en/rhs160x80x4-hf",
+            160.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "bb-hfrhs",
+    "source": "https://www.steelforlifebluebook.co.uk/hfrhs/ec3-ukna/section-properties-dimensions-properties",
+    "standard": "EN 10210-2",
+    "series": "RHS hot-finished"
+  },
+  "section": {
+    "area_cm2": 15.188,
+    "mass_kg_m": 11.923,
+    "iy_cm4": 302.58,
+    "iz_cm4": 160.71,
+    "iu_cm4": 302.58,
+    "iv_cm4": 160.71,
+    "wy_cm3": 50.43,
+    "wz_cm3": 40.18,
+    "centroid_mm": [
+      40.0,
+      60.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 15.2,
+      "mass_kg_m": 11.9
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/rhs120x80x4-hf",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:9481710cc345452f1918a055f974d968a0a6f5c293ad3e3cf3375a6fc531d15e"
+}

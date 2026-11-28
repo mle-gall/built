@@ -1,0 +1,86 @@
+{
+  "uid": "55dc861bc325d9e3",
+  "name": "UPN 260",
+  "rev": 1,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/upn260",
+      "family": "channel",
+      "params": {
+        "height": 260.0,
+        "width": 90.0,
+        "web": 10.0,
+        "flange": 14.0,
+        "radius": 14.0,
+        "toe": 7.0,
+        "slope": 8.0,
+        "flange_at": 45.0
+      },
+      "catalogue": {
+        "name": "UPN 260",
+        "series": [
+          [
+            "en/upn220",
+            220.0
+          ],
+          [
+            "en/upn240",
+            240.0
+          ],
+          [
+            "en/upn260",
+            260.0
+          ],
+          [
+            "en/upn280",
+            280.0
+          ],
+          [
+            "en/upn300",
+            300.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-upn",
+    "source": "https://orangebook.arcelormittal.com/node/265",
+    "standard": "EN 10365",
+    "series": "UPN"
+  },
+  "section": {
+    "area_cm2": 48.283,
+    "mass_kg_m": 37.902,
+    "iy_cm4": 4824.21,
+    "iz_cm4": 317.27,
+    "iu_cm4": 4824.21,
+    "iv_cm4": 317.27,
+    "wy_cm3": 371.09,
+    "wz_cm3": 47.84,
+    "centroid_mm": [
+      23.68,
+      130.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 48.3,
+      "mass_kg_m": 37.9
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/upn260",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:91b454983558312faacc55d596aa86b95d31d215c2e510d62d4505d81c5e65b3"
+}

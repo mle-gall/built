@@ -1,0 +1,67 @@
+{
+  "uid": "86a23323a6c20243",
+  "name": "L 75 × 75 × 10",
+  "rev": 3,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/l75x75x10",
+      "family": "angle",
+      "params": {
+        "height": 75.0,
+        "width": 75.0,
+        "web": 10.0,
+        "radius": 9.0,
+        "toe": 4.5
+      },
+      "catalogue": {
+        "name": "L 75 × 75 × 10",
+        "series": [
+          [
+            "en/l75x75x10",
+            75.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-l-equal",
+    "source": "https://orangebook.arcelormittal.com/node/220",
+    "standard": "EN 10056-1",
+    "series": "L equal"
+  },
+  "section": {
+    "area_cm2": 14.087,
+    "mass_kg_m": 11.058,
+    "iy_cm4": 71.43,
+    "iz_cm4": 71.43,
+    "iu_cm4": 113.09,
+    "iv_cm4": 29.77,
+    "wy_cm3": 13.52,
+    "wz_cm3": 13.52,
+    "centroid_mm": [
+      22.16,
+      22.16
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 14.1,
+      "mass_kg_m": 11.1
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/l75x75x10",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:0555fec76bc95e59b39bc846f526ef0aa343f72b2c68fd6a0d982820d1a12cc4"
+}

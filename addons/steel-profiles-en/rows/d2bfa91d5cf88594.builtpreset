@@ -1,0 +1,83 @@
+{
+  "uid": "d2bfa91d5cf88594",
+  "name": "HE 260 B",
+  "rev": 2,
+  "pack": "Steel profiles · EN",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "en/he260b",
+      "family": "i",
+      "params": {
+        "height": 260.0,
+        "width": 260.0,
+        "web": 10.0,
+        "flange": 17.5,
+        "radius": 24.0
+      },
+      "catalogue": {
+        "name": "HE 260 B",
+        "series": [
+          [
+            "en/he220b",
+            220.0
+          ],
+          [
+            "en/he240b",
+            240.0
+          ],
+          [
+            "en/he260b",
+            260.0
+          ],
+          [
+            "en/he280b",
+            280.0
+          ],
+          [
+            "en/he300b",
+            300.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "ob-he",
+    "source": "https://orangebook.arcelormittal.com/node/16",
+    "standard": "EN 10365",
+    "series": "HE"
+  },
+  "section": {
+    "area_cm2": 118.445,
+    "mass_kg_m": 92.979,
+    "iy_cm4": 14919.48,
+    "iz_cm4": 5134.52,
+    "iu_cm4": 14919.48,
+    "iv_cm4": 5134.52,
+    "wy_cm3": 1147.65,
+    "wz_cm3": 394.96,
+    "centroid_mm": [
+      130.0,
+      130.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 118.0,
+      "mass_kg_m": 93.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "en/he260b",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:340659f3444ae349a067cfee4b60960388a2206c2a94d13825d89652d52e9943"
+}

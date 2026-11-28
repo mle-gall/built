@@ -1,0 +1,71 @@
+{
+  "uid": "0736e37ec558c62f",
+  "name": "W18 × 76",
+  "rev": 2,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/w18x76",
+      "family": "i",
+      "params": {
+        "height": 462.28,
+        "width": 279.4,
+        "web": 10.795,
+        "flange": 17.272,
+        "radius": 10.16
+      },
+      "catalogue": {
+        "name": "W18 × 76",
+        "series": [
+          [
+            "aisc/w18x76",
+            462.28
+          ],
+          [
+            "aisc/w24x76",
+            607.06
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "W"
+  },
+  "section": {
+    "area_cm2": 143.576,
+    "mass_kg_m": 112.707,
+    "iy_cm4": 55243.88,
+    "iz_cm4": 6283.75,
+    "iu_cm4": 55243.88,
+    "iv_cm4": 6283.75,
+    "wy_cm3": 2390.06,
+    "wz_cm3": 449.8,
+    "centroid_mm": [
+      139.7,
+      231.14
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 143.871,
+      "mass_kg_m": 113.1
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/w18x76",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:8be7882693aeb9cdb6690ecb315ce6e5bb153a8a704a2d4a6983cc1540b76da8"
+}

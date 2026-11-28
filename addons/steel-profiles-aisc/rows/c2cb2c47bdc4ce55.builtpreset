@@ -1,0 +1,68 @@
+{
+  "uid": "c2cb2c47bdc4ce55",
+  "name": "S24 × 106",
+  "rev": 2,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/s24x106",
+      "family": "i",
+      "params": {
+        "height": 622.3,
+        "width": 199.898,
+        "web": 15.748,
+        "flange": 27.686,
+        "radius": 15.44,
+        "slope": 16.67
+      },
+      "catalogue": {
+        "name": "S24 × 106",
+        "series": [
+          [
+            "aisc/s24x106",
+            622.3
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A6/A6M (AISC Manual 16th ed.)",
+    "series": "S"
+  },
+  "section": {
+    "area_cm2": 201.343,
+    "mass_kg_m": 158.055,
+    "iy_cm4": 122645.43,
+    "iz_cm4": 3238.24,
+    "iu_cm4": 122645.43,
+    "iv_cm4": 3238.24,
+    "wy_cm3": 3941.68,
+    "wz_cm3": 323.99,
+    "centroid_mm": [
+      99.95,
+      311.15
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 200.645,
+      "mass_kg_m": 157.745
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/s24x106",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:5452633e693e4d767ad33adb6d8242d408b30a1d16b213f05be68917e96952a9"
+}

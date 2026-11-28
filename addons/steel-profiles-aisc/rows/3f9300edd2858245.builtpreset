@@ -1,0 +1,67 @@
+{
+  "uid": "3f9300edd2858245",
+  "name": "HSS20 × 20 × 1/2",
+  "rev": 2,
+  "pack": "Steel profiles · AISC",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "aisc/hss20x20x1_2",
+      "family": "rhs",
+      "params": {
+        "height": 508.0,
+        "width": 508.0,
+        "web": 12.7,
+        "radius": 25.4,
+        "inner": 12.7
+      },
+      "catalogue": {
+        "name": "HSS20 × 20 × 1/2",
+        "series": [
+          [
+            "aisc/hss20x20x1_2",
+            508.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "aisc-v16",
+    "source": "https://www.aisc.org/publications/steel-construction-manual-resources/16th-ed-steel-construction-manual/aisc-shapes-database-v16.0/",
+    "standard": "ASTM A500/A1085 (AISC Manual 16th ed.)",
+    "series": "HSS square"
+  },
+  "section": {
+    "area_cm2": 247.458,
+    "mass_kg_m": 194.255,
+    "iy_cm4": 100315.21,
+    "iz_cm4": 100315.21,
+    "iu_cm4": 100315.21,
+    "iv_cm4": 100315.21,
+    "wy_cm3": 3949.42,
+    "wz_cm3": 3949.42,
+    "centroid_mm": [
+      254.0,
+      254.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 230.967,
+      "mass_kg_m": 194.235
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "aisc/hss20x20x1_2",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:8a288179565788115e528346641f96653205b96b5b280d3d9ab1b2d54609b82e"
+}
