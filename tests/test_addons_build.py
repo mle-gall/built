@@ -18,7 +18,7 @@ PACKS = sorted(f.name for f in build_addons.folders())
 def test_every_trade_pack_is_a_source_folder_with_its_own_id():
     assert PACKS == ["mep-penetrations", "purlin-connections-en", "steel-connections-aisc",
                      "steel-connections-en", "steel-profiles-aisc", "steel-profiles-as-nzs", "steel-profiles-br",
-                     "steel-profiles-en", "timber-joints"]
+                     "steel-profiles-en", "steel-profiles-is", "timber-joints"]
     manifests = [json.loads((build_addons.ADDONS / p / "pack.json").read_text()) for p in PACKS]
     assert len({m["pack"]["id"] for m in manifests}) == len(PACKS)
     for m in manifests:

@@ -1,0 +1,68 @@
+{
+  "uid": "f4d8666796f1f983",
+  "name": "ISMCP 125 × 13.7",
+  "rev": 1,
+  "pack": "Steel profiles · IS",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "is/ismcp125x13.7",
+      "family": "channel",
+      "params": {
+        "height": 125.0,
+        "width": 66.0,
+        "web": 6.0,
+        "flange": 8.1,
+        "radius": 9.5,
+        "toe": 5.0
+      },
+      "catalogue": {
+        "name": "ISMCP 125 × 13.7",
+        "series": [
+          [
+            "is/ismcp125x13.7",
+            125.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "is808-1989",
+    "source": "https://law.resource.org/pub/in/bis/S03/is.808.1989.pdf",
+    "standard": "IS 808",
+    "series": "ISMCP"
+  },
+  "section": {
+    "area_cm2": 17.5,
+    "mass_kg_m": 13.738,
+    "iy_cm4": 437.55,
+    "iz_cm4": 74.14,
+    "iu_cm4": 437.55,
+    "iv_cm4": 74.14,
+    "wy_cm3": 70.01,
+    "wz_cm3": 16.5,
+    "centroid_mm": [
+      21.06,
+      62.5
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 17.5,
+      "mass_kg_m": 13.7
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "is/ismcp125x13.7",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:e1226d5bd14d0583c27c25b553bc368ecd9e2a1927dfefec5b697170a02d204e"
+}

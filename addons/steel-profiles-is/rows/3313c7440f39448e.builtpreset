@@ -1,0 +1,81 @@
+{
+  "uid": "3313c7440f39448e",
+  "name": "ISSC 120",
+  "rev": 1,
+  "pack": "Steel profiles · IS",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "is/issc120",
+      "family": "i",
+      "params": {
+        "height": 120.0,
+        "width": 120.0,
+        "web": 6.5,
+        "flange": 11.0,
+        "radius": 12.0,
+        "toe": 6.0,
+        "slope": 14.05
+      },
+      "catalogue": {
+        "name": "ISSC 120",
+        "series": [
+          [
+            "is/issc100",
+            100.0
+          ],
+          [
+            "is/issc120",
+            120.0
+          ],
+          [
+            "is/issc140",
+            140.0
+          ],
+          [
+            "is/issc150",
+            152.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "is808-1989",
+    "source": "https://law.resource.org/pub/in/bis/S03/is.808.1989.pdf",
+    "standard": "IS 808",
+    "series": "ISSC"
+  },
+  "section": {
+    "area_cm2": 33.434,
+    "mass_kg_m": 26.246,
+    "iy_cm4": 841.89,
+    "iz_cm4": 255.51,
+    "iu_cm4": 841.89,
+    "iv_cm4": 255.51,
+    "wy_cm3": 140.32,
+    "wz_cm3": 42.59,
+    "centroid_mm": [
+      60.0,
+      60.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 33.4,
+      "mass_kg_m": 26.2
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "is/issc120",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:97dcd0c6627efaae210acf756966d081da321a14ff6dc543d471ee3d1be3273a"
+}

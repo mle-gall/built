@@ -1,0 +1,85 @@
+{
+  "uid": "b67c865740f88a3a",
+  "name": "ISHB 350",
+  "rev": 1,
+  "pack": "Steel profiles · IS",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "is/ishb350",
+      "family": "i",
+      "params": {
+        "height": 350.0,
+        "width": 250.0,
+        "web": 8.3,
+        "flange": 11.6,
+        "radius": 12.0,
+        "toe": 6.0,
+        "slope": 6.99
+      },
+      "catalogue": {
+        "name": "ISHB 350",
+        "series": [
+          [
+            "is/ishb250",
+            250.0
+          ],
+          [
+            "is/ishb300",
+            300.0
+          ],
+          [
+            "is/ishb350",
+            350.0
+          ],
+          [
+            "is/ishb400",
+            400.0
+          ],
+          [
+            "is/ishb450",
+            450.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "is808-1989",
+    "source": "https://law.resource.org/pub/in/bis/S03/is.808.1989.pdf",
+    "standard": "IS 808",
+    "series": "ISHB"
+  },
+  "section": {
+    "area_cm2": 85.911,
+    "mass_kg_m": 67.44,
+    "iy_cm4": 19161.61,
+    "iz_cm4": 2451.62,
+    "iu_cm4": 19161.61,
+    "iv_cm4": 2451.62,
+    "wy_cm3": 1094.95,
+    "wz_cm3": 196.13,
+    "centroid_mm": [
+      125.0,
+      175.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 85.9,
+      "mass_kg_m": 67.4
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "is/ishb350",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:88731ef5a64db8ba1a27854c02a9c17e4d68b216468f5dba07722dd04a3aa51a"
+}

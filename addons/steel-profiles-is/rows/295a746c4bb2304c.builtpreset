@@ -1,0 +1,85 @@
+{
+  "uid": "295a746c4bb2304c",
+  "name": "ISMB 150",
+  "rev": 1,
+  "pack": "Steel profiles · IS",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "is/ismb150",
+      "family": "i",
+      "params": {
+        "height": 150.0,
+        "width": 75.0,
+        "web": 5.0,
+        "flange": 8.0,
+        "radius": 9.0,
+        "toe": 4.5,
+        "slope": 14.05
+      },
+      "catalogue": {
+        "name": "ISMB 150",
+        "series": [
+          [
+            "is/ismb100",
+            100.0
+          ],
+          [
+            "is/ismb125",
+            125.0
+          ],
+          [
+            "is/ismb150",
+            150.0
+          ],
+          [
+            "is/ismb175",
+            175.0
+          ],
+          [
+            "is/ismb200",
+            200.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "is808-1989",
+    "source": "https://law.resource.org/pub/in/bis/S03/is.808.1989.pdf",
+    "standard": "IS 808",
+    "series": "ISMB"
+  },
+  "section": {
+    "area_cm2": 19.074,
+    "mass_kg_m": 14.973,
+    "iy_cm4": 717.61,
+    "iz_cm4": 46.78,
+    "iu_cm4": 717.61,
+    "iv_cm4": 46.78,
+    "wy_cm3": 95.68,
+    "wz_cm3": 12.48,
+    "centroid_mm": [
+      37.5,
+      75.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 19.1,
+      "mass_kg_m": 15.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "is/ismb150",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:206b1e92116d02a3934c1ec95f4f8b968a03f93dacb2d650bdf66fef3fcd784a"
+}

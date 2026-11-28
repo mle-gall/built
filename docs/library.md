@@ -168,7 +168,7 @@ any overrides, and includes the recovered section on the next save.
 
 | Resource | Where it lives and why |
 |---|---|
-| Steel profiles · EN, · AISC, · AS/NZS, · BR | Provisional add-ons generated from sourced dimension tables (`source/` in each pack, see addons/steel-profiles-PROVENANCE.md): every size with its family, dimensions, computed section properties and source, plus the steel sweep presets. Each size carries its family and dimensions into the model. |
+| Steel profiles · EN, · AISC, · AS/NZS, · BR, · IS | Provisional add-ons generated from sourced dimension tables (`source/` in each pack, see addons/steel-profiles-PROVENANCE.md): every size with its family, dimensions, computed section properties and source, plus the steel sweep presets. Each size carries its family and dimensions into the model. |
 | Steel connections · EN and · AISC | Add-ons containing plates, fastener and weld details and steel-specific cuts. The EN pack includes the original M16 group and an S355 plate. The connection packs carry the plates their details use so plate schedules retain the material and mass. |
 | Purlin connections · EN | Add-on containing the cleat and the bolt detail it uses. |
 | MEP penetrations | Add-on containing Duct, Pipe and their wall and slab penetrations. |

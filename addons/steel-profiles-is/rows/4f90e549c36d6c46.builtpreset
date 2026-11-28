@@ -1,0 +1,85 @@
+{
+  "uid": "4f90e549c36d6c46",
+  "name": "ISLC 125",
+  "rev": 1,
+  "pack": "Steel profiles · IS",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "is/islc125",
+      "family": "channel",
+      "params": {
+        "height": 125.0,
+        "width": 65.0,
+        "web": 4.4,
+        "flange": 6.6,
+        "radius": 7.0,
+        "toe": 2.4,
+        "slope": 2.62
+      },
+      "catalogue": {
+        "name": "ISLC 125",
+        "series": [
+          [
+            "is/islc75",
+            75.0
+          ],
+          [
+            "is/islc100",
+            100.0
+          ],
+          [
+            "is/islc125",
+            125.0
+          ],
+          [
+            "is/islc150",
+            150.0
+          ],
+          [
+            "is/islc175",
+            175.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "is808-1989",
+    "source": "https://law.resource.org/pub/in/bis/S03/is.808.1989.pdf",
+    "standard": "IS 808",
+    "series": "ISLC"
+  },
+  "section": {
+    "area_cm2": 13.674,
+    "mass_kg_m": 10.734,
+    "iy_cm4": 357.04,
+    "iz_cm4": 56.33,
+    "iu_cm4": 357.04,
+    "iv_cm4": 56.33,
+    "wy_cm3": 57.13,
+    "wz_cm3": 12.64,
+    "centroid_mm": [
+      20.45,
+      62.5
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 13.7,
+      "mass_kg_m": 10.7
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "is/islc125",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:211a18f814d6d76128dc7f26006f7ac47a45c656ea0623331fa4cda645c1bb80"
+}

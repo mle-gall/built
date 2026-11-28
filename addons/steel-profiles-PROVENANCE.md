@@ -136,3 +136,30 @@ Provisional: transcribed from public sources until the purchased standards are c
 Cross-check sources: `en10365-iteh` SIST EN 10365:2017 free preview (iTeh): Table 1 IPE; `bauforumstahl` bauforumstahl e.V. digitale Stahlbautabellen: Stahlprofile; `bb-ub` Blue Book UB (BS 4-1); `bb-uc` Blue Book UC (BS 4-1); `bb-ubp` Blue Book UBP; `bb-pfc` Blue Book PFC; `bb-l-equal` Blue Book equal angles (BS EN 10056-1); `bb-l-unequal` Blue Book unequal angles (BS EN 10056-1).
 
 Not covered yet: EN 10055 equal flange tees: no free source with r1, r2, r3 found yet; EN 10365 J, U and CH sections: not in the sources used.
+
+## Steel profiles · IS (`addons/steel-profiles-is`)
+
+Provisional: read from the public copy of IS 808:1989 until checked against the purchased IS 808:2021.
+
+200 sizes; 78 left out (listed with the reason in `source/report.md`).
+
+| Family | Shape | Standard | Sizes | Sources | Provisional values | Replaced by |
+|---|---|---|---|---|---|---|
+| ISMB (`ismb.csv`) | i | IS 808 | 14 | is808-1989 | flange slope and where tf is measured (outstand middle); root and toe radii; all dimensions until checked | IS 808:2021 tables |
+| ISJB (`isjb.csv`) | i | IS 808 | 4 | is808-1989 | flange slope and where tf is measured (outstand middle); root and toe radii; all dimensions until checked | IS 808:2021 tables |
+| ISLB (`islb.csv`) | i | IS 808 | 14 | is808-1989 | flange slope and where tf is measured (outstand middle); root and toe radii; all dimensions until checked | IS 808:2021 tables |
+| ISWB (`iswb.csv`) | i | IS 808 | 12 | is808-1989 | flange slope and where tf is measured (outstand middle); root and toe radii; all dimensions until checked | IS 808:2021 tables |
+| ISSC (`issc.csv`) | i | IS 808 | 8 | is808-1989 | flange slope and where tf is measured (outstand middle); root and toe radii; all dimensions until checked | IS 808:2021 tables |
+| ISHB (`ishb.csv`) | i | IS 808 | 17 | is808-1989 | flange slope and where tf is measured (outstand middle); root and toe radii; all dimensions until checked | IS 808:2021 tables |
+| ISMC (`ismc.csv`) | channel | IS 808 | 19 | is808-1989 | flange slope and where tf is measured (outstand middle); root and toe radii; all dimensions until checked | IS 808:2021 tables |
+| ISJC (`isjc.csv`) | channel | IS 808 | 5 | is808-1989 | flange slope and where tf is measured (outstand middle); root and toe radii; all dimensions until checked | IS 808:2021 tables |
+| ISLC (`islc.csv`) | channel | IS 808 | 15 | is808-1989 | flange slope and where tf is measured (outstand middle); root and toe radii; all dimensions until checked | IS 808:2021 tables |
+| ISMCP (`ismcp.csv`) | channel | IS 808 | 20 | is808-1989 | root and toe radii; all dimensions until checked | IS 808:2021 tables |
+| ISA equal (`isa-equal.csv`) | angle | IS 808 | 38 | is808-1989 | root and toe radii; all dimensions until checked | IS 808:2021 tables |
+| ISA unequal (`isa-unequal.csv`) | angle | IS 808 | 34 | is808-1989 | root and toe radii; all dimensions until checked | IS 808:2021 tables |
+
+| Source | Title | Edition | Accessed | Columns used | Notes |
+|---|---|---|---|---|---|
+| `is808-1989` | [IS 808:1989 Dimensions for hot rolled steel beam, column, channel and angle sections (Third Revision), with Amendment No. 1 (1992); public copy by Public.Resource.Org](https://law.resource.org/pub/in/bis/S03/is.808.1989.pdf) | 1989 (reaffirmed; superseded by IS 808:2021) | 2026-11-28 | designation, M, a, D, B (heavier HB sections: B + the web thickness difference, per the Table 3.1 footnote), t, T (measured at (B - t)/4 from the toe for beams, (B - t)/2 for channels), flange slope alpha (98 = 8 degrees, 96 = 6, 94 = 4, 91.5 = 1.5), R1, R2 (angles marked 'reasonably square' drawn with R2 = 0); Tables 2.1, 2.2, 3.1, 4.1, 4.2, 5.1, 6.1 read from the page images (the text layer is unreliable OCR) |  the standard itself (public-safety disclosure copy) |
+
+Not covered yet: IS 808 supplementary angle lists (Tables 5.2, 6.2): not transcribed yet; IS 4923 and IS 1161 hollow sections: public copies found (law.resource.org) but not transcribed yet; a second, independent source for cross-checking (no free Indian mill table with radii found).

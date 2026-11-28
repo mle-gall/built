@@ -1,0 +1,128 @@
+{
+  "title": "Steel profiles · IS",
+  "prefix": "is",
+  "status": "provisional",
+  "note": "Provisional: read from the public copy of IS 808:1989 until checked against the purchased IS 808:2021.",
+  "families": [
+    {
+      "file": "ismb.csv",
+      "shape": "i",
+      "series": "ISMB",
+      "standard": "IS 808",
+      "replaced_by": "IS 808:2021 tables",
+      "sloped": true
+    },
+    {
+      "file": "isjb.csv",
+      "shape": "i",
+      "series": "ISJB",
+      "standard": "IS 808",
+      "replaced_by": "IS 808:2021 tables",
+      "sloped": true
+    },
+    {
+      "file": "islb.csv",
+      "shape": "i",
+      "series": "ISLB",
+      "standard": "IS 808",
+      "replaced_by": "IS 808:2021 tables",
+      "sloped": true,
+      "left_out_note": "at the 8 degree slope the flange tip is thinner than the toe radius needs; the family cannot draw that toe yet"
+    },
+    {
+      "file": "iswb.csv",
+      "shape": "i",
+      "series": "ISWB",
+      "standard": "IS 808",
+      "replaced_by": "IS 808:2021 tables",
+      "sloped": true,
+      "left_out_note": "at the 8 degree slope the flange tip is thinner than the toe radius needs; the family cannot draw that toe yet"
+    },
+    {
+      "file": "issc.csv",
+      "shape": "i",
+      "series": "ISSC",
+      "standard": "IS 808",
+      "replaced_by": "IS 808:2021 tables",
+      "sloped": true,
+      "left_out_note": "at the 8 degree slope the flange tip is thinner than the toe radius needs; the family cannot draw that toe yet"
+    },
+    {
+      "file": "ishb.csv",
+      "shape": "i",
+      "series": "ISHB",
+      "standard": "IS 808",
+      "replaced_by": "IS 808:2021 tables",
+      "sloped": true
+    },
+    {
+      "file": "ismc.csv",
+      "shape": "channel",
+      "series": "ISMC",
+      "standard": "IS 808",
+      "replaced_by": "IS 808:2021 tables",
+      "sloped": true
+    },
+    {
+      "file": "isjc.csv",
+      "shape": "channel",
+      "series": "ISJC",
+      "standard": "IS 808",
+      "replaced_by": "IS 808:2021 tables",
+      "sloped": true
+    },
+    {
+      "file": "islc.csv",
+      "shape": "channel",
+      "series": "ISLC",
+      "standard": "IS 808",
+      "replaced_by": "IS 808:2021 tables",
+      "sloped": true
+    },
+    {
+      "file": "ismcp.csv",
+      "shape": "channel",
+      "series": "ISMCP",
+      "standard": "IS 808",
+      "replaced_by": "IS 808:2021 tables"
+    },
+    {
+      "file": "isa-equal.csv",
+      "shape": "angle",
+      "series": "ISA equal",
+      "standard": "IS 808",
+      "replaced_by": "IS 808:2021 tables",
+      "left_out_note": "toes marked 'reasonably square' (no R2) are drawn square; the standard's areas imply a toe radius, so these sizes wait for the current edition"
+    },
+    {
+      "file": "isa-unequal.csv",
+      "shape": "angle",
+      "series": "ISA unequal",
+      "standard": "IS 808",
+      "replaced_by": "IS 808:2021 tables",
+      "left_out_note": "toes marked 'reasonably square' (no R2) are drawn square; the standard's areas imply a toe radius, so these sizes wait for the current edition"
+    }
+  ],
+  "keys": {},
+  "sources": {
+    "is808-1989": {
+      "url": "https://law.resource.org/pub/in/bis/S03/is.808.1989.pdf",
+      "title": "IS 808:1989 Dimensions for hot rolled steel beam, column, channel and angle sections (Third Revision), with Amendment No. 1 (1992); public copy by Public.Resource.Org",
+      "edition": "1989 (reaffirmed; superseded by IS 808:2021)",
+      "accessed": "2026-11-28",
+      "kind": "the standard itself (public-safety disclosure copy)",
+      "columns": "designation, M, a, D, B (heavier HB sections: B + the web thickness difference, per the Table 3.1 footnote), t, T (measured at (B - t)/4 from the toe for beams, (B - t)/2 for channels), flange slope alpha (98 = 8 degrees, 96 = 6, 94 = 4, 91.5 = 1.5), R1, R2 (angles marked 'reasonably square' drawn with R2 = 0); Tables 2.1, 2.2, 3.1, 4.1, 4.2, 5.1, 6.1 read from the page images (the text layer is unreliable OCR)",
+      "sha256": "sha256:8fb21c5ad57d119e3854edda9f659c9237f9b9538cd6cbb93054794709bf7405"
+    }
+  },
+  "checks": {},
+  "notes": {
+    "islb.csv:ISLB 500": "the standard prints T = 4.1 mm (likely 14.1); kept out until the current edition is checked",
+    "ismc.csv:ISMC 175 x 22.7": "the standard's mass (22.7 kg/m) and area (27.6 cm², 21.7 kg/m) disagree"
+  },
+  "missing": [
+    "IS 808 supplementary angle lists (Tables 5.2, 6.2): not transcribed yet",
+    "IS 4923 and IS 1161 hollow sections: public copies found (law.resource.org) but not transcribed yet",
+    "a second, independent source for cross-checking (no free Indian mill table with radii found)"
+  ]
+}

@@ -1,0 +1,81 @@
+{
+  "uid": "88bc7e05d769a9a0",
+  "name": "ISMB 550",
+  "rev": 1,
+  "pack": "Steel profiles · IS",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "is/ismb550",
+      "family": "i",
+      "params": {
+        "height": 550.0,
+        "width": 190.0,
+        "web": 11.2,
+        "flange": 19.3,
+        "radius": 18.0,
+        "toe": 9.0,
+        "slope": 14.05
+      },
+      "catalogue": {
+        "name": "ISMB 550",
+        "series": [
+          [
+            "is/ismb450",
+            450.0
+          ],
+          [
+            "is/ismb500",
+            500.0
+          ],
+          [
+            "is/ismb550",
+            550.0
+          ],
+          [
+            "is/ismb600",
+            600.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "is808-1989",
+    "source": "https://law.resource.org/pub/in/bis/S03/is.808.1989.pdf",
+    "standard": "IS 808",
+    "series": "ISMB"
+  },
+  "section": {
+    "area_cm2": 132.111,
+    "mass_kg_m": 103.707,
+    "iy_cm4": 64889.47,
+    "iz_cm4": 1834.06,
+    "iu_cm4": 64889.47,
+    "iv_cm4": 1834.06,
+    "wy_cm3": 2359.62,
+    "wz_cm3": 193.06,
+    "centroid_mm": [
+      95.0,
+      275.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 132.0,
+      "mass_kg_m": 104.0
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "is/ismb550",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:138dcaa5b5145c03a0e0ae16f4af4a222256a99b1180b76439b0de66c3be2956"
+}

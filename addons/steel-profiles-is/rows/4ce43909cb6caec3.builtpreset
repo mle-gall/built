@@ -1,0 +1,84 @@
+{
+  "uid": "4ce43909cb6caec3",
+  "name": "ISMCP 300",
+  "rev": 1,
+  "pack": "Steel profiles · IS",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "is/ismcp300",
+      "family": "channel",
+      "params": {
+        "height": 300.0,
+        "width": 90.0,
+        "web": 7.8,
+        "flange": 13.6,
+        "radius": 13.0,
+        "toe": 7.0
+      },
+      "catalogue": {
+        "name": "ISMCP 300",
+        "series": [
+          [
+            "is/ismcp225",
+            225.0
+          ],
+          [
+            "is/ismcp250",
+            250.0
+          ],
+          [
+            "is/ismcp300",
+            300.0
+          ],
+          [
+            "is/ismcp350",
+            350.0
+          ],
+          [
+            "is/ismcp400",
+            400.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "is808-1989",
+    "source": "https://law.resource.org/pub/in/bis/S03/is.808.1989.pdf",
+    "standard": "IS 808",
+    "series": "ISMCP"
+  },
+  "section": {
+    "area_cm2": 46.273,
+    "mass_kg_m": 36.325,
+    "iy_cm4": 6432.6,
+    "iz_cm4": 351.97,
+    "iu_cm4": 6432.6,
+    "iv_cm4": 351.97,
+    "wy_cm3": 428.84,
+    "wz_cm3": 54.46,
+    "centroid_mm": [
+      25.37,
+      150.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 46.5,
+      "mass_kg_m": 36.3
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "is/ismcp300",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:786537313e5371c092318412025fed6d1ab6d88eee65ef7fa1bc6f16d3123270"
+}

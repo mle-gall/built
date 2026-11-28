@@ -1,0 +1,68 @@
+{
+  "uid": "cf3de0bf835648fa",
+  "name": "ISMCP 250 × 38.1",
+  "rev": 1,
+  "pack": "Steel profiles · IS",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "is/ismcp250x38.1",
+      "family": "channel",
+      "params": {
+        "height": 250.0,
+        "width": 84.0,
+        "web": 11.0,
+        "flange": 14.1,
+        "radius": 12.0,
+        "toe": 7.0
+      },
+      "catalogue": {
+        "name": "ISMCP 250 × 38.1",
+        "series": [
+          [
+            "is/ismcp250x38.1",
+            250.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "is808-1989",
+    "source": "https://law.resource.org/pub/in/bis/S03/is.808.1989.pdf",
+    "standard": "IS 808",
+    "series": "ISMCP"
+  },
+  "section": {
+    "area_cm2": 48.494,
+    "mass_kg_m": 38.068,
+    "iy_cm4": 4345.48,
+    "iz_cm4": 295.11,
+    "iu_cm4": 4345.48,
+    "iv_cm4": 295.11,
+    "wy_cm3": 347.64,
+    "wz_cm3": 48.46,
+    "centroid_mm": [
+      23.1,
+      125.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 48.5,
+      "mass_kg_m": 38.1
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "is/ismcp250x38.1",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:e49488ea92083a9a11e49541d8848f2cb2d1d230edc1fe77f0aa975c10913c76"
+}

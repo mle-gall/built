@@ -1,0 +1,77 @@
+{
+  "uid": "170e8da3c1b27d9b",
+  "name": "ISMC 400",
+  "rev": 1,
+  "pack": "Steel profiles · IS",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "is/ismc400",
+      "family": "channel",
+      "params": {
+        "height": 400.0,
+        "width": 100.0,
+        "web": 8.8,
+        "flange": 15.3,
+        "radius": 15.0,
+        "toe": 4.8,
+        "slope": 10.51
+      },
+      "catalogue": {
+        "name": "ISMC 400",
+        "series": [
+          [
+            "is/ismc300",
+            300.0
+          ],
+          [
+            "is/ismc350",
+            350.0
+          ],
+          [
+            "is/ismc400",
+            400.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "is808-1989",
+    "source": "https://law.resource.org/pub/in/bis/S03/is.808.1989.pdf",
+    "standard": "IS 808",
+    "series": "ISMC"
+  },
+  "section": {
+    "area_cm2": 63.783,
+    "mass_kg_m": 50.07,
+    "iy_cm4": 15206.98,
+    "iz_cm4": 504.86,
+    "iu_cm4": 15206.98,
+    "iv_cm4": 504.86,
+    "wy_cm3": 760.35,
+    "wz_cm3": 66.57,
+    "centroid_mm": [
+      24.17,
+      200.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 63.8,
+      "mass_kg_m": 50.1
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "is/ismc400",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:98cd86882c01ac47ee9f68079621263f03cf3835782b7fbc9e04f1a714dbde71"
+}

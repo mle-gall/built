@@ -1,0 +1,85 @@
+{
+  "uid": "bb39a12d01cb771c",
+  "name": "ISMC 175",
+  "rev": 1,
+  "pack": "Steel profiles · IS",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "is/ismc175",
+      "family": "channel",
+      "params": {
+        "height": 175.0,
+        "width": 75.0,
+        "web": 6.0,
+        "flange": 10.2,
+        "radius": 10.5,
+        "toe": 3.2,
+        "slope": 10.51
+      },
+      "catalogue": {
+        "name": "ISMC 175",
+        "series": [
+          [
+            "is/ismc125",
+            125.0
+          ],
+          [
+            "is/ismc150",
+            150.0
+          ],
+          [
+            "is/ismc175",
+            175.0
+          ],
+          [
+            "is/ismc200",
+            200.0
+          ],
+          [
+            "is/ismc225",
+            225.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "is808-1989",
+    "source": "https://law.resource.org/pub/in/bis/S03/is.808.1989.pdf",
+    "standard": "IS 808",
+    "series": "ISMC"
+  },
+  "section": {
+    "area_cm2": 24.911,
+    "mass_kg_m": 19.555,
+    "iy_cm4": 1237.01,
+    "iz_cm4": 120.73,
+    "iu_cm4": 1237.01,
+    "iv_cm4": 120.73,
+    "wy_cm3": 141.37,
+    "wz_cm3": 22.72,
+    "centroid_mm": [
+      21.86,
+      87.5
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 24.9,
+      "mass_kg_m": 19.6
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "is/ismc175",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:8b1dc80c5dd14defffd013d54c3bffdb79ea48524c3b4fb962220943d2b3abf9"
+}

@@ -1,0 +1,85 @@
+{
+  "uid": "ca76f8694a3a633a",
+  "name": "ISWB 225",
+  "rev": 1,
+  "pack": "Steel profiles · IS",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "is/iswb225",
+      "family": "i",
+      "params": {
+        "height": 225.0,
+        "width": 150.0,
+        "web": 6.4,
+        "flange": 9.9,
+        "radius": 9.0,
+        "toe": 4.5,
+        "slope": 10.51
+      },
+      "catalogue": {
+        "name": "ISWB 225",
+        "series": [
+          [
+            "is/iswb175",
+            175.0
+          ],
+          [
+            "is/iswb200",
+            200.0
+          ],
+          [
+            "is/iswb225",
+            225.0
+          ],
+          [
+            "is/iswb350",
+            350.0
+          ],
+          [
+            "is/iswb400",
+            400.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "is808-1989",
+    "source": "https://law.resource.org/pub/in/bis/S03/is.808.1989.pdf",
+    "standard": "IS 808",
+    "series": "ISWB"
+  },
+  "section": {
+    "area_cm2": 43.24,
+    "mass_kg_m": 33.943,
+    "iy_cm4": 3920.37,
+    "iz_cm4": 448.62,
+    "iu_cm4": 3920.37,
+    "iv_cm4": 448.62,
+    "wy_cm3": 348.48,
+    "wz_cm3": 59.82,
+    "centroid_mm": [
+      75.0,
+      112.5
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 43.2,
+      "mass_kg_m": 33.9
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "is/iswb225",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:57a8f09f9f177839130d26df6c7c6d89cebb0b486fbba1eda71d403223109835"
+}

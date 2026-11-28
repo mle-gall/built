@@ -1,0 +1,77 @@
+{
+  "uid": "65be52a56ad47b2a",
+  "name": "ISJC 100",
+  "rev": 1,
+  "pack": "Steel profiles · IS",
+  "primitive": "sweep",
+  "record": {},
+  "locks": {},
+  "values": {
+    "profile": {
+      "library": "is/isjc100",
+      "family": "channel",
+      "params": {
+        "height": 100.0,
+        "width": 45.0,
+        "web": 3.0,
+        "flange": 5.1,
+        "radius": 6.0,
+        "toe": 2.0,
+        "slope": 2.62
+      },
+      "catalogue": {
+        "name": "ISJC 100",
+        "series": [
+          [
+            "is/isjc100",
+            100.0
+          ],
+          [
+            "is/isjc125",
+            125.0
+          ],
+          [
+            "is/isjc150",
+            150.0
+          ]
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "created_with": "Built",
+    "status": "provisional",
+    "source_id": "is808-1989",
+    "source": "https://law.resource.org/pub/in/bis/S03/is.808.1989.pdf",
+    "standard": "IS 808",
+    "series": "ISJC"
+  },
+  "section": {
+    "area_cm2": 7.413,
+    "mass_kg_m": 5.819,
+    "iy_cm4": 123.87,
+    "iz_cm4": 14.63,
+    "iu_cm4": 123.87,
+    "iv_cm4": 14.63,
+    "wy_cm3": 24.77,
+    "wz_cm3": 4.72,
+    "centroid_mm": [
+      14.03,
+      50.0
+    ],
+    "density": 7850.0,
+    "listed": {
+      "area_cm2": 7.41,
+      "mass_kg_m": 5.8
+    }
+  },
+  "profile_size": true,
+  "depends": [
+    {
+      "kind": "profile",
+      "key": "is/isjc100",
+      "bundled": null
+    }
+  ],
+  "hash": "sha256:74aa2b084aa84c67141206627da73a2eeb2ab1e7e518a731b47feaf6be7638ac"
+}
