@@ -143,7 +143,19 @@ pub(super) fn place(
                 *dst = expr::field(v, params, dims).map_err(err)? / 1000.;
             }
         }
-        let mut m = DMat4::from_cols_array(frame) * DMat4::from_translation(offset.into());
+        // A part's own Z (a plate's thickness, a fastener's shank) follows
+        // the frame's Z unless `axis` names another frame axis.
+        let turn = match at["axis"].as_str().unwrap_or("z") {
+            "z" => DMat4::IDENTITY,
+            "-z" => DMat4::from_rotation_x(std::f64::consts::PI),
+            "x" => DMat4::from_rotation_y(std::f64::consts::FRAC_PI_2),
+            "-x" => DMat4::from_rotation_y(-std::f64::consts::FRAC_PI_2),
+            "y" => DMat4::from_rotation_x(-std::f64::consts::FRAC_PI_2),
+            "-y" => DMat4::from_rotation_x(std::f64::consts::FRAC_PI_2),
+            _ => return Err(err("A part axis is x, y or z, optionally negated")),
+        };
+        let mut m =
+            DMat4::from_cols_array(frame) * DMat4::from_translation(offset.into()) * turn;
         let g = item["placement"]
             .as_str()
             .and_then(|s| group(scene.py(), t, s))

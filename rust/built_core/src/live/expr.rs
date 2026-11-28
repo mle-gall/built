@@ -175,6 +175,25 @@ impl Expr {
     }
 }
 pub(super) type Values = BTreeMap<String, f64>;
+/// Every name an expression reads: parameters and `role.dim` dimensions.
+pub(super) fn names(v: &Value) -> Result<BTreeSet<String>, String> {
+    fn walk(e: &Expr, out: &mut BTreeSet<String>) {
+        match e {
+            Expr::Name(n) => {
+                out.insert(n.clone());
+            }
+            Expr::Op(_, a, b) => {
+                walk(a, out);
+                walk(b, out);
+            }
+            Expr::Call(_, args) | Expr::List(args) => args.iter().for_each(|a| walk(a, out)),
+            Expr::Number(_) => {}
+        }
+    }
+    let mut out = BTreeSet::new();
+    walk(&parse(v)?, &mut out);
+    Ok(out)
+}
 pub(super) fn field(v: &Value, params: &Values, dims: &Values) -> Result<f64, String> {
     parse(v)?.eval(
         &mut |k| {

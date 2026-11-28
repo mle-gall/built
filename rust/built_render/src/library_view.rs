@@ -140,8 +140,15 @@ pub const SCOPES: [(&str, &str); 4] = [("model", "In this model"), ("recent", "R
 /// Browsing by base: the Materials' sort menu.
 pub const FACETS: [(&str, &str); 3] = [("facet:all", "Every base"), ("facet:colour", "Colour bases"),
     ("facet:image", "Image bases")];
+/// Browsing presets by kind: the Presets' Show menu.
+pub const PRESET_FACETS: [(&str, &str); 5] = [("facet:all", "Every kind"), ("facet:sweep", "Sweep"), ("facet:cut", "Cut"),
+    ("facet:repeat", "Repeat"), ("facet:junction", "Junction")];
+/// The facet values a sheet keeps.
+pub fn facet_value(facet: &str) -> Option<&str> {
+    matches!(facet, "colour" | "image" | "sweep" | "cut" | "repeat" | "junction").then_some(facet)
+}
 /// Verb ids and their menu labels (a type relabels "apply").
-pub const VERBS: [(&str, &str); 20] = [("apply", "Use"), ("edit", "Edit in the inspector"), ("duplicate", "Duplicate"),
+pub const VERBS: [(&str, &str); 22] = [("share", "Share pack…"), ("modelupdate", "Update this model's copy"), ("apply", "Use"), ("edit", "Edit in the inspector"), ("duplicate", "Duplicate"),
     ("rename", "Rename"), ("keep", "Save to Library…"), ("unkeep", "Remove from My library"),
     ("select", "Select uses"), ("replace", "Replace selection with this"), ("keepfile", "Keep when unused"),
     ("unkeepfile", "Stop keeping in file"), ("delete", "Delete…"), ("save", "Save to Library…"),
@@ -246,13 +253,17 @@ pub fn filtered<'a>(items: impl IntoIterator<Item = &'a Item>, st: &Browse) -> V
         match w {
             "is:colour" | "is:color" => base = base.or(Some("colour")),
             "is:image" => base = base.or(Some("image")),
+            "is:junction" | "is:sweep" | "is:cut" | "is:repeat" => base = base.or(w.strip_prefix("is:")),
             _ => words.push(w),
         }
     }
-    let base = base.or(match st.facet.as_str() { "colour" => Some("colour"), "image" => Some("image"), _ => None });
+    let base = base.or(facet_value(st.facet.as_str()));
     items.into_iter().filter(|e| {
         if let (Some(b), Some(eb)) = (base, e.base.as_deref()) {
-            if eb != b {
+            // One browsing state serves every type: a materials facet never
+            // hides presets, nor a presets one materials.
+            let material = |x: &str| matches!(x, "colour" | "image");
+            if eb != b && material(eb) == material(b) {
                 return false;
             }
         }
@@ -527,7 +538,7 @@ fn tile(t: &str, e: &Item, current: Option<&str>, thumbs: &mut Vec<String>, labe
         }
         s
     } else if t == "presets" {
-        e.defaults.iter().find(|d|d.0.starts_with("IFC class")).map(|d|d.1.clone()).unwrap_or_default()
+        e.defaults.iter().find(|d|d.0.starts_with("IFC class") || d.0 == "Meeting").map(|d|d.1.clone()).unwrap_or_default()
     } else if t == "families" {
         e.category.clone()
     } else if e.uses != 0 {
@@ -561,10 +572,10 @@ pub(crate) fn detail(inp: &Input, e: &Item, thumbs: &mut Vec<String>) -> Vec<Val
     };
     out.push(block("heading", json!({"text": e.shown(), "right": where_})));
     if inp.kind=="presets" {
-        if e.verbs.iter().any(|v|v=="apply"){out.push(block("buttons",json!({"buttons":[verb("apply",if e.defaults.iter().any(|r|r.0.starts_with("cutter_kind")) {"Use in Cut"} else {"Use in Sweep"},"↩",PRIMARY)],"align":"fill"})));}
+        if e.verbs.iter().any(|v|v=="apply"){out.push(block("buttons",json!({"buttons":[verb("apply",preset_apply_label(e),"↩",PRIMARY)],"align":"fill"})));}
         out.push(block("kv",json!({"rows":e.defaults})));
-        if e.verbs.iter().any(|v|v=="review"){out.push(block("buttons",json!({"buttons":[verb("review","Review similar…","↩",PRIMARY)],"align":"fill"})));}
-        let actions:Vec<_>=[("follow","Follow new meetings"),("unfollow","Stop following"),("edit","Edit…"),("duplicate","Duplicate"),("export","Export pack…"),("delete","Delete…")].into_iter().filter(|(id,_)|e.verbs.iter().any(|v|v==id)).map(|(id,title)|verb(id,title,"",0)).collect();
+        if e.verbs.iter().any(|v|v=="review"){out.push(block("buttons",json!({"buttons":[verb("review","Review similar…",if e.verbs.iter().any(|v|v=="apply") {""} else {"↩"},if e.verbs.iter().any(|v|v=="apply") {0} else {PRIMARY})],"align":"fill"})));}
+        let actions:Vec<_>=[("follow","Follow new meetings"),("unfollow","Stop following"),("edit","Edit…"),("duplicate","Duplicate"),("export","Export pack…"),("share","Share pack…"),("delete","Delete…")].into_iter().filter(|(id,_)|e.verbs.iter().any(|v|v==id)).map(|(id,title)|verb(id,title,"",0)).collect();
         out.push(block("buttons",json!({"buttons":actions})));
         return out;
     }
@@ -655,8 +666,8 @@ fn saved_detail(inp: &Input, e: &Item, mut out: Vec<Value>) -> Vec<Value> {
         "materials" => "Paint with it",
         "components" => "Place a copy",
         "styles" => "Use this style",
-        "presets" if e.defaults.iter().any(|r| r.0.starts_with("cutter_kind")) => "Use in Cut",
-        "presets" | "profiles" => "Use in Sweep",
+        "presets" => preset_apply_label(e),
+        "profiles" => "Use in Sweep",
         _ => "Use",
     };
     let mut first = Vec::new();
@@ -671,7 +682,7 @@ fn saved_detail(inp: &Input, e: &Item, mut out: Vec<Value>) -> Vec<Value> {
     }
     out.push(block("kv", json!({"rows": e.defaults})));
     // Two short rows: where it goes, then what it is (the pane is narrow).
-    for row in [&[("update", "Update"), ("copyto", "Copy to…"), ("moveto", "Move to…")][..], &[("libedit", "Edit…"), ("reveal", REVEAL), ("libdelete", "Delete…")][..]] {
+    for row in [&[("modelupdate", "Update this model"), ("share", "Share pack…")][..], &[("update", "Update"), ("copyto", "Copy to…"), ("moveto", "Move to…")][..], &[("libedit", "Edit…"), ("reveal", REVEAL), ("libdelete", "Delete…")][..]] {
         let actions: Vec<Value> = row.iter()
             .filter(|(id, _)| e.verbs.iter().any(|v| v == id))
             .map(|(id, title)| verb(id, title, "", QUIET))
@@ -681,6 +692,20 @@ fn saved_detail(inp: &Input, e: &Item, mut out: Vec<Value>) -> Vec<Value> {
         }
     }
     out
+}
+
+/// What a preset's primary button says: Apply… for a junction detail (it
+/// binds the selection), Use in Cut or Use in Sweep otherwise.
+fn preset_apply_label(e: &Item) -> &'static str {
+    if e.base.as_deref() == Some("junction") {
+        "Apply…"
+    } else if e.base.as_deref() == Some("repeat") {
+        "Apply to the selected Repeat"
+    } else if e.defaults.iter().any(|r| r.0.starts_with("cutter_kind")) || e.base.as_deref() == Some("cut") {
+        "Use in Cut"
+    } else {
+        "Use in Sweep"
+    }
 }
 
 fn empty_text(t: &str, scope: &str) -> String {
@@ -706,9 +731,10 @@ pub(crate) fn sheet_rows(inp: &Input, mut native: Option<&mut RowGroups>) -> Val
     let label = SORTS.iter().find(|s| s.0 == st.sort).map_or("Name", |s| s.1);
     let facet = format!("facet:{}", if st.facet.is_empty() { "all" } else { &st.facet });
     let mut options: Vec<Value> = SORTS.iter().map(|(i, l)| verb(i, l, "", i64::from(*i == st.sort))).collect();
-    let show = (t == "materials").then(|| {
-        let options: Vec<_> = FACETS.iter().map(|(id, label)| verb(id, label, "", i64::from(*id == facet))).collect();
-        let label = FACETS.iter().find(|(id, _)| *id == facet).unwrap_or(&FACETS[0]).1;
+    let show = matches!(t, "materials" | "presets").then(|| {
+        let facets: &[(&str, &str)] = if t == "presets" { &PRESET_FACETS } else { &FACETS };
+        let options: Vec<_> = facets.iter().map(|(id, label)| verb(id, label, "", i64::from(*id == facet))).collect();
+        let label = facets.iter().find(|(id, _)| *id == facet).unwrap_or(&facets[0]).1;
         json!({"id":"show", "label":format!("Show: {label}"), "on":facet, "options":options})
     });
     if t=="components" { options[1]["label"]=json!("Copies"); }

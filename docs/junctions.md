@@ -1148,6 +1148,53 @@ step, Esc leaves with nothing applied. Scripts and the agent bridge use
 `junction_review_action(window, "tick:3" | "apply" | …)` and
 `junction_review_state(scene)`.
 
+### Library and packs (J6)
+
+Junction details are presets of primitive `junction` in Library › Presets.
+The Show menu filters presets by kind (Sweep, Cut, Repeat, Junction). A
+detail's row gives the rule in words, what it adds, its parameters, its
+IFC class, its uses, and its pack, revision, author and licence. A row
+also says what the detail still needs. **Apply…** binds the selected
+members, main role first; for two members either order works. It embeds the
+detail and the presets it needs, then applies them in one History step
+(`junction_apply` with `definitions`). A Library copy with a newer pack
+revision than the model's shows "Update available · rev a → b · N uses".
+Its **Update this model** command is one `preset_update` step.
+
+The core functions are `pack_export`, `pack_read`, `junction_bind`,
+`junction_definitions`, `junction_words` and `junction_thumbnail` in
+`built_core.command_protocol` (`live/pack.rs`). The Library wraps them as
+`wgpu_library.share_pack` and `wgpu_library.import_pack`. `pack_read`
+writes nothing. It checks the envelope, the required features (refused
+when unknown), and the units (millimetres only for now). It checks every
+listed file against its sha256 and every row against its own `hash`
+(canonical JSON without `hash` and `source`). It validates each template:
+references only to its roles, `meet`, content keys and declared
+dependencies, and parameters without a cycle. It then resolves
+dependencies (built in, in the pack, or already in the Library) and marks
+each row ready or `needs`. A row inherits what its child details need.
+`import_pack` stores every row at the chosen destination or none. Rows
+that need something are listed with what they need and cannot be applied.
+This model takes only ready rows. Bundled components become Library
+components; bundled profile sizes travel in the part preset as `family`
+plus `params`.
+
+Two template additions came with the starter packs:
+
+| Addition | Use |
+|---|---|
+| `cutter: {"block": {"size": [x, y, z], "at": [x, y, z]}}` (mm, posed in the anchor's junction frame; subtract, union, intersect) | laps, tenons, mortises, shoulders |
+| `part.at.axis`: `x`, `y`, `z`, `-x`, `-y`, `-z` (which frame axis the part's own Z follows) | fin plates, hanger sides, dowels across a tenon |
+| `part.fastener.kind`: `bolt` (default), `screw`, `nail`, `dowel`, `anchor`; `holes` overrides the bore default (screws and nails none) | timber fixings, anchors |
+
+The starter packs ship as format 2 packs with inline rows in
+`resources/presets/packs/`. They are Steel connections · EN (End plate,
+4 bolts; Fin plate; Base plate; Apex haunch; Bolt M16 8.8; Anchor M16;
+Fillet weld), Timber joints (Birdsmouth, Half-lap, Tenon and mortise,
+Joist hanger) and Generic (Corner mitre, Butt with screws). The
+Architecture pack is J4's. `tests/junction_starter_cases.py` draws the
+members for each one in an empty document.
+
 ## 13. Risks
 
 | Risk | Mitigation |

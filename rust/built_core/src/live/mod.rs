@@ -15,6 +15,7 @@ mod joints;
 pub(crate) mod junction;
 pub(crate) use junction::hosting::{opening_conflict,wall_faces_changed};
 mod meetings;
+mod pack;
 mod presets;
 pub(crate) mod profile;
 mod reference;
@@ -216,6 +217,7 @@ fn evaluate(
                                 | cut::Cutter::Section(_)
                                 | cut::Cutter::Hole(_)
                                 | cut::Cutter::Opening(_)
+                                | cut::Cutter::Block(_)
                         )
                     ))
         })
@@ -762,7 +764,9 @@ enum Edit {
     Presets(Vec<presets::Preset>),
     DeletePreset(String),
     Create(Vec<sweep::Sweep>, bool),
-    Set(Vec<Row>),
+    /// Rows to set, after embedding the presets they need that the
+    /// model does not hold yet (a Library detail applied in one step).
+    Set(Vec<Row>, Vec<presets::Preset>),
     /// Done in the Sketch workspace: the sketch row, and the sweeps whose
     /// profile becomes it (a catalogue size edited as a drawing).
     Commit(Row, Vec<String>),
@@ -1011,7 +1015,8 @@ impl Mutation {
                     t.pending.insert(uid);
                 }
             }
-            Edit::Set(requests) => {
+            Edit::Set(requests, definitions) => {
+                presets::embed(&mut t, definitions)?;
                 for request in requests {
                     set_row(scene, &mut t, request)?;
                 }
@@ -1030,6 +1035,7 @@ impl Mutation {
                         sketch: Some(row.uid.clone()),
                         drawing: None,
                         library: String::new(),
+                        family: String::new(),
                         params: Default::default(),
                     };
                     user.state.clear();
@@ -1464,7 +1470,7 @@ pub(crate) fn repeat_command<'p>(
         "uid": uid, "kind":"repeat", "source":source, "run":run, "rule":rule
     }))
     .map_err(|e| PyValueError::new_err(e.to_string()))?;
-    let command = Bound::new(py, Mutation(Edit::Set(vec![row])))?.into_any();
+    let command = Bound::new(py, Mutation(Edit::Set(vec![row], Vec::new())))?.into_any();
     command.setattr("_repeat_selection_row", uid)?;
     Ok(command)
 }
@@ -1525,7 +1531,8 @@ fn sweep_thumbnail<'p>(
         sketch: None,
         drawing: None,
         library: key,
-        params: Default::default(),
+        family: String::new(),
+            params: Default::default(),
     };
     let outline = profile.outline(48).map_err(PyValueError::new_err)?;
     let scale = pixels as f64 * 0.8 / outline.height.max(outline.width);
@@ -1671,7 +1678,7 @@ fn live_set<'p>(history: &Obj<'p>, row: &Obj<'p>) -> PyResult<Bound<'p, PyDict>>
             sketch::validate(&row).map_err(PyValueError::new_err)?;
         }
     }
-    edit(history, Edit::Set(rows))
+    edit(history, Edit::Set(rows, Vec::new()))
 }
 /// Done in the Sketch workspace: the sketch row and every user of it
 /// re-evaluated, one History step. A new sketch gets a fresh uid.
@@ -1782,6 +1789,13 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(junction_skip, m)?)?;
     m.add_function(wrap_pyfunction!(junction_follow, m)?)?;
     meetings::register(m)?;
+    m.add_function(wrap_pyfunction!(pack::pack_read, m)?)?;
+    m.add_function(wrap_pyfunction!(pack::pack_export, m)?)?;
+    m.add_function(wrap_pyfunction!(pack::pack_row_hash, m)?)?;
+    m.add_function(wrap_pyfunction!(pack::junction_words, m)?)?;
+    m.add_function(wrap_pyfunction!(pack::junction_thumbnail, m)?)?;
+    m.add_function(wrap_pyfunction!(pack::junction_bind, m)?)?;
+    m.add_function(wrap_pyfunction!(pack::junction_definitions, m)?)?;
     m.add_function(wrap_pyfunction!(junction_set, m)?)?;
     m.add_function(wrap_pyfunction!(junction_frames, m)?)?;
     m.add_function(wrap_pyfunction!(junction_release, m)?)?;
@@ -1878,6 +1892,7 @@ pub(crate) fn cut_labels(
                     cut::Cutter::Section(_) => "section",
                     cut::Cutter::Opening(_) => "Opening",
                     cut::Cutter::Hole(_) => "Hole",
+                    cut::Cutter::Block(_) => "Block",
                 };
                 Some((
                     id.clone(),
@@ -1921,11 +1936,16 @@ fn live_cuts<'p>(scene: &Obj<'p>, owner: &str) -> PyResult<Obj<'p>> {
     to_py(scene.py(), &cuts)
 }
 
+/// Apply a detail to bound members. `definitions` are the detail and the
+/// presets it needs, embedded in the same step when the model lacks them
+/// (a Library or pack detail): one History step, one undo entry.
 #[pyfunction]
+#[pyo3(signature=(history, detail, bindings, definitions=None))]
 fn junction_apply<'p>(
     history: &Obj<'p>,
     detail: String,
     bindings: &Obj<'p>,
+    definitions: Option<&Obj<'p>>,
 ) -> PyResult<Bound<'p, PyDict>> {
     let roles: serde_json::Value = json(bindings)?;
     // One use, or several applied in one History step (a review's Enter).
@@ -1938,13 +1958,21 @@ fn junction_apply<'p>(
         return Err(PyValueError::new_err("Expected junction bindings"));
     }
     let uids: Vec<String> = uses.iter().map(|_| eid::new_uid()).collect();
-    let rows: Vec<_> = uses
+    let rows = uses
         .into_iter()
         .zip(&uids)
-        .map(|(roles, uid)| serde_json::json!({"kind":"junction","uid":uid,"detail":{"uid":detail},"roles":roles}))
-        .collect();
-    let row = to_py(history.py(), &rows)?;
-    let reply = live_set(history, &row)?;
+        .map(|(roles, uid)| {
+            serde_json::from_value::<Row>(serde_json::json!({"kind":"junction","uid":uid,"detail":{"uid":detail},"roles":roles}))
+                .map_err(|e| PyValueError::new_err(e.to_string()))
+        })
+        .collect::<PyResult<Vec<_>>>()?;
+    // The detail and the presets it needs, embedded in the same step when
+    // the model lacks them (a Library or pack detail).
+    let definitions: Vec<presets::Preset> = match definitions {
+        Some(d) if !d.is_none() => json(d)?,
+        _ => Vec::new(),
+    };
+    let reply = edit(history, Edit::Set(rows, definitions))?;
     if many {
         reply.set_item("uids", uids)?;
     } else {

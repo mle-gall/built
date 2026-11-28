@@ -13,6 +13,7 @@
 //! `built_core.protocol.commands`.
 mod bulk;
 pub(crate) mod destinations;
+mod packs;
 mod presets;
 use presets::PresetsProvider;
 pub(crate) use presets::capture_preset;
@@ -1981,6 +1982,8 @@ fn thumb(view: &Bound<'_, PyAny>, path: &Bound<'_, PyAny>) -> PyResult<String> {
         let name=path.str()?;
         let rgba=if let Some(profile)=name.to_str()?.strip_prefix("profile:"){
             py.import("built_core.command_protocol")?.call_method1("sweep_thumbnail",(profile,px))?
+        }else if name.to_str()?.starts_with("junction:"){
+            py.import("built_core.command_protocol")?.call_method1("junction_thumbnail",(name.to_str()?,px))?
         }else{render(py)?.call_method1("swatch_pixels", (path, px, true))?};
         if !rgba.is_none() {
             view.getattr("renderer")?.call_method1("ui_set_icons", (vec![(&key, px, px, rgba)],))?;
@@ -2336,7 +2339,7 @@ impl LibrarySheet {
         let online = out.get_item("online")?.is_truthy()?;
         sheet.call_method1("search", (out.get_item("search")?,))?;
         sheet.getattr("menus")?.call_method1("append", (out.get_item("sort")?,))?;
-        if prov_id == "materials" {
+        if prov_id == "materials" || prov_id == "presets" {
             sheet.getattr("menus")?.call_method1("append", (out.get_item("show")?,))?;
         }
         let faceted=prov_id=="components" && !online;
@@ -2719,7 +2722,7 @@ impl LibrarySheet {
             "headmenu" if args.len() > 1 => {
                 let opt_ = &args[1];
                 if arg=="group" && matches!(opt_.as_str(),"none"|"class"|"source") { st.set_item("component_group",opt_)?; } else if let Some(facet) = opt_.strip_prefix("facet:") {
-                    st.set_item("facet", if matches!(facet, "all" | "colour" | "image") { facet } else { "all" })?;
+                    st.set_item("facet", crate::library_view::facet_value(facet).unwrap_or("all"))?;
                 } else if py.import("builtins")?.getattr("dict")?.call1((sorts(py)?,))?.contains(opt_)? {
                     st.set_item("sort", opt_)?;
                 }
@@ -3369,6 +3372,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     }
     sub.add("item", sub.getattr("item_of")?)?;
     destinations::register(&sub)?;
+    packs::register(&sub)?;
     m.add_submodule(&sub)?;
     py.import("sys")?.getattr("modules")?.set_item("built_render.wgpu_library", &sub)?;
     Ok(())

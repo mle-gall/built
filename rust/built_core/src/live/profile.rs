@@ -30,6 +30,11 @@ pub struct Profile {
     pub drawing: Option<serde_json::Value>,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub library: String,
+    /// The family of a size that is not in the built-in catalogue, carried
+    /// with the row (a detail pack's bundled profile table): `params` then
+    /// holds every dimension.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub family: String,
     #[serde(default)]
     pub params: BTreeMap<String, f64>,
 }
@@ -71,16 +76,16 @@ impl Profile {
         if let Some(drawing) = &self.drawing {
             return super::drawn_profile::outline(drawing, segments);
         }
-        let size = SIZES
-            .table
-            .sizes
-            .iter()
-            .find(|p| p.key == self.library)
-            .ok_or("profile_missing")?;
+        let size = SIZES.table.sizes.iter().find(|p| p.key == self.library);
+        let (family, table) = match size {
+            Some(size) => (size.family.as_str(), Some(&size.params)),
+            None if is_family(&self.family) => (self.family.as_str(), None),
+            None => return Err("profile_missing"),
+        };
         let get = |k: &str| {
             self.params
                 .get(k)
-                .or_else(|| size.params.get(k))
+                .or_else(|| table.and_then(|p| p.get(k)))
                 .copied()
                 .unwrap_or(0.)
         };
@@ -94,7 +99,7 @@ impl Profile {
         if !(w > 0. && h > 0. && (4..=512).contains(&segments) && r >= 0.) {
             return Err("invalid_profile");
         }
-        let fam = size.family.as_str();
+        let fam = family;
         if fam != "rectangle" && !(t > 0. && t < w && t < h) {
             return Err("invalid_profile");
         }
@@ -227,7 +232,7 @@ impl Profile {
         };
         Ok(Outline {
             named: Default::default(),
-            family: size.family.clone(),
+            family: family.to_owned(),
             rings,
             width: w,
             height: h,
@@ -236,6 +241,19 @@ impl Profile {
             radius: r,
         })
     }
+}
+
+/// The parametric families the generator draws.
+pub fn is_family(name: &str) -> bool {
+    matches!(
+        name,
+        "i" | "rhs" | "rectangle" | "channel" | "angle" | "chs" | "tee" | "zed"
+    )
+}
+
+/// Whether a size is in the built-in catalogue.
+pub fn built_in(key: &str) -> bool {
+    SIZES.table.sizes.iter().any(|s| s.key == key)
 }
 
 pub fn label(key: &str) -> Option<&'static str> {
@@ -252,7 +270,7 @@ pub fn label(key: &str) -> Option<&'static str> {
 /// about one centre become one arc; a ring about one centre is a circle.
 pub fn catalogue_sketch(key: &str) -> Option<serde_json::Value> {
     use built_draft2d::{geom, Shape, Sketch, Use};
-    let outline = Profile { sketch: None, drawing: None, library: key.into(), params: Default::default() }.outline(24).ok()?;
+    let outline = Profile { sketch: None, drawing: None, library: key.into(), family: String::new(), params: Default::default() }.outline(24).ok()?;
     let mut sketch = Sketch::new(Use::Profile);
     sketch.name = label(key)?.to_owned();
     for ring in &outline.rings {
