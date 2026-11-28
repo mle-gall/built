@@ -55,10 +55,6 @@ fn current(py: Python<'_>, root: doc::Key) -> Option<LiveTable> {
     };
     Some(value.bind(py).cast::<LiveTable>().ok()?.get().clone())
 }
-pub(crate) fn has_junctions(scene: &Obj<'_>) -> PyResult<bool> {
-    Ok(current(scene.py(), root(scene)?).is_some_and(|t| !t.junctions.is_empty()))
-}
-
 fn put(scene: &Obj<'_>, table: LiveTable) -> PyResult<()> {
     let py = scene.py();
     let value = if table.rows.is_empty() && table.presets.is_empty() {

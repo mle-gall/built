@@ -253,10 +253,13 @@ def _save_ifc(scene, path, project_name, profile, stream, placements):
     if junctions.rows:
         from built_core.command_protocol import preset_catalog
         presets = {p['uid']: p for p, _ in preset_catalog(recipe_scene)}
-    for j in junctions.rows.values():
-        if j.get('state', 'ok') != 'ok':
-            problems.append(dict(uid=j['uid'], name=(j.get('detail') or {}).get('name', ''),
-                                 messages=[f"{j['state']}: exported last good parts"]))
+        included = {obj['group'].uid for obj in objects if obj.get('group') is not None}
+        for uid, j in junctions.rows.items():
+            if j.get('state', 'ok') != 'ok' and (
+                j['owner'] in included or included.intersection(junctions.realizers[uid])
+            ):
+                problems.append(dict(uid=uid, name=(j.get('detail') or {}).get('name', ''),
+                                     messages=[f"{j['state']}: exported last good parts"]))
     maps = {}
     axis_context = None
     for obj in objects:

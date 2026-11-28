@@ -315,6 +315,6 @@ pub(crate) fn export_readiness(
         Value::Array(runs)
     } else { Value::Null };
     let report = json!({"choices":deliveries,"active":active,"scope":scope,"ready":total-blocked,"total":total,
-        "has_junctions":crate::live::has_junctions(scene)?, "package":package,"outputs":outputs,"runs":runs,"rows":rows,"items":items,"checks":checks,"notes":notes});
+        "package":package,"outputs":outputs,"runs":runs,"rows":rows,"items":items,"checks":checks,"notes":notes});
     Ok(report.to_string())
 }

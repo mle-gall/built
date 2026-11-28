@@ -1108,7 +1108,6 @@ fn enqueue_py<'py>(win: &Bound<'py, PyAny>, key: &Bound<'py, PyAny>, record: &Bo
     enqueue(win, key, record)
 }
 
-/// `dlv:<verb>[:<key>]` from the dock's Deliveries.
 /// Place the displayed issue snapshot as editable paper cells in one History step.
 fn place_schedule(history: &Bound<'_, PyAny>, name: &str, table: &Bound<'_, PyAny>) -> PyResult<()> {
     let py = history.py();
@@ -1146,6 +1145,7 @@ fn place_schedule(history: &Bound<'_, PyAny>, name: &str, table: &Bound<'_, PyAn
     Ok(())
 }
 
+/// `dlv:<verb>[:<key>]` from the dock's Deliveries.
 #[pyfunction]
 fn delivery_action(win: &Bound<'_, PyAny>, view: &Bound<'_, PyAny>, arg: &str) -> PyResult<()> {
     let py = win.py();

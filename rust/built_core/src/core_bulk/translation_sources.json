@@ -1395,6 +1395,7 @@
  "No fillets under the limit",
  "No gaps within the tolerance",
  "No geometry to make a plan of",
+ "No junction quantities in this model",
  "No kept deliveries yet",
  "No lines or polygons found in the file.",
  "No matches. Pan the map to your site, or type coordinates.",

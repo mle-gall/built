@@ -66,10 +66,13 @@ pub(super) fn destination(ui: &mut egui::Ui, report: &Value, jobs: &[super::Job]
                 kit::inspector_title(ui, "Junction schedules", "");
             } else {
                 kit::inspector_title(ui, "Review handover", delivery_name(report));
-            kit::prop_row(ui,"Model revision",&review["revision"].to_string());
-            kit::prop_row(ui,"IDS",review["ids_result"].as_str().unwrap_or(""));
+                kit::prop_row(ui,"Model revision",&review["revision"].to_string());
+                kit::prop_row(ui,"IDS",review["ids_result"].as_str().unwrap_or(""));
             }
             if let Some(schedules) = review["schedules"].as_object() {
+                if review["schedules_only"] == true && schedules.is_empty() {
+                    kit::empty_state(ui, "No junction quantities in this model");
+                }
                 for (name, table) in schedules {
                     kit::disclosure(ui, ("junction schedule", name), name, name == "fasteners", |ui| {
                         if kit::quiet(ui, "Place on new sheet").clicked() {
@@ -126,7 +129,7 @@ pub(super) fn destination(ui: &mut egui::Ui, report: &Value, jobs: &[super::Job]
             if kit::quiet(ui,"Back to deliveries").clicked() {cmds.push("deliver:back".into());}
             return;
         }
-        if report["has_junctions"] == true && kit::quiet(ui, "Junction schedules").clicked() {
+        if report.is_object() && kit::quiet(ui, "Junction schedules").clicked() {
             cmds.push("deliver:schedules".into());
         }
         let issues = checks(report);
