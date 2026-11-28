@@ -178,6 +178,11 @@ fn children(
         let g = g?;
         let mesh = g.getattr("mesh")?;
         let groups = g.getattr("children")?;
+        // A weld annotation without a bead is still a product in the assembly.
+        let record = g.getattr("ifc")?;
+        let weld = record.is_truthy()? && record.call_method1("get", ("class",))?.eq("IfcFastener")?
+            && record.call_method1("get", ("predefined_type",))?.eq("WELD")?;
+        let annotation = weld && !mesh.getattr("faces")?.is_truthy()?;
         let mut meshes = vec![mesh];
         let child_groups = if structure(&g, "product")? {
             let real = pyo3::types::PyList::empty(g.py());
@@ -221,15 +226,27 @@ fn children(
             id
         } else {
             let id = defs.len();
+            let mut geometry = Vec::new();
+            if !annotation {
+                for mesh in &meshes {
+                    geometry.extend(bodies(mesh)?);
+                }
+            }
+            if weld {
+                // Previously generated fillets have inward-oriented shell faces.
+                for part in &mut geometry {
+                    if let Geometry::Facets(body) = part {
+                        if body.volume().map_err(bad)? < 0. {
+                            for ring in body.faces.iter_mut().flatten() {
+                                ring.reverse();
+                            }
+                        }
+                    }
+                }
+            }
             defs.push(Definition {
                 name: g.getattr("name")?.extract()?,
-                bodies: meshes
-                    .iter()
-                    .map(bodies)
-                    .collect::<PyResult<Vec<_>>>()?
-                    .into_iter()
-                    .flatten()
-                    .collect(),
+                bodies: geometry,
                 children: nested,
             });
             known.insert(key, id);

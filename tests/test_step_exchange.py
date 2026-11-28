@@ -557,3 +557,17 @@ def test_fragmented_planar_sheet_shares_support_but_keeps_hard_topology(tmp_path
     assert text.count("= PLANE(") == 1
     assert text.count("= EDGE_CURVE(") == 25
     assert step.prepare_step(path)["exact"] == 1
+
+
+@pytest.mark.parametrize("bead", [False, True])
+def test_knee_assembly_shares_bolt_definition(tmp_path, bead):
+    from tests.test_live_junction import knee_fixture
+    scene, _, _ = knee_fixture(bead=bead)
+    path = tmp_path / "knee.step"
+    step.save_step(scene, path)
+    text = path.read_text()
+    products = [line for line in text.splitlines() if "= PRODUCT(" in line]
+    assert sum("ISO 4017" in line for line in products) == 1
+    assert any("End plate" in line for line in products)
+    assert any("seam" in line for line in products)
+    assert "NEXT_ASSEMBLY_USAGE_OCCURRENCE(" in text

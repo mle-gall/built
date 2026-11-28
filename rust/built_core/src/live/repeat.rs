@@ -282,6 +282,10 @@ pub(super) fn layout(
             .as_str()
             .zip(row.repeat.run["frame"].as_str())
             .and_then(|(j, f)| junction::local_frame(t, &row.owner, j, f))
+            .or_else(|| {
+                let basis: [f64; 16] = serde_json::from_value(row.repeat.run.get("basis")?.clone()).ok()?;
+                Some(DMat4::from_cols_array(&basis))
+            })
         else {
             return Ok(Err("ref_lost"));
         };

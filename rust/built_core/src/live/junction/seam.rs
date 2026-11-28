@@ -265,7 +265,7 @@ pub(super) fn update(
         record["throat"] = json!(throat);
         for key in ["type", "sides", "process"] {
             if let Some(v) = spec.get(key) {
-                record[key] = v.clone();
+                record[if key == "type" { "weld_type" } else { key }] = v.clone();
             }
         }
     }
