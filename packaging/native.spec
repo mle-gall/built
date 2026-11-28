@@ -350,6 +350,11 @@ mcp_exe = EXE(
     icon=icon,
 )
 
+# Refuse an add-on even if a data hook tries to package it under another name.
+for destination, source, _ in [*a.datas, *mcp_a.datas]:
+    if Path(source).resolve().is_relative_to((ROOT / 'addons').resolve()) or destination.endswith('.builtpack'):
+        raise ValueError(f'Trade add-ons must be distributed separately: {destination}')
+
 coll = COLLECT(
     exe,
     mcp_exe,
