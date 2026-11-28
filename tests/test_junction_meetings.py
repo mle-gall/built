@@ -128,11 +128,11 @@ def cleat_detail(scene):
     plate = next(p for p, _ in live.preset_catalog(scene) if p["name"] == "Plate")["uid"]
     return dict(uid="c09300000000000a", name="Purlin cleat", primitive="junction", pack="Project", rev=1,
                 locks={}, record={"class": "IfcElementAssembly"},
-                values=dict(meeting="end_face", roles={"main": {}, "joining": {}}, contents=[
+                values=dict(meeting="crossing", roles={"main": {}, "joining": {}}, contents=[
                     dict(key="cleat", part={"preset": plate, "fields": {
                         "profile.params.width": 80, "profile.params.height": 120, "thickness": 8},
                         "at": {"frame": "@meet"}})],
-                    rule={"meeting": "end_face", "roles": {
+                    rule={"meeting": "crossing", "roles": {
                         "main": {"profile": [{"library": "en/ipe"}], "face": ["flange_outer"]},
                         "joining": {"profile": [{"library": "en/shs"}]}},
                         "angle": {"value": 90, "tol": 2}}))
@@ -151,12 +151,13 @@ def test_garage_meetings_are_found_with_no_false_positives():
     scene, _ = garage()
     ride(scene, count=60)
     kinds = meetings_by_kind(scene)
-    assert kinds == {"end_face": 8 + 48, "end_end": 4, "base": 8}, kinds
+    assert kinds == {"end_face": 8, "crossing": 48, "end_end": 4, "base": 8}, kinds
     groups = scene.groups_by_uid()
     knees = [m for m in live.meetings(scene, {"kind": "end_face"}) if groups[m["members"][0]].name.startswith("C-")]
     assert len(knees) == 8 and {m["face"] for m in knees} == {"flange_outer"}
     assert {round(m["angle"]) for m in knees} == {75} and {m["hand"] for m in knees} == {1, -1}
-    cleats = [m for m in live.meetings(scene, {"kind": "end_face"}) if groups[m["members"][0]].name.startswith("R-")]
+    cleats = live.meetings(scene, {"kind": "crossing"})
+    assert all(groups[m["members"][0]].name.startswith("R-") for m in cleats)
     assert len(cleats) == 48 and all(m["face"] == "flange_outer" for m in cleats)
     # Keys are stable and unique: the same model gives the same keys.
     keys = [m["key"] for m in live.meetings(scene)]
@@ -164,7 +165,7 @@ def test_garage_meetings_are_found_with_no_false_positives():
     live.meeting_index_reset(scene)
     assert sorted(m["key"] for m in live.meetings(scene)) == sorted(keys)
     groups_ = live.junction_arrangements(scene)
-    assert [(g["kind"], g["count"], g["status"]) for g in groups_][:2] == [("end_face", 48, "none"), ("end_face", 8, "none")]
+    assert [(g["kind"], g["count"], g["status"]) for g in groups_][:2] == [("crossing", 48, "none"), ("end_face", 8, "none")]
     assert "HE 200 A × IPE 240" in groups_[1]["arrangement"] and "75°" in groups_[1]["arrangement"]
 
 
@@ -173,7 +174,8 @@ def test_knee_detail_with_parts_is_suggested_mirrored_and_applied_in_one_step(tm
     source = first_knee(scene)
     bolt, weld, knee = knee_details(scene, hand=source["hand"])
     apply(history, "preset_update", rows=[bolt, weld, knee])
-    roles = {"main": dict(source["roles"]["main"], face="flange_outer"), "joining": source["roles"]["other"]}
+    roles = {"main": source["roles"]["main"], "joining": source["roles"]["other"]}
+    assert roles["main"]["face"] == "flange_outer"
     apply(history, "junction_apply", detail=knee["uid"], bindings=roles)
     reply = live.junction_suggest(scene, knee["uid"])
     fits = Counter(s["fit"] for s in reply["suggestions"])
@@ -260,7 +262,7 @@ def test_cleats_across_the_purlin_repeats_and_the_index_follows_edits():
         Counter((r["state"], str(r.get("reason"))) for r in junctions)
     # Moving a column off its rafter end ends that knee; undo brings it back.
     knees = meetings_by_kind(scene)
-    column = next(g for g in scene.groups if g.name == "C-1 · frame 1")
+    column = next(g for g in scene.groups if g.name.startswith("C-1 · frame 1"))
     apply(history, "move_placements", placements=[column.uid], delta=[0, -1, 0])
     stats = live.meeting_index_stats(scene)
     assert meetings_by_kind(scene)["end_face"] == knees["end_face"] - 1
@@ -330,3 +332,49 @@ def test_meeting_budgets_on_the_hall_and_the_garage_beside_the_ride():
     assert garage_ms < 5 * scale and min(builds) < 20 * scale
     assert max(updates[1:]) < .5 * scale and stats["bytes"] < 2_000_000
     assert one < 10 * scale and every < 50 * scale
+
+
+WALL_CORNER, WALL_MITRE, WALL_TEE, WALL_ON_SLAB, DOOR_OPENING = (
+    "f4f093aed0396c6f", "4036051395af3d4c", "a2ff384d2a3b97b3", "9266cd42050e4e90", "30e27bad196ea165")
+
+
+def walls():
+    """Existing walls (no Wall tool corners): an L, a tee, a door in a wall."""
+    scene = Scene()
+    scene.groups.append(box_group("Floor", (-1, -1, -.2), (7, 6, 0), "IfcSlab"))
+    door = box_group("Door", (1, -.15, 0), (1.9, .15, 2.1), "IfcDoor")
+    scene.groups.append(door)
+    history = History(scene)
+    wall = lambda a, b: dict(profile=dict(library="basic/wall"), attachment="bottom", path=dict(points=[a, b]))
+    apply(history, "create_sweeps", sweeps=[wall([0, 0, 0], [6, 0, 0]), wall([6, 0, 0], [6, 5, 0]),
+                                            wall([3, 0, 0], [3, 4, 0])])
+    for g, name in zip(scene.groups[2:], ("W-1", "W-2", "W-3")):
+        g.name = name
+    return scene, history, door
+
+
+def test_existing_walls_get_corners_tees_and_slab_details_through_the_review():
+    scene, history, door = walls()
+    kinds = meetings_by_kind(scene)
+    assert kinds == {"corner": 2, "base": 3, "hosted": 1}, kinds
+    fits = lambda uid: Counter(s["fit"] for s in live.junction_suggest(scene, uid)["suggestions"])
+    assert fits(WALL_CORNER) == fits(WALL_MITRE) == {"match": 1}
+    assert fits(WALL_TEE) == {"match": 1} and fits(WALL_ON_SLAB) == {"match": 3}
+    door_fit = live.junction_suggest(scene, DOOR_OPENING)["suggestions"]
+    assert [(s["fit"], sorted(s["roles"])) for s in door_fit] == [("match", ["host", "hosted"])]
+    for uid in (WALL_CORNER, WALL_TEE):
+        (s,) = live.junction_suggest(scene, uid)["suggestions"]
+        apply(history, "junction_apply", detail=uid, bindings=[s["roles"]])
+    junctions = [r for r in live.live_rows(scene) if r["kind"] == "junction"]
+    assert len(junctions) == 2 and all(r["state"] == "ok" for r in junctions), \
+        [(r["detail"]["name"], r["state"], r.get("reason")) for r in junctions]
+    corner = next(r for r in junctions if r["detail"]["uid"] == WALL_CORNER)
+    assert len(corner["contents"]) == 2
+    assert fits(WALL_CORNER) == {"applied": 1} and fits(WALL_MITRE) == {"detailed": 1}
+    assert fits(WALL_TEE) == {"applied": 1}
+    groups = {g["arrangement"]: g for g in live.junction_arrangements(scene)}
+    assert sum(g["detailed"] for g in groups.values()) == 2
+    # Undo takes both back in one step each.
+    apply(history, "undo")
+    apply(history, "undo")
+    assert fits(WALL_CORNER) == {"match": 1}

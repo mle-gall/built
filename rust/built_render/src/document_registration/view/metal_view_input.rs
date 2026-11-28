@@ -66,6 +66,15 @@ fn mouse_press<'py>(a: &Args<'py>) -> Reply<'py> {
         let mode = tools.call_method0("sync")?;
         let left = is_input(&button, "LeftButton")?;
         let (x, y) = xy(&press)?;
+        // A junction review's badges take their clicks before any tool.
+        if !drag_nav && left {
+            let alt = has_input(&event.call_method0("modifiers")?, "AltModifier")?;
+            if crate::junction_review::press(view, x.extract()?, y.extract()?, alt)? {
+                view.setattr("last", py.None())?;
+                view.call_method0("update")?;
+                return Ok(none(py));
+            }
+        }
         if !drag_nav && mode.eq("select")? && left {
             // The Select machine owns the gesture: a press in place right
             // after a double click is the triple click, taken at once.
@@ -367,6 +376,17 @@ fn key_press<'py>(a: &Args<'py>) -> Reply<'py> {
         let mode = tools.call_method0("sync")?;
         let key = event.call_method0("key")?;
         let source = view.getattr("source_viewport")?;
+        // An open junction review: Enter applies the ticked, Esc leaves.
+        let enter = is_input(&key, "Key_Return")? || is_input(&key, "Key_Enter")?;
+        let escape = is_input(&key, "Key_Escape")?;
+        if (enter && !tools.getattr("value_buffer")?.is_truthy()?)
+            || escape
+        {
+            if crate::junction_review::key(view, enter, escape)? {
+                view.call_method0("update")?;
+                return Ok(none(py));
+            }
+        }
         if is_input(&key, "Key_Escape")? {
             let render = py.import("built_render")?;
             let interaction = py.import("views.document_interaction")?.getattr("DocumentInteraction")?;

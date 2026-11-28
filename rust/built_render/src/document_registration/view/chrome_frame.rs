@@ -576,6 +576,7 @@ fn before_frame<'py>(a: &Args<'py>) -> Reply<'py> {
     if stage >= 3 {
         render(py)?.call_method1("inspector_sync", (&view, &win))?;
     }
+    crate::junction_review::before_frame(&view, &win)?;
     module.call_method1("_tabs", (&view, &win))?;
     document_tabs(&view, &win)?.call_method1("sync_host_context", (&view, &win))?;
     let options = PyList::empty(py);

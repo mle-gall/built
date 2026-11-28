@@ -85,6 +85,7 @@ fn run_one<'py>(win: &Obj<'py>, action: &Obj<'py>, source_view: &Obj<'py>) -> Py
     let viewport = || win.getattr("viewport");
     match kind {
         "extension" => return win.call_method1("run_command", (action,)).map(drop),
+        "jreview" => return crate::junction_review::action(win, arg),
         "scenephoto" => {
             let view = dialogs.call_method1("view_of", (win,))?;
             if !view.is_none() {

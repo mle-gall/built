@@ -152,7 +152,9 @@ fn nearest_end(m: &Member, p: DVec3) -> &'static str {
 }
 
 /// Which face of `main` an end of `other` meets, and its hand.
-fn face(main: &Member, other: &Member, end: usize) -> (&'static str, i8) {
+/// Which face of `main` an end of `other` meets, its hand, and its outward
+/// normal.
+fn face(main: &Member, other: &Member, end: usize) -> (&'static str, i8, DVec3) {
     let p = other.end(end);
     let (_, x, y) = main.local(p);
     let (sx, sy) = (x / (main.half[0] + 1e-6), y / (main.half[1] + 1e-6));
@@ -171,7 +173,8 @@ fn face(main: &Member, other: &Member, end: usize) -> (&'static str, i8) {
         (false, _) => "top",
         (true, _) => "side",
     };
-    (name, hand)
+    let normal = if across { main.across } else { main.up } * f64::from(hand);
+    (name, hand, normal)
 }
 
 fn segment_closest(x: &Member, y: &Member) -> (f64, f64, f64) {
@@ -208,7 +211,10 @@ fn base(slab: &Member, m: &Member) -> Option<(usize, DVec3)> {
         t >= -TOL
             && t <= slab.len() + TOL
             && x.abs() <= slab.half[0] + TOL
-            && (y * top - below - slab.half[1]).abs() <= TOL
+            && {
+                let h = y * top - below;
+                h <= slab.half[1] + TOL && h >= -slab.half[1] - TOL
+            }
     };
     if m.shape == Shape::Wall {
         let mid = (m.a + m.b) * 0.5;
@@ -307,9 +313,12 @@ pub fn classify(x: &Member, y: &Member) -> Option<Found> {
         }
         if let Some((_, main, j)) = pick {
             let (m, o) = if main == 0 { (x, y) } else { (y, x) };
-            let (face, hand) = face(m, o, j);
+            let (face, hand, normal) = face(m, o, j);
             let at = o.end(j);
-            let kind = if walls { "corner" } else { "end_face" };
+            // An end lying on the face (a purlin seated on a rafter's top
+            // flange) bears on it: a stacked crossing, not an end into it.
+            let along = o.dir().dot(normal).abs() < MIN_ANGLE.to_radians().sin();
+            let kind = if walls { "corner" } else if along { "crossing" } else { "end_face" };
             return Some(found(kind, main, ["side", Member::tag(j)], at, face, hand, nearest_end(m, at)));
         }
         // Crossing: closest points inside both spans, envelopes in contact.
@@ -500,7 +509,7 @@ impl Index {
             self.meetings
                 .get(&(end.min(host), end.max(host)))
                 .is_some_and(|g| {
-                    g.kind == "end_face"
+                    matches!(g.kind, "end_face" | "crossing")
                         && g.main == usize::from(host > end)
                         && g.tags[1] == tag
                 })
@@ -606,7 +615,7 @@ pub(crate) mod tests {
         let top = left.a.lerp(left.b, 0.5) + left.up * (0.12 + 0.05);
         let purlin = bar("p", top.into(), (top + DVec3::Y * 5.).into(), 100., 100., [0., 0., 1.]);
         let g = classify(&left, &purlin).unwrap();
-        assert_eq!((g.kind, g.main, g.face, g.tags), ("end_face", 0, "flange_outer", ["side", "start"]));
+        assert_eq!((g.kind, g.main, g.face, g.tags), ("crossing", 0, "flange_outer", ["side", "start"]));
         let far = bar("f", [10., 10., 0.], [10., 12., 0.], 100., 100., [0., 0., 1.]);
         assert!(classify(&left, &far).is_none());
         // A continuous purlin over the rafter crosses it.
@@ -639,7 +648,7 @@ pub(crate) mod tests {
         assert_eq!(classify(&p1, &p2).unwrap().kind, "end_end");
         let index = Index::build(vec![rafter, p1, p2]);
         let kinds: Vec<_> = index.all().map(|(m, _, f)| (m.uid.as_str(), f.kind)).collect();
-        assert_eq!(kinds, [("r", "end_face"); 2]);
+        assert_eq!(kinds, [("r", "crossing"); 2]);
     }
 
     #[test]

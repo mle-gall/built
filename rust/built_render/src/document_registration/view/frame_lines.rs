@@ -874,6 +874,7 @@ fn selection_box_vertices<'py>(a: &Args<'py>) -> Reply<'py> {
 pub(super) fn cutter_primitives<'py>(view: &Obj<'py>, scene: &Obj<'py>) -> Reply<'py> {
     let py = view.py();
     let result = empty(py);
+    crate::junction_review::primitives(view, scene, &result)?;
     let all = attr_flag(scene, "show_all_cutters", false)?;
     if !all && !scene.getattr("selection")?.is_truthy()? {
         return Ok(result.into_any());

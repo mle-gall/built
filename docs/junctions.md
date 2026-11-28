@@ -1064,6 +1064,78 @@ Plate dimensions and unit masses describe stock. A missing material density
 leaves mass blank. The BCF package includes a viewpoint targeting the
 exported top assembly for each junction problem.
 
+### Meetings and the review (J3)
+
+`live/meetings.rs` builds the index the first time a query asks and keeps
+it per document. It never reads faces:
+
+| Element | Member |
+|---|---|
+| Sweep | its stock path (the stock cache, else the marker's `path`) and its profile's envelope, one capsule per span |
+| Repeat copy | the source sweep's stock in the copy's frame; a direct copy binds as `{"row", "station"}`, a copy inside a nested copy, or a copy of a sweep's placement sharing its definition, binds by placement |
+| Adaptive copy (own geometry) | the source's section over the copy's extent along the source axis |
+| Classified plain element | its box, cached by definition key and store revision: a bar when the longest side is at least 3 × the next, a wall, a slab (IfcSlab, IfcFooting, IfcRoof, IfcPlate), or a hostable door or window |
+| Junction assemblies, linked files, unclassified geometry | skipped |
+
+Section axes are read in the member's canonical direction, so a member
+drawn the other way meets the same way; its `hand` (mirror class) is the
+side of the main member's section the other comes from.
+
+The classifier adds two cases to §4.2. A seated end (a purlin end bearing
+on a rafter's top flange, its axis along the face) is a `crossing` with
+the end named, because J0's `end_face` frame needs the axis to pierce the
+face. Two ends that both sit on one member (purlins butting over a rafter)
+meet that member, not each other. A `base` end or wall bottom may lie
+inside the slab's thickness. A `corner` is an L (two ends) or a tee (an
+end on a run); a detail whose values say `"arrangement": "tee"` matches
+tees, other corner details match L corners only.
+
+Keys are `h64("built:meeting:v1:<kind>:" + sorted "<uid path>|<tag>")`
+with tags `start`, `end`, `side`, `mid`, `top`, `bottom`, `host` and
+`hosted`. The contact face is not in the key, so a skip survives a rotated
+section. The signature (By arrangement) is the kind, `class:profile:face
+or end` per role (sorted for symmetric kinds) and the angle to the degree;
+mirrored meetings share a group.
+
+Rule matching follows §2.6 with these readings: `rule.hand` is the source
+meeting's mirror class (the "mirrored" atom; `mirror: "exact"` filters on
+it); a role's `end` is checked only with `direction: "exact"`; `offset`
+without `value` expects 0 mm. Equal fits on a symmetric meeting take the
+thicker member, then the older one, as main. A main binding on a flange
+names `face: "flange_outer"`, so bolt grips measure through it.
+
+The index follows the document through `Doc.touched`, the keys written
+since a reader asked: each touched subtree is walked again and only the
+members that changed are re-queried in the grid. Undo, redo and plugin
+writes are covered the same way. The log wraps at 65,536 keys and the
+index then rescans.
+
+Skips and Follow are journalled on the live table and saved as
+`ext["built.junctions"]`. Follow lists a detail's open matches in
+`junction_counts` (`new`); nothing is applied.
+
+| Protocol | |
+|---|---|
+| Verbs | `junction_apply(detail, bindings)` with one binding map or a list (one step), `junction_skip(detail, meeting, skip=True)` with one key or a list, `junction_follow(detail, on=True)` |
+| Queries | `meetings(scene, filter)`, `junction_suggest(scene, detail)`, `junction_counts(scene)`, `junction_arrangements(scene)`, `junction_ghosts(scene, detail, keys)`, `meeting_index_stats(scene)` |
+
+`junction_suggest` lists each meeting of the detail's kind as `match`,
+`near` (one criterion out, with `widen_to`), `skipped`, `detailed` (a
+junction of another detail) or `applied`, with `why` atoms and the role
+bindings `junction_apply` takes.
+
+**The review** (`built_render/src/junction_review.rs`). Saving a junction
+detail that has matches shows "Knee end plate saved · 7 similar meetings ·
+Review". The review draws a badge at each meeting (ticked, unticked, near,
+skipped) and dashed ghosts of the detail's planes for the ticked ones, and
+lists the meetings beside the rail: Near with Widen (a detail revision by
+the one change), Skipped with Un-skip, Apply N and Skip all. A click on a
+badge ticks it, Alt-click skips it, Enter applies the ticked in one History
+step, Esc leaves with nothing applied. Scripts and the agent bridge use
+`built_render.junction_review(window, detail)`,
+`junction_review_action(window, "tick:3" | "apply" | …)` and
+`junction_review_state(scene)`.
+
 ## 13. Risks
 
 | Risk | Mitigation |

@@ -740,7 +740,12 @@ pub(super) fn meeting_key(kind: &str, roles: [(&Member, &str); 2]) -> String {
     eid::derived_uid(&format!("built:meeting:v1:{kind}:{}", parts.join(",")))
 }
 fn symmetric(f: &Found) -> bool {
-    matches!(f.kind, "end_end" | "crossing") || (f.kind == "corner" && f.tags[0] != "side")
+    f.kind == "end_end"
+        || (f.kind == "crossing" && f.tags[0] == "mid")
+        || (f.kind == "corner" && f.tags[0] != "side")
+}
+fn ptr_eq(a: &Member, b: &Member) -> bool {
+    std::ptr::eq(a, b)
 }
 fn leaf(uid: &str) -> &str {
     uid.split('#').next().unwrap_or(uid)
@@ -841,7 +846,7 @@ fn label_of(m: &Member) -> String {
 }
 /// Grouping signature, independent of modelling direction and hand.
 fn signature(main: &Member, other: &Member, f: &Found) -> (String, String) {
-    let mut roles = [descriptor(main, if f.kind == "end_face" { f.face } else { f.tags[0] }), descriptor(other, f.tags[1])];
+    let mut roles = [descriptor(main, if f.tags[0] == "side" { f.face } else { f.tags[0] }), descriptor(other, f.tags[1])];
     let mut labels = [label_of(main), label_of(other)];
     if symmetric(f) && roles[0] > roles[1] {
         roles.swap(0, 1);
@@ -852,6 +857,8 @@ fn signature(main: &Member, other: &Member, f: &Found) -> (String, String) {
         "end_face" => format!("end to {}", f.face.replace('_', " ")),
         "end_end" if f.angle < 5. => "splice".into(),
         "end_end" => "end to end".into(),
+        "crossing" if f.tags[0] == "side" => format!("seated on {}", f.face.replace('_', " ")),
+        "corner" => arrangement(f).replace("corner", "L corner"),
         k => k.replace('_', " "),
     };
     (
@@ -922,7 +929,7 @@ fn misses(rule: &Value, names: [&str; 2], roles: [(&Member, &str); 2], f: &Found
     let mut out = Vec::new();
     let exact = rule["direction"] == "exact";
     for (i, (m, end)) in roles.iter().enumerate() {
-        let face = (i == 0 && f.kind == "end_face").then_some(f.face);
+        let face = (i == 0 && matches!(f.kind, "end_face" | "crossing") && f.tags[0] == "side").then_some(f.face);
         role_misses(names[i], m, &rule["roles"][names[i]], face, end, exact, &mut out);
     }
     if let Some(value) = rule["angle"]["value"].as_f64() {
@@ -974,7 +981,18 @@ fn rule_of(p: &presets::Preset) -> Value {
     if rule["meeting"].is_null() {
         rule["meeting"] = p.values.get("meeting").cloned().unwrap_or(Value::Null);
     }
+    if rule["arrangement"].is_null() {
+        rule["arrangement"] = p.values.get("arrangement").cloned().unwrap_or(Value::Null);
+    }
     rule
+}
+/// A corner is an L (two ends) or a tee (an end on the other's run).
+fn arrangement(f: &Found) -> &'static str {
+    match (f.kind, f.tags[0]) {
+        ("corner", "side") => "tee",
+        ("corner", _) => "corner",
+        _ => "",
+    }
 }
 
 #[derive(Serialize)]
@@ -1007,6 +1025,10 @@ fn suggestion(
     if kind.is_some_and(|k| k != f.kind) {
         return None;
     }
+    // A corner detail without an arrangement is for L corners.
+    if f.kind == "corner" && rule["arrangement"].as_str().unwrap_or("corner") != arrangement(f) {
+        return None;
+    }
     let names = [names[0].as_str(), names[1].as_str()];
     let mut orders = vec![[(main, f.tags[0]), (other, f.tags[1])]];
     if symmetric(f) {
@@ -1015,11 +1037,17 @@ fn suggestion(
     let (roles, failed) = orders
         .into_iter()
         .map(|o| {
-            let ends = [end_of(o[0].0, if f.kind == "end_face" && o[0].1 == "side" { f.main_end } else { o[0].1 }, f.at), end_of(o[1].0, o[1].1, f.at)];
+            let ends = [end_of(o[0].0, if o[0].1 == "side" { f.main_end } else { o[0].1 }, f.at), end_of(o[1].0, o[1].1, f.at)];
             let m = misses(rule, names, [(o[0].0, ends[0]), (o[1].0, ends[1])], f);
             ([(o[0].0, ends[0]), (o[1].0, ends[1])], m)
         })
-        .min_by_key(|(_, m)| m.len())?;
+        // Equal fits: the thicker member, then the older one, is main
+        // (a wall corner's priority without the load-bearing flag).
+        .min_by_key(|(roles, m)| {
+            let width = |m: &Member| (m.dims.get("width").copied().unwrap_or(0.) * 1000.) as i64;
+            let order = |m: &Member| m.row.as_ref().and_then(|r| t.order.get(r)).copied().unwrap_or(u64::MAX);
+            (m.len(), -width(roles[0].0), order(roles[0].0))
+        })?;
     if failed.len() > 1 {
         return None;
     }
@@ -1065,7 +1093,15 @@ fn suggestion(
         at: f.at.to_array(),
         label: format!("{} × {}", name(roles[0].0), name(roles[1].0)),
         roles: BTreeMap::from([
-            (names[0].to_string(), binding(roles[0].0, roles[0].1)),
+            (names[0].to_string(), {
+                let mut b = binding(roles[0].0, roles[0].1);
+                // The plies a junction measures through need the flange
+                // named; other faces are found by facing (J0).
+                if f.face == "flange_outer" && f.tags[0] == "side" && ptr_eq(roles[0].0, main) {
+                    b["face"] = json!(f.face);
+                }
+                b
+            }),
             (names[1].to_string(), binding(roles[1].0, roles[1].1)),
         ]),
         mirrored,
@@ -1163,6 +1199,10 @@ pub(super) fn meetings_query<'p>(scene: &Obj<'p>, filter: Option<&Obj<'p>>) -> P
                 }
             }
             let (sig, words) = signature(main, other, f);
+            let mut main_binding = binding(main, end_of(main, if f.tags[0] == "side" { f.main_end } else { f.tags[0] }, f.at));
+            if f.face == "flange_outer" {
+                main_binding["face"] = json!(f.face);
+            }
             out.push(json!({
                 "key": meeting_key(f.kind, [(main, f.tags[0]), (other, f.tags[1])]),
                 "kind": f.kind,
@@ -1173,8 +1213,7 @@ pub(super) fn meetings_query<'p>(scene: &Obj<'p>, filter: Option<&Obj<'p>>) -> P
                 "hand": f.hand,
                 "signature": sig,
                 "arrangement": words,
-                "roles": {"main": binding(main, end_of(main, if f.tags[0] == "side" { f.main_end } else { f.tags[0] }, f.at)),
-                          "other": binding(other, end_of(other, f.tags[1], f.at))},
+                "roles": {"main": main_binding, "other": binding(other, end_of(other, f.tags[1], f.at))},
                 "members": [leaf(&main.uid), leaf(&other.uid)],
             }));
         }

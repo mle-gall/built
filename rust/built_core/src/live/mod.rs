@@ -862,7 +862,20 @@ impl Mutation {
             return Err(PyValueError::new_err("Unrecognised preset extension"));
         }
         match &self.0 {
-            Edit::Presets(rows) => presets::update(scene, &mut t, rows)?,
+            Edit::Presets(rows) => {
+                presets::update(scene, &mut t, rows)?;
+                // The view offers a review of similar meetings after the step
+                // (never inside it: the search is not part of the History).
+                let saved: Vec<(String, String)> = rows
+                    .iter()
+                    .filter(|p| p.primitive == "junction")
+                    .filter(|p| p.values.get("meeting").and_then(|m| m.as_str()) != Some("parts"))
+                    .map(|p| (p.uid.clone(), p.name.clone()))
+                    .collect();
+                if !saved.is_empty() {
+                    scene.setattr("_junction_saved", saved)?;
+                }
+            }
             Edit::DeletePreset(id) => {
                 if t.rows.values().any(|r| {
                     presets::follower(r) == Some(id.as_str())
