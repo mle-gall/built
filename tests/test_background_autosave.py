@@ -129,6 +129,8 @@ def test_failed_write_keeps_previous_recovery(win, monkeypatch):
     doc=win.active_document();slot=autosave.pending(doc.path,doc.untitled_no)
     old=slot.read_bytes();version=doc.autosaved_version
     _edit(win,z=7)
+    notices = []
+    manager.finished.connect(lambda name, message: notices.append(message))
     def fail(*args,**kwargs): raise OSError('disk full')
     monkeypatch.setattr(igz,'write_prepared',fail)
     win._on_autosave_tick()
@@ -136,6 +138,7 @@ def test_failed_write_keeps_previous_recovery(win, monkeypatch):
     assert slot.read_bytes()==old
     assert doc.autosaved_version==version
     assert manager.last_error=='disk full'
+    assert notices[-1] == 'Could not write the recovery file. disk full'
 
 
 def test_deferred_mesh_snapshot_does_not_materialize_source(tmp_path, monkeypatch):
@@ -234,5 +237,6 @@ def test_untitled_catalogue_members_with_cut_and_repeat_survive_autosave(win, tm
         back = Scene()
         igz.load_into(back, path)
         assert command_protocol.live_rows(back) == command_protocol.live_rows(scene)
-        assert sorted(solid_volume(g) for g in back.groups) == pytest.approx(
-            sorted(solid_volume(g) for g in scene.groups))
+        assert {g.uid: solid_volume(g) for g in back.groups} == pytest.approx(
+            {g.uid: solid_volume(g) for g in scene.groups})
+        assert all(solid_volume(g) > 0 for g in back.groups if g.uid in (post.uid, beam.uid))
