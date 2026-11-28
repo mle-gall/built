@@ -239,3 +239,86 @@ def test_apply_refuses_a_wrong_selection_with_the_roles_it_needs():
         live.junction_bind(scene, p["uid"], [one])
     reply = commands.run(h, "junction_apply", detail=p["uid"], bindings={"main": {"placement": one}})
     assert not reply["ok"]
+
+
+def test_fin_plate_bolts_drill_both_plies():
+    fin = next(p for p in starter_details() if p["name"] == "Fin plate")
+    scene, _, uid = apply_in_empty_document(fin)
+    rows = rows_of(scene)
+    parent = next(r for r in rows if r["uid"] == uid)
+    bolts = next(r for r in rows if r.get("key") == "bolts" and r["parent"] == uid)
+    grid = next(r for r in rows if r.get("key") == "bolts:repeat")
+    assert grid["rule"]["grid"]["pitch"] == parent["params"]["fin_h"] / 2
+    assert {r["owner"] for r in rows if r.get("junction") == bolts["uid"] and r["kind"] == "cut"} == {
+        bolts["roles"][ply]["placement"] for ply in ("ply_1", "ply_2")
+    }
+
+
+def test_imperial_steel_details_follow_units():
+    scene = Scene()
+    scene.units = {"length": "mm"}
+    name = "Steel connections · AISC"
+    assert all(p["pack"] != name for p, _ in live.preset_catalog(scene))
+    scene.units = {"length": "ft-in-frac"}
+    rows = [p for p, _ in live.preset_catalog(scene) if p["pack"] == name]
+    assert len(rows) == 8
+    h = History(scene)
+    w = {"library": "aisc/w8x18"}
+    picks = sweeps(h, (w, [[0, 0, 0], [0, 0, 3]]), (w, [[0, 0, 2], [0, 2, 2]]))
+    detail = next(p for p in rows if p["name"] == "Fin plate")
+    apply(h, "junction_apply", detail=detail["uid"], bindings=live.junction_bind(scene, detail, picks))
+    assert all(r["state"] == "ok" for r in rows_of(scene))
+    bolts = [g for g in scene.groups_by_uid().values() if (g.ifc or {}).get("d") == 19.05]
+    assert bolts and all("3/4" in g.name for g in bolts)
+
+
+def test_component_bundle_embeds_once_on_apply(tmp_path):
+    from tests.junction_starter_cases import box
+    source = Scene()
+    component = box(source, "Cleat", "IfcDiscreteAccessory", (0, 0, 0), (.06, .04, .008))
+    component.component = True
+    root = next(p for p in starter_details() if p["name"] == "Corner mitre")
+    root = dict(root, uid="fed0000000000001", name="Corner with cleat")
+    root["values"] = dict(root["values"], contents=[
+        {"key": "cleat", "part": {"component": component.uid, "at": {"frame": "@meet"}}}
+    ])
+    path = tmp_path / "cleats.builtpack"
+    live.pack_export([root], {"name": "Cleats"}, str(path), None, source)
+    imported, = live.pack_read(str(path))["rows"]
+    scene = Scene()
+    h = History(scene)
+    for y in (0, 2):
+        picks = sweeps(h, (HE, [[0, y, 0], [2, y, 0]]), (HE, [[2, y, 0], [2, y + 1, 0]]))
+        uid = apply(h, "junction_apply", detail=imported["uid"], bindings=live.junction_bind(scene, imported, picks),
+                    definitions=[imported])["uid"]
+        kept, = [g for g in scene.kept_components if g.uid == component.uid]
+        row = next(r for r in rows_of(scene) if r["uid"] == uid)
+        assert row["state"] == "ok"
+        part = scene.groups_by_uid()[row["contents"][0]["placement"]]
+        assert part.mesh is kept.mesh
+
+
+@pytest.mark.parametrize("filename", [
+    "steel-connections-en", "steel-connections-aisc", "purlin-connections-en", "mep-penetrations",
+])
+def test_inline_pack_hashes_and_dependencies(filename):
+    from pathlib import Path
+    path = Path(__file__).resolve().parents[1] / "resources" / "presets" / "packs" / (filename + ".builtpreset")
+    pack = live.pack_read(str(path))
+    assert pack["v"] == 2
+    assert all("needs" not in row and row["source"]["hash"] == row["hash"] for row in pack["rows"])
+
+
+def test_purlin_seats_at_an_oblique_crossing():
+    scene = Scene()
+    h = History(scene)
+    a, b = sweeps(h, (HE, [[-1.5, 0, 0], [1.5, 0, 0]]), (IPE, [[-.4, -1, 0], [.4, 1, 0]]))
+    p = next(p for p in starter_details() if p["name"] == "Purlin cleat")
+    uid = apply(h, "junction_apply", detail=p["uid"], bindings=live.junction_bind(scene, p, [a, b]))["uid"]
+    rows = rows_of(scene)
+    assert all(r["state"] == "ok" for r in rows)
+    joint = next(r for r in rows if r["uid"] == uid)
+    assert joint["frames"]["joining.bottom"][14] == pytest.approx(joint["frames"]["main.seat"][14])
+    apply(h, "undo")
+    joining = next(r for r in rows_of(scene) if r["owner"] == b)
+    assert all(pt[2] == 0 for pt in joining["path"]["points"])

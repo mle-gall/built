@@ -135,11 +135,14 @@ pub fn direct_deps(p: &Value) -> Vec<Dep> {
                 if let Some(uid) = part["preset"].as_str() {
                     out.insert(Dep { kind: "preset", key: uid.into() });
                 }
+                if let Some(key) = part["sweep"]["profile"]["library"].as_str() {
+                    out.insert(Dep { kind: "profile", key: key.into() });
+                }
                 if let Some(uid) = part["component"].as_str() {
                     out.insert(Dep { kind: "component", key: uid.into() });
                 }
                 if part.get("fastener").is_some() {
-                    out.insert(Dep { kind: "fastener", key: "metric".into() });
+                    out.insert(Dep { kind: "fastener", key: part["fastener"]["table"].as_str().unwrap_or("metric").into() });
                 }
                 if let Some(uid) = item["junction"]["detail"].as_str() {
                     out.insert(Dep { kind: "detail", key: uid.into() });
@@ -169,7 +172,7 @@ pub fn built_in(dep: &Dep) -> bool {
     match dep.kind {
         "preset" | "detail" => builtin_preset(&dep.key).is_some(),
         "profile" => profile::built_in(&dep.key),
-        "fastener" => dep.key == "metric",
+        "fastener" => matches!(dep.key.as_str(), "metric" | "inch"),
         _ => false,
     }
 }
@@ -192,6 +195,7 @@ fn symbol_names(v: &Value, out: &mut BTreeSet<String>) {
 fn expression_names(v: &Value, out: &mut BTreeSet<String>) -> Result<(), String> {
     match v {
         Value::String(s) if !s.starts_with('@') => {
+            if s == "through" { return Ok(()); }
             for n in expr::names(v)? {
                 out.insert(n);
             }
@@ -210,7 +214,7 @@ fn expression_names(v: &Value, out: &mut BTreeSet<String>) -> Result<(), String>
                     "key" | "on" | "name" | "prompt" | "group" | "unit" | "lock" | "kind"
                         | "operation" | "end" | "face" | "frame" | "type" | "standard"
                         | "grade" | "preset" | "component" | "detail" | "run" | "material"
-                        | "process" | "contact" | "arrangement" | "ref" | "meeting"
+                        | "table" | "library" | "class" | "axis" | "process" | "contact" | "arrangement" | "ref" | "meeting"
                 ) {
                     continue;
                 }
@@ -744,7 +748,14 @@ pub(super) fn bind(scene: &Obj<'_>, t: &LiveTable, p: &presets::Preset, picks: &
     if picks.len() == 2 && matches!(meeting, "end_face" | "base") {
         let a = axis_ends(scene, t, &picks[0])?;
         let b = axis_ends(scene, t, &picks[1])?;
-        let swap = match (a, b) {
+        let allowed = rule["roles"][&roles[0]]["class"].as_array();
+        let main_class_fits = |uid: &str| -> bool {
+            let class = group(scene.py(), t, uid).and_then(|g| g.getattr("ifc").ok())
+                .and_then(|r| r.get_item("class").ok()).and_then(|v| v.extract::<String>().ok());
+            allowed.is_some_and(|classes| class.is_some_and(|s| classes.contains(&json!(s))))
+        };
+        let fits = (main_class_fits(&picks[0]), main_class_fits(&picks[1]));
+        let swap = if fits.0 != fits.1 { fits.1 } else { match (a, b) {
             (Some(_), None) => meeting == "base",
             (Some((a0, a1)), Some((b0, b1))) => {
                 let joins = segment_distance(b0, a0, a1).min(segment_distance(b1, a0, a1));
@@ -752,7 +763,7 @@ pub(super) fn bind(scene: &Obj<'_>, t: &LiveTable, p: &presets::Preset, picks: &
                 reversed + 1e-6 < joins
             }
             _ => false,
-        };
+        }};
         if swap {
             picks.swap(0, 1);
         }
@@ -789,7 +800,7 @@ pub(super) fn bind(scene: &Obj<'_>, t: &LiveTable, p: &presets::Preset, picks: &
             .and_then(|f| f.first())
             .and_then(Value::as_str)
         {
-            if i == 0 && meeting == "end_face" {
+            if i == 0 && matches!(meeting, "end_face" | "crossing") {
                 b["face"] = json!(face);
             }
         }
@@ -931,6 +942,13 @@ fn find_row(src: &Sources<'_>, uid: &str) -> Option<Value> {
     src.rows.iter().find(|r| r["uid"] == uid).cloned()
 }
 
+fn part_revision(row: &Value, key: &str) -> Value {
+    row["source"]["components"][key].get("rev").cloned()
+        .or_else(|| row["depends"].as_array()?.iter()
+            .find(|d| d["kind"] == "component" && d["key"] == key)?.get("rev").cloned())
+        .unwrap_or(json!(1))
+}
+
 /// Write a pack of `details` (preset rows) and everything they need that is
 /// not built in. Returns pack.json as written and the files.
 pub fn export(details: &[Value], meta: &Value, src: &Sources<'_>, created_with: &str) -> PyResult<(Value, Vec<(String, Vec<u8>)>)> {
@@ -990,6 +1008,7 @@ pub fn export(details: &[Value], meta: &Value, src: &Sources<'_>, created_with: 
                         .ok_or_else(|| err(format!("Component {} is not in this model", dep.key)))?;
                     let path = format!("components/{}.built", dep.key);
                     entry["hash"] = json!(sha256(&bytes));
+                    entry["rev"] = part_revision(&row, &dep.key);
                     if used_paths.insert(path.clone()) {
                         files.push((path.clone(), bytes));
                     }
@@ -1420,7 +1439,14 @@ pub(super) fn pack_read<'p>(py: Python<'p>, path: PathBuf, known: Option<&Obj<'p
             // A single .builtpreset row, as before.
             let row: Value = serde_json::from_slice(&std::fs::read(&path)?).map_err(|e| err(e.to_string()))?;
             let manifest = if row["format"] == "built.presets" { row } else { json!({"format":"built.presets","v":1,"rows":[row]}) };
-            read_v1(&manifest, &known)?
+            if manifest["v"] == 2 {
+                // An inline format 2 pack has the same validation as pack.json.
+                let files = Zipped(BTreeMap::from([("pack.json".into(),
+                    serde_json::to_vec(&manifest).map_err(err)?)]));
+                read(&files, &known)?
+            } else {
+                read_v1(&manifest, &known)?
+            }
         } else {
             read(&Folder(folder), &known)?
         }
@@ -1438,7 +1464,20 @@ pub(super) fn pack_read<'p>(py: Python<'p>, path: PathBuf, known: Option<&Obj<'p
     let out = pyo3::types::PyDict::new(py);
     out.set_item("pack", to_py(py, &plan.manifest["pack"])?)?;
     out.set_item("v", plan.manifest["v"].as_u64().unwrap_or(1))?;
-    out.set_item("rows", to_py(py, &plan.rows)?)?;
+    let mut rows = plan.rows;
+    // Keep the verified bundle with the library row until its first application,
+    // including packs imported directly into a model.
+    for row in &mut rows {
+        for dep in row["depends"].as_array().cloned().unwrap_or_default() {
+            if dep["kind"] != "component" { continue; }
+            let Some((uid, bytes)) = dep["key"].as_str().zip(
+                dep["bundled"].as_str().and_then(|p| plan.files.get(p))) else { continue };
+            let encoded: String = py.import("base64")?.call_method1("b64encode",
+                (pyo3::types::PyBytes::new(py, bytes),))?.call_method1("decode", ("ascii",))?.extract()?;
+            row["source"]["components"][uid] = json!({"rev":dep["rev"], "hash":sha256(bytes), "data":encoded});
+        }
+    }
+    out.set_item("rows", to_py(py, &rows)?)?;
     let bundled = pyo3::types::PyDict::new(py);
     for (uid, path) in components {
         if let Some(bytes) = path.as_str().and_then(|p| plan.files.get(p)) {
@@ -1475,10 +1514,23 @@ pub(super) fn pack_export<'p>(
     }
     lookup.extend(details.iter().cloned());
     let component = |uid: &str| -> PyResult<Option<Vec<u8>>> {
+        for row in &lookup {
+            let bundle = &row["source"]["components"][uid];
+            if let Some(data) = bundle["data"].as_str() {
+                let bytes: Vec<u8> = py.import("base64")?.call_method1("b64decode", (data,))?.extract()?;
+                if bundle["hash"] != sha256(&bytes) {
+                    return Err(err("Bundled component hash mismatch"));
+                }
+                return Ok(Some(bytes));
+            }
+        }
         let Some(scene) = scene else { return Ok(None) };
         let definition = match current(py, root(scene)?).and_then(|t| group(py, &t, uid)) {
             Some(g) => Some(g),
-            None => cut::source(scene, uid)?,
+            None => match cut::source(scene, uid)? {
+                Some(definition) => Some(definition),
+                None => scene.call_method0("groups_by_uid")?.cast_into::<PyDict>()?.get_item(uid)?,
+            }
         };
         let Some(definition) = definition else { return Ok(None) };
         let tmp = py.import("tempfile")?.call_method0("mkdtemp")?.extract::<PathBuf>()?;

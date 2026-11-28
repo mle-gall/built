@@ -141,6 +141,47 @@ pub(super) fn all_rows(ctx: &Bound<'_, PyAny>) -> PyResult<Vec<Value>> {
     Ok(out)
 }
 
+/// Older Library imports stored the verified component in the component
+/// entry's files. Supply those bytes with the definition on Apply as well.
+fn definitions<'p>(ctx: &Bound<'p, PyAny>, p: &Value, rows: &[Value]) -> PyResult<Bound<'p, PyAny>> {
+    let py = ctx.py();
+    let defs = proto(py)?.call_method1("junction_definitions", (obj_of(py, p)?, obj_of(py, &json!(rows))?))?;
+    let mut catalog = None;
+    for row in defs.try_iter()? {
+        let row = row?;
+        let mut value = val(py, &row)?;
+        let parts = value["values"]["contents"].as_array().cloned().unwrap_or_default();
+        for item in parts {
+            let Some(id) = item["part"]["component"].as_str() else { continue };
+            if value["source"]["components"][id].is_object() { continue; }
+            if catalog.is_none() {
+                let scene = ctx.getattr_opt("scene")?;
+                catalog = Some(super::destinations::entries(py, scene.as_ref(), &["components"])?);
+            }
+            for entry in catalog.iter().flatten().filter(|l| l.entry.id == id) {
+                let Some(root) = &entry.dest.root else { continue };
+                let path = store::files_dir(root, "components", id).join("component.built");
+                if !path.is_file() { continue; }
+                let data = pyo3::types::PyBytes::new(py, &std::fs::read(path)?);
+                let hash = py.import("hashlib")?.call_method1("sha256", (&data,))?
+                    .call_method0("hexdigest")?.extract::<String>()?;
+                let hash = format!("sha256:{hash}");
+                let dependency = value["depends"].as_array().and_then(|d| d.iter().find(|v| v["key"] == id));
+                if dependency.and_then(|d| d["hash"].as_str()).is_some_and(|want| want != hash) {
+                    continue;
+                }
+                let rev = dependency.and_then(|d| d["rev"].as_u64()).unwrap_or(1);
+                let encoded: String = py.import("base64")?.call_method1("b64encode", (data,))?
+                    .call_method1("decode", ("ascii",))?.extract()?;
+                value["source"]["components"][id] = json!({"hash":hash,"rev":rev,"data":encoded});
+                row.set_item("source", obj_of(py, &value["source"])?)?;
+                break;
+            }
+        }
+    }
+    Ok(defs)
+}
+
 /// Apply… a detail to the selected members (main first), embedding the
 /// detail and what it needs in the same step.
 pub(super) fn apply(ctx: &Bound<'_, PyAny>, p: &Value) -> PyResult<()> {
@@ -162,7 +203,7 @@ pub(super) fn apply(ctx: &Bound<'_, PyAny>, p: &Value) -> PyResult<()> {
         Err(e) => return flash(ctx, &e.value(py).str()?.to_string()),
     };
     let rows = all_rows(ctx)?;
-    let definitions = match api.call_method1("junction_definitions", (obj_of(py, p)?, obj_of(py, &json!(rows))?)) {
+    let definitions = match definitions(ctx, p, &rows) {
         Ok(d) => d,
         Err(e) => return flash(ctx, &e.value(py).str()?.to_string()),
     };
@@ -183,7 +224,7 @@ pub(super) fn apply(ctx: &Bound<'_, PyAny>, p: &Value) -> PyResult<()> {
 pub(super) fn update_model(ctx: &Bound<'_, PyAny>, p: &Value) -> PyResult<()> {
     let py = ctx.py();
     let rows = all_rows(ctx)?;
-    let defs = match proto(py)?.call_method1("junction_definitions", (obj_of(py, p)?, obj_of(py, &json!(rows))?)) {
+    let defs = match definitions(ctx, p, &rows) {
         Ok(d) => d,
         Err(e) => return flash(ctx, &e.value(py).str()?.to_string()),
     };

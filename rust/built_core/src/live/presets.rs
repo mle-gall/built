@@ -103,6 +103,8 @@ pub const PACK_FILES: &[&str] = &[
     include_str!("../../../../resources/presets/starter.builtpreset"),
     include_str!("../../../../resources/presets/packs/steel-connections-en.builtpreset"),
     include_str!("../../../../resources/presets/packs/timber-joints.builtpreset"),
+    include_str!("../../../../resources/presets/packs/purlin-connections-en.builtpreset"),
+    include_str!("../../../../resources/presets/packs/mep-penetrations.builtpreset"),
     include_str!("../../../../resources/presets/packs/generic.builtpreset"),
 ];
 #[derive(Deserialize)]
@@ -111,9 +113,13 @@ struct PackFile {
     #[serde(default)]
     pack: Value,
 }
-static BUILTINS: LazyLock<Pack> = LazyLock::new(|| {
+static BUILTINS: LazyLock<Pack> = LazyLock::new(|| load_packs(PACK_FILES));
+static IMPERIAL: LazyLock<Pack> = LazyLock::new(|| load_packs(&[
+    include_str!("../../../../resources/presets/packs/steel-connections-aisc.builtpreset"),
+]));
+fn load_packs(files: &[&str]) -> Pack {
     let mut rows = Vec::new();
-    for text in PACK_FILES {
+    for text in files {
         let file: PackFile = serde_json::from_str(text).expect("bundled presets");
         for row in file.rows {
             let mut p: Preset = serde_json::from_value(row.clone()).expect("bundled preset");
@@ -122,14 +128,18 @@ static BUILTINS: LazyLock<Pack> = LazyLock::new(|| {
                 p.source = Some(json!({"pack": id, "name": file.pack["name"], "version": file.pack["version"],
                     "rev": p.rev, "hash": row["hash"], "author": file.pack["author"], "licence": file.pack["licence"]}));
             }
+            if let Some(pref) = file.pack.get("preference") {
+                p.source.as_mut().expect("pack metadata")["preference"] = pref.clone();
+            }
             rows.push(p);
         }
     }
     Pack { rows }
-});
+}
 /// A bundled preset or detail by uid.
 pub fn builtin(uid: &str) -> Option<Preset> {
-    BUILTINS.rows.iter().find(|p| p.uid == uid).cloned()
+    let pack = if uid.starts_with("a15c") { &*IMPERIAL } else { &*BUILTINS };
+    pack.rows.iter().find(|p| p.uid == uid).cloned()
 }
 
 fn error(msg: impl ToString) -> PyErr {
@@ -254,7 +264,7 @@ pub fn lookup(t: &LiveTable, uid: &str) -> Option<Preset> {
     t.presets
         .get(uid)
         .cloned()
-        .or_else(|| BUILTINS.rows.iter().find(|p| p.uid == uid).cloned())
+        .or_else(|| builtin(uid))
 }
 pub fn link(t: &mut LiveTable, spec: &mut sweep::Sweep) -> PyResult<Option<Preset>> {
     let Some(uid) = &spec.preset_uid else {
@@ -377,7 +387,15 @@ fn preset_catalog<'p>(py: Python<'p>, scene: Option<&Obj<'p>>) -> PyResult<Obj<'
         .and_then(|k| current(py, k))
         .unwrap_or_default();
     let mut rows = Vec::new();
-    for p in &BUILTINS.rows {
+    let units = py.import("built_core.units")?;
+    let uses_inches = |units: Obj<'_>| -> PyResult<bool> {
+        let length: String = units.get_item("length")?.extract()?;
+        Ok(matches!(length.as_str(), "ft" | "in" | "ft-in" | "in-frac" | "ft-in-frac"))
+    };
+    let imperial = scene.map(|s| uses_inches(units.call_method1("model_units_of", (s,))?))
+        .transpose()?.unwrap_or(false) || uses_inches(units.call_method0("new_document_units")?)?;
+    let regional = imperial.then(|| IMPERIAL.rows.as_slice()).unwrap_or_default();
+    for p in BUILTINS.rows.iter().chain(regional) {
         if !table.presets.contains_key(&p.uid) {
             rows.push((p, "bundled"));
         }
