@@ -129,9 +129,6 @@ pub(super) fn destination(ui: &mut egui::Ui, report: &Value, jobs: &[super::Job]
             if kit::quiet(ui,"Back to deliveries").clicked() {cmds.push("deliver:back".into());}
             return;
         }
-        if report.is_object() && kit::quiet(ui, "Junction schedules").clicked() {
-            cmds.push("deliver:schedules".into());
-        }
         let issues = checks(report);
         let status = match issues.len() {
             _ if !report.is_object() => "Checking…".into(),
@@ -283,6 +280,9 @@ pub(super) fn destination(ui: &mut egui::Ui, report: &Value, jobs: &[super::Job]
                     if kit::sheet_button(ui, "Edit setup…", "", 0) { cmds.push(format!("deliver:edit:{active}")); }
                 });
             });
+        }
+        if report.is_object() && kit::quiet(ui, "Junction schedules").clicked() {
+            cmds.push("deliver:schedules".into());
         }
     });
     show
