@@ -825,3 +825,64 @@ boundary of a cylindrical member cut by an oblique plane.
 - **Rectangle.** Its opposite corner infers no axis from its first corner
   (that made a line on the red axis), and while values are typed the
   preview is the typed `w; h` rectangle towards the cursor's quadrant.
+
+## Slab and Footing presets (feat/presets-1128)
+
+Slab and Footing are presets of `primitive: "sweep"`, like Wall and Plate.
+Four general fields were added to the sweep row so that they need no
+element kind of their own; any preset may use them.
+
+| Field | Meaning | Used by |
+|---|---|---|
+| `path.depth`, `path.dir` | An **extrusion**: the path is one point (`points[0]`, or the first of `ends` when a host holds it), a direction in the parent's frame and a depth in millimetres. Without `dir` the direction is towards `points[1]`. The profile is then the outline and the depth the thickness | Slab, Raft slab, Pad footing; any plate-like element |
+| `edge` | The **edge profile** of an extrusion: `{"shape", "size", "depth", "side"}`. The outer ring of the outline is repeated, inset, between the outline and an end face (`start`, `end` or `both`). Shapes: `chamfer`, `round` (smooth, `segments` ÷ 4 facets), `step` (a rebate; a negative `size` steps outwards: a spread footing) and `downstand` (an edge beam `size` wide hanging `depth` past the end face: a raft slab's thickened edge). Holes run straight through | Raft slab; a chamfered or bull-nosed slab edge |
+| `shift` | The section moved off the path, `[across, up]` in the path's own frame, millimetres. `Sweep::origin` folds it into the attachment point, so the generator, the meeting index, junction frames and the IFC writer place the section the same way | Strip footing under an off-centre wall line |
+| `fit` | **Sized from** a host member: `{"host": {"sweep": "<row uid>", "at": "start" \| "end"}, "values": {field: expression}}`. Each expression is in the junction parameters' grammar (`live/expr.rs`) over `host.width`, `host.height`, `host.thickness`, `host.length`; the fields are `profile.params.<name>`, `path.depth`, `shift.x`, `shift.y` and `rotation`. The row depends on the host's stock (`Key::Stock`); the live pass writes the resolved numbers into the row before it evaluates (`live/fit.rs`), so the saved row, the record and the exports carry plain numbers. A fitted field edited by hand drops its own relation and keeps the others. A host that is gone or no longer resolves leaves the member as it was | Pad footing (from its column), Strip footing (from its wall) |
+
+Role ids: an extrusion's side faces between the two full outlines keep the
+ids they have without an edge (`side/…/station/0`), so adding or changing
+an edge profile keeps dimensions and cuts on those faces; the edge's own
+rings are `station/s<n>` and `station/e<n>`, its flat ledges `ledge/…`.
+
+A preset's `values` may carry `depth`, `edge`, `shift` and `fit` (the
+`values` of a preset, not its host: the element names its own). `depth`
+is written to `path.depth`; `locks` apply to them as to every field.
+
+Bundled in the starter pack `Construction`:
+
+| Preset | Record | Values |
+|---|---|---|
+| Slab | `IfcSlab` FLOOR, Concrete, `SL-{n}`, node Slabs | `basic/flat` 4000 × 3000 (the outline drawn replaces it), depth 200 |
+| Raft slab | `IfcSlab` BASESLAB, `RS-{n}` | depth 250, edge beam 400 × 350 under its far face |
+| Pad footing | `IfcFooting` PAD_FOOTING, `PF-{n}`, node Footings | `basic/flat` 600 × 600, depth 400, width and depth = host + 400 |
+| Strip footing | `IfcFooting` STRIP_FOOTING, `SF-{n}` | `basic/flat` 500 × 250, width = host thickness + 300 |
+
+**The Sweep tool** reads the armed preset, never its trade:
+
+| Preset has | The pointer gives | Typed |
+|---|---|---|
+| `depth` | the **outline**: a click on a face (loose or in a plain group) extrudes that face's outline, holes included, as a drawn profile (a sketch row: Edit profile changes the outline later); elsewhere two clicks are opposite corners of a rectangle (the parametric profile, its width and height). Alt on a face keeps a plain corner on that face's plane. F puts the extrusion above the outline instead of below | a length is the thickness; `width;height` after the first corner |
+| `fit` | the **host**: a click on a swept member makes the element sized from it and anchored to it (a pad under its lower end, a strip along its axis under its section, 150 mm past each end when the wall is one span). A click elsewhere places the catalogue size free | as above, or the path's length |
+
+Openings in a slab are ordinary live cuts (the Opening and Penetration
+presets); a wall on a slab is the `base` meeting (Wall on slab): the
+meeting index reads an extrusion classed as a slab or footing by its box,
+as it reads a hand-modelled slab. Save as preset keeps `depth` and `edge`,
+so a slab type goes to This model, the project, My library or a shared
+folder like every preset.
+
+Not done: a slab from the ring of walls under the pointer (pass-4 A); a
+footing under a chain of several wall spans is one mitred strip with plain
+points (not anchored); the IFC writer exports an edged extrusion as its
+evaluated faces, not as a swept solid.
+
+## Sketch workspace: Release (feat/presets-1128)
+
+The top bar has Cancel, **Release** and Done. Release leaves the sketch
+and keeps the result, as Release does in the other edit sessions:
+`sketch_commit(row, adopt=…, release=True)` commits the drawing and, in the
+same History step, gives each sweep and section cut that uses it its own
+frozen copy and removes the shared row (§4.4). It is offered when
+something uses the sketch, and refused with the reason when the drawing is
+not closed. Scripts use the window command `sketch:release`.
+

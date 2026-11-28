@@ -431,8 +431,14 @@ impl SweepTool {
             )
         })
     }
-    /// The profile the chip names: a drawing by its name, a size by its label.
-    fn profile_name(&self) -> &str {
+    /// The profile the chip names: a drawing by its name, a size by its
+    /// label, a size the preset re-dimensions by its own width and height.
+    fn profile_name(&self) -> std::borrow::Cow<'_, str> {
+        if self.profile.drawing.is_none() {
+            if let (Some(w), Some(h)) = (self.profile.params.get("width"), self.profile.params.get("height")) {
+                return format!("{w:.0} × {h:.0}").into();
+            }
+        }
         self.profile
             .drawing
             .as_ref()
@@ -440,6 +446,7 @@ impl SweepTool {
             .filter(|n| !n.is_empty())
             .or_else(|| self.profile.name())
             .unwrap_or(if self.profile.drawing.is_some() { "Drawn profile" } else { "Sweep" })
+            .into()
     }
     /// *preset · profile · attachment · rotation*; a profile size picked
     /// from the Library is its own preset, so its name shows once.
@@ -550,8 +557,12 @@ impl Tool for SweepTool {
                 "from this face".to_owned()
             } else if self.rectangular() && !self.fit.is_object() {
                 "first corner, or a face".to_owned()
+            } else if self.rectangular() {
+                // A free pad: its catalogue size.
+                let o = self.profile.outline(24).ok();
+                o.map_or_else(|| self.profile_name().into_owned(), |o| format!("{:.0} × {:.0} mm", o.width, o.height))
             } else {
-                self.profile_name().to_owned()
+                self.profile_name().into_owned()
             };
             let edge = match self.edge["shape"].as_str() {
                 Some("chamfer") => " · chamfered edge",

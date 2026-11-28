@@ -1036,7 +1036,23 @@ impl Mutation {
                         }
 
                         let name = if p.naming.contains("{n}") {
-                            p.naming.replace("{n}", &(t.serial + 1).to_string())
+                            // The next number of this pattern in the model
+                            // (SL-1, SL-2…), whatever else was made between.
+                            let (head, tail) = p.naming.split_once("{n}").unwrap_or((p.naming.as_str(), ""));
+                            let mut next = 1u64;
+                            {
+                                // Names read from the document, not through
+                                // Python: a model may hold thousands of members.
+                                let d = doc::lock();
+                                for row in t.rows.values().filter(|r| r.kind == "sweep") {
+                                    let Some(Data::Placement(other)) = t.groups.get(&row.owner).and_then(|k| d.node(*k)).map(|n| &n.data) else { continue };
+                                    let Some(other) = other.name.as_deref() else { continue };
+                                    if let Some(n) = other.strip_prefix(head).and_then(|r| r.strip_suffix(tail)).and_then(|n| n.parse::<u64>().ok()) {
+                                        next = next.max(n.saturating_add(1));
+                                    }
+                                }
+                            }
+                            p.naming.replace("{n}", &next.to_string())
                         } else {
                             p.name.clone()
                         };
@@ -1685,6 +1701,14 @@ fn live_sweep<'p>(scene: &Obj<'p>, owner: &str) -> PyResult<Obj<'p>> {
             .and_then(|r| r.sketch_fields.name.as_str())
             .or_else(|| spec.profile.name())
             .unwrap_or("Drawn profile");
+        // A size the element re-dimensions reads by its own width and height.
+        let name = match (spec.profile.sketch.is_none(), spec.profile.params.get("width"), spec.profile.params.get("height")) {
+            (true, Some(w), Some(h)) => {
+                let stem = name.find(|c: char| c.is_ascii_digit()).map_or(name, |at| name[..at].trim_end());
+                format!("{stem} {w:.0} × {h:.0}")
+            }
+            _ => name.to_owned(),
+        };
         value.set_item("profile_name", name)?;
         if let Some(g) = group(scene.py(), &t, owner) {
             if let Ok(path) = g.getattr("ext")?.get_item(EXT)?.get_item("path") {

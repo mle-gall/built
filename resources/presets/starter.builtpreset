@@ -71,7 +71,11 @@
       "rev": 1,
       "values": {
         "profile": {
-          "library": "basic/slab"
+          "library": "basic/flat",
+          "params": {
+            "width": 4000,
+            "height": 3000
+          }
         },
         "attachment": "bottom_left",
         "depth": 200
@@ -102,7 +106,11 @@
       "rev": 1,
       "values": {
         "profile": {
-          "library": "basic/slab"
+          "library": "basic/flat",
+          "params": {
+            "width": 4000,
+            "height": 3000
+          }
         },
         "attachment": "bottom_left",
         "depth": 250,
@@ -139,7 +147,11 @@
       "rev": 1,
       "values": {
         "profile": {
-          "library": "basic/pad"
+          "library": "basic/flat",
+          "params": {
+            "width": 600,
+            "height": 600
+          }
         },
         "attachment": "centre",
         "depth": 400,
@@ -177,7 +189,11 @@
       "rev": 1,
       "values": {
         "profile": {
-          "library": "basic/strip"
+          "library": "basic/flat",
+          "params": {
+            "width": 500,
+            "height": 250
+          }
         },
         "attachment": "top",
         "fit": {

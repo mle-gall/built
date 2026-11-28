@@ -27,7 +27,7 @@ def bounds(group):
 
 def slab(h, name="Slab", width=4000, height=3000, **more):
     p = preset(name)
-    spec = dict(preset_uid=p["uid"], profile=dict(library="basic/slab", params=dict(width=width, height=height)),
+    spec = dict(preset_uid=p["uid"], profile=dict(library="basic/flat", params=dict(width=width, height=height)),
                 attachment="bottom_left", path=dict(points=[[0, 0, 0]], dir=[0, 0, -1]), **more)
     apply(h, "create_sweeps", sweeps=[spec])
     return h.scene.groups[-1]
@@ -183,7 +183,7 @@ def test_pad_footing_is_sized_from_its_column_and_follows_it(tmp_path):
     assert row["fit"]["values"] == {"profile.params.height": "host.height + 400", "profile.params.width": "host.width + 400"}
     lo, hi = bounds(foot)
     assert lo == pytest.approx([0.7, 0.705, -0.4]) and hi == pytest.approx([1.3, 1.295, 0])
-    assert foot.ifc["class"] == "IfcFooting" and foot.ifc["predefined_type"] == "PAD_FOOTING" and foot.name == "PF-2"
+    assert foot.ifc["class"] == "IfcFooting" and foot.ifc["predefined_type"] == "PAD_FOOTING" and foot.name == "PF-1"
     # A larger column: the pad follows, in the same step.
     crow = live.live_sweep(scene, col.uid)
     apply(h, "live_set", row=dict(crow, profile=dict(library="en/ipe240")))
@@ -273,3 +273,53 @@ def test_presets_keep_their_extrusion_edge_and_fit_through_a_pack_roundtrip():
     assert bounds(g)[0][2] == pytest.approx(-0.53)
     bad = dict(mine, values=dict(mine["values"], thickness=3))
     assert not commands.run(h, "preset_update", rows=[bad])["ok"]
+
+
+@pytest.mark.perf
+def test_footing_budgets_on_a_grid_of_columns():
+    """200 columns on their pads: a column's change re-evaluates its own pad
+    and no other, within the member budget (general-base §3.4), and a slab
+    drawn into that model is named and made within it too."""
+    import statistics
+    import time
+
+    scene = Scene()
+    h = History(scene)
+    column_preset, pad_preset = preset("Steel column"), preset("Pad footing")
+    grid = [(x * 5.0, y * 5.0) for x in range(20) for y in range(10)]
+    apply(h, "create_sweeps", sweeps=[dict(preset_uid=column_preset["uid"], path=dict(points=[[x, y, 0], [x, y, 3]]))
+                                      for x, y in grid])
+    columns = list(scene.groups)
+    rows = [live.live_sweep(scene, g.uid) for g in columns]
+    pads = []
+    for row in rows:
+        anchor = {"to": {"sweep": row["uid"], "at": "start"}}
+        pads.append(dict(preset_uid=pad_preset["uid"], attachment="centre", path=dict(ends=[anchor, anchor], dir=[0, 0, -1]),
+                         fit=dict(host={"sweep": row["uid"], "at": "start"})))
+    apply(h, "create_sweeps", sweeps=pads)
+    footings = list(scene.groups)[len(columns):]
+    assert len(footings) == 200 and footings[-1].name == "PF-200"
+    assert all(r["state"] == "ok" for r in live.live_rows(scene))
+    meshes = [g.mesh for g in footings]
+    samples = []
+    for i in range(15):
+        size = "en/ipe240" if i % 2 == 0 else "en/he200a"
+        start = time.perf_counter()
+        apply(h, "live_set", row=dict(rows[7], profile=dict(library=size)))
+        samples.append((time.perf_counter() - start) * 1000)
+    changed = [i for i, (g, m) in enumerate(zip(footings, meshes)) if g.mesh is not m]
+    assert changed == [7]
+    assert live.live_sweep(scene, footings[7].uid)["profile"]["params"]["width"] == pytest.approx(520)
+    edit = statistics.median(samples)
+    # A step that touches no host leaves every footing alone.
+    meshes = [g.mesh for g in footings]
+    samples = []
+    for i in range(9):
+        start = time.perf_counter()
+        slab(h, width=3000 + i)
+        samples.append((time.perf_counter() - start) * 1000)
+    assert all(g.mesh is m for g, m in zip(footings, meshes))
+    assert scene.groups[-1].name == "SL-9"
+    draw = statistics.median(samples)
+    print(f"200 columns on pads: one column edit with its pad {edit:.2f} ms, a slab drawn into the model {draw:.2f} ms")
+    assert edit < 16 and draw < 16, (edit, draw)

@@ -73,48 +73,6 @@
         "source": "Built parametric dimensions"
       },
       {
-        "key": "basic/slab",
-        "label": "Slab 4000 × 3000",
-        "family": "rectangle",
-        "params": {
-          "width": 4000,
-          "height": 3000,
-          "web": 0,
-          "flange": 0,
-          "radius": 0
-        },
-        "standard": "",
-        "source": "Nominal parametric dimensions"
-      },
-      {
-        "key": "basic/pad",
-        "label": "Pad 600 × 600",
-        "family": "rectangle",
-        "params": {
-          "width": 600,
-          "height": 600,
-          "web": 0,
-          "flange": 0,
-          "radius": 0
-        },
-        "standard": "",
-        "source": "Nominal parametric dimensions"
-      },
-      {
-        "key": "basic/strip",
-        "label": "Strip 500 × 250",
-        "family": "rectangle",
-        "params": {
-          "width": 500,
-          "height": 250,
-          "web": 0,
-          "flange": 0,
-          "radius": 0
-        },
-        "standard": "",
-        "source": "Nominal parametric dimensions"
-      },
-      {
         "key": "basic/rail",
         "label": "Round rail 42 × 2",
         "family": "chs",
