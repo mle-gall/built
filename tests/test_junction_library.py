@@ -252,3 +252,17 @@ def test_empty_state_points_to_import_pack_until_a_pack_is_installed(win, tmp_pa
     win._activate_tool("select")
     win._activate_tool("junction")
     assert win._tools["junction"]._state("prompt") != hint
+
+
+def test_a_search_that_hides_the_focused_profile_moves_focus_to_the_first_match(win, tmp_path):
+    addon_cases.install(win, "steel-profiles-en", tmp_path)
+    L.open_library(win, "profiles")
+    first = frame(win)
+    assert first["focus"] and "HE 200" not in first["focus"]
+    act(win, "search", "HE 200")
+    sheet = frame(win)
+    shown = tiles(sheet)
+    assert [i["label"] for i in shown] == ["HE 200 A"]
+    assert sheet["focus"] == shown[0]["id"] and sheet["force_focus"]
+    act(win, "focus", shown[0]["id"])
+    assert not frame(win)["force_focus"]

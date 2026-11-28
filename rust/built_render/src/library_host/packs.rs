@@ -456,9 +456,9 @@ pub(super) fn ask_import(ctx: &Bound<'_, PyAny>) -> PyResult<()> {
         let field = forms.getattr("Field")?;
         let fields = PyList::empty(py);
         let summary = if needs > 0 {
-            format!("{count} detail{} · {needs} need something this Library lacks and will be listed, not applied", if count == 1 { "" } else { "s" })
+            format!("{count} item{} · {needs} need something this Library lacks and will be listed, not applied", if count == 1 { "" } else { "s" })
         } else {
-            format!("{count} detail{}, all ready", if count == 1 { "" } else { "s" })
+            format!("{count} item{}, all ready", if count == 1 { "" } else { "s" })
         };
         fields.append(field.call1(("summary", "text", if name.is_empty() { "Pack".to_owned() } else { name }, summary))?)?;
         let options: Vec<(String, String)> = dests.clone();
@@ -475,7 +475,7 @@ pub(super) fn ask_import(ctx: &Bound<'_, PyAny>) -> PyResult<()> {
             let ctx = c2.bind(py);
             let dest: String = args.get_item(1)?.get_item("dest")?.extract()?;
             match import(py, ctx, &path2, &dest) {
-                Ok(r) => flash(ctx, &format!("Imported {} detail{} into {}{}", r["ok"], if r["ok"] == 1 { "" } else { "s" }, text(&r["destination"]),
+                Ok(r) => flash(ctx, &format!("Imported {} item{} into {}{}", r["ok"], if r["ok"] == 1 { "" } else { "s" }, text(&r["destination"]),
                     if r["needs"].as_u64().unwrap_or(0) > 0 { format!(" · {} need something missing", r["needs"]) } else { String::new() }))?,
                 Err(e) => flash(ctx, &e.value(py).str()?.to_string())?,
             }

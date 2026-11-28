@@ -2509,6 +2509,9 @@ impl LibrarySheet {
                 content.call_method("buttons", (acts,), Some(&[("align", "left")].into_py_dict(py)?))?;
             }
         }
+        // A search or scope that hides the cursor moves it to the first row
+        // shown; the sheet's focus follows so Enter uses the row on screen.
+        let moved = !st.call_method1("get", ("cursor",))?.eq(out.get_item("cursor")?)?;
         st.set_item("cursor", out.get_item("cursor")?)?;
         let detail = sheet.call_method("detail", (), Some(&[("width", (if faceted {260i32} else {340}).into_pyobject(py)?.into_any()), ("empty", s(py, "Pick an item to see it here."))].into_py_dict(py)?))?;
         let cursor = st.call_method1("get", ("cursor",))?;
@@ -2538,7 +2541,7 @@ impl LibrarySheet {
         }
         sheet.call_method1("footer", (links, crate::settings_rows::tr(py, hint)?))?;
         if cursor.is_truthy()? {
-            let force = st.call_method1("pop", ("force_focus", false))?.is_truthy()?;
+            let force = st.call_method1("pop", ("force_focus", false))?.is_truthy()? || moved;
             sheet.call_method("focus", (&cursor,), Some(&[("force", force)].into_py_dict(py)?))?;
         }
         let catalogue = slf.getattr("catalogue")?;
