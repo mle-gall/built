@@ -574,17 +574,12 @@ fn encoded_geometry<'p>(
             .bind(py)
             .cast::<PyDict>()?;
         let np = py.import("numpy")?;
-        let a = PyDict::new(py);
-        for (k, v) in arrays.iter() {
-            a.set_item(k, np.call_method1("asarray", (v,))?)?
-        }
-        for (k, n) in [("pos", 3), ("edges", 2)] {
-            a.set_item(
-                k,
-                a.get_item(k)?
-                    .ok_or_else(|| PyValueError::new_err(k))?
-                    .call_method1("reshape", (-1, n))?,
-            )?
+        // The exact-geometry encoder consumes JSON strings alongside numeric
+        // columns. Preserve those records when the worker packs its snapshot.
+        let a = arrays.copy()?;
+        for (key, width) in [("pos", 3), ("edges", 2)] {
+            let column = a.as_any().get_item(key)?;
+            a.set_item(key, np.call_method1("asarray", (column,))?.call_method1("reshape", (-1, width))?)?;
         }
         let pos = a.get_item("pos")?.unwrap();
         if !np

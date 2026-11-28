@@ -365,6 +365,13 @@ pub(crate) fn clearance_operand<'p>(tool: &Obj<'p>, clearance: f64) -> PyResult<
     .ok_or_else(|| error(tool.py(), "empty clearance operand"))
 }
 
+/// A pair of coincident flange faces can leave a zero-volume manifold.
+fn overlaps(a: &Obj, b: &Obj, intersection: &Obj) -> PyResult<bool> {
+    if intersection.call_method0("is_empty")?.is_truthy()? { return Ok(false) }
+    let volume = |m: &Obj| m.call_method0("volume")?.extract::<f64>();
+    Ok(volume(intersection)?.abs() > 64. * f64::EPSILON * volume(a)?.abs().min(volume(b)?.abs()))
+}
+
 /// Keep intermediates in the manifold kernel. Only the final solid needs
 /// editable polygon faces, exact donor bindings and persistent element IDs.
 pub(crate) fn body_stack<'p>(
@@ -393,11 +400,7 @@ pub(crate) fn body_stack<'p>(
             "union" => result.add(&cutter)?,
             "intersect" => result.bitxor(&cutter)?,
             _ => {
-                if result
-                    .bitxor(&cutter)?
-                    .call_method0("is_empty")?
-                    .is_truthy()?
-                {
+                if !overlaps(&result, &cutter, &result.bitxor(&cutter)?)? {
                     skipped.push((uid, "cut_misses"));
                     continue;
                 }
@@ -488,7 +491,7 @@ pub(crate) fn operation<'p>(
         _ => {
             let (a, b) = (&mans[0], &mans[1]);
             let overlap = a.bitxor(b)?;
-            if overlap.call_method0("is_empty")?.is_truthy()? {
+            if !overlaps(a, b, &overlap)? {
                 return Err(error(py, "no overlap"));
             }
             let second = add(&b.sub(a)?, 1, false)?;

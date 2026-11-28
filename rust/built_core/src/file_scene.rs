@@ -341,11 +341,11 @@ fn archive_settings(scene: &Obj<'_>, out: &Dict<'_>, stream: &Obj<'_>) -> PyResu
     Ok(())
 }
 
-#[pyfunction]
-pub fn igz_archive_scene_fields(scene: &Obj<'_>, out: &Dict<'_>, stream: &Obj<'_>) -> PyResult<()> {
+#[pyfunction(signature=(scene,out,stream,recovery=false))]
+pub fn igz_archive_scene_fields(scene: &Obj<'_>, out: &Dict<'_>, stream: &Obj<'_>, recovery: bool) -> PyResult<()> {
     let py = scene.py();
     // Persistent ids go to format-2 files only (an .igz copy keeps none).
-    let built = flag(stream, "built", false)?;
+    let built = recovery || flag(stream, "built", false)?;
     if let Some(id) = scene.getattr_opt("doc_id")?.and_then(|v| v.extract::<String>().ok()) {
         out.set_item("_doc_id", id)?;
     }

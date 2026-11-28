@@ -129,6 +129,8 @@ def test_failed_write_keeps_previous_recovery(win, monkeypatch):
     doc=win.active_document();slot=autosave.pending(doc.path,doc.untitled_no)
     old=slot.read_bytes();version=doc.autosaved_version
     _edit(win,z=7)
+    notices = []
+    manager.finished.connect(lambda name, message: notices.append(message))
     def fail(*args,**kwargs): raise OSError('disk full')
     monkeypatch.setattr(igz,'write_prepared',fail)
     win._on_autosave_tick()
@@ -136,6 +138,7 @@ def test_failed_write_keeps_previous_recovery(win, monkeypatch):
     assert slot.read_bytes()==old
     assert doc.autosaved_version==version
     assert manager.last_error=='disk full'
+    assert notices[-1] == 'Could not write the recovery file. disk full'
 
 
 def test_deferred_mesh_snapshot_does_not_materialize_source(tmp_path, monkeypatch):
@@ -205,3 +208,35 @@ def test_trackpad_camera_motion_defers_snapshot_slices(win):
     assert not manager.writing
     manager.cancel()
     assert not manager.busy
+
+
+def test_untitled_catalogue_members_with_cut_and_repeat_survive_autosave(win, tmp_path):
+    from built_core import command_protocol
+    from built_core.solids import solid_volume
+    from tests.test_live_repeat import repeat
+    from tests.test_sketch_rows import apply, member
+    doc = win.active_document()
+    history = doc.viewport.history
+    scene = doc.viewport.scene
+    assert doc.path is None
+    apply(history, "create_sweeps", sweeps=[
+        member({"library": "en/he200a"}, [[0, 0, 0], [0, 0, 3]]),
+        member({"library": "en/ipe200"}, [[4, 0, 1], [0, 0, 1]])])
+    post, beam = scene.groups
+    apply(history, "live_set", row=dict(kind="cut", owner=beam.uid, uid="c07000000000aa17",
+          cutter={"body":post.uid}, name="Cope", operation="subtract", clearance=2))
+    apply(history, "live_set", row=repeat(beam))
+    win._on_autosave_tick()
+    worker = win._background_autosave
+    until(win, lambda: not worker.busy)
+    recovered = autosave.pending(doc.path, doc.untitled_no)
+    assert recovered and doc.autosaved_version is not None, worker.last_error
+    manual = tmp_path / "Members.built"
+    igz.save_scene(scene, manual)
+    for path in (recovered, manual):
+        back = Scene()
+        igz.load_into(back, path)
+        assert command_protocol.live_rows(back) == command_protocol.live_rows(scene)
+        assert {g.uid: solid_volume(g) for g in back.groups} == pytest.approx(
+            {g.uid: solid_volume(g) for g in scene.groups})
+        assert all(solid_volume(g) > 0 for g in back.groups if g.uid in (post.uid, beam.uid))

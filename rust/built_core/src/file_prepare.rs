@@ -416,7 +416,7 @@ fn igz_prepare_scene_steps(
             let scene = scene.bind(py);
             api(py)?.call_method1(
                 "igz_archive_scene_fields",
-                (scene, payload.bind(py), &state.stream),
+                (scene, payload.bind(py), &state.stream, state.capture.is_some()),
             )?;
             let s = attr(scene, "photo_mesh")?;
             Ok((!s.is_none() && attr(&s, "triangle_count")?.is_truthy()?).then(|| s.unbind()))
