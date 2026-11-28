@@ -109,18 +109,68 @@ fn change_visibility(win: &Bound<'_, PyAny>, verb: &str) -> PyResult<()> {
     history.call_method1("execute", (cmd.call((&targets,), Some(&kw))?,))?;
     vp.call_method0("update")?;
     let vars = PyDict::new(py);
-    let (msg, ms) = if hide {
-        let objs = matching(&targets, "built_core.group", "Group")?.len();
+    if hide {
+        let groups = matching(&targets, "built_core.group", "Group")?;
         let faces = matching(&targets, "built_core.mesh", "Face")?.len();
-        vars.set_item("objects", objs)?;
-        vars.set_item("faces", faces)?;
-        vars.set_item("edges", targets.len()? - objs - faces)?;
-        ("Hid {objects} object(s), {faces} face(s) and {edges} edge(s) — Edit ▸ Unhide brings them back",4000)
+        let edges = targets.len()? - groups.len() - faces;
+        let mut parts = Vec::new();
+        for (n, singular, plural) in [
+            (groups.len(), "1 object", "{n} objects"),
+            (faces, "1 face", "{n} faces"),
+            (edges, "1 edge", "{n} edges"),
+        ] {
+            if n > 0 {
+                vars.set_item("n", n)?;
+                parts.push(
+                    translated(py, if n == 1 { singular } else { plural }, Some(&vars))?
+                        .extract::<String>()?,
+                );
+            }
+        }
+        if groups.len() == 1 {
+            if let Some(name) = groups
+                .get_item(0)?
+                .getattr_opt("name")?
+                .and_then(|s| s.extract::<String>().ok())
+                .filter(|s| !s.is_empty())
+            {
+                parts[0].push_str(&format!(" «{name}»"));
+            }
+        }
+        vars.set_item("items", parts.join(", "))?;
+        let text = translated(py, "Hid {items}", Some(&vars))?;
+        let (history, cmd, targets, vp) = (
+            history.unbind(),
+            cmd.unbind(),
+            targets.unbind(),
+            vp.unbind(),
+        );
+        let show = crate::settings_rows::func(py, move |py, _| {
+            let hidden = PyList::empty(py);
+            add_hidden(
+                &hidden,
+                targets.bind(py),
+                &py.import("built_core")?.getattr("is_hidden")?,
+            )?;
+            if !hidden.is_empty() {
+                history
+                    .bind(py)
+                    .call_method1("execute", (cmd.bind(py).call1((hidden, false))?,))?;
+                vp.bind(py).call_method0("update")?;
+            }
+            Ok(py.None())
+        })?;
+        win.call_method1(
+            "notify",
+            ("info", text, [(translated(py, "Show", None)?, show)]),
+        )?;
     } else {
         vars.set_item("n", targets.len()?)?;
-        ("Unhid {n} entities.", 3000)
-    };
-    bar.call_method1("showMessage", (translated(py, msg, Some(&vars))?, ms))?;
+        bar.call_method1(
+            "showMessage",
+            (translated(py, "Unhid {n} entities.", Some(&vars))?, 3000),
+        )?;
+    }
     Ok(())
 }
 #[pyfunction]

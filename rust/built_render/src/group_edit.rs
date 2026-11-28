@@ -78,7 +78,8 @@ fn make_group(win: &Bound<'_, PyAny>) -> PyResult<()> {
         )?;
     } else {
         let kw = PyDict::new(py);
-        kw.set_item("n", groups.len())?;
+        let group_count = groups.len();
+        kw.set_item("n", group_count)?;
         kw.set_item(
             "extra",
             if loose {
@@ -96,7 +97,7 @@ fn make_group(win: &Bound<'_, PyAny>) -> PyResult<()> {
             (
                 translated(
                     py,
-                    "Grouped {n} group(s){extra} — double-click to go inside",
+                    if group_count == 1 { "Grouped {n} group{extra} — double-click to go inside" } else { "Grouped {n} groups{extra} — double-click to go inside" },
                     Some(&kw),
                 )?,
                 4000,

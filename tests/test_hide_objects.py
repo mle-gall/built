@@ -68,6 +68,24 @@ def test_hide_command_takes_the_object_out_of_sight_and_undo_brings_it_back():
     assert g.hidden
 
 
+def test_hide_toast_shows_only_its_own_objects(native_host):
+    win = native_host.window
+    scene = win.viewport.scene
+    groups = [_group(name) for name in ("Beam", "Post", "Brace")]
+    scene.groups.extend(groups)
+    scene.version += 1
+    scene.select(groups[:1])
+    win._on_hide()
+    first = win._chrome_history[0]
+    assert first.title == "Hid 1 object «Beam»"
+    scene.select(groups[1:])
+    win._on_hide()
+    assert win._chrome_history[0].title == "Hid 2 objects"
+    assert first.action_label == "Show"
+    first.action()
+    assert [g.hidden for g in groups] == [False, True, True]
+
+
 def test_hide_command_also_hides_faces_and_edges():
     """Hide works on faces too (Marco, 2026-09-18: «también puedes
     ocultar caras»)."""

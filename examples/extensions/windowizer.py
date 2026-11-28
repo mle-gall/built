@@ -117,24 +117,24 @@ _TEXTS = {
             'Cierra el grupo que estás editando y vuelve a ejecutar Windowizer.',
         'Select one or more faces (e.g. a rectangle drawn on a wall), then run Windowizer.':
             'Selecciona una o más caras (por ejemplo, un rectángulo dibujado en un muro) y vuelve a ejecutar Windowizer.',
-        'Windowizer — {n} face(s)':
-            'Windowizer — {n} cara(s)',
+        'Windowizer — {n} face': 'Windowizer — {n} cara',
+        'Windowizer — {n} faces': 'Windowizer — {n} caras',
         'Nothing was done.':
             'No se hizo nada.',
-        'Windowizer: {n} window(s) created.':
-            'Windowizer: {n} ventana(s) creada(s).',
+        'Windowizer: {n} window created.': 'Windowizer: {n} ventana creada.',
+        'Windowizer: {n} windows created.': 'Windowizer: {n} ventanas creadas.',
         'Some faces were skipped:':
             'Se omitieron algunas caras:',
         'Select a window made with Windowizer.':
             'Selecciona una ventana hecha con Windowizer.',
         'Edit — {names}':
             'Editar — {names}',
-        'Windowizer: {n} window(s) updated.':
-            'Windowizer: {n} ventana(s) actualizada(s).',
+        'Windowizer: {n} window updated.': 'Windowizer: {n} ventana actualizada.',
+        'Windowizer: {n} windows updated.': 'Windowizer: {n} ventanas actualizadas.',
         'Windowizer: current settings taken from “{name}”.':
             'Windowizer: ajustes actuales tomados de «{name}».',
-        'Windowizer: {n} window(s) deleted.':
-            'Windowizer: {n} ventana(s) borrada(s).',
+        'Windowizer: {n} window deleted.': 'Windowizer: {n} ventana borrada.',
+        'Windowizer: {n} windows deleted.': 'Windowizer: {n} ventanas borradas.',
         'The wall has been edited since, so the opening was not closed for: {names}. Close it by hand.':
             'El muro se editó después, así que el hueco no se cerró para: {names}. Ciérralo a mano.',
         'Invalid length: {text} (e.g. 5cm, 50mm, 0.05)':
@@ -217,24 +217,24 @@ _TEXTS = {
             'Feche o grupo que está editando e execute o Windowizer de novo.',
         'Select one or more faces (e.g. a rectangle drawn on a wall), then run Windowizer.':
             'Selecione uma ou mais faces (por exemplo, um retângulo desenhado numa parede) e execute o Windowizer de novo.',
-        'Windowizer — {n} face(s)':
-            'Windowizer — {n} face(s)',
+        'Windowizer — {n} face': 'Windowizer — {n} face',
+        'Windowizer — {n} faces': 'Windowizer — {n} faces',
         'Nothing was done.':
             'Nada foi feito.',
-        'Windowizer: {n} window(s) created.':
-            'Windowizer: {n} janela(s) criada(s).',
+        'Windowizer: {n} window created.': 'Windowizer: {n} janela criada.',
+        'Windowizer: {n} windows created.': 'Windowizer: {n} janelas criadas.',
         'Some faces were skipped:':
             'Algumas faces foram ignoradas:',
         'Select a window made with Windowizer.':
             'Selecione uma janela feita com o Windowizer.',
         'Edit — {names}':
             'Editar — {names}',
-        'Windowizer: {n} window(s) updated.':
-            'Windowizer: {n} janela(s) atualizada(s).',
+        'Windowizer: {n} window updated.': 'Windowizer: {n} janela atualizada.',
+        'Windowizer: {n} windows updated.': 'Windowizer: {n} janelas atualizadas.',
         'Windowizer: current settings taken from “{name}”.':
             'Windowizer: ajustes atuais tomados de «{name}».',
-        'Windowizer: {n} window(s) deleted.':
-            'Windowizer: {n} janela(s) apagada(s).',
+        'Windowizer: {n} window deleted.': 'Windowizer: {n} janela apagada.',
+        'Windowizer: {n} windows deleted.': 'Windowizer: {n} janelas apagadas.',
         'The wall has been edited since, so the opening was not closed for: {names}. Close it by hand.':
             'A parede foi editada depois, então o vão não foi fechado para: {names}. Feche-o à mão.',
         'Invalid length: {text} (e.g. 5cm, 50mm, 0.05)':
@@ -317,24 +317,24 @@ _TEXTS = {
             'Chiudi il gruppo che stai modificando, poi esegui di nuovo Windowizer.',
         'Select one or more faces (e.g. a rectangle drawn on a wall), then run Windowizer.':
             'Seleziona una o più facce (ad es. un rettangolo disegnato su un muro), poi esegui di nuovo Windowizer.',
-        'Windowizer — {n} face(s)':
-            'Windowizer — {n} faccia/e',
+        'Windowizer — {n} face': 'Windowizer — {n} faccia',
+        'Windowizer — {n} faces': 'Windowizer — {n} facce',
         'Nothing was done.':
             'Non è stato fatto nulla.',
-        'Windowizer: {n} window(s) created.':
-            'Windowizer: {n} finestra/e create.',
+        'Windowizer: {n} window created.': 'Windowizer: {n} finestra creata.',
+        'Windowizer: {n} windows created.': 'Windowizer: {n} finestre create.',
         'Some faces were skipped:':
             'Alcune facce sono state saltate:',
         'Select a window made with Windowizer.':
             'Seleziona una finestra fatta con Windowizer.',
         'Edit — {names}':
             'Modifica — {names}',
-        'Windowizer: {n} window(s) updated.':
-            'Windowizer: {n} finestra/e aggiornate.',
+        'Windowizer: {n} window updated.': 'Windowizer: {n} finestra aggiornata.',
+        'Windowizer: {n} windows updated.': 'Windowizer: {n} finestre aggiornate.',
         'Windowizer: current settings taken from “{name}”.':
             'Windowizer: impostazioni correnti prese da «{name}».',
-        'Windowizer: {n} window(s) deleted.':
-            'Windowizer: {n} finestra/e eliminate.',
+        'Windowizer: {n} window deleted.': 'Windowizer: {n} finestra eliminata.',
+        'Windowizer: {n} windows deleted.': 'Windowizer: {n} finestre eliminate.',
         'The wall has been edited since, so the opening was not closed for: {names}. Close it by hand.':
             "Il muro è stato modificato dopo, quindi l'apertura non è stata chiusa per: {names}. Chiudila a mano.",
         'Invalid length: {text} (e.g. 5cm, 50mm, 0.05)':
@@ -417,24 +417,24 @@ _TEXTS = {
             '请先关闭正在编辑的组，然后再运行 Windowizer。',
         'Select one or more faces (e.g. a rectangle drawn on a wall), then run Windowizer.':
             '请选择一个或多个面（例如在墙上画的矩形），然后再运行 Windowizer。',
-        'Windowizer — {n} face(s)':
-            'Windowizer — {n} 个面',
+        'Windowizer — {n} face': 'Windowizer — {n} 个面',
+        'Windowizer — {n} faces': 'Windowizer — {n} 个面',
         'Nothing was done.':
             '未执行任何操作。',
-        'Windowizer: {n} window(s) created.':
-            'Windowizer：已创建 {n} 个窗户。',
+        'Windowizer: {n} window created.': 'Windowizer：已创建 {n} 个窗户。',
+        'Windowizer: {n} windows created.': 'Windowizer：已创建 {n} 个窗户。',
         'Some faces were skipped:':
             '部分面被跳过：',
         'Select a window made with Windowizer.':
             '请选择一个用 Windowizer 创建的窗户。',
         'Edit — {names}':
             '编辑 — {names}',
-        'Windowizer: {n} window(s) updated.':
-            'Windowizer：已更新 {n} 个窗户。',
+        'Windowizer: {n} window updated.': 'Windowizer：已更新 {n} 个窗户。',
+        'Windowizer: {n} windows updated.': 'Windowizer：已更新 {n} 个窗户。',
         'Windowizer: current settings taken from “{name}”.':
             'Windowizer：当前设置取自“{name}”。',
-        'Windowizer: {n} window(s) deleted.':
-            'Windowizer：已删除 {n} 个窗户。',
+        'Windowizer: {n} window deleted.': 'Windowizer：已删除 {n} 个窗户。',
+        'Windowizer: {n} windows deleted.': 'Windowizer：已删除 {n} 个窗户。',
         'The wall has been edited since, so the opening was not closed for: {names}. Close it by hand.':
             '墙体之后被编辑过，因此以下洞口未能封闭：{names}。请手动封闭。',
         'Invalid length: {text} (e.g. 5cm, 50mm, 0.05)':
@@ -517,24 +517,24 @@ _TEXTS = {
             'Tutup grup yang sedang diedit, lalu jalankan Windowizer lagi.',
         'Select one or more faces (e.g. a rectangle drawn on a wall), then run Windowizer.':
             'Pilih satu atau lebih muka (misalnya persegi panjang yang digambar di dinding), lalu jalankan Windowizer lagi.',
-        'Windowizer — {n} face(s)':
-            'Windowizer — {n} muka',
+        'Windowizer — {n} face': 'Windowizer — {n} muka',
+        'Windowizer — {n} faces': 'Windowizer — {n} muka',
         'Nothing was done.':
             'Tidak ada yang dilakukan.',
-        'Windowizer: {n} window(s) created.':
-            'Windowizer: {n} jendela dibuat.',
+        'Windowizer: {n} window created.': 'Windowizer: {n} jendela dibuat.',
+        'Windowizer: {n} windows created.': 'Windowizer: {n} jendela dibuat.',
         'Some faces were skipped:':
             'Beberapa muka dilewati:',
         'Select a window made with Windowizer.':
             'Pilih jendela yang dibuat dengan Windowizer.',
         'Edit — {names}':
             'Edit — {names}',
-        'Windowizer: {n} window(s) updated.':
-            'Windowizer: {n} jendela diperbarui.',
+        'Windowizer: {n} window updated.': 'Windowizer: {n} jendela diperbarui.',
+        'Windowizer: {n} windows updated.': 'Windowizer: {n} jendela diperbarui.',
         'Windowizer: current settings taken from “{name}”.':
             'Windowizer: pengaturan saat ini diambil dari «{name}».',
-        'Windowizer: {n} window(s) deleted.':
-            'Windowizer: {n} jendela dihapus.',
+        'Windowizer: {n} window deleted.': 'Windowizer: {n} jendela dihapus.',
+        'Windowizer: {n} windows deleted.': 'Windowizer: {n} jendela dihapus.',
         'The wall has been edited since, so the opening was not closed for: {names}. Close it by hand.':
             'Dinding telah diedit setelahnya, jadi bukaan tidak ditutup untuk: {names}. Tutup secara manual.',
         'Invalid length: {text} (e.g. 5cm, 50mm, 0.05)':
@@ -585,6 +585,10 @@ _TEXTS = {
             'Hapus jendela',
     },
 }
+
+
+def _counted(one, many, n):
+    return _tr(one if n == 1 else many, n=n)
 
 
 def _tr(text: str, **kw) -> str:
@@ -1306,7 +1310,7 @@ def windowize(viewport) -> None:
         return
     mats = sorted(set(scene.materials) | {FRAME_MAT, GLASS_MAT})
     WindowizerDialog.ask(viewport, current_params(scene), mats,
-                         title=_tr("Windowizer — {n} face(s)", n=len(faces)),
+                         title=_counted("Windowizer — {n} face", "Windowizer — {n} faces", len(faces)),
                          done=lambda params: _create_windows(viewport, faces, params))
 
 
@@ -1330,8 +1334,7 @@ def _create_windows(viewport, faces, params):
         sc.selection.clear()
         sc.selection.update(made)
 
-    if _run(viewport, mutate, _tr("Windowizer: {n} window(s) created.",
-                                  n=len(faces) - len(skipped))):
+    if _run(viewport, mutate, _counted("Windowizer: {n} window created.", "Windowizer: {n} windows created.", len(faces) - len(skipped))):
         if skipped:
             _warn(viewport, _tr("Some faces were skipped:") + "\n• " + "\n• ".join(skipped))
 
@@ -1358,7 +1361,7 @@ def _edit_windows(viewport, wins, params):
         for g in wins:
             rebuild_window(sc, g, params)
 
-    _run(viewport, mutate, _tr("Windowizer: {n} window(s) updated.", n=len(wins)))
+    _run(viewport, mutate, _counted("Windowizer: {n} window updated.", "Windowizer: {n} windows updated.", len(wins)))
 
 
 def inherit(viewport) -> None:
@@ -1391,7 +1394,7 @@ def erase(viewport) -> None:
             if not delete_window(sc, g):
                 left_open.append(g.name)
 
-    if _run(viewport, mutate, _tr("Windowizer: {n} window(s) deleted.", n=len(wins))):
+    if _run(viewport, mutate, _counted("Windowizer: {n} window deleted.", "Windowizer: {n} windows deleted.", len(wins))):
         if left_open:
             _warn(viewport, _tr("The wall has been edited since, so the opening was not "
                                "closed for: {names}. Close it by hand.",

@@ -56,9 +56,9 @@ fn face_winding(win: &Bound<'_, PyAny>, orient: bool) -> PyResult<()> {
     status(
         win,
         if orient {
-            "Oriented {n} face(s) like the selected one."
+            if count == 1 { "Oriented {n} face like the selected one." } else { "Oriented {n} faces like the selected one." }
         } else {
-            "Reversed {n} face(s)."
+            if count == 1 { "Reversed {n} face." } else { "Reversed {n} faces." }
         },
         Some(count),
     )
@@ -75,7 +75,7 @@ fn heal_overlaps(win: &Bound<'_, PyAny>) -> PyResult<()> {
     if count == 0 {
         status(win, "No overlapping faces found.", None)
     } else {
-        status(win, "Healed {n} overlapping face(s).", Some(count))
+        status(win, if count == 1 { "Healed {n} overlapping face." } else { "Healed {n} overlapping faces." }, Some(count))
     }
 }
 
@@ -239,7 +239,7 @@ fn rebuild_faces(win: &Bound<'_, PyAny>) -> PyResult<()> {
     let (cmd, message) = if picked.is_empty() {
         (
             history.call_method0("RebuildPlanarFacesCommand")?,
-            "Rebuilt {n} face(s) from the edge graph.",
+            ("Rebuilt {n} face from the edge graph.", "Rebuilt {n} faces from the edge graph."),
         )
     } else {
         let Some((origin, normal)) = common_plane(&picked)? else {
@@ -250,7 +250,7 @@ fn rebuild_faces(win: &Bound<'_, PyAny>) -> PyResult<()> {
         let normal = vec.call1((normal.to_array(),))?;
         (
             history.call_method1("RebuildPlaneFacesCommand", (origin, normal))?,
-            "Rebuilt {n} face(s) on the selected plane.",
+            ("Rebuilt {n} face on the selected plane.", "Rebuilt {n} faces on the selected plane."),
         )
     };
     apply(&vp, &cmd)?;
@@ -261,7 +261,8 @@ fn rebuild_faces(win: &Bound<'_, PyAny>) -> PyResult<()> {
             None,
         );
     }
-    status(win, message, Some(cmd.getattr("rebuilt")?.extract()?))
+    let count = cmd.getattr("rebuilt")?.extract()?;
+    status(win, if count == 1 { message.0 } else { message.1 }, Some(count))
 }
 
 #[pyfunction]

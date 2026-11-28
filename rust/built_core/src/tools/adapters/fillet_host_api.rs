@@ -555,18 +555,18 @@ fn host_finish_bevel<'py>(a: &Args<'py>) -> Reply<'py> {
     if tool.call_method0("_corners_mode")?.is_truthy()? {
         said = module.call_method(
             "tr",
-            ("Bevelled {n} corner(s), distance {r}.",),
+            (if n.eq(1)? { "Bevelled {n} corner, distance {r}." } else { "Bevelled {n} corners, distance {r}." },),
             Some(&fields!(py; "n" => &n, "r" => module.call_method1("fmt_len_fine", (&r,))?)),
         )?;
     } else {
         if tool.call_method0("_is_plain_fillet")?.is_truthy()? {
             said = module.call_method(
                 "tr",
-                ("Rounded {n} edge(s), radius {r}.",),
+                (if n.eq(1)? { "Rounded {n} edge, radius {r}." } else { "Rounded {n} edges, radius {r}." },),
                 Some(&fields!(py; "n" => &n, "r" => module.call_method1("fmt_len_fine", (&r,))?)),
             )?;
         } else {
-            said = module.call_method("tr", ("Bevelled {n} edge(s), {m} {r}.",), Some(&fields!(py; "n" => &n, "m" => module.call_method1("tr", (tool.call_method0("_measure_label")?,))?, "r" => module.call_method1("fmt_len_fine", (&r,))?)))?;
+            said = module.call_method("tr", (if n.eq(1)? { "Bevelled {n} edge, {m} {r}." } else { "Bevelled {n} edges, {m} {r}." },), Some(&fields!(py; "n" => &n, "m" => module.call_method1("tr", (tool.call_method0("_measure_label")?,))?, "r" => module.call_method1("fmt_len_fine", (&r,))?)))?;
         }
     }
     viewport.call_method1("flash_status", (&said, 3000))?;
