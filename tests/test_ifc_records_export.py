@@ -282,7 +282,7 @@ def garage_junctions():
 
     scene = Scene()
     history = History(scene)
-    apply(history, 'preset_update', rows=[details['Bolt M16'], details['Fillet weld'], knee, small, cleat])
+    apply(history, 'preset_update', rows=[details['S355 plate'], details['Bolt M16'], details['Fillet weld'], knee, small, cleat])
     for i in range(56):
         x = 3*i
         sweeps = [member({'library': 'en/he200a'}, [[x, 0, 0], [x+2, 0, 0]]),

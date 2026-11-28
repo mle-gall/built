@@ -2430,8 +2430,6 @@ impl LibrarySheet {
             sheet.call_method1("verb",("typeact:import","Import pack…"))?;
         }else if prov_id=="profiles" {
             sheet.call_method1("verb",("typeact:pack","Import pack…"))?;
-            sheet.call_method1("verb",("typeact:new","New profile…"))?;
-            sheet.call_method1("verb",("typeact:import","Import drawing…"))?;
         }else if prov_id=="sections" {
             sheet.call_method1("verb",("typeact:new","New section…"))?;
         }else if !has_target {
@@ -2532,7 +2530,13 @@ impl LibrarySheet {
             slf.call_method1("_component_detail", (&detail, &prov, ctx, &e))?;
         }
         let hint = if prov_id == "profiles" && !st.get_item("items")?.call_method0("values")?.try_iter()?.any(|r| r.is_ok_and(|r| r.contains("profile_preset").unwrap_or(false))) { "More profiles and details come as packs: Import pack…" } else if matches!(prov_id.as_str(), "components" | "families") { "Click or drag to place · … for actions · Esc back to the model" } else { "Click to use · … for actions · Esc back to the model" };
-        sheet.call_method1("footer", (PyTuple::empty(py), crate::settings_rows::tr(py, hint)?))?;
+        let links = PyList::empty(py);
+        if prov_id == "profiles" {
+            for (id, label) in [("typeact:new", "New profile…"), ("typeact:import", "Import drawing…")] {
+                links.append((id, crate::settings_rows::tr(py, label)?))?;
+            }
+        }
+        sheet.call_method1("footer", (links, crate::settings_rows::tr(py, hint)?))?;
         if cursor.is_truthy()? {
             let force = st.call_method1("pop", ("force_focus", false))?.is_truthy()?;
             sheet.call_method("focus", (&cursor,), Some(&[("force", force)].into_py_dict(py)?))?;
