@@ -260,6 +260,8 @@ fn locate(d: &doc::Doc, k: doc::Key) -> Option<(DMat4, Vec<doc::Key>, Vec<String
 
 struct Walk<'a> {
     t: &'a LiveTable,
+    /// Definition key → the sweep owner it was generated for.
+    defs: HashMap<u64, String>,
     ext: u16,
     ifc: u16,
     names: HashMap<String, String>,
@@ -335,33 +337,42 @@ impl Walk<'_> {
             if let Some(tpl) = self.sweep_template(d, uid, class) {
                 let row = self.t.owners.get(uid).cloned();
                 self.out.push((chain.clone(), Pending::Ready(tpl.members(world, &Member { row, ..base }))));
-            } else if let Some((repeat, source)) =
-                copy.and_then(|r| Some((r, r.source.clone()?)))
+            } else if let Some((station, source, tpl)) = copy
+                .and_then(|r| Some((r, r.source.clone()?)))
+                .and_then(|(r, source)| {
+                    // A direct copy binds as its Repeat's station; a copy
+                    // inside a nested copy binds by placement.
+                    let direct = chain.len() >= 2
+                        && self.t.groups.get(&r.owner) == Some(&chain[chain.len() - 2]);
+                    let station = direct.then(|| (r.uid.clone(), uid.clone()));
+                    Some((station, source.clone(), self.sweep_template(d, &source, class)?))
+                })
+                .or_else(|| {
+                    // A copy of a sweep's placement sharing its definition.
+                    let source = self.defs.get(&def?.key)?.clone();
+                    let tpl = self.sweep_template(d, &source, class)?;
+                    Some((None, source, tpl))
+                })
             {
                 let source_def = self.t.groups.get(&source).and_then(|sk| {
                     let Data::Placement(sp) = &d.node(*sk)?.data else { return None };
                     Some(sp.definition.as_ref()?.0.get().key)
                 });
-                if let Some(tpl) = self.sweep_template(d, &source, class) {
-                    let base = Member {
-                        station: Some((repeat.uid.clone(), uid.clone())),
-                        ..base
-                    };
-                    match def.filter(|def| Some(def.key) != source_def) {
-                        Some(def) => self.out.push((
-                            chain.clone(),
-                            Pending::Box {
-                                base,
-                                def: def.key,
-                                geometry: def.geometry.clone_ref(py),
-                                world,
-                                along: Some((tpl, world)),
-                            },
-                        )),
-                        None => self
-                            .out
-                            .push((chain.clone(), Pending::Ready(tpl.members(world, &base)))),
-                    }
+                let base = Member { station, ..base };
+                match def.filter(|def| Some(def.key) != source_def) {
+                    Some(def) => self.out.push((
+                        chain.clone(),
+                        Pending::Box {
+                            base,
+                            def: def.key,
+                            geometry: def.geometry.clone_ref(py),
+                            world,
+                            along: Some((tpl, world)),
+                        },
+                    )),
+                    None => self
+                        .out
+                        .push((chain.clone(), Pending::Ready(tpl.members(world, &base)))),
                 }
             } else if let Some(def) = def.filter(|_| {
                 [BAR_CLASSES, SLAB_CLASSES, WALL_CLASSES, HOSTED_CLASSES]
@@ -505,6 +516,7 @@ impl DocIndex {
     fn read(&mut self, py: Python<'_>, t: &LiveTable, keys: &[doc::Key]) -> PyResult<Vec<(Vec<doc::Key>, Vec<Member>)>> {
         let mut walk = Walk {
             t,
+            defs: HashMap::new(),
             ext: doc::attr_id("ext").map_err(PyValueError::new_err)?,
             ifc: doc::attr_id("ifc").map_err(PyValueError::new_err)?,
             names: HashMap::new(),
@@ -512,6 +524,15 @@ impl DocIndex {
         };
         {
             let d = doc::lock();
+            for row in t.rows.values().filter(|r| r.kind == "sweep" && r.junction.is_none()) {
+                let def = t.groups.get(&row.owner).and_then(|k| match &d.node(*k)?.data {
+                    Data::Placement(p) => Some(p.definition.as_ref()?.0.get().key),
+                    _ => None,
+                });
+                if let Some(def) = def {
+                    walk.defs.insert(def, row.owner.clone());
+                }
+            }
             for &k in keys {
                 let Some(n) = d.node(k) else { continue };
                 let Some(parent) = n.owners.first() else { continue };
@@ -909,7 +930,7 @@ fn misses(rule: &Value, names: [&str; 2], roles: [(&Member, &str); 2], f: &Found
         let off = (f.angle - value).abs();
         if off > tol + 1e-9 {
             let mut wider = rule["angle"].clone();
-            wider["tol"] = json!(off.ceil());
+            wider["tol"] = json!((off - 1e-6).ceil());
             out.push(miss("angle", None, json!((f.angle * 10.).round() / 10.), rule["angle"].clone(), wider));
         }
     }
@@ -926,7 +947,7 @@ fn misses(rule: &Value, names: [&str; 2], roles: [(&Member, &str); 2], f: &Found
         let off = (f.offset - want).abs();
         if off > tol + 1e-6 {
             let mut wider = rule["offset"].clone();
-            wider["tol_mm"] = json!(off.ceil());
+            wider["tol_mm"] = json!((off - 1e-6).ceil());
             out.push(miss("offset", None, json!((f.offset * 10.).round() / 10.), rule["offset"].clone(), wider));
         }
     }
@@ -1203,7 +1224,7 @@ pub(super) fn meeting_index_stats<'p>(scene: &Obj<'p>) -> PyResult<Obj<'p>> {
     let stats = with_index(scene, |_, ix| {
         Ok(json!({
             "members": ix.index.len(),
-            "meetings": ix.index.meetings.len(),
+            "meetings": ix.index.all().count(),
             "bytes": ix.index.heap_bytes() + ix.chains.len() * 64 + ix.names.len() * 64,
             "build_ms": ix.build_ms,
             "update_ms": ix.update_ms,

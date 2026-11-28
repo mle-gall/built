@@ -478,7 +478,10 @@ impl Index {
     }
     /// Every meeting as `(main, other, found)`.
     pub fn all(&self) -> impl Iterator<Item = (&Member, &Member, &Found)> {
-        self.meetings.iter().map(|(&(i, j), f)| {
+        self.meetings
+            .iter()
+            .filter(|(&(i, j), f)| !self.lapped(i, j, f))
+            .map(|(&(i, j), f)| {
             let (x, y) = (self.member(i), self.member(j));
             if f.main == 0 {
                 (x, y, f)
@@ -486,6 +489,25 @@ impl Index {
                 (y, x, f)
             }
         })
+    }
+    /// Two ends that both sit on a third member's face (purlins butting over
+    /// a rafter) meet that member, not each other.
+    fn lapped(&self, i: u32, j: u32, f: &Found) -> bool {
+        if f.kind != "end_end" {
+            return false;
+        }
+        let on = |end: u32, tag: &str, host: u32| {
+            self.meetings
+                .get(&(end.min(host), end.max(host)))
+                .is_some_and(|g| {
+                    g.kind == "end_face"
+                        && g.main == usize::from(host > end)
+                        && g.tags[1] == tag
+                })
+        };
+        self.near[i as usize]
+            .iter()
+            .any(|&k| k != j && on(i, f.tags[0], k) && on(j, f.tags[1], k))
     }
     /// Approximate heap use in bytes (members, grid and meetings).
     pub fn heap_bytes(&self) -> usize {
@@ -606,6 +628,18 @@ pub(crate) mod tests {
         b.a = DVec3::new(2.5, 0.1, 1.5);
         let t = classify(&a, &b).unwrap();
         assert_eq!((t.kind, t.tags), ("corner", ["side", "start"]));
+    }
+
+    #[test]
+    fn purlins_butting_over_a_rafter_meet_the_rafter_only() {
+        let rafter = bar("r", [0., 0., 0.], [0., 6., 0.], 120., 240., [0., 0., 1.]);
+        let top = DVec3::new(0., 3., 0.17);
+        let p1 = bar("p1", (top - DVec3::X * 5.).into(), top.into(), 100., 100., [0., 0., 1.]);
+        let p2 = bar("p2", top.into(), (top + DVec3::X * 5.).into(), 100., 100., [0., 0., 1.]);
+        assert_eq!(classify(&p1, &p2).unwrap().kind, "end_end");
+        let index = Index::build(vec![rafter, p1, p2]);
+        let kinds: Vec<_> = index.all().map(|(m, _, f)| (m.uid.as_str(), f.kind)).collect();
+        assert_eq!(kinds, [("r", "end_face"); 2]);
     }
 
     #[test]
