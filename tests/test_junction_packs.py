@@ -314,10 +314,12 @@ def test_purlin_seats_at_an_oblique_crossing():
     h = History(scene)
     a, b = sweeps(h, (HE, [[-1.5, 0, 0], [1.5, 0, 0]]), (IPE, [[-.4, -1, 0], [.4, 1, 0]]))
     p = next(p for p in starter_details() if p["name"] == "Purlin cleat")
-    uid = apply(h, "junction_apply", detail=p["uid"], bindings=live.junction_bind(scene, p, [a, b]))["uid"]
+    suggestion, = live.junction_suggest(scene, p["uid"])["suggestions"]
+    uid = apply(h, "junction_apply", detail=p["uid"], bindings=suggestion["roles"])["uid"]
     rows = rows_of(scene)
     assert all(r["state"] == "ok" for r in rows)
     joint = next(r for r in rows if r["uid"] == uid)
+    assert joint["frames"]["main.seat"][10] == pytest.approx(1)
     assert joint["frames"]["joining.bottom"][14] == pytest.approx(joint["frames"]["main.seat"][14])
     apply(h, "undo")
     joining = next(r for r in rows_of(scene) if r["owner"] == b)

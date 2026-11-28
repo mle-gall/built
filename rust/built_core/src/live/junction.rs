@@ -626,7 +626,9 @@ pub(super) fn geometry(scene: &Obj<'_>, t: &LiveTable, j: &Row) -> PyResult<Opti
             frames.insert(format!("{name}.{suffix}"), frame.to_cols_array());
         }
         if *name == main && j.joint.meeting.as_deref() == Some("crossing") {
-            if let Some(frame) = pose(at + n * (pt - at).dot(n), n, b.axis) {
+            // A review suggestion can bind a crossing without a picked face.
+            // Seat on the section's upper datum regardless of pick order or end.
+            if let Some(frame) = r.datums.get("top").and_then(|top| pose(at + *top, r.up, b.axis)) {
                 frames.insert(format!("{name}.seat"), frame.to_cols_array());
             }
         }
